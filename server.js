@@ -44,6 +44,7 @@ db.serialize(()=>{
 });
 
 
+
 //=====================
 // 現在表示ユーザー
 //=====================
@@ -77,6 +78,7 @@ WHERE id IN
 if(err){
 
 console.log(err);
+
 return;
 
 }
@@ -86,6 +88,7 @@ rows.forEach((row)=>{
 
 
 users[row.name]={
+
 
 name:row.name,
 
@@ -99,7 +102,12 @@ fuel:row.fuel,
 
 destination:row.destination,
 
-lastUpdate:0
+
+// 最終更新時間を復元
+
+lastUpdate:
+new Date(row.time).getTime()
+
 
 };
 
@@ -121,7 +129,7 @@ rows.length
 
 
 //=====================
-// 接続
+// Socket.IO
 //=====================
 
 io.on(
@@ -135,7 +143,8 @@ socket.id
 );
 
 
-// 接続直後に現在情報送信
+
+// 接続直後に現在状態送信
 
 socket.emit(
 "locations",
@@ -151,6 +160,7 @@ socket.on(
 
 users[data.name]={
 
+
 name:data.name,
 
 lat:data.lat,
@@ -163,13 +173,15 @@ fuel:data.fuel,
 
 destination:data.destination,
 
-lastUpdate:Date.now()
+lastUpdate:
+Date.now()
+
 
 };
 
 
 
-// DB保存
+// SQLite保存
 
 db.run(
 
@@ -233,13 +245,13 @@ socket.id
 
 
 // すぐ削除しない
-// 5分後チェックで削除
 
 
 });
 
 
 });
+
 
 
 
@@ -251,7 +263,9 @@ socket.id
 setInterval(()=>{
 
 
-const now=Date.now();
+const now =
+Date.now();
+
 
 
 Object.keys(users)
@@ -259,8 +273,6 @@ Object.keys(users)
 
 
 if(
-
-users[name].lastUpdate !== 0 &&
 
 now - users[name].lastUpdate
 >
@@ -270,13 +282,14 @@ now - users[name].lastUpdate
 
 
 console.log(
-"offline:",
+"offline remove:",
 name
 );
 
 
 
 delete users[name];
+
 
 
 io.emit(
@@ -292,7 +305,6 @@ users
 
 
 },60000);
-
 
 
 
