@@ -7,7 +7,8 @@
 
 <title>GPS位置共有システム</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+<link rel="stylesheet"
+href="https://unpkg.com/leaflet/dist/leaflet.css">
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
@@ -16,33 +17,50 @@
 
 <style>
 
-body {
-    font-family:sans-serif;
-    margin:20px;
+body{
+font-family:sans-serif;
+margin:20px;
 }
 
-#map {
-    height:500px;
-    width:100%;
+
+#map{
+height:500px;
+width:100%;
 }
 
-input {
-    margin:5px;
-    padding:5px;
+
+input{
+margin:5px;
+padding:5px;
 }
 
-button {
-    padding:8px;
-    margin:5px;
+
+button{
+padding:8px;
+margin:5px;
 }
 
-.user {
-    border:1px solid #aaa;
-    padding:10px;
-    margin:5px;
+
+.user{
+border:1px solid #aaa;
+padding:10px;
+margin:5px;
+}
+
+
+.online{
+color:green;
+font-weight:bold;
+}
+
+
+.offline{
+color:red;
+font-weight:bold;
 }
 
 </style>
+
 
 </head>
 
@@ -62,7 +80,8 @@ button {
 
 水量：
 
-<input id="water" type="number" value="0">
+<input id="water" type="number" value="100">
+
 
 <br>
 
@@ -71,12 +90,14 @@ button {
 
 <input id="fuel" type="number" value="100">
 
+
 <br>
 
 
 次の目的地：
 
-<input id="destination" type="text" value="">
+<input id="destination" value="">
+
 
 <br>
 
@@ -91,7 +112,7 @@ GPS開始
 </button>
 
 
-<br><br>
+<hr>
 
 
 <div id="map"></div>
@@ -106,15 +127,11 @@ GPS開始
 <script>
 
 
-const socket = io();
+const socket=io();
 
 
-//================
-// 地図
-//================
 
-const map =
-L.map('map')
+const map=L.map('map')
 .setView(
 [32.803,130.707],
 13
@@ -123,7 +140,7 @@ L.map('map')
 
 
 L.tileLayer(
-'https://tile.openstreetmap.org/{z}/{x}/{z}.png',
+'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
 {
 attribution:'OpenStreetMap'
 }
@@ -136,53 +153,37 @@ let markers={};
 
 
 
-//================
-// GPS
-//================
-
-let myPosition={
-lat:0,
-lon:0
-};
-
-
 let lastLat=0;
 let lastLon=0;
+
 
 
 const MOVE_DISTANCE=10;
 
 
 
+//=====================
+// GPS開始
+//=====================
+
 function startGPS(){
-
-
-if(!navigator.geolocation){
-
-alert("GPS利用不可");
-
-return;
-
-}
-
 
 
 navigator.geolocation.watchPosition(
 
-
-(position)=>{
-
-
-let lat =
-position.coords.latitude;
+(pos)=>{
 
 
-let lon =
-position.coords.longitude;
+let lat=
+pos.coords.latitude;
+
+
+let lon=
+pos.coords.longitude;
 
 
 
-let distance =
+let distance=
 getDistance(
 lastLat,
 lastLon,
@@ -194,20 +195,17 @@ lon
 
 if(
 lastLat===0 ||
-distance >= MOVE_DISTANCE
+distance>=MOVE_DISTANCE
 ){
 
 
-myPosition.lat=lat;
-
-myPosition.lon=lon;
-
-
-sendLocation();
+sendLocation(
+lat,
+lon
+);
 
 
 lastLat=lat;
-
 lastLon=lon;
 
 
@@ -217,7 +215,7 @@ lastLon=lon;
 },
 
 
-(error)=>{
+()=>{
 
 alert(
 "位置情報取得失敗"
@@ -227,13 +225,8 @@ alert(
 
 
 {
-
 enableHighAccuracy:true,
-
-maximumAge:10000,
-
 timeout:10000
-
 }
 
 
@@ -244,26 +237,28 @@ timeout:10000
 
 
 
-//================
+
+//=====================
 // 送信
-//================
+//=====================
 
-function sendLocation(){
+function sendLocation(lat,lon){
 
 
-let data={
+socket.emit(
+
+"location",
+
+{
 
 
 name:
 document.getElementById("name").value,
 
 
-lat:
-myPosition.lat,
+lat:lat,
 
-
-lon:
-myPosition.lon,
+lon:lon,
 
 
 water:
@@ -279,20 +274,11 @@ document.getElementById("fuel").value
 
 
 destination:
-document.getElementById("destination").value,
+document.getElementById("destination").value
 
 
-lastUpdate:
-Date.now()
+}
 
-
-};
-
-
-
-socket.emit(
-"location",
-data
 );
 
 
@@ -300,21 +286,32 @@ data
 
 
 
-//================
-// 手動更新
-//================
 
 function updateStatus(){
 
-sendLocation();
+
+navigator.geolocation.getCurrentPosition(
+
+(pos)=>{
+
+sendLocation(
+pos.coords.latitude,
+pos.coords.longitude
+);
+
+}
+
+);
+
 
 }
 
 
 
-//================
+
+//=====================
 // 距離計算
-//================
+//=====================
 
 function getDistance(
 lat1,
@@ -324,11 +321,8 @@ lon2
 ){
 
 
-if(lat1===0){
-
+if(lat1===0)
 return 99999;
-
-}
 
 
 const R=6371000;
@@ -344,71 +338,47 @@ const dLon=
 *Math.PI/180;
 
 
+
 const a=
 
-Math.sin(dLat/2)
-*
-Math.sin(dLat/2)
+Math.sin(dLat/2)**2
 
 +
 
 Math.cos(lat1*Math.PI/180)
 *
 Math.cos(lat2*Math.PI/180)
-
 *
-
-Math.sin(dLon/2)
-*
-Math.sin(dLon/2);
+Math.sin(dLon/2)**2;
 
 
 
-const c=
-2*Math.atan2(
+return R*
+2*
+Math.atan2(
 Math.sqrt(a),
 Math.sqrt(1-a)
 );
 
 
-
-return R*c;
-
-
 }
 
 
 
-
-//================
+//=====================
 // 状態表示
-//================
+//=====================
 
-function getStatus(user){
-
-
-if(!user.lastUpdate){
-
-return "⚪ 状態不明";
-
-}
+function statusText(user){
 
 
-let diff =
-Date.now()
--
-user.lastUpdate;
-
-
-
-if(
-diff <
-5 * 60 * 1000
-){
+if(user.online){
 
 return "🟢 オンライン";
 
-}else{
+}
+
+else{
 
 return "🔴 オフライン";
 
@@ -419,17 +389,26 @@ return "🔴 オフライン";
 
 
 
-function formatTime(time){
+function statusClass(user){
 
 
-if(!time){
+return user.online ?
+"online":
+"offline";
 
-return "不明";
 
 }
 
 
-return new Date(time)
+
+function formatTime(t){
+
+
+if(!t)
+return "不明";
+
+
+return new Date(t)
 .toLocaleString();
 
 
@@ -437,42 +416,74 @@ return new Date(time)
 
 
 
-
-//================
+//=====================
 // 受信
-//================
+//=====================
 
 socket.on(
+
 "locations",
+
 (users)=>{
 
 
 let html="";
 
 
+
 Object.keys(users)
-.forEach(id=>{
+.forEach(
+
+(name)=>{
 
 
-let user=users[id];
+let user=users[name];
 
 
 
-if(markers[id]){
+// マーカー更新
+
+let color =
+user.online ?
+"green":
+"red";
 
 
-markers[id]
+
+if(markers[name]){
+
+
+markers[name]
 .setLatLng(
-[user.lat,user.lon]
+[
+user.lat,
+user.lon
+]
 );
 
 
-}else{
+}
+
+else{
 
 
-markers[id]=
-L.marker(
-[user.lat,user.lon]
+markers[name]=
+
+L.circleMarker(
+
+[
+user.lat,
+user.lon
+],
+
+{
+
+radius:10,
+
+color:color
+
+}
+
 )
 .addTo(map);
 
@@ -481,14 +492,23 @@ L.marker(
 
 
 
-markers[id]
+markers[name]
+.setStyle(
+{
+color:color
+}
+);
+
+
+
+markers[name]
 .bindPopup(
 
 `
 
 <b>${user.name}</b><br>
 
-${getStatus(user)}<br>
+${statusText(user)}<br>
 
 💧 水量:${user.water}<br>
 
@@ -505,6 +525,7 @@ ${getStatus(user)}<br>
 
 
 
+
 html+=
 
 `
@@ -513,7 +534,13 @@ html+=
 
 <b>${user.name}</b><br>
 
-${getStatus(user)}<br>
+<span class="${statusClass(user)}">
+
+${statusText(user)}
+
+</span>
+
+<br>
 
 💧 水量:${user.water}<br>
 
@@ -529,15 +556,20 @@ ${getStatus(user)}<br>
 
 
 
-});
+}
+
+);
+
 
 
 document.getElementById("users")
 .innerHTML=html;
 
 
-});
 
+}
+
+);
 
 
 </script>
