@@ -123,7 +123,7 @@ L.map('map')
 
 
 L.tileLayer(
-'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+'https://tile.openstreetmap.org/{z}/{x}/{z}.png',
 {
 attribution:'OpenStreetMap'
 }
@@ -160,6 +160,7 @@ function startGPS(){
 if(!navigator.geolocation){
 
 alert("GPS利用不可");
+
 return;
 
 }
@@ -198,6 +199,7 @@ distance >= MOVE_DISTANCE
 
 
 myPosition.lat=lat;
+
 myPosition.lon=lon;
 
 
@@ -205,7 +207,9 @@ sendLocation();
 
 
 lastLat=lat;
+
 lastLon=lon;
+
 
 }
 
@@ -215,7 +219,9 @@ lastLon=lon;
 
 (error)=>{
 
-alert("位置情報取得失敗");
+alert(
+"位置情報取得失敗"
+);
 
 },
 
@@ -273,7 +279,11 @@ document.getElementById("fuel").value
 
 
 destination:
-document.getElementById("destination").value
+document.getElementById("destination").value,
+
+
+lastUpdate:
+Date.now()
 
 
 };
@@ -291,7 +301,7 @@ data
 
 
 //================
-// 状態更新
+// 手動更新
 //================
 
 function updateStatus(){
@@ -330,7 +340,7 @@ const dLat=
 
 
 const dLon=
-(lat2-lon1)
+(lon2-lon1)
 *Math.PI/180;
 
 
@@ -364,7 +374,67 @@ Math.sqrt(1-a)
 
 return R*c;
 
+
 }
+
+
+
+
+//================
+// 状態表示
+//================
+
+function getStatus(user){
+
+
+if(!user.lastUpdate){
+
+return "⚪ 状態不明";
+
+}
+
+
+let diff =
+Date.now()
+-
+user.lastUpdate;
+
+
+
+if(
+diff <
+5 * 60 * 1000
+){
+
+return "🟢 オンライン";
+
+}else{
+
+return "🔴 オフライン";
+
+}
+
+
+}
+
+
+
+function formatTime(time){
+
+
+if(!time){
+
+return "不明";
+
+}
+
+
+return new Date(time)
+.toLocaleString();
+
+
+}
+
 
 
 
@@ -418,19 +488,20 @@ markers[id]
 
 <b>${user.name}</b><br>
 
-緯度:${user.lat}<br>
-
-経度:${user.lon}<br>
+${getStatus(user)}<br>
 
 💧 水量:${user.water}<br>
 
 ⛽ 燃料:${user.fuel}<br>
 
-📍 次の目的地:${user.destination}
+📍 次の目的地:${user.destination}<br>
+
+最終更新:${formatTime(user.lastUpdate)}
 
 `
 
 );
+
 
 
 
@@ -442,11 +513,15 @@ html+=
 
 <b>${user.name}</b><br>
 
+${getStatus(user)}<br>
+
 💧 水量:${user.water}<br>
 
 ⛽ 燃料:${user.fuel}<br>
 
-📍 次の目的地:${user.destination}
+📍 次の目的地:${user.destination}<br>
+
+最終更新:${formatTime(user.lastUpdate)}
 
 </div>
 
