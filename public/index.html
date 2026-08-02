@@ -294,21 +294,6 @@ function updateStatus(){
 
 
 //=====================
-// ユーザー削除
-//=====================
-
-function deleteUser(name){
-
-    if(confirm(name + " を削除しますか？")){
-
-        socket.emit(
-            "deleteUser",
-            name
-        );
-
-    }
-
-}
 
 
 
@@ -329,6 +314,25 @@ pos.coords.longitude
 
 }
 
+
+
+
+//=====================
+// ユーザー削除
+//=====================
+
+function deleteUser(name){
+
+    if(confirm(name + " を削除しますか？")){
+
+        socket.emit(
+            "deleteUser",
+            name
+        );
+
+    }
+
+}
 
 
 
@@ -601,37 +605,7 @@ ${statusText(user)}
 
 
 
-document.getElementById("users").innerHTML=html;
 
-Object.keys(users)
-.forEach(
-
-(name)=>{
-
-
-let user=users[name];
-
-
-
-// マーカー更新
-
-let color =
-user.online ?
-"green":
-"red";
-
-
-
-if(markers[name]){
-
-
-markers[name]
-.setLatLng(
-[
-user.lat,
-user.lon
-]
-);
 
 
 }
