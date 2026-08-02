@@ -112,6 +112,9 @@ GPS開始
 </button>
 
 
+
+
+
 <hr>
 
 
@@ -288,6 +291,26 @@ document.getElementById("destination").value
 
 
 function updateStatus(){
+
+
+//=====================
+// ユーザー削除
+//=====================
+
+function deleteUser(name){
+
+    if(confirm(name + " を削除しますか？")){
+
+        socket.emit(
+            "deleteUser",
+            name
+        );
+
+    }
+
+}
+
+
 
 
 navigator.geolocation.getCurrentPosition(
