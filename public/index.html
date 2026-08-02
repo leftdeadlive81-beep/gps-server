@@ -7,12 +7,9 @@
 
 <title>GPS位置共有システム</title>
 
-
-<!-- Leaflet 地図 -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
 
 <script src="/socket.io/socket.io.js"></script>
 
@@ -24,36 +21,25 @@ body {
     margin:20px;
 }
 
-
 #map {
-
     height:500px;
     width:100%;
-
 }
-
 
 input {
-
     margin:5px;
     padding:5px;
-
 }
-
 
 button {
-
     padding:8px;
-
+    margin:5px;
 }
 
-
 .user {
-
     border:1px solid #aaa;
     padding:10px;
     margin:5px;
-
 }
 
 </style>
@@ -104,9 +90,12 @@ button {
 
 
 <button onclick="startGPS()">
-
 GPS開始
+</button>
 
+
+<button onclick="updateStatus()">
+状態更新
 </button>
 
 
@@ -119,9 +108,7 @@ GPS開始
 <div id="map"></div>
 
 
-
 <h3>接続ユーザー</h3>
-
 
 <div id="users"></div>
 
@@ -133,9 +120,9 @@ GPS開始
 const socket = io();
 
 
-//------------------
-// 地図設定
-//------------------
+//====================
+// 地図
+//====================
 
 const map = L.map('map')
 .setView(
@@ -144,34 +131,29 @@ const map = L.map('map')
 );
 
 
-
 L.tileLayer(
 
 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
 
 {
-
-attribution:
-'OpenStreetMap'
-
+    attribution:'OpenStreetMap'
 }
 
 ).addTo(map);
-
 
 
 let markers={};
 
 
 
-//------------------
+//====================
 // GPS
-//------------------
+//====================
 
 let myPosition={
 
-lat:0,
-lon:0
+    lat:0,
+    lon:0
 
 };
 
@@ -182,9 +164,8 @@ function startGPS(){
 
 if(!navigator.geolocation){
 
-alert("GPSが利用できません");
-
-return;
+    alert("GPSが利用できません");
+    return;
 
 }
 
@@ -192,20 +173,19 @@ return;
 
 navigator.geolocation.watchPosition(
 
+
 (position)=>{
 
 
-myPosition.lat =
-position.coords.latitude;
+    myPosition.lat =
+    position.coords.latitude;
 
 
-myPosition.lon =
-position.coords.longitude;
+    myPosition.lon =
+    position.coords.longitude;
 
 
-
-sendLocation();
-
+    sendLocation();
 
 
 },
@@ -213,11 +193,7 @@ sendLocation();
 
 (error)=>{
 
-
-alert(
-"位置情報取得失敗"
-);
-
+    alert("位置情報取得失敗");
 
 },
 
@@ -240,9 +216,9 @@ timeout:10000
 
 
 
-//------------------
-// 送信
-//------------------
+//====================
+// GPS送信
+//====================
 
 function sendLocation(){
 
@@ -283,7 +259,6 @@ document.getElementById("equipment").value
 };
 
 
-
 socket.emit(
 "location",
 data
@@ -294,13 +269,28 @@ data
 
 
 
+//====================
+// 状態だけ更新
+//====================
 
-//------------------
+function updateStatus(){
+
+
+sendLocation();
+
+
+}
+
+
+
+//====================
 // 受信
-//------------------
+//====================
 
 socket.on(
+
 "locations",
+
 (users)=>{
 
 
@@ -310,7 +300,7 @@ let html="";
 Object.keys(users).forEach(id=>{
 
 
-let user=users[id];
+const user=users[id];
 
 
 
@@ -339,8 +329,7 @@ L.marker(
 
 
 
-markers[id]
-.bindPopup(
+markers[id].bindPopup(
 
 `
 
@@ -362,7 +351,6 @@ markers[id]
 
 
 
-
 html +=
 
 `
@@ -375,15 +363,16 @@ html +=
 
 経度:${user.lon}<br>
 
-💰 ${user.money} 円<br>
+💰 所持金:${user.money} 円<br>
 
-⛽ ${user.fuel}<br>
+⛽ 燃料:${user.fuel}<br>
 
-🎒 ${user.equipment}
+🎒 装備:${user.equipment}
 
 </div>
 
 `;
+
 
 
 });
@@ -396,7 +385,6 @@ document.getElementById("users")
 
 
 });
-
 
 
 </script>
