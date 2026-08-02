@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
-
 <head>
+
 <meta charset="UTF-8">
 
 <title>位置情報共有システム</title>
@@ -11,8 +11,12 @@
 <style>
 
 #map {
-    height: 500px;
+    height:500px;
     width:100%;
+}
+
+input {
+    margin:3px;
 }
 
 </style>
@@ -23,10 +27,30 @@
 <body>
 
 
-<h1>位置情報共有システム</h1>
+<h1>位置情報共有</h1>
 
 
+端末名：
 <input id="name" placeholder="端末名">
+
+<br>
+
+燃料(%):
+<input id="fuel" value="100" type="number">
+
+<br>
+
+所持金(円):
+<input id="money" value="0" type="number">
+
+<br>
+
+装備数:
+<input id="equipment" value="0" type="number">
+
+
+<br><br>
+
 
 <button onclick="startTracking()">
 追跡開始
@@ -34,7 +58,7 @@
 
 
 <button onclick="showHistory()">
-履歴再生
+履歴表示
 </button>
 
 
@@ -60,201 +84,114 @@ let map;
 
 let myMarker;
 
-let myPolyline;
+let otherMarkers={};
 
 let myPath=[];
 
+let myPolyline;
 
 let historyLine;
 
-
-let otherMarkers={};
-
-
-let deviceName="";
+let deviceName;
 
 
-const socket = io();
+const socket=io();
 
 
-
-//
-// GPS開始
-//
 
 function startTracking(){
 
 
-    deviceName =
-    document.getElementById("name").value;
+deviceName=
+document.getElementById("name").value;
 
 
-    if(deviceName==""){
-        deviceName="未設定";
-    }
+if(deviceName==""){
+    deviceName="未設定";
+}
 
 
 
-    navigator.geolocation.watchPosition(
+navigator.geolocation.watchPosition(
 
+function(position){
 
-    function(position){
 
+let lat=
+position.coords.latitude;
 
-        let lat =
-        position.coords.latitude;
 
+let lon=
+position.coords.longitude;
 
-        let lon =
-        position.coords.longitude;
 
 
+let fuel=
+document.getElementById("fuel").value;
 
-        document.getElementById("result").innerHTML =
-        "端末："+deviceName+
-        "<br>緯度："+lat+
-        "<br>経度："+lon;
 
+let money=
+document.getElementById("money").value;
 
 
-        //
-        // 地図初期化
-        //
+let equipment=
+document.getElementById("equipment").value;
 
-        if(!map){
 
 
-            map =
-            L.map("map")
-            .setView(
-                [lat,lon],
-                16
-            );
+document.getElementById("result").innerHTML=
 
+"端末："+deviceName+
+"<br>燃料："+fuel+"%"+
+"<br>所持金："+money+"円"+
+"<br>装備数："+equipment+
+"<br>緯度："+lat+
+"<br>経度："+lon;
 
-            L.tileLayer(
-            "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-            {
-                attribution:
-                "OpenStreetMap"
-            }
 
-            ).addTo(map);
 
 
-        }
+if(!map){
 
 
+map=L.map('map')
+.setView([lat,lon],15);
 
-        //
-        // 自分の軌跡
-        //
 
-        myPath.push(
-            [lat,lon]
-        );
 
+L.tileLayer(
 
-        if(!myPolyline){
+'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
 
+{
 
-            myPolyline =
-            L.polyline(
-                myPath
-            )
-            .addTo(map);
+attribution:'OpenStreetMap'
 
+}
 
-        }else{
+).addTo(map);
 
 
-            myPolyline
-            .setLatLngs(myPath);
+}
 
 
-        }
 
+myPath.push([lat,lon]);
 
 
 
-        //
-        // 自分マーカー
-        //
+if(!myPolyline){
 
-        if(!myMarker){
 
+myPolyline=
+L.polyline(myPath)
+.addTo(map);
 
-            myMarker =
-            L.marker(
-                [lat,lon]
-            )
-            .addTo(map)
-            .bindTooltip(
-                deviceName,
-                {
-                    permanent:true
-                }
-            );
 
+}else{
 
-        }else{
 
-
-            myMarker
-            .setLatLng(
-                [lat,lon]
-            );
-
-        }
-
-
-
-
-        //
-        // サーバー送信
-        //
-
-        socket.emit(
-            "location",
-            {
-
-            name:deviceName,
-
-            lat:lat,
-
-            lon:lon
-
-            }
-        );
-
-
-
-    },
-
-
-    function(error){
-
-
-        document.getElementById("result").innerHTML =
-        "GPS取得失敗<br>"+
-        error.message;
-
-
-    },
-
-
-    {
-
-        enableHighAccuracy:true,
-
-        maximumAge:0,
-
-        timeout:10000
-
-    }
-
-
-    );
+myPolyline.setLatLngs(myPath);
 
 
 }
@@ -262,66 +199,153 @@ function startTracking(){
 
 
 
-
-//
-// 他端末表示
-//
-
-socket.on(
-"locations",
-function(users){
+if(!myMarker){
 
 
-    for(let id in users){
+myMarker=
+L.marker([lat,lon])
+.addTo(map)
+.bindTooltip(
+deviceName,
+{
+permanent:true,
+direction:"top"
+}
+);
 
 
-        let user =
-        users[id];
+}else{
+
+
+myMarker.setLatLng([lat,lon]);
+
+
+}
 
 
 
-        if(user.name != deviceName){
+
+socket.emit("location",{
+
+
+name:deviceName,
+
+lat:lat,
+
+lon:lon,
+
+fuel:fuel,
+
+money:money,
+
+equipment:equipment
+
+
+});
 
 
 
-            if(!otherMarkers[id]){
+
+},
 
 
-                otherMarkers[id] =
-                L.marker(
-                    [
-                    user.lat,
-                    user.lon
-                    ]
-                )
-                .addTo(map)
-                .bindTooltip(
-                    user.name,
-                    {
-                    permanent:true
-                    }
-                );
+function(error){
+
+document.getElementById("result").innerHTML=
+"GPS取得失敗："+error.message;
+
+},
 
 
-            }else{
+{
+
+enableHighAccuracy:true,
+
+maximumAge:0,
+
+timeout:10000
+
+}
 
 
-                otherMarkers[id]
-                .setLatLng(
-                    [
-                    user.lat,
-                    user.lon
-                    ]
-                );
+);
 
 
-            }
+}
 
 
-        }
 
 
-    }
+socket.on("locations",function(users){
+
+
+
+for(let id in users){
+
+
+
+let user=
+users[id];
+
+
+
+if(user.name!=deviceName){
+
+
+
+let text=
+
+user.name+
+"<br>燃料："+user.fuel+"%"+
+"<br>所持金："+user.money+"円"+
+"<br>装備数："+user.equipment;
+
+
+
+if(!otherMarkers[id]){
+
+
+otherMarkers[id]=
+
+L.marker(
+[user.lat,user.lon]
+)
+
+.addTo(map)
+
+.bindTooltip(
+text,
+{
+permanent:true,
+direction:"top"
+}
+);
+
+
+
+}else{
+
+
+otherMarkers[id]
+.setLatLng(
+[user.lat,user.lon]
+);
+
+
+otherMarkers[id]
+.setTooltipContent(text);
+
+
+
+}
+
+
+
+}
+
+
+}
+
 
 
 });
@@ -330,82 +354,53 @@ function(users){
 
 
 
-
-//
-// 履歴表示
-//
-
 async function showHistory(){
 
 
-    const response =
-    await fetch("/history");
+const response=
+await fetch("/history");
 
 
-    const data =
-    await response.json();
+const data=
+await response.json();
 
 
-
-    let points=[];
-
-
-
-    data.forEach(row=>{
-
-
-        if(row.name == deviceName){
-
-
-            points.push(
-                [
-                row.lat,
-                row.lon
-                ]
-            );
-
-
-        }
-
-
-    });
+let points=[];
 
 
 
-    if(historyLine){
+data.forEach(row=>{
 
 
-        map.removeLayer(
-            historyLine
-        );
-
-    }
+if(row.name===deviceName){
 
 
+points.push(
+[row.lat,row.lon]
+);
 
-    historyLine =
-    L.polyline(
-        points,
-        {
 
-        weight:5
+}
 
-        }
 
-    )
-    .addTo(map);
+});
 
 
 
-    if(points.length>0){
+if(historyLine){
+
+map.removeLayer(historyLine);
+
+}
 
 
-        map.fitBounds(
-            historyLine.getBounds()
-        );
 
-
-    }
+historyLine=
+L.polyline(points,{
+color:"red",
+weight:5
+})
+.addTo(map);
 
 
 
