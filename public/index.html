@@ -421,15 +421,15 @@ return new Date(t)
 //=====================
 
 socket.on(
-
 "locations",
-
 (users)=>{
 
 
 let html="";
 
+
 // 削除されたマーカーを消す
+
 Object.keys(markers).forEach((name)=>{
 
     if(!users[name]){
@@ -442,53 +442,110 @@ Object.keys(markers).forEach((name)=>{
 
 });
 
-let html="";
+
+
+// ユーザー表示
 
 Object.keys(users).forEach((name)=>{
 
-    let user=users[name];
 
-    let color=user.online ? "green" : "red";
+let user=users[name];
 
-    if(markers[name]){
 
-        markers[name].setLatLng([user.lat,user.lon]);
+let color =
+user.online ? "green":"red";
 
-    }else{
 
-        markers[name]=L.circleMarker(
-            [user.lat,user.lon],
-            {
-                radius:10,
-                color:color
-            }
-        ).addTo(map);
 
-    }
+// マーカー作成・更新
 
-    markers[name].setStyle({
-        color:color
-    });
+if(markers[name]){
 
-    markers[name].bindPopup(
-`
-<b>${user.name}</b><br>
-${statusText(user)}<br>
-💧 水量:${user.water}<br>
-⛽ 燃料:${user.fuel}<br>
-📍 次の目的地:${user.destination}<br>
-最終更新:${formatTime(user.lastUpdate)}
-`
+
+markers[name].setLatLng(
+[
+user.lat,
+user.lon
+]
 );
 
-    html+=`
+
+}
+else{
+
+
+markers[name]=L.circleMarker(
+
+[
+user.lat,
+user.lon
+],
+
+{
+
+radius:10,
+
+color:color
+
+}
+
+)
+.addTo(map);
+
+
+}
+
+
+
+markers[name].setStyle(
+{
+color:color
+}
+);
+
+
+
+// ポップアップ
+
+markers[name].bindPopup(
+
+`
+
+<b>${user.name}</b><br>
+
+${statusText(user)}<br>
+
+💧 水量:${user.water}<br>
+
+⛽ 燃料:${user.fuel}<br>
+
+📍 次の目的地:${user.destination}<br>
+
+最終更新:${formatTime(user.lastUpdate)}
+
+`
+
+);
+
+
+
+// 右側リスト
+
+html+=
+
+`
+
 <div class="user">
 
 <b>${user.name}</b><br>
 
+
 <span class="${statusClass(user)}">
+
 ${statusText(user)}
+
 </span>
+
 
 <br>
 
@@ -503,13 +560,28 @@ ${statusText(user)}
 <br><br>
 
 <button onclick="deleteUser('${user.name}')">
+
 🗑 削除
+
 </button>
 
+
 </div>
+
 `;
 
+
+
 });
+
+
+
+document.getElementById("users").innerHTML=html;
+
+
+}
+
+);
 
 document.getElementById("users").innerHTML=html;
 
