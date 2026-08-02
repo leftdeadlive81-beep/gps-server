@@ -13,6 +13,11 @@ const db = new sqlite3.Database("gps.db");
 db.serialize(() => {
 
     db.run(`
+    DROP TABLE IF EXISTS locations
+    `);
+
+
+    db.run(`
     CREATE TABLE IF NOT EXISTS locations(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
