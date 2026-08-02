@@ -3,108 +3,132 @@ const app = express();
 
 app.use(express.static("public"));
 
+
 const http = require("http");
+const server = http.createServer(app);
+
+
 const sqlite3 = require("sqlite3").verbose();
 
 const db = new sqlite3.Database("gps.db");
 
 
-// テーブル作成
-db.serialize(() => {
+
+//=====================
+// DB作成
+//=====================
+
+db.serialize(()=>{
+
 
     db.run(`
-    DROP TABLE IF EXISTS locations
+        DROP TABLE IF EXISTS locations
     `);
 
 
     db.run(`
-    CREATE TABLE IF NOT EXISTS locations(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        lat REAL,
-        lon REAL,
-        money INTEGER DEFAULT 0,
-        fuel INTEGER DEFAULT 0,
-        equipment INTEGER DEFAULT 0,
-        time DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
+        CREATE TABLE locations(
+
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            name TEXT,
+
+            lat REAL,
+
+            lon REAL,
+
+            water INTEGER,
+
+            fuel INTEGER,
+
+            destination TEXT,
+
+            time DATETIME DEFAULT CURRENT_TIMESTAMP
+
+        )
     `);
+
 
 });
 
 
-// HTTPサーバー
-const server = http.createServer(app);
 
 
+//=====================
 // Socket.IO
+//=====================
+
 const io = require("socket.io")(server);
 
 
-// 接続中ユーザー
-let users = {};
+let users={};
 
 
 
-io.on("connection", socket => {
-
-    console.log("接続:", socket.id);
-
-
-
-    // GPS情報受信
-    socket.on("location", data => {
+io.on(
+"connection",
+(socket)=>{
 
 
-        // 現在位置保存
-        users[socket.id] = data;
+console.log(
+"接続:",
+socket.id
+);
 
 
 
-        // DB保存
-        db.run(
-        `
-        INSERT INTO locations
-        (
-            name,
-            lat,
-            lon,
-            money,
-            fuel,
-            equipment
-        )
-        VALUES(?,?,?,?,?,?)
-        `,
-        [
-            data.name,
-            data.lat,
-            data.lon,
-            data.money || 0,
-            data.fuel || 0,
-            data.equipment || 0
-        ]);
+socket.on(
+"location",
+(data)=>{
+
+
+users[socket.id]=data;
 
 
 
-        // 全員へ送信
-        io.emit("locations", users);
+db.run(
+
+`
+INSERT INTO locations
+(
+name,
+lat,
+lon,
+water,
+fuel,
+destination
+)
+
+VALUES
+(?,?,?,?,?,?)
+
+`,
+
+[
+
+data.name,
+
+data.lat,
+
+data.lon,
+
+data.water,
+
+data.fuel,
+
+data.destination
+
+]
 
 
-    });
+);
 
 
 
-    // 切断
-    socket.on("disconnect", () => {
-
-
-        delete users[socket.id];
-
-
-        io.emit("locations", users);
-
-
-    });
+io.emit(
+"locations",
+users
+);
 
 
 
@@ -112,45 +136,96 @@ io.on("connection", socket => {
 
 
 
+
+
+socket.on(
+"disconnect",
+()=>{
+
+
+delete users[socket.id];
+
+
+io.emit(
+"locations",
+users
+);
+
+
+});
+
+
+});
+
+
+
+
+//=====================
 // 履歴取得
-app.get("/history", (req,res)=>{
+//=====================
+
+app.get(
+"/history",
+(req,res)=>{
 
 
-    db.all(
-        `
-        SELECT *
-        FROM locations
-        ORDER BY time
-        `,
-        [],
-        (err,rows)=>{
+db.all(
+
+`
+SELECT *
+FROM locations
+ORDER BY time
+
+`,
+
+[],
 
 
-            if(err){
-
-                res.status(500).send(err.message);
-                return;
-
-            }
+(err,rows)=>{
 
 
-            res.json(rows);
+if(err){
+
+res.status(500)
+.send(err.message);
+
+return;
+
+}
 
 
-        }
-    );
+res.json(rows);
+
+
+}
+
+
+);
 
 
 });
 
 
 
-// Render対応
-const PORT = process.env.PORT || 3000;
+
+//=====================
+// Render用PORT
+//=====================
+
+const PORT =
+process.env.PORT || 3000;
 
 
-server.listen(PORT,()=>{
 
-    console.log("http server start port:" + PORT);
+server.listen(
+PORT,
+()=>{
+
+
+console.log(
+"http server start port:",
+PORT
+);
+
 
 });
