@@ -7,7 +7,6 @@ const http = require("http");
 const server = http.createServer(app);
 
 const sqlite3 = require("sqlite3").verbose();
-
 const db = new sqlite3.Database("gps.db");
 
 const io = require("socket.io")(server);
@@ -46,15 +45,15 @@ db.serialize(()=>{
 
 
 //=====================
-// 現在表示ユーザー
+// 現在ユーザー
 //=====================
 
-let users={};
+let users = {};
 
 
 
 //=====================
-// SQLiteから復元
+// SQLite復元
 //=====================
 
 db.all(
@@ -78,7 +77,6 @@ WHERE id IN
 if(err){
 
 console.log(err);
-
 return;
 
 }
@@ -88,7 +86,6 @@ rows.forEach((row)=>{
 
 
 users[row.name]={
-
 
 name:row.name,
 
@@ -102,11 +99,11 @@ fuel:row.fuel,
 
 destination:row.destination,
 
-
-// 最終更新時間を復元
-
 lastUpdate:
-new Date(row.time).getTime()
+new Date(row.time).getTime(),
+
+
+online:false
 
 
 };
@@ -143,8 +140,7 @@ socket.id
 );
 
 
-
-// 接続直後に現在状態送信
+// 接続時に現在状態送信
 
 socket.emit(
 "locations",
@@ -173,8 +169,12 @@ fuel:data.fuel,
 
 destination:data.destination,
 
+
 lastUpdate:
-Date.now()
+Date.now(),
+
+
+online:true
 
 
 };
@@ -244,7 +244,8 @@ socket.id
 );
 
 
-// すぐ削除しない
+// 削除しない
+// オフライン判定で管理
 
 
 });
@@ -257,7 +258,7 @@ socket.id
 
 
 //=====================
-// オフライン削除
+// オンライン監視
 //=====================
 
 setInterval(()=>{
@@ -275,20 +276,27 @@ Object.keys(users)
 if(
 
 now - users[name].lastUpdate
+
 >
+
 5 * 60 * 1000
 
 ){
 
 
-console.log(
-"offline remove:",
-name
-);
+users[name].online=false;
 
 
+}else{
 
-delete users[name];
+
+users[name].online=true;
+
+
+}
+
+
+});
 
 
 
@@ -298,13 +306,8 @@ users
 );
 
 
-}
-
-
-});
-
-
 },60000);
+
 
 
 
@@ -324,6 +327,7 @@ db.all(
 SELECT *
 FROM locations
 ORDER BY time DESC
+
 `,
 
 [],
@@ -353,7 +357,7 @@ res.json(rows);
 
 
 //=====================
-// Render用
+// Render
 //=====================
 
 const PORT =
