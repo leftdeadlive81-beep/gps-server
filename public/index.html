@@ -17,7 +17,7 @@
 <style>
 
 body {
-    font-family: sans-serif;
+    font-family:sans-serif;
     margin:20px;
 }
 
@@ -44,7 +44,6 @@ button {
 
 </style>
 
-
 </head>
 
 
@@ -54,21 +53,16 @@ button {
 <h2>GPS位置共有システム</h2>
 
 
-<div>
-
-
 名前：
 
 <input id="name" value="隊員A">
 
-
 <br>
 
 
-所持金：
+水量：
 
-<input id="money" type="number" value="0">
-
+<input id="water" type="number" value="0">
 
 <br>
 
@@ -77,14 +71,12 @@ button {
 
 <input id="fuel" type="number" value="100">
 
-
 <br>
 
 
-装備数：
+次の目的地：
 
-<input id="equipment" type="number" value="0">
-
+<input id="destination" type="text" value="">
 
 <br>
 
@@ -99,10 +91,7 @@ GPS開始
 </button>
 
 
-</div>
-
-
-<br>
+<br><br>
 
 
 <div id="map"></div>
@@ -120,42 +109,48 @@ GPS開始
 const socket = io();
 
 
-//====================
+//================
 // 地図
-//====================
+//================
 
-const map = L.map('map')
+const map =
+L.map('map')
 .setView(
-    [32.803,130.707],
-    13
+[32.803,130.707],
+13
 );
 
 
+
 L.tileLayer(
-
 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-
 {
-    attribution:'OpenStreetMap'
+attribution:'OpenStreetMap'
 }
+)
+.addTo(map);
 
-).addTo(map);
 
 
 let markers={};
 
 
 
-//====================
+//================
 // GPS
-//====================
+//================
 
 let myPosition={
-
-    lat:0,
-    lon:0
-
+lat:0,
+lon:0
 };
+
+
+let lastLat=0;
+let lastLon=0;
+
+
+const MOVE_DISTANCE=10;
 
 
 
@@ -164,8 +159,8 @@ function startGPS(){
 
 if(!navigator.geolocation){
 
-    alert("GPSが利用できません");
-    return;
+alert("GPS利用不可");
+return;
 
 }
 
@@ -177,15 +172,42 @@ navigator.geolocation.watchPosition(
 (position)=>{
 
 
-    myPosition.lat =
-    position.coords.latitude;
+let lat =
+position.coords.latitude;
 
 
-    myPosition.lon =
-    position.coords.longitude;
+let lon =
+position.coords.longitude;
 
 
-    sendLocation();
+
+let distance =
+getDistance(
+lastLat,
+lastLon,
+lat,
+lon
+);
+
+
+
+if(
+lastLat===0 ||
+distance >= MOVE_DISTANCE
+){
+
+
+myPosition.lat=lat;
+myPosition.lon=lon;
+
+
+sendLocation();
+
+
+lastLat=lat;
+lastLon=lon;
+
+}
 
 
 },
@@ -193,7 +215,7 @@ navigator.geolocation.watchPosition(
 
 (error)=>{
 
-    alert("位置情報取得失敗");
+alert("位置情報取得失敗");
 
 },
 
@@ -202,7 +224,7 @@ navigator.geolocation.watchPosition(
 
 enableHighAccuracy:true,
 
-maximumAge:0,
+maximumAge:10000,
 
 timeout:10000
 
@@ -216,14 +238,14 @@ timeout:10000
 
 
 
-//====================
-// GPS送信
-//====================
+//================
+// 送信
+//================
 
 function sendLocation(){
 
 
-const data={
+let data={
 
 
 name:
@@ -238,9 +260,9 @@ lon:
 myPosition.lon,
 
 
-money:
+water:
 Number(
-document.getElementById("money").value
+document.getElementById("water").value
 ),
 
 
@@ -250,13 +272,12 @@ document.getElementById("fuel").value
 ),
 
 
-equipment:
-Number(
-document.getElementById("equipment").value
-)
+destination:
+document.getElementById("destination").value
 
 
 };
+
 
 
 socket.emit(
@@ -269,42 +290,103 @@ data
 
 
 
-//====================
-// 状態だけ更新
-//====================
+//================
+// 状態更新
+//================
 
 function updateStatus(){
 
-
 sendLocation();
-
 
 }
 
 
 
-//====================
+//================
+// 距離計算
+//================
+
+function getDistance(
+lat1,
+lon1,
+lat2,
+lon2
+){
+
+
+if(lat1===0){
+
+return 99999;
+
+}
+
+
+const R=6371000;
+
+
+const dLat=
+(lat2-lat1)
+*Math.PI/180;
+
+
+const dLon=
+(lat2-lon1)
+*Math.PI/180;
+
+
+const a=
+
+Math.sin(dLat/2)
+*
+Math.sin(dLat/2)
+
++
+
+Math.cos(lat1*Math.PI/180)
+*
+Math.cos(lat2*Math.PI/180)
+
+*
+
+Math.sin(dLon/2)
+*
+Math.sin(dLon/2);
+
+
+
+const c=
+2*Math.atan2(
+Math.sqrt(a),
+Math.sqrt(1-a)
+);
+
+
+
+return R*c;
+
+}
+
+
+
+//================
 // 受信
-//====================
+//================
 
 socket.on(
-
 "locations",
-
 (users)=>{
 
 
 let html="";
 
 
-Object.keys(users).forEach(id=>{
+Object.keys(users)
+.forEach(id=>{
 
 
-const user=users[id];
+let user=users[id];
 
 
-
-// マーカー更新
 
 if(markers[id]){
 
@@ -329,7 +411,8 @@ L.marker(
 
 
 
-markers[id].bindPopup(
+markers[id]
+.bindPopup(
 
 `
 
@@ -339,11 +422,11 @@ markers[id].bindPopup(
 
 経度:${user.lon}<br>
 
-💰 所持金:${user.money} 円<br>
+💧 水量:${user.water}<br>
 
 ⛽ 燃料:${user.fuel}<br>
 
-🎒 装備:${user.equipment}
+📍 次の目的地:${user.destination}
 
 `
 
@@ -351,7 +434,7 @@ markers[id].bindPopup(
 
 
 
-html +=
+html+=
 
 `
 
@@ -359,15 +442,11 @@ html +=
 
 <b>${user.name}</b><br>
 
-緯度:${user.lat}<br>
-
-経度:${user.lon}<br>
-
-💰 所持金:${user.money} 円<br>
+💧 水量:${user.water}<br>
 
 ⛽ 燃料:${user.fuel}<br>
 
-🎒 装備:${user.equipment}
+📍 次の目的地:${user.destination}
 
 </div>
 
@@ -378,13 +457,12 @@ html +=
 });
 
 
-
 document.getElementById("users")
 .innerHTML=html;
 
 
-
 });
+
 
 
 </script>
