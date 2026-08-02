@@ -7,31 +7,57 @@
 
 <title>GPS位置共有システム</title>
 
+
+<!-- Leaflet 地図 -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+
 <script src="/socket.io/socket.io.js"></script>
+
 
 <style>
 
 body {
     font-family: sans-serif;
-    margin: 20px;
+    margin:20px;
 }
+
+
+#map {
+
+    height:500px;
+    width:100%;
+
+}
+
 
 input {
+
     margin:5px;
     padding:5px;
+
 }
+
 
 button {
+
     padding:8px;
+
 }
 
+
 .user {
+
     border:1px solid #aaa;
     padding:10px;
     margin:5px;
+
 }
 
 </style>
+
 
 </head>
 
@@ -44,13 +70,17 @@ button {
 
 <div>
 
+
 名前：
+
 <input id="name" value="隊員A">
+
 
 <br>
 
 
 所持金：
+
 <input id="money" type="number" value="0">
 
 
@@ -58,6 +88,7 @@ button {
 
 
 燃料：
+
 <input id="fuel" type="number" value="100">
 
 
@@ -65,6 +96,7 @@ button {
 
 
 装備数：
+
 <input id="equipment" type="number" value="0">
 
 
@@ -72,15 +104,23 @@ button {
 
 
 <button onclick="startGPS()">
+
 GPS開始
+
 </button>
 
 
 </div>
 
 
+<br>
 
-<h3>現在接続中</h3>
+
+<div id="map"></div>
+
+
+
+<h3>接続ユーザー</h3>
 
 
 <div id="users"></div>
@@ -93,26 +133,58 @@ GPS開始
 const socket = io();
 
 
+//------------------
+// 地図設定
+//------------------
 
-let myPosition = {
+const map = L.map('map')
+.setView(
+    [32.803,130.707],
+    13
+);
 
-    lat:0,
-    lon:0
+
+
+L.tileLayer(
+
+'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+
+{
+
+attribution:
+'OpenStreetMap'
+
+}
+
+).addTo(map);
+
+
+
+let markers={};
+
+
+
+//------------------
+// GPS
+//------------------
+
+let myPosition={
+
+lat:0,
+lon:0
 
 };
 
 
-
-
-// GPS開始
 
 function startGPS(){
 
 
 if(!navigator.geolocation){
 
-    alert("GPSが利用できません");
-    return;
+alert("GPSが利用できません");
+
+return;
 
 }
 
@@ -123,16 +195,16 @@ navigator.geolocation.watchPosition(
 (position)=>{
 
 
-    myPosition.lat =
-    position.coords.latitude;
+myPosition.lat =
+position.coords.latitude;
 
 
-    myPosition.lon =
-    position.coords.longitude;
+myPosition.lon =
+position.coords.longitude;
 
 
 
-    sendLocation();
+sendLocation();
 
 
 
@@ -141,18 +213,22 @@ navigator.geolocation.watchPosition(
 
 (error)=>{
 
-    alert("位置情報取得失敗");
+
+alert(
+"位置情報取得失敗"
+);
+
 
 },
 
 
 {
 
-    enableHighAccuracy:true,
+enableHighAccuracy:true,
 
-    maximumAge:0,
+maximumAge:0,
 
-    timeout:10000
+timeout:10000
 
 }
 
@@ -160,13 +236,13 @@ navigator.geolocation.watchPosition(
 );
 
 
-
 }
 
 
 
-
-// サーバー送信
+//------------------
+// 送信
+//------------------
 
 function sendLocation(){
 
@@ -187,15 +263,21 @@ myPosition.lon,
 
 
 money:
-Number(document.getElementById("money").value),
+Number(
+document.getElementById("money").value
+),
 
 
 fuel:
-Number(document.getElementById("fuel").value),
+Number(
+document.getElementById("fuel").value
+),
 
 
 equipment:
-Number(document.getElementById("equipment").value)
+Number(
+document.getElementById("equipment").value
+)
 
 
 };
@@ -213,8 +295,9 @@ data
 
 
 
-
-// 他ユーザー受信
+//------------------
+// 受信
+//------------------
 
 socket.on(
 "locations",
@@ -224,39 +307,81 @@ socket.on(
 let html="";
 
 
-Object.values(users).forEach(user=>{
+Object.keys(users).forEach(id=>{
 
 
-html += `
+let user=users[id];
 
-<div class="user">
 
+
+// マーカー更新
+
+if(markers[id]){
+
+
+markers[id]
+.setLatLng(
+[user.lat,user.lon]
+);
+
+
+}else{
+
+
+markers[id]=
+L.marker(
+[user.lat,user.lon]
+)
+.addTo(map);
+
+
+}
+
+
+
+markers[id]
+.bindPopup(
+
+`
 
 <b>${user.name}</b><br>
 
+緯度:${user.lat}<br>
 
-緯度:
-${user.lat}<br>
+経度:${user.lon}<br>
 
+💰 所持金:${user.money} 円<br>
 
-経度:
-${user.lon}<br>
+⛽ 燃料:${user.fuel}<br>
 
+🎒 装備:${user.equipment}
 
-💰 所持金:
-${user.money} 円<br>
+`
 
-
-⛽ 燃料:
-${user.fuel}<br>
+);
 
 
-🎒 装備:
-${user.equipment}
 
+
+html +=
+
+`
+
+<div class="user">
+
+<b>${user.name}</b><br>
+
+緯度:${user.lat}<br>
+
+経度:${user.lon}<br>
+
+💰 ${user.money} 円<br>
+
+⛽ ${user.fuel}<br>
+
+🎒 ${user.equipment}
 
 </div>
-
 
 `;
 
@@ -264,8 +389,9 @@ ${user.equipment}
 });
 
 
-document.getElementById("users").innerHTML =
-html;
+
+document.getElementById("users")
+.innerHTML=html;
 
 
 
