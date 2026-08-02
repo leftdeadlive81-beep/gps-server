@@ -22,24 +22,20 @@ font-family:sans-serif;
 margin:20px;
 }
 
-
 #map{
 height:500px;
 width:100%;
 }
-
 
 input{
 margin:5px;
 padding:5px;
 }
 
-
 button{
 padding:8px;
 margin:5px;
 }
-
 
 .user{
 border:1px solid #aaa;
@@ -47,12 +43,10 @@ padding:10px;
 margin:5px;
 }
 
-
 .online{
 color:green;
 font-weight:bold;
 }
-
 
 .offline{
 color:red;
@@ -60,7 +54,6 @@ font-weight:bold;
 }
 
 </style>
-
 
 </head>
 
@@ -72,30 +65,24 @@ font-weight:bold;
 
 
 名前：
-
 <input id="name" value="隊員A">
 
 <br>
 
 
 水量：
-
 <input id="water" type="number" value="100">
-
 
 <br>
 
 
 燃料：
-
 <input id="fuel" type="number" value="100">
-
 
 <br>
 
 
 次の目的地：
-
 <input id="destination" value="">
 
 
@@ -110,9 +97,6 @@ GPS開始
 <button onclick="updateStatus()">
 状態更新
 </button>
-
-
-
 
 
 <hr>
@@ -130,16 +114,23 @@ GPS開始
 <script>
 
 
-const socket=io();
+//=====================
+// Socket.IO
+//=====================
+
+const socket = io();
 
 
 
-const map=L.map('map')
+//=====================
+// 地図
+//=====================
+
+const map = L.map('map')
 .setView(
 [32.803,130.707],
 13
 );
-
 
 
 L.tileLayer(
@@ -155,13 +146,12 @@ attribution:'OpenStreetMap'
 let markers={};
 
 
-
 let lastLat=0;
 let lastLon=0;
 
 
-
 const MOVE_DISTANCE=10;
+
 
 
 
@@ -177,17 +167,13 @@ navigator.geolocation.watchPosition(
 (pos)=>{
 
 
-let lat=
-pos.coords.latitude;
+let lat=pos.coords.latitude;
 
-
-let lon=
-pos.coords.longitude;
+let lon=pos.coords.longitude;
 
 
 
-let distance=
-getDistance(
+let distance=getDistance(
 lastLat,
 lastLon,
 lat,
@@ -241,8 +227,9 @@ timeout:10000
 
 
 
+
 //=====================
-// 送信
+// 状態送信
 //=====================
 
 function sendLocation(lat,lon){
@@ -254,7 +241,6 @@ socket.emit(
 
 {
 
-
 name:
 document.getElementById("name").value,
 
@@ -264,14 +250,12 @@ lat:lat,
 lon:lon,
 
 
-water:
-Number(
+water:Number(
 document.getElementById("water").value
 ),
 
 
-fuel:
-Number(
+fuel:Number(
 document.getElementById("fuel").value
 ),
 
@@ -290,29 +274,35 @@ document.getElementById("destination").value
 
 
 
-function updateStatus(){
-
 
 //=====================
+// 状態更新
+//=====================
 
-
+function updateStatus(){
 
 
 navigator.geolocation.getCurrentPosition(
 
 (pos)=>{
 
+
 sendLocation(
+
 pos.coords.latitude,
+
 pos.coords.longitude
-);
-
-}
 
 );
 
 
 }
+
+);
+
+
+}
+
 
 
 
@@ -323,16 +313,25 @@ pos.coords.longitude
 
 function deleteUser(name){
 
-    if(confirm(name + " を削除しますか？")){
 
-        socket.emit(
-            "deleteUser",
-            name
-        );
+if(confirm(name+" を削除しますか？")){
 
-    }
+
+socket.emit(
+
+"deleteUser",
+
+name
+
+);
+
 
 }
+
+
+}
+
+
 
 
 
@@ -392,25 +391,17 @@ Math.sqrt(1-a)
 
 
 
+
+
 //=====================
-// 状態表示
+// 表示関数
 //=====================
 
 function statusText(user){
 
-
-if(user.online){
-
-return "🟢 オンライン";
-
-}
-
-else{
-
-return "🔴 オフライン";
-
-}
-
+return user.online ?
+"🟢 オンライン":
+"🔴 オフライン";
 
 }
 
@@ -418,18 +409,15 @@ return "🔴 オフライン";
 
 function statusClass(user){
 
-
 return user.online ?
 "online":
 "offline";
-
 
 }
 
 
 
 function formatTime(t){
-
 
 if(!t)
 return "不明";
@@ -438,62 +426,84 @@ return "不明";
 return new Date(t)
 .toLocaleString();
 
-
 }
 
 
 
+
+
 //=====================
-// 受信
+// 位置情報受信
 //=====================
 
 socket.on(
+
 "locations",
+
 (users)=>{
 
 
 let html="";
 
 
-// 削除されたマーカーを消す
 
-Object.keys(markers).forEach((name)=>{
+// 消えたユーザーのマーカー削除
 
-    if(!users[name]){
+Object.keys(markers).forEach(
 
-        map.removeLayer(markers[name]);
+(name)=>{
 
-        delete markers[name];
 
-    }
+if(!users[name]){
 
-});
+
+map.removeLayer(
+markers[name]
+);
+
+
+delete markers[name];
+
+
+}
+
+
+}
+
+);
+
 
 
 
 // ユーザー表示
 
-Object.keys(users).forEach((name)=>{
+Object.keys(users).forEach(
+
+(name)=>{
 
 
 let user=users[name];
 
 
-let color =
-user.online ? "green":"red";
+let color=user.online?
+"green":
+"red";
 
 
 
-// マーカー作成・更新
+// マーカー更新
 
 if(markers[name]){
 
 
-markers[name].setLatLng(
+markers[name]
+.setLatLng(
+
 [
 user.lat,
 user.lon
 ]
+
 );
 
 
@@ -501,7 +511,9 @@ user.lon
 else{
 
 
-markers[name]=L.circleMarker(
+markers[name]=
+
+L.circleMarker(
 
 [
 user.lat,
@@ -524,7 +536,8 @@ color:color
 
 
 
-markers[name].setStyle(
+markers[name]
+.setStyle(
 {
 color:color
 }
@@ -534,7 +547,8 @@ color:color
 
 // ポップアップ
 
-markers[name].bindPopup(
+markers[name]
+.bindPopup(
 
 `
 
@@ -556,7 +570,8 @@ ${statusText(user)}<br>
 
 
 
-// 右側リスト
+
+// 一覧
 
 html+=
 
@@ -566,13 +581,11 @@ html+=
 
 <b>${user.name}</b><br>
 
-
 <span class="${statusClass(user)}">
 
 ${statusText(user)}
 
 </span>
-
 
 <br>
 
@@ -592,25 +605,9 @@ ${statusText(user)}
 
 </button>
 
-
 </div>
 
 `;
-
-
-
-});
-
-
-
-
-
-
-
-
-}
-
-
 
 
 
