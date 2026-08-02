@@ -10,6 +10,8 @@ const sqlite3 = require("sqlite3").verbose();
 
 const db = new sqlite3.Database("gps.db");
 
+const io = require("socket.io")(server);
+
 
 //=====================
 // DB作成
@@ -42,21 +44,16 @@ db.serialize(()=>{
 });
 
 
-
 //=====================
-// Socket.IO
+// 現在表示ユーザー
 //=====================
 
-const io = require("socket.io")(server);
-
-
-// 現在接続中＋復元データ
 let users={};
 
 
 
 //=====================
-// 起動時 SQLite復元
+// SQLiteから復元
 //=====================
 
 db.all(
@@ -90,7 +87,6 @@ rows.forEach((row)=>{
 
 users[row.name]={
 
-
 name:row.name,
 
 lat:row.lat,
@@ -101,8 +97,9 @@ water:row.water,
 
 fuel:row.fuel,
 
-destination:row.destination
+destination:row.destination,
 
+lastUpdate:0
 
 };
 
@@ -138,7 +135,7 @@ socket.id
 );
 
 
-// 接続直後に現在情報を送信
+// 接続直後に現在情報送信
 
 socket.emit(
 "locations",
@@ -152,13 +149,27 @@ socket.on(
 (data)=>{
 
 
-// 名前をキーにする
+users[data.name]={
 
-users[data.name]=data;
+name:data.name,
+
+lat:data.lat,
+
+lon:data.lon,
+
+water:data.water,
+
+fuel:data.fuel,
+
+destination:data.destination,
+
+lastUpdate:Date.now()
+
+};
 
 
 
-// SQLite保存
+// DB保存
 
 db.run(
 
@@ -221,13 +232,67 @@ socket.id
 );
 
 
-// DB保持のため削除しない
+// すぐ削除しない
+// 5分後チェックで削除
 
 
 });
 
 
 });
+
+
+
+
+//=====================
+// オフライン削除
+//=====================
+
+setInterval(()=>{
+
+
+const now=Date.now();
+
+
+Object.keys(users)
+.forEach((name)=>{
+
+
+if(
+
+users[name].lastUpdate !== 0 &&
+
+now - users[name].lastUpdate
+>
+5 * 60 * 1000
+
+){
+
+
+console.log(
+"offline:",
+name
+);
+
+
+
+delete users[name];
+
+
+io.emit(
+"locations",
+users
+);
+
+
+}
+
+
+});
+
+
+},60000);
+
 
 
 
@@ -276,7 +341,7 @@ res.json(rows);
 
 
 //=====================
-// Render PORT
+// Render用
 //=====================
 
 const PORT =
@@ -289,10 +354,12 @@ PORT,
 
 ()=>{
 
+
 console.log(
 "http server start port:",
 PORT
 );
+
 
 }
 
