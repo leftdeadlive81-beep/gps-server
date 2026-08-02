@@ -1,130 +1,3 @@
-const express = require("express");
-const app = express();
-
-app.use(express.static("public"));
-
-const http = require("http");
-const server = http.createServer(app);
-
-const sqlite3 = require("sqlite3").verbose();
-const db = new sqlite3.Database("gps.db");
-
-const io = require("socket.io")(server);
-
-
-//=====================
-// DB作成
-//=====================
-
-db.serialize(()=>{
-
-    db.run(`
-    CREATE TABLE IF NOT EXISTS locations(
-
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-        name TEXT,
-
-        lat REAL,
-
-        lon REAL,
-
-        water INTEGER,
-
-        fuel INTEGER,
-
-        destination TEXT,
-
-        time DATETIME DEFAULT CURRENT_TIMESTAMP
-
-    )
-    `);
-
-});
-
-
-
-//=====================
-// 現在ユーザー
-//=====================
-
-let users = {};
-
-
-
-//=====================
-// SQLite復元
-//=====================
-
-db.all(
-
-`
-SELECT *
-FROM locations
-WHERE id IN
-(
- SELECT MAX(id)
- FROM locations
- GROUP BY name
-)
-`,
-
-[],
-
-(err,rows)=>{
-
-
-if(err){
-
-console.log(err);
-return;
-
-}
-
-
-rows.forEach((row)=>{
-
-
-users[row.name]={
-
-name:row.name,
-
-lat:row.lat,
-
-lon:row.lon,
-
-water:row.water,
-
-fuel:row.fuel,
-
-destination:row.destination,
-
-lastUpdate:
-new Date(row.time).getTime(),
-
-
-online:false
-
-
-};
-
-
-});
-
-
-console.log(
-"復元ユーザー数:",
-rows.length
-);
-
-
-}
-
-);
-
-
-
-
 //=====================
 // Socket.IO
 //=====================
@@ -132,7 +5,6 @@ rows.length
 io.on(
 "connection",
 (socket)=>{
-
 
 console.log(
 "接続:",
@@ -149,13 +21,15 @@ users
 
 
 
+//=====================
+// 位置情報受信
+//=====================
+
 socket.on(
 "location",
 (data)=>{
 
-
 users[data.name]={
-
 
 name:data.name,
 
@@ -169,16 +43,12 @@ fuel:data.fuel,
 
 destination:data.destination,
 
-
 lastUpdate:
 Date.now(),
 
-
 online:true
 
-
 };
-
 
 
 // SQLite保存
@@ -202,181 +72,94 @@ VALUES
 `,
 
 [
-
 data.name,
-
 data.lat,
-
 data.lon,
-
 data.water,
-
 data.fuel,
-
 data.destination
-
 ]
 
 );
 
 
-
 io.emit(
 "locations",
 users
 );
 
-
 });
 
 
 
-
+//=====================
+// ユーザー削除
+//=====================
 
 socket.on(
-"disconnect",
-()=>{
+"deleteUser",
+(name)=>{
+
+console.log("削除要求:",name);
 
 
-console.log(
-"切断:",
-socket.id
-);
+// メモリから削除
+
+delete users[name];
 
 
-// 削除しない
-// オフライン判定で管理
+// SQLiteから削除
 
+db.run(
 
-});
+"DELETE FROM locations WHERE name = ?",
 
+[name],
 
-});
-
-
-
-
-
-//=====================
-// オンライン監視
-//=====================
-
-setInterval(()=>{
-
-
-const now =
-Date.now();
-
-
-
-Object.keys(users)
-.forEach((name)=>{
-
-
-if(
-
-now - users[name].lastUpdate
-
->
-
-5 * 60 * 1000
-
-){
-
-
-users[name].online=false;
-
-
-}else{
-
-
-users[name].online=true;
-
-
-}
-
-
-});
-
-
-
-io.emit(
-"locations",
-users
-);
-
-
-},60000);
-
-
-
-
-
-//=====================
-// 履歴取得
-//=====================
-
-app.get(
-"/history",
-(req,res)=>{
-
-
-db.all(
-
-`
-SELECT *
-FROM locations
-ORDER BY time DESC
-
-`,
-
-[],
-
-(err,rows)=>{
-
+(err)=>{
 
 if(err){
 
-res.status(500)
-.send(err.message);
+console.log(err);
 
 return;
 
 }
 
 
-res.json(rows);
+console.log("削除完了:",name);
 
 
-});
+// 全員へ通知
 
-
-});
-
-
-
-
-//=====================
-// Render
-//=====================
-
-const PORT =
-process.env.PORT || 3000;
-
-
-server.listen(
-
-PORT,
-
-()=>{
-
-
-console.log(
-"http server start port:",
-PORT
+io.emit(
+"locations",
+users
 );
-
 
 }
 
 );
+
+});
+
+
+
+//=====================
+// 切断
+//=====================
+
+socket.on(
+"disconnect",
+()=>{
+
+console.log(
+"切断:",
+socket.id
+);
+
+// オフライン判定で管理
+
+});
+
+});
