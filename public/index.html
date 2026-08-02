@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+<meta charset="UTF-8">
+
+<title>位置情報共有システム</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+
+<style>
+
+#map {
+    height: 500px;
+    width:100%;
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+
+<h1>位置情報共有システム</h1>
+
+
+<input id="name" placeholder="端末名">
+
+<button onclick="startTracking()">
+追跡開始
+</button>
+
+
+<button onclick="showHistory()">
+履歴再生
+</button>
+
+
+<p id="result">
+待機中
+</p>
+
+
+<div id="map"></div>
+
+
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script src="/socket.io/socket.io.js"></script>
+
+
+
+<script>
+
+
+let map;
+
+let myMarker;
+
+let myPolyline;
+
+let myPath=[];
+
+
+let historyLine;
+
+
+let otherMarkers={};
+
+
+let deviceName="";
+
+
+const socket = io();
+
+
+
+//
+// GPS開始
+//
+
+function startTracking(){
+
+
+    deviceName =
+    document.getElementById("name").value;
+
+
+    if(deviceName==""){
+        deviceName="未設定";
+    }
+
+
+
+    navigator.geolocation.watchPosition(
+
+
+    function(position){
+
+
+        let lat =
+        position.coords.latitude;
+
+
+        let lon =
+        position.coords.longitude;
+
+
+
+        document.getElementById("result").innerHTML =
+        "端末："+deviceName+
+        "<br>緯度："+lat+
+        "<br>経度："+lon;
+
+
+
+        //
+        // 地図初期化
+        //
+
+        if(!map){
+
+
+            map =
+            L.map("map")
+            .setView(
+                [lat,lon],
+                16
+            );
+
+
+            L.tileLayer(
+            "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+            {
+                attribution:
+                "OpenStreetMap"
+            }
+
+            ).addTo(map);
+
+
+        }
+
+
+
+        //
+        // 自分の軌跡
+        //
+
+        myPath.push(
+            [lat,lon]
+        );
+
+
+        if(!myPolyline){
+
+
+            myPolyline =
+            L.polyline(
+                myPath
+            )
+            .addTo(map);
+
+
+        }else{
+
+
+            myPolyline
+            .setLatLngs(myPath);
+
+
+        }
+
+
+
+
+        //
+        // 自分マーカー
+        //
+
+        if(!myMarker){
+
+
+            myMarker =
+            L.marker(
+                [lat,lon]
+            )
+            .addTo(map)
+            .bindTooltip(
+                deviceName,
+                {
+                    permanent:true
+                }
+            );
+
+
+        }else{
+
+
+            myMarker
+            .setLatLng(
+                [lat,lon]
+            );
+
+        }
+
+
+
+
+        //
+        // サーバー送信
+        //
+
+        socket.emit(
+            "location",
+            {
+
+            name:deviceName,
+
+            lat:lat,
+
+            lon:lon
+
+            }
+        );
+
+
+
+    },
+
+
+    function(error){
+
+
+        document.getElementById("result").innerHTML =
+        "GPS取得失敗<br>"+
+        error.message;
+
+
+    },
+
+
+    {
+
+        enableHighAccuracy:true,
+
+        maximumAge:0,
+
+        timeout:10000
+
+    }
+
+
+    );
+
+
+}
+
+
+
+
+
+//
+// 他端末表示
+//
+
+socket.on(
+"locations",
+function(users){
+
+
+    for(let id in users){
+
+
+        let user =
+        users[id];
+
+
+
+        if(user.name != deviceName){
+
+
+
+            if(!otherMarkers[id]){
+
+
+                otherMarkers[id] =
+                L.marker(
+                    [
+                    user.lat,
+                    user.lon
+                    ]
+                )
+                .addTo(map)
+                .bindTooltip(
+                    user.name,
+                    {
+                    permanent:true
+                    }
+                );
+
+
+            }else{
+
+
+                otherMarkers[id]
+                .setLatLng(
+                    [
+                    user.lat,
+                    user.lon
+                    ]
+                );
+
+
+            }
+
+
+        }
+
+
+    }
+
+
+});
+
+
+
+
+
+
+//
+// 履歴表示
+//
+
+async function showHistory(){
+
+
+    const response =
+    await fetch("/history");
+
+
+    const data =
+    await response.json();
+
+
+
+    let points=[];
+
+
+
+    data.forEach(row=>{
+
+
+        if(row.name == deviceName){
+
+
+            points.push(
+                [
+                row.lat,
+                row.lon
+                ]
+            );
+
+
+        }
+
+
+    });
+
+
+
+    if(historyLine){
+
+
+        map.removeLayer(
+            historyLine
+        );
+
+    }
+
+
+
+    historyLine =
+    L.polyline(
+        points,
+        {
+
+        weight:5
+
+        }
+
+    )
+    .addTo(map);
+
+
+
+    if(points.length>0){
+
+
+        map.fitBounds(
+            historyLine.getBounds()
+        );
+
+
+    }
+
+
+
+}
+
+
+</script>
+
+
+</body>
+
+</html>
