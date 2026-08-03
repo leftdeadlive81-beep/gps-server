@@ -2,10 +2,13 @@
 // 初期設定
 //=====================
 
+require("dotenv").config();
+
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-const sqlite3 = require("sqlite3").verbose();
+const { Pool } = require("pg");
+
 
 const app = express();
 
@@ -18,10 +21,49 @@ app.use(express.static("public"));
 
 
 //=====================
-// SQLite
+// Supabase PostgreSQL
 //=====================
 
-const db = new sqlite3.Database("./gps.db");
+
+
+const pool = new Pool({
+
+    connectionString:
+        process.env.DATABASE_URL,
+
+    ssl:{
+        rejectUnauthorized:false
+    },
+
+    family:4
+
+});
+
+
+
+
+// 接続確認
+
+pool.connect()
+.then(client=>{
+
+    console.log(
+        "Supabase PostgreSQL connected"
+    );
+
+    client.release();
+
+})
+.catch(err=>{
+
+    console.log(
+        "Database connection error",
+        err
+    );
+
+});
+
+
 
 
 //=====================
@@ -32,112 +74,45 @@ let users = {};
 
 
 
-//=====================
-// SQLite初期化
-//=====================
-
-db.serialize(()=>{
-
-
-// 現在状態
-
-db.run(`
-
-CREATE TABLE IF NOT EXISTS current_users (
-
-name TEXT PRIMARY KEY,
-
-lat REAL,
-
-lon REAL,
-
-water INTEGER,
-
-fuel INTEGER,
-
-destination TEXT,
-
-lastUpdate INTEGER,
-
-online INTEGER
-
-)
-
-`);
-
-
-
-
-// 履歴
-
-db.run(`
-
-CREATE TABLE IF NOT EXISTS location_history (
-
-id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-name TEXT,
-
-lat REAL,
-
-lon REAL,
-
-water INTEGER,
-
-fuel INTEGER,
-
-destination TEXT,
-
-created INTEGER
-
-)
-
-`);
-
-
-
-
 
 //=====================
 // 起動時復元
 //=====================
 
-db.all(
-
-"SELECT * FROM current_users",
-
-(err,rows)=>{
+async function loadUsers(){
 
 
-if(err){
-
-console.log(err);
-
-return;
-
-}
+try{
 
 
-rows.forEach((row)=>{
+const result = await pool.query(
+
+"SELECT * FROM current_users"
+
+);
+
+
+
+result.rows.forEach(row=>{
 
 
 users[row.name]={
 
-name:row.name,
+    name:row.name,
 
-lat:row.lat,
+    lat:row.lat,
 
-lon:row.lon,
+    lon:row.lon,
 
-water:row.water,
+    water:row.water,
 
-fuel:row.fuel,
+    fuel:row.fuel,
 
-destination:row.destination,
+    destination:row.destination,
 
-lastUpdate:row.lastUpdate,
+    lastUpdate:row.lastupdate,
 
-online:false
+    online:false
 
 };
 
@@ -148,20 +123,36 @@ online:false
 console.log(
 
 "復元ユーザー数:",
-
 Object.keys(users).length
 
 );
 
 
-});
+
+}
+
+catch(err){
 
 
-});
+console.log(
+
+"復元エラー:",
+err
+
+);
+
+
+}
+
+
+}
 
 
 
 
+// 起動時読み込み
+
+loadUsers();
 
 //=====================
 // Socket.IO
@@ -175,25 +166,18 @@ io.on(
 
 
 console.log(
-
 "接続:",
-
 socket.id
-
 );
 
 
 
-// 接続時送信
+// 接続時に現在状態送信
 
 socket.emit(
-
 "locations",
-
 users
-
 );
-
 
 
 
@@ -206,7 +190,7 @@ socket.on(
 
 "location",
 
-(data)=>{
+async(data)=>{
 
 
 const now = Date.now();
@@ -238,53 +222,53 @@ online:true
 
 
 
-
 //=====================
 // 現在状態保存
 //=====================
 
-db.run(`
+try{
+
+
+await pool.query(
+
+`
 
 INSERT INTO current_users
 
 (
 
 name,
-
 lat,
-
 lon,
-
 water,
-
 fuel,
-
 destination,
-
 lastUpdate,
-
 online
 
 )
 
-VALUES(?,?,?,?,?,?,?,?)
+VALUES
+
+($1,$2,$3,$4,$5,$6,$7,$8)
+
 
 ON CONFLICT(name)
 
 DO UPDATE SET
 
 
-lat=excluded.lat,
+lat=EXCLUDED.lat,
 
-lon=excluded.lon,
+lon=EXCLUDED.lon,
 
-water=excluded.water,
+water=EXCLUDED.water,
 
-fuel=excluded.fuel,
+fuel=EXCLUDED.fuel,
 
-destination=excluded.destination,
+destination=EXCLUDED.destination,
 
-lastUpdate=excluded.lastUpdate,
+lastUpdate=EXCLUDED.lastUpdate,
 
 online=1
 
@@ -293,24 +277,28 @@ online=1
 [
 
 data.name,
-
 data.lat,
-
 data.lon,
-
 data.water,
-
 data.fuel,
-
 data.destination,
-
 now,
-
 1
 
 ]
 
 );
+
+
+}
+catch(err){
+
+console.log(
+"current_users保存エラー:",
+err
+);
+
+}
 
 
 
@@ -320,52 +308,57 @@ now,
 // 履歴保存
 //=====================
 
-db.run(`
+try{
+
+
+await pool.query(
+
+`
 
 INSERT INTO location_history
 
 (
 
 name,
-
 lat,
-
 lon,
-
 water,
-
 fuel,
-
 destination,
-
 created
 
 )
 
-VALUES(?,?,?,?,?,?,?)
+VALUES
+
+($1,$2,$3,$4,$5,$6,$7)
 
 `,
 
 [
 
 data.name,
-
 data.lat,
-
 data.lon,
-
 data.water,
-
 data.fuel,
-
 data.destination,
-
 now
 
 ]
 
 );
 
+
+}
+catch(err){
+
+console.log(
+"history保存エラー:",
+err
+);
+
+}
 
 
 
@@ -379,6 +372,7 @@ io.emit(
 users
 
 );
+
 
 
 });
@@ -396,13 +390,12 @@ socket.on(
 
 "deleteUser",
 
-(name)=>{
+async(name)=>{
 
 
 console.log(
 
 "削除要求:",
-
 name
 
 );
@@ -413,31 +406,37 @@ delete users[name];
 
 
 
-db.run(
-
-"DELETE FROM current_users WHERE name=?",
-
-[name],
-
-(err)=>{
+try{
 
 
-if(err){
+await pool.query(
 
-console.log(err);
+"DELETE FROM current_users WHERE name=$1",
 
-return;
+[name]
 
-}
+);
+
 
 
 console.log(
 
 "削除完了:",
-
 name
 
 );
+
+
+
+}
+catch(err){
+
+console.log(
+"削除エラー:",
+err
+);
+
+}
 
 
 
@@ -449,8 +448,6 @@ users
 
 );
 
-
-});
 
 
 });
@@ -474,7 +471,6 @@ socket.on(
 console.log(
 
 "切断:",
-
 socket.id
 
 );
@@ -484,10 +480,6 @@ socket.id
 
 
 });
-
-
-
-
 
 //=====================
 // サーバー起動
@@ -506,10 +498,11 @@ PORT,
 console.log(
 
 "http server start port:",
-
 PORT
 
 );
 
 
-});
+}
+
+);
