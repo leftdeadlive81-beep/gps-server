@@ -19,39 +19,101 @@ href="https://unpkg.com/leaflet/dist/leaflet.css">
 
 body{
 font-family:sans-serif;
-margin:20px;
+margin:10px;
+background:#f5f5f5;
 }
 
-#map{
-height:500px;
-width:100%;
+h2{
+font-size:22px;
+text-align:center;
 }
+
+
+.card{
+
+background:white;
+border-radius:10px;
+padding:15px;
+margin-bottom:10px;
+box-shadow:0 2px 5px #aaa;
+
+}
+
 
 input{
-margin:5px;
-padding:5px;
-}
 
-button{
+width:90%;
+font-size:18px;
 padding:8px;
 margin:5px;
+
 }
+
+
+button{
+
+font-size:18px;
+padding:12px;
+margin:5px;
+width:90%;
+border-radius:8px;
+background:white;
+
+}
+
+
+#map{
+
+height:60vh;
+width:100%;
+border-radius:10px;
+
+}
+
 
 .user{
-border:1px solid #aaa;
-padding:10px;
-margin:5px;
+
+background:white;
+border-radius:10px;
+padding:15px;
+margin:10px 0;
+box-shadow:0 2px 5px #aaa;
+
+cursor:pointer;
+
 }
+
 
 .online{
+
 color:green;
 font-weight:bold;
+
 }
 
+
 .offline{
+
 color:red;
 font-weight:bold;
+
 }
+
+
+#gpsStatus{
+
+font-size:18px;
+font-weight:bold;
+
+}
+
+
+#lastSend{
+
+font-size:16px;
+
+}
+
 
 </style>
 
@@ -61,42 +123,94 @@ font-weight:bold;
 <body>
 
 
-<h2>GPS位置共有システム</h2>
+<h2>📍 GPS位置共有システム</h2>
+
+
+
+<div class="card">
+
+
+<h3>隊員情報</h3>
 
 
 名前：
+<br>
+
 <input id="name" value="隊員A">
 
+
 <br>
 
 
-水量：
+💧 水量：
+
+<br>
+
 <input id="water" type="number" value="100">
 
+
 <br>
 
 
-燃料：
+⛽ 燃料：
+
+<br>
+
 <input id="fuel" type="number" value="100">
 
+
 <br>
 
 
-次の目的地：
+📍 次の目的地：
+
+<br>
+
 <input id="destination" value="">
 
 
-<br>
+
+</div>
+
+
+
+<div class="card">
 
 
 <button onclick="startGPS()">
-GPS開始
+
+📡 GPS開始
+
 </button>
+
 
 
 <button onclick="updateStatus()">
-状態更新
+
+🔄 状態更新
+
 </button>
+
+
+
+<div id="gpsStatus">
+
+🔴 GPS停止中
+
+</div>
+
+
+
+<div id="lastSend">
+
+最終送信：-
+
+</div>
+
+
+
+</div>
+
 
 
 <hr>
@@ -105,14 +219,13 @@ GPS開始
 <div id="map"></div>
 
 
-<h3>接続ユーザー</h3>
+<h3>👥 接続ユーザー</h3>
+
 
 <div id="users"></div>
 
 
-
 <script>
-
 
 //=====================
 // Socket.IO
@@ -120,6 +233,18 @@ GPS開始
 
 const socket = io();
 
+
+//=====================
+// 名前復元
+//=====================
+
+const savedName = localStorage.getItem("name");
+
+if(savedName){
+
+document.getElementById("name").value = savedName;
+
+}
 
 
 //=====================
@@ -150,6 +275,9 @@ let lastLat=0;
 let lastLon=0;
 
 
+let watchID=null;
+
+
 const MOVE_DISTANCE=10;
 
 
@@ -162,7 +290,18 @@ const MOVE_DISTANCE=10;
 function startGPS(){
 
 
-navigator.geolocation.watchPosition(
+if(watchID!==null){
+
+alert("GPSはすでに開始しています");
+
+return;
+
+}
+
+
+
+watchID=navigator.geolocation.watchPosition(
+
 
 (pos)=>{
 
@@ -173,19 +312,41 @@ let lon=pos.coords.longitude;
 
 
 
-let distance=getDistance(
-lastLat,
-lastLon,
+// 初回登録
+
+if(lastLat===0){
+
+
+sendLocation(
 lat,
 lon
 );
 
 
 
-if(
-lastLat===0 ||
-distance>=MOVE_DISTANCE
-){
+
+lastLat=lat;
+lastLon=lon;
+
+
+return;
+
+}
+
+
+
+let distance=getDistance(
+
+lastLat,
+lastLon,
+lat,
+lon
+
+);
+
+
+
+if(distance>=MOVE_DISTANCE){
 
 
 sendLocation(
@@ -206,20 +367,28 @@ lastLon=lon;
 
 ()=>{
 
+
 alert(
 "位置情報取得失敗"
 );
+
 
 },
 
 
 {
+
 enableHighAccuracy:true,
-timeout:10000
+
+timeout:10000,
+
+maximumAge:0
+
 }
 
 
 );
+
 
 
 }
@@ -234,6 +403,27 @@ timeout:10000
 
 function sendLocation(lat,lon){
 
+localStorage.setItem(
+"name",
+document.getElementById("name").value
+);
+
+
+
+document.getElementById("gpsStatus")
+.innerHTML=
+"🟢 GPS稼働中";
+
+
+
+document.getElementById("lastSend")
+.innerHTML=
+"最終送信："+
+new Date()
+.toLocaleTimeString();
+
+
+
 
 socket.emit(
 
@@ -241,32 +431,45 @@ socket.emit(
 
 {
 
+
 name:
+
 document.getElementById("name").value,
 
 
 lat:lat,
 
+
 lon:lon,
 
 
-water:Number(
+
+water:
+
+Number(
 document.getElementById("water").value
 ),
 
 
-fuel:Number(
+
+fuel:
+
+Number(
 document.getElementById("fuel").value
 ),
 
 
+
 destination:
+
 document.getElementById("destination").value
+
 
 
 }
 
 );
+
 
 
 }
@@ -282,7 +485,9 @@ document.getElementById("destination").value
 function updateStatus(){
 
 
+
 navigator.geolocation.getCurrentPosition(
+
 
 (pos)=>{
 
@@ -298,10 +503,93 @@ pos.coords.longitude
 
 }
 
+
+
 );
 
 
 }
+
+
+
+
+
+
+//=====================
+// 距離計算
+//=====================
+
+function getDistance(
+
+lat1,
+lon1,
+lat2,
+lon2
+
+){
+
+
+
+if(lat1===0)
+
+return 99999;
+
+
+
+const R=6371000;
+
+
+
+const dLat=
+
+(lat2-lat1)
+*
+Math.PI/180;
+
+
+
+const dLon=
+
+(lon2-lon1)
+*
+Math.PI/180;
+
+
+
+const a=
+
+Math.sin(dLat/2)**2
+
++
+
+Math.cos(lat1*Math.PI/180)
+
+*
+
+Math.cos(lat2*Math.PI/180)
+
+*
+
+Math.sin(dLon/2)**2;
+
+
+
+return R*
+
+2*
+
+Math.atan2(
+
+Math.sqrt(a),
+
+Math.sqrt(1-a)
+
+);
+
+
+
+}
+
 
 
 
@@ -333,66 +621,6 @@ name
 
 
 
-
-
-//=====================
-// 距離計算
-//=====================
-
-function getDistance(
-lat1,
-lon1,
-lat2,
-lon2
-){
-
-
-if(lat1===0)
-return 99999;
-
-
-const R=6371000;
-
-
-const dLat=
-(lat2-lat1)
-*Math.PI/180;
-
-
-const dLon=
-(lon2-lon1)
-*Math.PI/180;
-
-
-
-const a=
-
-Math.sin(dLat/2)**2
-
-+
-
-Math.cos(lat1*Math.PI/180)
-*
-Math.cos(lat2*Math.PI/180)
-*
-Math.sin(dLon/2)**2;
-
-
-
-return R*
-2*
-Math.atan2(
-Math.sqrt(a),
-Math.sqrt(1-a)
-);
-
-
-}
-
-
-
-
-
 //=====================
 // 表示関数
 //=====================
@@ -400,7 +628,9 @@ Math.sqrt(1-a)
 function statusText(user){
 
 return user.online ?
+
 "🟢 オンライン":
+
 "🔴 オフライン";
 
 }
@@ -410,7 +640,9 @@ return user.online ?
 function statusClass(user){
 
 return user.online ?
+
 "online":
+
 "offline";
 
 }
@@ -420,6 +652,7 @@ return user.online ?
 function formatTime(t){
 
 if(!t)
+
 return "不明";
 
 
@@ -427,6 +660,50 @@ return new Date(t)
 .toLocaleString();
 
 }
+
+
+
+
+
+//=====================
+// ユーザー位置へ移動
+//=====================
+
+function focusUser(name){
+
+
+if(markers[name]){
+
+
+let pos = markers[name]
+.getLatLng();
+
+
+
+map.setView(
+
+[
+pos.lat,
+pos.lng
+],
+
+16
+
+);
+
+
+
+markers[name]
+.openPopup();
+
+
+
+}
+
+
+}
+
+
 
 
 
@@ -449,7 +726,8 @@ let html="";
 
 // 消えたユーザーのマーカー削除
 
-Object.keys(markers).forEach(
+Object.keys(markers)
+.forEach(
 
 (name)=>{
 
@@ -475,9 +753,9 @@ delete markers[name];
 
 
 
-// ユーザー表示
 
-Object.keys(users).forEach(
+Object.keys(users)
+.forEach(
 
 (name)=>{
 
@@ -485,9 +763,14 @@ Object.keys(users).forEach(
 let user=users[name];
 
 
+
 let color=user.online?
+
 "green":
+
 "red";
+
+
 
 
 
@@ -529,23 +812,31 @@ color:color
 }
 
 )
+
 .addTo(map);
 
 
+
 }
+
+
 
 
 
 markers[name]
 .setStyle(
+
 {
+
 color:color
+
 }
+
 );
 
 
 
-// ポップアップ
+
 
 markers[name]
 .bindPopup(
@@ -554,13 +845,21 @@ markers[name]
 
 <b>${user.name}</b><br>
 
-${statusText(user)}<br>
+${statusText(user)}
 
-💧 水量:${user.water}<br>
+<br>
 
-⛽ 燃料:${user.fuel}<br>
+💧 水量:${user.water}
 
-📍 次の目的地:${user.destination}<br>
+<br>
+
+⛽ 燃料:${user.fuel}
+
+<br>
+
+📍 次の目的地:${user.destination}
+
+<br>
 
 最終更新:${formatTime(user.lastUpdate)}
 
@@ -571,15 +870,24 @@ ${statusText(user)}<br>
 
 
 
-// 一覧
+
+
+
+// ユーザー一覧
 
 html+=
 
+
 `
 
-<div class="user">
+<div class="user"
+onclick="focusUser('${user.name}')">
 
-<b>${user.name}</b><br>
+
+<b>${user.name}</b>
+
+<br>
+
 
 <span class="${statusClass(user)}">
 
@@ -587,25 +895,46 @@ ${statusText(user)}
 
 </span>
 
+
 <br>
 
-💧 水量:${user.water}<br>
 
-⛽ 燃料:${user.fuel}<br>
+💧 水量:${user.water}
 
-📍 次の目的地:${user.destination}<br>
 
-最終更新:${formatTime(user.lastUpdate)}
+<br>
+
+
+⛽ 燃料:${user.fuel}
+
+
+<br>
+
+
+📍 次の目的地:${user.destination}
+
+
+<br>
+
+
+最終更新:
+
+${formatTime(user.lastUpdate)}
+
+
 
 <br><br>
 
-<button onclick="deleteUser('${user.name}')">
+
+<button onclick="event.stopPropagation();deleteUser('${user.name}')">
 
 🗑 削除
 
 </button>
 
+
 </div>
+
 
 `;
 
@@ -617,6 +946,8 @@ ${statusText(user)}
 
 
 
+
+
 document.getElementById("users")
 .innerHTML=html;
 
@@ -624,7 +955,10 @@ document.getElementById("users")
 
 }
 
+
 );
+
+
 
 
 </script>
