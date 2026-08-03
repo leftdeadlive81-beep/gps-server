@@ -25,8 +25,21 @@ const db = new sqlite3.Database("./gps.db");
 
 
 //=====================
-// 現在状態テーブル
+// ユーザー情報（メモリ）
 //=====================
+
+let users = {};
+
+
+
+//=====================
+// SQLite初期化
+//=====================
+
+db.serialize(()=>{
+
+
+// 現在状態
 
 db.run(`
 
@@ -53,9 +66,9 @@ online INTEGER
 `);
 
 
-//=====================
-// 履歴テーブル
-//=====================
+
+
+// 履歴
 
 db.run(`
 
@@ -81,14 +94,6 @@ created INTEGER
 
 `);
 
-
-
-
-//=====================
-// ユーザー情報（メモリ）
-//=====================
-
-let users = {};
 
 
 
@@ -149,10 +154,10 @@ Object.keys(users).length
 );
 
 
-}
+});
 
-);
 
+});
 
 
 
@@ -179,7 +184,7 @@ socket.id
 
 
 
-// 接続時に現在状態送信
+// 接続時送信
 
 socket.emit(
 
@@ -188,6 +193,7 @@ socket.emit(
 users
 
 );
+
 
 
 
@@ -237,7 +243,6 @@ online:true
 // 現在状態保存
 //=====================
 
-
 db.run(`
 
 INSERT INTO current_users
@@ -264,7 +269,6 @@ online
 
 VALUES(?,?,?,?,?,?,?,?)
 
-
 ON CONFLICT(name)
 
 DO UPDATE SET
@@ -283,7 +287,6 @@ destination=excluded.destination,
 lastUpdate=excluded.lastUpdate,
 
 online=1
-
 
 `,
 
@@ -313,11 +316,9 @@ now,
 
 
 
-
 //=====================
 // 履歴保存
 //=====================
-
 
 db.run(`
 
@@ -369,7 +370,6 @@ now
 
 
 
-
 // 全員へ通知
 
 io.emit(
@@ -381,8 +381,8 @@ users
 );
 
 
-
 });
+
 
 
 
@@ -409,18 +409,13 @@ name
 
 
 
-// メモリ削除
-
 delete users[name];
 
 
 
-
-// 現在状態削除
-
 db.run(
 
-"DELETE FROM current_users WHERE name = ?",
+"DELETE FROM current_users WHERE name=?",
 
 [name],
 
@@ -434,7 +429,6 @@ console.log(err);
 return;
 
 }
-
 
 
 console.log(
@@ -456,13 +450,11 @@ users
 );
 
 
-
-}
-
-);
+});
 
 
 });
+
 
 
 
@@ -497,7 +489,6 @@ socket.id
 
 
 
-
 //=====================
 // サーバー起動
 //=====================
@@ -521,6 +512,4 @@ PORT
 );
 
 
-}
-
-);
+});
