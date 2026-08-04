@@ -172,6 +172,16 @@ font-weight:bold;
 }
 
 
+.selected{
+
+border:4px solid blue;
+
+background:#e8f0ff;
+
+}
+
+
+
 
 </style>
 
@@ -413,6 +423,8 @@ let markers={};
 
 
 let lastLat=0;
+
+let selectedUser=null;
 
 let lastLon=0;
 
@@ -969,33 +981,28 @@ popupAnchor:[0,-50]
 //=====================
 
 
+
 function focusUser(name){
 
+selectedUser=name;
 
 
 if(markers[name]){
 
 
-let pos=
-
-markers[name].getLatLng();
-
+let pos=markers[name].getLatLng();
 
 
 map.setView(
 
 [
-
 pos.lat,
-
 pos.lng
-
 ],
 
-16
+17
 
 );
-
 
 
 markers[name].openPopup();
@@ -1005,6 +1012,8 @@ markers[name].openPopup();
 
 
 }
+
+
 
 //=====================
 // ユーザー情報受信
@@ -1208,7 +1217,7 @@ ${formatTime(user.lastUpdate)}
 
 html +=
 `
-<div class="user"
+<div class="user ${selectedUser===user.name ? "selected":""}"
 
 onclick="focusUser('${user.name}')">
 
