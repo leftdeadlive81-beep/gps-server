@@ -1,7 +1,7 @@
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-const { createClient } = require("@supabase/supabase-js");
+const { Pool } = require("pg");
 
 
 const app = express();
@@ -16,17 +16,19 @@ app.use(express.static("public"));
 
 
 //=====================
-// Supabase
+// Supabase PostgreSQL
 //=====================
 
 
-const supabase = createClient(
+const pool = new Pool({
 
-    process.env.SUPABASE_URL,
+    connectionString: process.env.DATABASE_URL,
 
-    process.env.SUPABASE_KEY
+    ssl:{
+        rejectUnauthorized:false
+    }
 
-);
+});
 
 
 
@@ -41,76 +43,83 @@ let users = {};
 
 
 
-
 //=====================
-// 起動時 Supabase復元
+// 起動時DB復元
 //=====================
 
 
 async function loadUsers(){
 
 
-    const {data,error}=await supabase
-
-    .from("current_users")
-
-    .select("*");
+try{
 
 
+const result = await pool.query(
 
-    if(error){
+"SELECT * FROM current_users"
 
-        console.error(
-            "Supabase読み込みエラー",
-            error
-        );
-
-        return;
-
-    }
+);
 
 
 
-
-    data.forEach(user=>{
-
-
-        users[user.name]={
+result.rows.forEach(user=>{
 
 
-            name:user.name,
-
-            lat:user.lat,
-
-            lon:user.lon,
-
-            water:user.water,
-
-            fuel:user.fuel,
-
-            destination:user.destination,
-
-            iconType:user.iconType || "person",
-
-            lastUpdate:user.lastUpdate,
-
-            online:false
+users[user.name]={
 
 
-        };
+name:user.name,
+
+lat:user.lat,
+
+lon:user.lon,
+
+water:user.water,
+
+fuel:user.fuel,
+
+destination:user.destination,
+
+iconType:user.iconType || "person",
+
+lastUpdate:user.lastupdate,
+
+online:false
 
 
-    });
+};
+
+
+});
 
 
 
-    console.log(
+console.log(
 
-        "復元ユーザー:",
+"復元ユーザー:",
 
-        Object.keys(users)
+Object.keys(users)
 
-    );
+);
+
+
+
+}
+
+catch(err){
+
+
+console.error(
+
+"DB復元エラー",
+
+err
+
+);
+
+
+}
+
 
 
 }
@@ -163,8 +172,6 @@ users
 
 
 
-
-
 //=====================
 // 位置情報受信
 //=====================
@@ -177,8 +184,7 @@ socket.on(
 async(data)=>{
 
 
-let now=Date.now();
-
+let now = Date.now();
 
 
 
@@ -209,7 +215,9 @@ online:true
 
 
 
+
 // メモリ更新
+
 
 users[data.name]=user;
 
@@ -217,49 +225,96 @@ users[data.name]=user;
 
 
 
+
+try{
+
+
 //=====================
 // 現在位置保存
 //=====================
 
 
-const {error}=await supabase
+await pool.query(
 
-.from("current_users")
+`
 
-.upsert({
+INSERT INTO current_users
 
-name:user.name,
+(
 
-lat:user.lat,
+name,
 
-lon:user.lon,
+lat,
 
-water:user.water,
+lon,
 
-fuel:user.fuel,
+water,
 
-destination:user.destination,
+fuel,
 
-iconType:user.iconType,
+destination,
 
-lastUpdate:user.lastUpdate,
+iconType,
 
-online:true
+lastUpdate,
 
-});
+online
+
+)
+
+VALUES
+
+($1,$2,$3,$4,$5,$6,$7,$8,$9)
 
 
+ON CONFLICT(name)
 
-if(error){
+DO UPDATE SET
 
-console.error(
-"current_users保存エラー",
-error
+
+lat=EXCLUDED.lat,
+
+lon=EXCLUDED.lon,
+
+water=EXCLUDED.water,
+
+fuel=EXCLUDED.fuel,
+
+destination=EXCLUDED.destination,
+
+iconType=EXCLUDED.iconType,
+
+lastUpdate=EXCLUDED.lastUpdate,
+
+online=EXCLUDED.online
+
+
+`,
+
+[
+
+user.name,
+
+user.lat,
+
+user.lon,
+
+user.water,
+
+user.fuel,
+
+user.destination,
+
+user.iconType,
+
+user.lastUpdate,
+
+1
+
+]
+
+
 );
-
-}
-
-
 
 
 
@@ -271,38 +326,76 @@ error
 //=====================
 
 
-const {error:historyError}=await supabase
+await pool.query(
 
-.from("location_history")
+`
 
-.insert({
+INSERT INTO location_history
 
-name:user.name,
+(
 
-lat:user.lat,
+name,
 
-lon:user.lon,
+lat,
 
-water:user.water,
+lon,
 
-fuel:user.fuel,
+water,
 
-destination:user.destination,
+fuel,
 
-iconType:user.iconType,
+destination,
 
-created:now
+iconType,
 
-});
+created
+
+)
+
+VALUES
+
+($1,$2,$3,$4,$5,$6,$7,$8)
+
+`,
+
+[
+
+user.name,
+
+user.lat,
+
+user.lon,
+
+user.water,
+
+user.fuel,
+
+user.destination,
+
+user.iconType,
+
+now
+
+]
+
+
+);
 
 
 
-if(historyError){
+}
+
+catch(err){
+
 
 console.error(
-"履歴保存エラー",
-historyError
+
+"DB保存エラー",
+
+err
+
 );
+
 
 }
 
@@ -311,8 +404,7 @@ historyError
 
 
 
-
-// 全員へ配信
+// 全員へ送信
 
 
 io.emit(
@@ -327,9 +419,7 @@ users
 
 }
 
-
 );
-
 
 
 
@@ -354,20 +444,27 @@ delete users[name];
 
 
 
+try{
 
-await supabase
 
-.from("current_users")
+await pool.query(
 
-.delete()
+"DELETE FROM current_users WHERE name=$1",
 
-.eq(
-
-"name",
-
-name
+[name]
 
 );
+
+
+}
+
+catch(err){
+
+
+console.error(err);
+
+
+}
 
 
 
@@ -383,8 +480,8 @@ users
 
 }
 
-
 );
+
 
 
 
@@ -416,6 +513,7 @@ socket.id
 
 }
 
+
 );
 
 
@@ -430,13 +528,12 @@ socket.id
 
 
 
-
 //=====================
 // Render PORT
 //=====================
 
 
-const PORT=
+const PORT =
 
 process.env.PORT || 10000;
 
