@@ -420,7 +420,7 @@ let lastLon=0;
 let lastSendTime=0;
 
 
-const SEND_INTERVAL=60000;
+const SEND_INTERVAL=30000;
 
 
 const MOVE_DISTANCE=10;
@@ -454,6 +454,7 @@ return;
 
 gpsTimer=setInterval(()=>{
 
+    console.log("30秒タイマー動作");
 
 navigator.geolocation.getCurrentPosition(
 
@@ -474,7 +475,7 @@ pos.coords.longitude
 );
 
 
-},60000);
+},30000);
 
 
 
