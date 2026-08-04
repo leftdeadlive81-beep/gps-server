@@ -1,13 +1,7 @@
-//=====================
-// 初期設定
-//=====================
-
-require("dotenv").config();
-
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-const { Pool } = require("pg");
+const sqlite3 = require("sqlite3").verbose();
 
 
 const app = express();
@@ -20,99 +14,128 @@ const io = new Server(server);
 app.use(express.static("public"));
 
 
-//=====================
-// Supabase PostgreSQL
-//=====================
-
-
-
-const pool = new Pool({
-
-    connectionString:
-        process.env.DATABASE_URL,
-
-    ssl:{
-        rejectUnauthorized:false
-    },
-
-    family:4
-
-});
-
-
-
-
-// 接続確認
-
-pool.connect()
-.then(client=>{
-
-    console.log(
-        "Supabase PostgreSQL connected"
-    );
-
-    client.release();
-
-})
-.catch(err=>{
-
-    console.log(
-        "Database connection error",
-        err
-    );
-
-});
-
-
-
 
 //=====================
-// ユーザー情報（メモリ）
+// SQLite
 //=====================
 
-let users = {};
-
-
-
-
-//=====================
-// 起動時復元
-//=====================
-
-async function loadUsers(){
-
-
-try{
-
-
-const result = await pool.query(
-
-"SELECT * FROM current_users"
-
+const db = new sqlite3.Database(
+"database.db"
 );
 
 
 
-result.rows.forEach(row=>{
+// 現在ユーザー
+
+db.run(`
+
+CREATE TABLE IF NOT EXISTS current_users (
+
+name TEXT PRIMARY KEY,
+
+lat REAL,
+
+lon REAL,
+
+water INTEGER,
+
+fuel INTEGER,
+
+destination TEXT,
+
+lastUpdate INTEGER,
+
+online INTEGER
+
+)
+
+`);
 
 
-users[row.name]={
 
-    name:row.name,
 
-    lat:row.lat,
+// 履歴
 
-    lon:row.lon,
+db.run(`
 
-    water:row.water,
+CREATE TABLE IF NOT EXISTS location_history (
 
-    fuel:row.fuel,
+id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-    destination:row.destination,
+name TEXT,
 
-    lastUpdate:row.lastupdate,
+lat REAL,
 
-    online:false
+lon REAL,
+
+water INTEGER,
+
+fuel INTEGER,
+
+destination TEXT,
+
+created INTEGER
+
+)
+
+`);
+
+
+
+
+
+// メモリ
+
+let users={};
+
+
+
+
+
+//=====================
+// 起動時 SQLite復元
+//=====================
+
+
+db.all(
+
+"SELECT * FROM current_users",
+
+[],
+
+(err,rows)=>{
+
+
+if(err){
+
+console.error(err);
+
+return;
+
+}
+
+
+
+rows.forEach(user=>{
+
+
+users[user.name]={
+
+name:user.name,
+
+lat:user.lat,
+
+lon:user.lon,
+
+water:user.water,
+
+fuel:user.fuel,
+
+destination:user.destination,
+
+lastUpdate:user.lastUpdate,
+
+online:false
 
 };
 
@@ -121,42 +144,25 @@ users[row.name]={
 
 
 console.log(
-
-"復元ユーザー数:",
-Object.keys(users).length
-
-);
-
-
-
-}
-
-catch(err){
-
-
-console.log(
-
-"復元エラー:",
-err
-
+"復元ユーザー:",
+Object.keys(users)
 );
 
 
 }
 
-
-}
-
+);
 
 
 
-// 起動時読み込み
 
-loadUsers();
+
+
 
 //=====================
-// Socket.IO
+// Socket接続
 //=====================
+
 
 io.on(
 
@@ -172,7 +178,7 @@ socket.id
 
 
 
-// 接続時に現在状態送信
+// 接続時現在情報送信
 
 socket.emit(
 "locations",
@@ -182,54 +188,67 @@ users
 
 
 
-//=====================
-// 位置情報受信
-//=====================
+//---------------------
+// 位置受信
+//---------------------
+
 
 socket.on(
 
 "location",
 
-async(data)=>{
+(data)=>{
 
 
-const now = Date.now();
+let now =
+Date.now();
 
 
 
-// メモリ更新
+let user={
 
-users[data.name]={
 
 name:data.name,
 
+
 lat:data.lat,
+
 
 lon:data.lon,
 
+
 water:data.water,
+
 
 fuel:data.fuel,
 
+
 destination:data.destination,
+
 
 lastUpdate:now,
 
+
 online:true
+
 
 };
 
 
 
 
-//=====================
+
+// メモリ更新
+
+users[data.name]=user;
+
+
+
+
+
 // 現在状態保存
-//=====================
 
-try{
-
-
-await pool.query(
+db.run(
 
 `
 
@@ -238,51 +257,61 @@ INSERT INTO current_users
 (
 
 name,
+
 lat,
+
 lon,
+
 water,
+
 fuel,
+
 destination,
+
 lastUpdate,
+
 online
 
 )
 
-VALUES
-
-($1,$2,$3,$4,$5,$6,$7,$8)
-
+VALUES (?,?,?,?,?,?,?,?)
 
 ON CONFLICT(name)
 
 DO UPDATE SET
 
+lat=excluded.lat,
 
-lat=EXCLUDED.lat,
+lon=excluded.lon,
 
-lon=EXCLUDED.lon,
+water=excluded.water,
 
-water=EXCLUDED.water,
+fuel=excluded.fuel,
 
-fuel=EXCLUDED.fuel,
+destination=excluded.destination,
 
-destination=EXCLUDED.destination,
+lastUpdate=excluded.lastUpdate,
 
-lastUpdate=EXCLUDED.lastUpdate,
-
-online=1
+online=excluded.online
 
 `,
 
 [
 
-data.name,
-data.lat,
-data.lon,
-data.water,
-data.fuel,
-data.destination,
-now,
+user.name,
+
+user.lat,
+
+user.lon,
+
+user.water,
+
+user.fuel,
+
+user.destination,
+
+user.lastUpdate,
+
 1
 
 ]
@@ -290,28 +319,13 @@ now,
 );
 
 
-}
-catch(err){
-
-console.log(
-"current_users保存エラー:",
-err
-);
-
-}
 
 
 
 
-
-//=====================
 // 履歴保存
-//=====================
 
-try{
-
-
-await pool.query(
+db.run(
 
 `
 
@@ -320,29 +334,39 @@ INSERT INTO location_history
 (
 
 name,
+
 lat,
+
 lon,
+
 water,
+
 fuel,
+
 destination,
+
 created
 
 )
 
-VALUES
-
-($1,$2,$3,$4,$5,$6,$7)
+VALUES (?,?,?,?,?,?,?)
 
 `,
 
 [
 
-data.name,
-data.lat,
-data.lon,
-data.water,
-data.fuel,
-data.destination,
+user.name,
+
+user.lat,
+
+user.lon,
+
+user.water,
+
+user.fuel,
+
+user.destination,
+
 now
 
 ]
@@ -350,20 +374,10 @@ now
 );
 
 
-}
-catch(err){
-
-console.log(
-"history保存エラー:",
-err
-);
-
-}
 
 
 
 
-// 全員へ通知
 
 io.emit(
 
@@ -375,43 +389,36 @@ users
 
 
 
-});
+}
+
+);
 
 
 
 
 
 
-//=====================
+
+
+//---------------------
 // ユーザー削除
-//=====================
+//---------------------
+
 
 socket.on(
 
 "deleteUser",
 
-async(name)=>{
-
-
-console.log(
-
-"削除要求:",
-name
-
-);
-
+(name)=>{
 
 
 delete users[name];
 
 
 
-try{
+db.run(
 
-
-await pool.query(
-
-"DELETE FROM current_users WHERE name=$1",
+"DELETE FROM current_users WHERE name=?",
 
 [name]
 
@@ -419,27 +426,6 @@ await pool.query(
 
 
 
-console.log(
-
-"削除完了:",
-name
-
-);
-
-
-
-}
-catch(err){
-
-console.log(
-"削除エラー:",
-err
-);
-
-}
-
-
-
 io.emit(
 
 "locations",
@@ -450,16 +436,15 @@ users
 
 
 
-});
+}
+
+);
 
 
 
 
 
-
-//=====================
 // 切断
-//=====================
 
 socket.on(
 
@@ -469,23 +454,30 @@ socket.on(
 
 
 console.log(
-
 "切断:",
 socket.id
+);
+
+
+}
 
 );
 
 
-});
+
+}
+
+);
 
 
-});
 
-//=====================
-// サーバー起動
-//=====================
 
-const PORT = process.env.PORT || 3000;
+
+
+
+const PORT =
+process.env.PORT || 10000;
+
 
 
 server.listen(
@@ -497,7 +489,7 @@ PORT,
 
 console.log(
 
-"http server start port:",
+"server start port:",
 PORT
 
 );
