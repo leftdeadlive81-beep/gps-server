@@ -19,84 +19,9 @@ app.use(express.static("public"));
 // SQLite
 //=====================
 
-
 const db = new sqlite3.Database(
-"database.db"
+    "database.db"
 );
-
-
-
-
-//=====================
-// 現在ユーザー
-//=====================
-
-
-db.run(`
-
-CREATE TABLE IF NOT EXISTS current_users (
-
-name TEXT PRIMARY KEY,
-
-lat REAL,
-
-lon REAL,
-
-water INTEGER,
-
-fuel INTEGER,
-
-destination TEXT,
-
-iconType TEXT,
-
-lastUpdate INTEGER,
-
-online INTEGER
-
-)
-
-`);
-
-
-
-
-
-//=====================
-// 履歴
-//=====================
-
-
-db.run(`
-
-CREATE TABLE IF NOT EXISTS location_history (
-
-id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-name TEXT,
-
-lat REAL,
-
-lon REAL,
-
-water INTEGER,
-
-fuel INTEGER,
-
-destination TEXT,
-
-iconType TEXT,
-
-created INTEGER
-
-)
-
-`);
-
-
-
-
-
 
 
 
@@ -104,101 +29,157 @@ created INTEGER
 // メモリ
 //=====================
 
-
-let users={};
-
-
+let users = {};
 
 
 
 
 //=====================
-// 起動時 SQLite復元
+// DB初期化
 //=====================
 
-
-db.all(
-
-"SELECT * FROM current_users",
-
-[],
-
-(err,rows)=>{
+db.serialize(()=>{
 
 
-if(err){
+    // 現在ユーザー
 
-console.error(err);
+    db.run(`
 
-return;
+    CREATE TABLE IF NOT EXISTS current_users (
 
-}
+        name TEXT PRIMARY KEY,
 
+        lat REAL,
 
+        lon REAL,
 
-rows.forEach(user=>{
+        water INTEGER,
 
+        fuel INTEGER,
 
-users[user.name]={
+        destination TEXT,
 
+        iconType TEXT,
 
-name:user.name,
+        lastUpdate INTEGER,
 
+        online INTEGER
 
-lat:user.lat,
+    )
 
-
-lon:user.lon,
-
-
-water:user.water,
-
-
-fuel:user.fuel,
+    `);
 
 
-destination:user.destination,
+
+    // 履歴
+
+    db.run(`
+
+    CREATE TABLE IF NOT EXISTS location_history (
+
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+        name TEXT,
+
+        lat REAL,
+
+        lon REAL,
+
+        water INTEGER,
+
+        fuel INTEGER,
+
+        destination TEXT,
+
+        iconType TEXT,
+
+        created INTEGER
+
+    )
+
+    `);
 
 
-iconType:user.iconType || "person",
+
+    //=====================
+    // 起動時復元
+    //=====================
+
+    db.all(
+
+        "SELECT * FROM current_users",
+
+        [],
+
+        (err,rows)=>{
 
 
-lastUpdate:user.lastUpdate,
+            if(err){
+
+                console.error(err);
+
+                return;
+
+            }
 
 
-online:false
+
+            rows.forEach(user=>{
 
 
-};
+                users[user.name]={
+
+
+                    name:user.name,
+
+                    lat:user.lat,
+
+                    lon:user.lon,
+
+                    water:user.water,
+
+                    fuel:user.fuel,
+
+                    destination:user.destination,
+
+                    iconType:user.iconType || "person",
+
+                    lastUpdate:user.lastUpdate,
+
+                    online:false
+
+
+                };
+
+
+            });
+
+
+
+            console.log(
+
+                "復元ユーザー:",
+
+                Object.keys(users)
+
+            );
+
+
+        }
+
+    );
 
 
 });
 
 
 
-console.log(
-
-"復元ユーザー:",
-
-Object.keys(users)
-
-);
-
-
-
-}
-
-);
-
-
-
-
 
 
 
 
 //=====================
-// Socket接続
+// Socket.IO
 //=====================
 
 
@@ -209,288 +190,306 @@ io.on(
 (socket)=>{
 
 
-console.log(
+    console.log(
 
-"接続:",
+        "接続:",
 
-socket.id
+        socket.id
 
-);
+    );
 
 
 
+    // 接続時現在情報送信
 
-// 接続時送信
+    socket.emit(
 
+        "locations",
 
-socket.emit(
+        users
 
-"locations",
+    );
 
-users
 
-);
 
 
 
+    //=====================
+    // 位置情報受信
+    //=====================
 
 
+    socket.on(
 
+    "location",
 
-//=====================
-// 位置情報受信
-//=====================
+    (data)=>{
 
 
-socket.on(
+        let now = Date.now();
 
-"location",
 
-(data)=>{
 
+        let user={
 
-let now=Date.now();
 
+            name:data.name,
 
 
+            lat:data.lat,
 
-let user={
 
+            lon:data.lon,
 
-name:data.name,
 
+            water:data.water,
 
-lat:data.lat,
 
+            fuel:data.fuel,
 
-lon:data.lon,
 
+            destination:data.destination,
 
-water:data.water,
 
+            iconType:data.iconType || "person",
 
-fuel:data.fuel,
 
+            lastUpdate:now,
 
-destination:data.destination,
 
+            online:true
 
-iconType:data.iconType || "person",
 
+        };
 
-lastUpdate:now,
 
 
-online:true
 
 
-};
+        // メモリ更新
 
+        users[data.name]=user;
 
 
 
 
-// メモリ更新
 
+        //=====================
+        // 現在状態保存
+        //=====================
 
-users[data.name]=user;
 
+        db.run(
 
+        `
 
+        INSERT INTO current_users
 
+        (
 
+            name,
 
-//=====================
-// 現在状態保存
-//=====================
+            lat,
 
+            lon,
 
-db.run(
+            water,
 
-`
+            fuel,
 
-INSERT INTO current_users
+            destination,
 
-(
+            iconType,
 
-name,
+            lastUpdate,
 
-lat,
+            online
 
-lon,
+        )
 
-water,
+        VALUES (?,?,?,?,?,?,?,?,?)
 
-fuel,
 
-destination,
 
-iconType,
+        ON CONFLICT(name)
 
-lastUpdate,
+        DO UPDATE SET
 
-online
 
-)
+        lat=excluded.lat,
 
-VALUES (?,?,?,?,?,?,?,?,?)
+        lon=excluded.lon,
 
+        water=excluded.water,
 
+        fuel=excluded.fuel,
 
-ON CONFLICT(name)
+        destination=excluded.destination,
 
-DO UPDATE SET
+        iconType=excluded.iconType,
 
+        lastUpdate=excluded.lastUpdate,
 
-lat=excluded.lat,
+        online=excluded.online
 
-lon=excluded.lon,
 
-water=excluded.water,
+        `,
 
-fuel=excluded.fuel,
 
-destination=excluded.destination,
+        [
 
-iconType=excluded.iconType,
+            user.name,
 
-lastUpdate=excluded.lastUpdate,
+            user.lat,
 
-online=excluded.online
+            user.lon,
 
+            user.water,
 
-`,
+            user.fuel,
 
-[
+            user.destination,
 
+            user.iconType,
 
-user.name,
+            user.lastUpdate,
 
+            1
 
-user.lat,
+        ]
 
+        );
 
-user.lon,
 
 
-user.water,
 
 
-user.fuel,
 
 
-user.destination,
+        //=====================
+        // 履歴保存
+        //=====================
 
 
-user.iconType,
+        db.run(
 
+        `
 
-user.lastUpdate,
+        INSERT INTO location_history
 
+        (
 
-1
+            name,
 
+            lat,
 
-]
+            lon,
 
+            water,
 
-);
+            fuel,
 
+            destination,
 
+            iconType,
 
+            created
 
+        )
 
+        VALUES (?,?,?,?,?,?,?,?)
 
+        `,
 
-//=====================
-// 履歴保存
-//=====================
 
+        [
 
-db.run(
+            user.name,
 
-`
+            user.lat,
 
-INSERT INTO location_history
+            user.lon,
 
-(
+            user.water,
 
-name,
+            user.fuel,
 
-lat,
+            user.destination,
 
-lon,
+            user.iconType,
 
-water,
+            now
 
-fuel,
+        ]
 
-destination,
+        );
 
-iconType,
 
-created
 
-)
 
-VALUES (?,?,?,?,?,?,?,?)
 
-`,
 
-[
 
+        // 全員へ配信
 
-user.name,
+        io.emit(
 
+            "locations",
 
-user.lat,
+            users
 
+        );
 
-user.lon,
 
+    }
 
-user.water,
+    );
 
 
-user.fuel,
 
 
-user.destination,
 
 
-user.iconType,
 
 
-now
+    //=====================
+    // ユーザー削除
+    //=====================
 
 
-]
+    socket.on(
 
+    "deleteUser",
 
-);
+    (name)=>{
 
 
+        delete users[name];
 
 
 
+        db.run(
 
+            "DELETE FROM current_users WHERE name=?",
 
+            [name]
 
-io.emit(
+        );
 
-"locations",
 
-users
 
-);
+        io.emit(
 
+            "locations",
 
+            users
 
-}
+        );
 
-);
 
+    }
 
+    );
 
 
 
@@ -498,80 +497,30 @@ users
 
 
 
+    //=====================
+    // 切断
+    //=====================
 
-//=====================
-// ユーザー削除
-//=====================
 
+    socket.on(
 
-socket.on(
+    "disconnect",
 
-"deleteUser",
+    ()=>{
 
-(name)=>{
 
+        console.log(
 
-delete users[name];
+            "切断:",
 
+            socket.id
 
+        );
 
-db.run(
 
-"DELETE FROM current_users WHERE name=?",
+    }
 
-[name]
-
-);
-
-
-
-io.emit(
-
-"locations",
-
-users
-
-);
-
-
-
-}
-
-);
-
-
-
-
-
-
-
-
-
-
-//=====================
-// 切断
-//=====================
-
-
-socket.on(
-
-"disconnect",
-
-()=>{
-
-
-console.log(
-
-"切断:",
-
-socket.id
-
-);
-
-
-}
-
-);
+    );
 
 
 
@@ -587,15 +536,13 @@ socket.id
 
 
 //=====================
-// Render用PORT
+// Render
 //=====================
 
 
 const PORT =
 
 process.env.PORT || 10000;
-
-
 
 
 
@@ -606,13 +553,13 @@ PORT,
 ()=>{
 
 
-console.log(
+    console.log(
 
-"server start port:",
+        "server start port:",
 
-PORT
+        PORT
 
-);
+    );
 
 
 }
