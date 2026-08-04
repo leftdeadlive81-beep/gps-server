@@ -1,7 +1,7 @@
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-const sqlite3 = require("sqlite3").verbose();
+const { createClient } = require("@supabase/supabase-js");
 
 
 const app = express();
@@ -16,12 +16,18 @@ app.use(express.static("public"));
 
 
 //=====================
-// SQLite
+// Supabase
 //=====================
 
-const db = new sqlite3.Database(
-    "database.db"
+
+const supabase = createClient(
+
+    process.env.SUPABASE_URL,
+
+    process.env.SUPABASE_KEY
+
 );
+
 
 
 
@@ -29,148 +35,89 @@ const db = new sqlite3.Database(
 // メモリ
 //=====================
 
+
 let users = {};
 
 
 
 
+
 //=====================
-// DB初期化
+// 起動時 Supabase復元
 //=====================
 
-db.serialize(()=>{
 
+async function loadUsers(){
 
-    // 現在ユーザー
 
-    db.run(`
+    const {data,error}=await supabase
 
-    CREATE TABLE IF NOT EXISTS current_users (
+    .from("current_users")
 
-        name TEXT PRIMARY KEY,
+    .select("*");
 
-        lat REAL,
 
-        lon REAL,
 
-        water INTEGER,
+    if(error){
 
-        fuel INTEGER,
+        console.error(
+            "Supabase読み込みエラー",
+            error
+        );
 
-        destination TEXT,
+        return;
 
-        iconType TEXT,
+    }
 
-        lastUpdate INTEGER,
 
-        online INTEGER
 
-    )
 
-    `);
+    data.forEach(user=>{
 
 
+        users[user.name]={
 
-    // 履歴
 
-    db.run(`
+            name:user.name,
 
-    CREATE TABLE IF NOT EXISTS location_history (
+            lat:user.lat,
 
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lon:user.lon,
 
-        name TEXT,
+            water:user.water,
 
-        lat REAL,
+            fuel:user.fuel,
 
-        lon REAL,
+            destination:user.destination,
 
-        water INTEGER,
+            iconType:user.iconType || "person",
 
-        fuel INTEGER,
+            lastUpdate:user.lastUpdate,
 
-        destination TEXT,
+            online:false
 
-        iconType TEXT,
 
-        created INTEGER
+        };
 
-    )
 
-    `);
+    });
 
 
 
-    //=====================
-    // 起動時復元
-    //=====================
+    console.log(
 
-    db.all(
+        "復元ユーザー:",
 
-        "SELECT * FROM current_users",
-
-        [],
-
-        (err,rows)=>{
-
-
-            if(err){
-
-                console.error(err);
-
-                return;
-
-            }
-
-
-
-            rows.forEach(user=>{
-
-
-                users[user.name]={
-
-
-                    name:user.name,
-
-                    lat:user.lat,
-
-                    lon:user.lon,
-
-                    water:user.water,
-
-                    fuel:user.fuel,
-
-                    destination:user.destination,
-
-                    iconType:user.iconType || "person",
-
-                    lastUpdate:user.lastUpdate,
-
-                    online:false
-
-
-                };
-
-
-            });
-
-
-
-            console.log(
-
-                "復元ユーザー:",
-
-                Object.keys(users)
-
-            );
-
-
-        }
+        Object.keys(users)
 
     );
 
 
-});
+}
+
+
+
+loadUsers();
 
 
 
@@ -190,261 +137,254 @@ io.on(
 (socket)=>{
 
 
-    console.log(
+console.log(
 
-        "接続:",
+"接続:",
 
-        socket.id
+socket.id
 
-    );
+);
 
 
 
-    // 接続時現在情報送信
 
-    socket.emit(
+// 接続時送信
 
-        "locations",
 
-        users
+socket.emit(
 
-    );
+"locations",
 
+users
 
+);
 
 
 
-    //=====================
-    // 位置情報受信
-    //=====================
 
 
-    socket.on(
 
-    "location",
 
-    (data)=>{
+//=====================
+// 位置情報受信
+//=====================
 
 
-        let now = Date.now();
+socket.on(
 
+"location",
 
+async(data)=>{
 
-        let user={
 
+let now=Date.now();
 
-            name:data.name,
 
 
-            lat:data.lat,
 
+let user={
 
-            lon:data.lon,
 
+name:data.name,
 
-            water:data.water,
+lat:data.lat,
 
+lon:data.lon,
 
-            fuel:data.fuel,
+water:data.water,
 
+fuel:data.fuel,
 
-            destination:data.destination,
+destination:data.destination,
 
+iconType:data.iconType || "person",
 
-            iconType:data.iconType || "person",
+lastUpdate:now,
 
+online:true
 
-            lastUpdate:now,
 
+};
 
-            online:true
 
 
-        };
 
+// メモリ更新
 
+users[data.name]=user;
 
 
 
-        // メモリ更新
 
-        users[data.name]=user;
 
+//=====================
+// 現在位置保存
+//=====================
 
 
+const {error}=await supabase
 
+.from("current_users")
 
-        //=====================
-        // 現在状態保存
-        //=====================
+.upsert({
 
+name:user.name,
 
-        db.run(
+lat:user.lat,
 
-        `
+lon:user.lon,
 
-        INSERT INTO current_users
+water:user.water,
 
-        (
+fuel:user.fuel,
 
-            name,
+destination:user.destination,
 
-            lat,
+iconType:user.iconType,
 
-            lon,
+lastUpdate:user.lastUpdate,
 
-            water,
+online:true
 
-            fuel,
+});
 
-            destination,
 
-            iconType,
 
-            lastUpdate,
+if(error){
 
-            online
+console.error(
+"current_users保存エラー",
+error
+);
 
-        )
+}
 
-        VALUES (?,?,?,?,?,?,?,?,?)
 
 
 
-        ON CONFLICT(name)
 
-        DO UPDATE SET
 
 
-        lat=excluded.lat,
 
-        lon=excluded.lon,
+//=====================
+// 履歴保存
+//=====================
 
-        water=excluded.water,
 
-        fuel=excluded.fuel,
+const {error:historyError}=await supabase
 
-        destination=excluded.destination,
+.from("location_history")
 
-        iconType=excluded.iconType,
+.insert({
 
-        lastUpdate=excluded.lastUpdate,
+name:user.name,
 
-        online=excluded.online
+lat:user.lat,
 
+lon:user.lon,
 
-        `,
+water:user.water,
 
+fuel:user.fuel,
 
-        [
+destination:user.destination,
 
-            user.name,
+iconType:user.iconType,
 
-            user.lat,
+created:now
 
-            user.lon,
+});
 
-            user.water,
 
-            user.fuel,
 
-            user.destination,
+if(historyError){
 
-            user.iconType,
+console.error(
+"履歴保存エラー",
+historyError
+);
 
-            user.lastUpdate,
+}
 
-            1
 
-        ]
 
-        );
 
 
 
 
+// 全員へ配信
 
 
+io.emit(
 
-        //=====================
-        // 履歴保存
-        //=====================
+"locations",
 
+users
 
-        db.run(
+);
 
-        `
 
-        INSERT INTO location_history
 
-        (
+}
 
-            name,
 
-            lat,
+);
 
-            lon,
 
-            water,
 
-            fuel,
 
-            destination,
 
-            iconType,
 
-            created
 
-        )
 
-        VALUES (?,?,?,?,?,?,?,?)
 
-        `,
+//=====================
+// ユーザー削除
+//=====================
 
 
-        [
+socket.on(
 
-            user.name,
+"deleteUser",
 
-            user.lat,
+async(name)=>{
 
-            user.lon,
 
-            user.water,
+delete users[name];
 
-            user.fuel,
 
-            user.destination,
 
-            user.iconType,
 
-            now
+await supabase
 
-        ]
+.from("current_users")
 
-        );
+.delete()
 
+.eq(
 
+"name",
 
+name
 
+);
 
 
 
-        // 全員へ配信
+io.emit(
 
-        io.emit(
+"locations",
 
-            "locations",
+users
 
-            users
+);
 
-        );
 
 
-    }
+}
 
-    );
 
+);
 
 
 
@@ -452,75 +392,31 @@ io.on(
 
 
 
-    //=====================
-    // ユーザー削除
-    //=====================
 
+//=====================
+// 切断
+//=====================
 
-    socket.on(
 
-    "deleteUser",
+socket.on(
 
-    (name)=>{
+"disconnect",
 
+()=>{
 
-        delete users[name];
 
+console.log(
 
+"切断:",
 
-        db.run(
+socket.id
 
-            "DELETE FROM current_users WHERE name=?",
+);
 
-            [name]
 
-        );
+}
 
-
-
-        io.emit(
-
-            "locations",
-
-            users
-
-        );
-
-
-    }
-
-    );
-
-
-
-
-
-
-
-    //=====================
-    // 切断
-    //=====================
-
-
-    socket.on(
-
-    "disconnect",
-
-    ()=>{
-
-
-        console.log(
-
-            "切断:",
-
-            socket.id
-
-        );
-
-
-    }
-
-    );
+);
 
 
 
@@ -536,11 +432,11 @@ io.on(
 
 
 //=====================
-// Render
+// Render PORT
 //=====================
 
 
-const PORT =
+const PORT=
 
 process.env.PORT || 10000;
 
@@ -553,13 +449,13 @@ PORT,
 ()=>{
 
 
-    console.log(
+console.log(
 
-        "server start port:",
+"server start port:",
 
-        PORT
+PORT
 
-    );
+);
 
 
 }
