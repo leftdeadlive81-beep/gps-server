@@ -1203,11 +1203,10 @@ ${formatTime(user.lastUpdate)}
 // ユーザー一覧
 
 
+
+
 html +=
-
-
 `
-
 <div class="user"
 
 onclick="focusUser('${user.name}')">
@@ -1234,23 +1233,16 @@ ${statusText(user)}
 
 
 💧 水量：
-
 ${user.water}
 
-
 <br>
-
 
 ⛽ 燃料：
-
 ${user.fuel}
-
 
 <br>
 
-
 📍 目的地：
-
 ${user.destination}
 
 
@@ -1258,27 +1250,31 @@ ${user.destination}
 
 
 🖼 アイコン：
-
 ${user.iconType==="vehicle" ?
-
 "🚙車両":
-
 "👤隊員"}
-
 
 
 <br>
 
 
 🕒 最終更新：
-
 ${formatTime(user.lastUpdate)}
 
 
+<br><br>
+
+
+<button
+
+onclick="event.stopPropagation(); deleteUser('${user.name}')">
+
+🗑 削除
+
+</button>
+
 
 </div>
-
-
 `;
 
 
