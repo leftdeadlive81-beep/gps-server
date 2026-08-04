@@ -1081,7 +1081,7 @@ if(markers[name]){
 
 // 古い丸マーカーの場合は作り直す
 
-if(markers[name]._radius){
+if(markers[name] && markers[name]._radius){
 
     map.removeLayer(markers[name]);
 
@@ -1300,3 +1300,10 @@ document.getElementById("users")
 
 
 );
+
+
+</script>
+
+</body>
+
+</html>
