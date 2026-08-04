@@ -1,8 +1,7 @@
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-const { createClient } = require("@supabase/supabase-js");
-
+const { Pool } = require("pg");
 
 
 const app = express();
@@ -12,24 +11,26 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 
-
 app.use(express.static("public"));
 
 
 
 //=====================
-// Supabase
+// PostgreSQL
+// Supabase Transaction Pooler
 //=====================
 
 
-const supabase = createClient(
+const pool = new Pool({
 
-    process.env.SUPABASE_URL,
+    connectionString:
+        process.env.DATABASE_URL,
 
-    process.env.SUPABASE_KEY
+    ssl:{
+        rejectUnauthorized:false
+    }
 
-);
-
+});
 
 
 
@@ -38,80 +39,85 @@ const supabase = createClient(
 // メモリ
 //=====================
 
-
-let users = {};
+let users={};
 
 
 
 
 //=====================
-// 起動時 Supabase復元
+// 起動時 DB復元
 //=====================
 
 
 async function loadUsers(){
 
 
-    const {data,error}=await supabase
-
-        .from("current_users")
-
-        .select("*");
+    try{
 
 
+        const result =
+        await pool.query(
 
-    if(error){
+            "SELECT * FROM current_users"
 
-        console.error(
-            "DB取得エラー",
-            error
         );
 
-        return;
+
+
+        result.rows.forEach(user=>{
+
+
+            users[user.name]={
+
+
+                name:user.name,
+
+                lat:user.lat,
+
+                lon:user.lon,
+
+                water:user.water,
+
+                fuel:user.fuel,
+
+                destination:user.destination,
+
+
+                online:false
+
+
+            };
+
+
+        });
+
+
+
+        console.log(
+
+            "復元ユーザー:",
+
+            Object.keys(users)
+
+        );
+
+
 
     }
 
+    catch(err){
 
 
-    data.forEach(user=>{
+        console.error(
+
+            "DB復元エラー",
+
+            err
+
+        );
 
 
-        users[user.name]={
-
-
-            name:user.name,
-
-            lat:user.lat,
-
-            lon:user.lon,
-
-            water:user.water,
-
-            fuel:user.fuel,
-
-            destination:user.destination,
-
-            iconType:user.iconType || "person",
-
-            lastUpdate:user.lastUpdate,
-
-            online:false
-
-
-        };
-
-
-    });
-
-
-
-    console.log(
-
-        "復元ユーザー:",
-
-        Object.keys(users)
-
-    );
+    }
 
 
 }
@@ -119,7 +125,6 @@ async function loadUsers(){
 
 
 loadUsers();
-
 
 
 
@@ -150,7 +155,7 @@ socket.id
 
 
 
-// 接続時送信
+// 接続時現在位置送信
 
 
 socket.emit(
@@ -179,170 +184,208 @@ socket.on(
 async(data)=>{
 
 
-let now=Date.now();
+    const now =
+    Date.now();
 
 
 
-let user={
+    const user={
 
 
-    name:data.name,
+        name:data.name,
 
-    lat:data.lat,
+        lat:data.lat,
 
-    lon:data.lon,
+        lon:data.lon,
 
-    water:data.water,
+        water:data.water,
 
-    fuel:data.fuel,
+        fuel:data.fuel,
 
-    destination:data.destination,
+        destination:data.destination,
 
-    iconType:data.iconType || "person",
 
-    lastUpdate:now,
+        online:true
 
-    online:true
 
+    };
 
-};
 
 
 
+    users[data.name]=user;
 
 
-// メモリ更新
 
-users[data.name]=user;
 
 
+    try{
 
 
+        //=====================
+        // 現在位置更新
+        //=====================
 
 
-//=====================
-// current_users更新
-//=====================
+        await pool.query(
 
+        `
 
-const {error}=await supabase
+        INSERT INTO current_users
 
-.from("current_users")
+        (
 
-.upsert(
+        name,
 
-{
+        lat,
 
-name:user.name,
+        lon,
 
-lat:user.lat,
+        water,
 
-lon:user.lon,
+        fuel,
 
-water:user.water,
+        destination
 
-fuel:user.fuel,
+        )
 
-destination:user.destination,
+        VALUES
 
-iconType:user.iconType,
+        ($1,$2,$3,$4,$5,$6)
 
-lastUpdate:user.lastUpdate,
 
-online:true
+        ON CONFLICT(name)
 
+        DO UPDATE SET
 
-},
 
-{
+        lat=$2,
 
-onConflict:"name"
+        lon=$3,
 
-}
+        water=$4,
 
-);
+        fuel=$5,
 
+        destination=$6
 
 
-if(error){
+        `,
 
-console.error(
-"current_users保存失敗",
-error
-);
 
-}
+        [
 
+        user.name,
 
+        user.lat,
 
+        user.lon,
 
+        user.water,
 
+        user.fuel,
 
-//=====================
-// 履歴保存
-//=====================
+        user.destination
 
+        ]
 
-const history={
+        );
 
 
-name:user.name,
 
-lat:user.lat,
 
-lon:user.lon,
 
-water:user.water,
 
-fuel:user.fuel,
 
-destination:user.destination,
+        //=====================
+        // 履歴保存
+        //=====================
 
-iconType:user.iconType,
 
-created:now
+        await pool.query(
 
+        `
 
-};
+        INSERT INTO location_history
 
+        (
 
+        name,
 
-const {error:historyError}=await supabase
+        lat,
 
-.from("location_history")
+        lon,
 
-.insert(history);
+        water,
 
+        fuel,
 
+        destination
 
-if(historyError){
+        )
 
-console.error(
 
-"履歴保存失敗",
+        VALUES
 
-historyError
+        ($1,$2,$3,$4,$5,$6)
 
-);
 
-}
+        `,
 
 
+        [
 
+        user.name,
 
+        user.lat,
 
+        user.lon,
 
+        user.water,
 
-// 全員へ配信
+        user.fuel,
 
+        user.destination
 
-io.emit(
+        ]
 
-"locations",
+        );
 
-users
 
-);
+
+
+
+    }
+
+    catch(err){
+
+
+        console.error(
+
+            "DB保存エラー",
+
+            err
+
+        );
+
+
+    }
+
+
+
+
+
+
+    // 全員へ送信
+
+
+    io.emit(
+
+        "locations",
+
+        users
+
+    );
 
 
 
@@ -369,37 +412,43 @@ socket.on(
 async(name)=>{
 
 
-delete users[name];
+    delete users[name];
 
 
 
-// DB削除
-
-await supabase
-
-.from("current_users")
-
-.delete()
-
-.eq(
-
-"name",
-
-name
-
-);
+    try{
 
 
+        await pool.query(
+
+        "DELETE FROM current_users WHERE name=$1",
+
+        [name]
+
+        );
+
+
+    }
+
+    catch(err){
+
+
+        console.error(err);
+
+
+    }
 
 
 
-io.emit(
 
-"locations",
 
-users
+    io.emit(
 
-);
+        "locations",
+
+        users
+
+    );
 
 
 
@@ -450,13 +499,12 @@ socket.id
 
 
 
-
 //=====================
 // Render PORT
 //=====================
 
 
-const PORT=
+const PORT =
 
 process.env.PORT || 10000;
 
