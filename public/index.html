@@ -5,7 +5,6 @@
 
 <meta charset="UTF-8">
 
-<!-- スマホ表示用 -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <title>GPS位置共有システム</title>
@@ -14,38 +13,29 @@
 <link rel="stylesheet"
 href="https://unpkg.com/leaflet/dist/leaflet.css">
 
-
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script src="/socket.io/socket.io.js"></script>
 
 
-
 <style>
-
 
 body{
 
 font-family:sans-serif;
-
 margin:10px;
-
 background:#f5f5f5;
-
 font-size:24px;
 
 }
 
 
-
 h2{
 
 font-size:32px;
-
 text-align:center;
 
 }
-
 
 
 h3{
@@ -55,65 +45,46 @@ font-size:28px;
 }
 
 
-
 .card{
 
 background:white;
-
 border-radius:15px;
-
 padding:20px;
-
 margin-bottom:15px;
-
 box-shadow:0 2px 5px #aaa;
 
 }
 
 
-
 input{
 
 width:90%;
-
 font-size:26px;
-
 padding:14px;
-
 margin:8px;
-
 border-radius:10px;
-
 border:1px solid #888;
 
 }
 
 
-
 button{
 
 font-size:26px;
-
 padding:15px;
-
 margin:8px;
-
 width:95%;
-
 border-radius:12px;
 
 }
 
 
-
 #gpsStatus{
 
 font-size:26px;
-
 font-weight:bold;
 
 }
-
 
 
 #lastSend{
@@ -123,73 +94,56 @@ font-size:24px;
 }
 
 
-
 #map{
 
 height:55vh;
-
 width:100%;
-
 border-radius:15px;
 
 }
-
 
 
 .user{
 
 background:white;
-
 border-radius:15px;
-
 padding:20px;
-
 margin:15px 0;
-
 box-shadow:0 2px 5px #aaa;
-
 font-size:24px;
-
 cursor:pointer;
 
 }
 
 
-
 .online{
 
 color:green;
-
 font-weight:bold;
 
 }
-
 
 
 .offline{
 
 color:red;
-
 font-weight:bold;
 
 }
 
 
-
 </style>
 
-</head>
 
+</head>
 
 
 <body>
 
 
-
 <h2>
 📍 GPS位置共有システム
 </h2>
-
 
 
 <div class="card">
@@ -237,10 +191,7 @@ font-weight:bold;
 <input id="destination" value="">
 
 
-
 </div>
-
-
 
 
 
@@ -282,13 +233,10 @@ font-weight:bold;
 
 
 
-
 <hr>
 
 
-
 <div id="map"></div>
-
 
 
 <h3>
@@ -309,66 +257,44 @@ font-weight:bold;
 const socket = io();
 
 
-
-
 //=====================
 // 保存データ復元
 //=====================
 
-
 window.onload=function(){
 
 
-let name=
-localStorage.getItem("name");
+let name=localStorage.getItem("name");
 
+let water=localStorage.getItem("water");
 
-let water=
-localStorage.getItem("water");
+let fuel=localStorage.getItem("fuel");
 
-
-let fuel=
-localStorage.getItem("fuel");
-
-
-let destination=
-localStorage.getItem("destination");
+let destination=localStorage.getItem("destination");
 
 
 
 if(name)
-
 document.getElementById("name").value=name;
 
 
-
 if(water)
-
 document.getElementById("water").value=water;
 
 
-
 if(fuel)
-
 document.getElementById("fuel").value=fuel;
 
 
-
 if(destination)
-
 document.getElementById("destination").value=destination;
 
 
 }
 
-
-
-
-
 //=====================
 // 地図
 //=====================
-
 
 const map=L.map('map')
 .setView(
@@ -377,26 +303,17 @@ const map=L.map('map')
 );
 
 
-
 L.tileLayer(
-
 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-
 {
-
 attribution:'OpenStreetMap'
-
 }
-
 )
-
 .addTo(map);
 
 
 
-
 let markers={};
-
 
 
 let lastLat=0;
@@ -404,22 +321,35 @@ let lastLat=0;
 let lastLon=0;
 
 
+// 最終送信時間
+
+let lastSendTime=0;
+
+
+// 60秒
+
+const SEND_INTERVAL=60000;
+
+
+// GPS監視ID
 
 let watchID=null;
 
 
+// 1分タイマー
 
 let gpsTimer=null;
 
 
+// 移動距離
 
 const MOVE_DISTANCE=10;
+
 
 
 //=====================
 // GPS開始
 //=====================
-
 
 function startGPS(){
 
@@ -433,6 +363,52 @@ return;
 }
 
 
+
+//---------------------
+// 60秒ごとの強制送信
+//---------------------
+
+gpsTimer=setInterval(()=>{
+
+
+navigator.geolocation.getCurrentPosition(
+
+(pos)=>{
+
+
+sendLocation(
+
+pos.coords.latitude,
+
+pos.coords.longitude
+
+);
+
+
+lastSendTime=Date.now();
+
+
+},
+
+
+(error)=>{
+
+console.log(error);
+
+}
+
+
+);
+
+
+},60000);
+
+
+
+
+//---------------------
+// GPS位置監視
+//---------------------
 
 watchID=navigator.geolocation.watchPosition(
 
@@ -461,6 +437,8 @@ lastLat=lat;
 
 lastLon=lon;
 
+lastSendTime=Date.now();
+
 
 return;
 
@@ -469,29 +447,54 @@ return;
 
 
 
+// 移動距離確認
+
 let distance=getDistance(
 
 lastLat,
+
 lastLon,
+
 lat,
+
 lon
 
 );
 
 
 
-if(distance>=MOVE_DISTANCE){
+let now=Date.now();
+
+
+
+// 10m移動 または 60秒経過
+
+if(
+
+distance>=MOVE_DISTANCE
+
+||
+
+now-lastSendTime>=SEND_INTERVAL
+
+){
 
 
 sendLocation(
+
 lat,
+
 lon
+
 );
+
 
 
 lastLat=lat;
 
 lastLon=lon;
+
+lastSendTime=now;
 
 
 }
@@ -506,8 +509,11 @@ lastLon=lon;
 
 console.log(error);
 
+
 alert(
+
 "位置情報取得失敗"
+
 );
 
 
@@ -522,40 +528,11 @@ timeout:10000,
 
 maximumAge:0
 
-}
-
-
-);
-
-
-
-// ★追加
-// 移動していなくても1分ごと送信
-
-gpsTimer=setInterval(()=>{
-
-
-navigator.geolocation.getCurrentPosition(
-
-(pos)=>{
-
-
-sendLocation(
-
-pos.coords.latitude,
-
-pos.coords.longitude
-
-);
-
 
 }
 
+
 );
-
-
-},60000);
-
 
 
 }
@@ -567,12 +544,11 @@ pos.coords.longitude
 // 状態送信
 //=====================
 
-
 function sendLocation(lat,lon){
 
 
 
-// 保存
+// ローカル保存
 
 localStorage.setItem(
 
@@ -623,16 +599,15 @@ document.getElementById("gpsStatus")
 
 
 
-
-
 document.getElementById("lastSend")
 .innerHTML=
 
-"最終送信："+
+"最終送信："
+
++
 
 new Date()
 .toLocaleTimeString();
-
 
 
 
@@ -650,34 +625,33 @@ name:
 document.getElementById("name").value,
 
 
-
 lat:lat,
 
 
 lon:lon,
 
 
-
 water:
 
 Number(
-document.getElementById("water").value
-),
 
+document.getElementById("water").value
+
+),
 
 
 fuel:
 
 Number(
-document.getElementById("fuel").value
-),
 
+document.getElementById("fuel").value
+
+),
 
 
 destination:
 
 document.getElementById("destination").value
-
 
 
 }
@@ -693,12 +667,9 @@ document.getElementById("destination").value
 
 
 
-
-
 //=====================
 // 状態更新ボタン
 //=====================
-
 
 function updateStatus(){
 
@@ -730,12 +701,9 @@ pos.coords.longitude
 
 
 
-
-
 //=====================
 // 距離計算
 //=====================
-
 
 function getDistance(
 
@@ -748,12 +716,6 @@ lat2,
 lon2
 
 ){
-
-
-if(lat1===0)
-
-return 99999;
-
 
 
 const R=6371000;
@@ -811,47 +773,31 @@ Math.sqrt(1-a)
 );
 
 
-
 }
 
-
-
-
-
 //=====================
-// 削除
+// ユーザー削除
 //=====================
-
 
 function deleteUser(name){
 
-
 if(confirm(name+"を削除しますか？")){
 
-
 socket.emit(
-
 "deleteUser",
-
 name
-
 );
 
+}
 
 }
 
 
-}
-
-
-
 //=====================
-// 表示関数
+// 表示用関数
 //=====================
-
 
 function statusText(user){
-
 
 return user.online ?
 
@@ -859,13 +805,11 @@ return user.online ?
 
 "🔴 オフライン";
 
-
 }
 
 
 
 function statusClass(user){
-
 
 return user.online ?
 
@@ -873,13 +817,11 @@ return user.online ?
 
 "offline";
 
-
 }
 
 
 
 function formatTime(t){
-
 
 if(!t)
 
@@ -889,11 +831,7 @@ return "不明";
 return new Date(t)
 .toLocaleString();
 
-
 }
-
-
-
 
 
 
@@ -901,29 +839,21 @@ return new Date(t)
 // ユーザー位置へ移動
 //=====================
 
-
 function focusUser(name){
-
 
 
 if(markers[name]){
 
 
-let pos=
-
-markers[name]
+let pos=markers[name]
 .getLatLng();
-
 
 
 map.setView(
 
 [
-
 pos.lat,
-
 pos.lng
-
 ],
 
 16
@@ -931,17 +861,13 @@ pos.lng
 );
 
 
-
-markers[name]
-.openPopup();
+markers[name].openPopup();
 
 
 }
 
 
-
 }
-
 
 
 
@@ -950,7 +876,6 @@ markers[name]
 //=====================
 // ユーザー情報受信
 //=====================
-
 
 socket.on(
 
@@ -963,13 +888,9 @@ let html="";
 
 
 
-
-
 // 消えたユーザーのマーカー削除
 
-
 Object.keys(markers)
-
 .forEach(
 
 (name)=>{
@@ -979,9 +900,7 @@ if(!users[name]){
 
 
 map.removeLayer(
-
 markers[name]
-
 );
 
 
@@ -999,19 +918,13 @@ delete markers[name];
 
 
 
-
-
 Object.keys(users)
-
 .forEach(
 
 (name)=>{
 
 
-let user=
-
-users[name];
-
+let user=users[name];
 
 
 let color=
@@ -1025,24 +938,18 @@ user.online ?
 
 
 
-
-
-// マーカー更新
+// マーカー作成・更新
 
 
 if(markers[name]){
 
 
 markers[name]
-
 .setLatLng(
 
 [
-
 user.lat,
-
 user.lon
-
 ]
 
 );
@@ -1055,28 +962,20 @@ else{
 
 markers[name]=
 
-
 L.circleMarker(
 
 [
-
 user.lat,
-
 user.lon
-
 ],
 
 {
 
-
 radius:12,
-
 
 color:color,
 
-
 fillOpacity:0.8
-
 
 }
 
@@ -1085,16 +984,12 @@ fillOpacity:0.8
 .addTo(map);
 
 
-
 }
 
 
 
 
-
-markers[name]
-
-.setStyle(
+markers[name].setStyle(
 
 {
 
@@ -1108,22 +1003,11 @@ color:color
 
 
 
-
-
-// ポップアップ
-
-
-markers[name]
-
-.bindPopup(
+markers[name].bindPopup(
 
 `
 
-<b>
-
-${user.name}
-
-</b>
+<b>${user.name}</b>
 
 <br>
 
@@ -1162,10 +1046,7 @@ ${formatTime(user.lastUpdate)}
 
 
 
-
-
 // ユーザー一覧
-
 
 html +=
 
@@ -1240,7 +1121,6 @@ onclick="event.stopPropagation();deleteUser('${user.name}')">
 </button>
 
 
-
 </div>
 
 
@@ -1255,17 +1135,11 @@ onclick="event.stopPropagation();deleteUser('${user.name}')">
 
 
 
-
-
-
 document.getElementById("users")
-
 .innerHTML=html;
 
 
-
 }
-
 
 );
 
@@ -1277,4 +1151,3 @@ document.getElementById("users")
 
 
 </html>
-
