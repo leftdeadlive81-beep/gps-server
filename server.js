@@ -39,7 +39,7 @@ const pool = new Pool({
 // メモリ
 //=====================
 
-let users={};
+let users = {};
 
 
 
@@ -82,8 +82,9 @@ async function loadUsers(){
 
                 destination:user.destination,
 
+                online:false,
 
-                online:false
+                lastUpdate:user.lastUpdate
 
 
             };
@@ -131,6 +132,7 @@ loadUsers();
 
 
 
+
 //=====================
 // Socket.IO
 //=====================
@@ -154,9 +156,7 @@ socket.id
 
 
 
-
-// 接続時現在位置送信
-
+// 接続時送信
 
 socket.emit(
 
@@ -165,7 +165,6 @@ socket.emit(
 users
 
 );
-
 
 
 
@@ -184,8 +183,7 @@ socket.on(
 async(data)=>{
 
 
-    const now =
-    Date.now();
+    const now = Date.now();
 
 
 
@@ -204,11 +202,15 @@ async(data)=>{
 
         destination:data.destination,
 
+        iconType:data.iconType || "person",
 
-        online:true
+        online:true,
+
+        lastUpdate:now
 
 
     };
+
 
 
 
@@ -219,11 +221,12 @@ async(data)=>{
 
 
 
+
     try{
 
 
         //=====================
-        // 現在位置更新
+        // 現在位置保存
         //=====================
 
 
@@ -245,13 +248,19 @@ async(data)=>{
 
         fuel,
 
-        destination
+        destination,
+
+        online,
+
+        lastUpdate
 
         )
 
+
         VALUES
 
-        ($1,$2,$3,$4,$5,$6)
+        ($1,$2,$3,$4,$5,$6,$7,$8)
+
 
 
         ON CONFLICT(name)
@@ -267,7 +276,11 @@ async(data)=>{
 
         fuel=$5,
 
-        destination=$6
+        destination=$6,
+
+        online=$7,
+
+        lastUpdate=$8
 
 
         `,
@@ -285,7 +298,11 @@ async(data)=>{
 
         user.fuel,
 
-        user.destination
+        user.destination,
+
+        1,
+
+        now
 
         ]
 
@@ -353,9 +370,8 @@ async(data)=>{
 
 
 
-
-
     }
+
 
     catch(err){
 
@@ -375,8 +391,7 @@ async(data)=>{
 
 
 
-
-    // 全員へ送信
+    // 全員へ配信
 
 
     io.emit(
@@ -388,10 +403,10 @@ async(data)=>{
     );
 
 
-
 }
 
 );
+
 
 
 
@@ -433,11 +448,16 @@ async(name)=>{
     catch(err){
 
 
-        console.error(err);
+        console.error(
+
+            "削除エラー",
+
+            err
+
+        );
 
 
     }
-
 
 
 
@@ -451,10 +471,10 @@ async(name)=>{
     );
 
 
-
 }
 
 );
+
 
 
 
@@ -471,7 +491,7 @@ socket.on(
 
 "disconnect",
 
-()=>{
+async()=>{
 
 
 console.log(
@@ -499,8 +519,9 @@ socket.id
 
 
 
+
 //=====================
-// Render PORT
+// Render
 //=====================
 
 
