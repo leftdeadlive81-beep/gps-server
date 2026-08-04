@@ -19,13 +19,18 @@ app.use(express.static("public"));
 // SQLite
 //=====================
 
+
 const db = new sqlite3.Database(
 "database.db"
 );
 
 
 
+
+//=====================
 // 現在ユーザー
+//=====================
+
 
 db.run(`
 
@@ -43,6 +48,8 @@ fuel INTEGER,
 
 destination TEXT,
 
+iconType TEXT,
+
 lastUpdate INTEGER,
 
 online INTEGER
@@ -54,7 +61,11 @@ online INTEGER
 
 
 
+
+//=====================
 // 履歴
+//=====================
+
 
 db.run(`
 
@@ -74,6 +85,8 @@ fuel INTEGER,
 
 destination TEXT,
 
+iconType TEXT,
+
 created INTEGER
 
 )
@@ -84,9 +97,16 @@ created INTEGER
 
 
 
+
+
+
+//=====================
 // メモリ
+//=====================
+
 
 let users={};
+
 
 
 
@@ -121,21 +141,33 @@ rows.forEach(user=>{
 
 users[user.name]={
 
+
 name:user.name,
+
 
 lat:user.lat,
 
+
 lon:user.lon,
+
 
 water:user.water,
 
+
 fuel:user.fuel,
+
 
 destination:user.destination,
 
+
+iconType:user.iconType || "person",
+
+
 lastUpdate:user.lastUpdate,
 
+
 online:false
+
 
 };
 
@@ -143,15 +175,21 @@ online:false
 });
 
 
+
 console.log(
+
 "復元ユーザー:",
+
 Object.keys(users)
+
 );
+
 
 
 }
 
 );
+
 
 
 
@@ -172,25 +210,36 @@ io.on(
 
 
 console.log(
+
 "接続:",
+
 socket.id
+
 );
 
 
 
-// 接続時現在情報送信
+
+// 接続時送信
+
 
 socket.emit(
+
 "locations",
+
 users
+
 );
 
 
 
 
-//---------------------
-// 位置受信
-//---------------------
+
+
+
+//=====================
+// 位置情報受信
+//=====================
 
 
 socket.on(
@@ -200,8 +249,8 @@ socket.on(
 (data)=>{
 
 
-let now =
-Date.now();
+let now=Date.now();
+
 
 
 
@@ -226,6 +275,9 @@ fuel:data.fuel,
 destination:data.destination,
 
 
+iconType:data.iconType || "person",
+
+
 lastUpdate:now,
 
 
@@ -240,13 +292,18 @@ online:true
 
 // メモリ更新
 
+
 users[data.name]=user;
 
 
 
 
 
+
+//=====================
 // 現在状態保存
+//=====================
+
 
 db.run(
 
@@ -268,17 +325,22 @@ fuel,
 
 destination,
 
+iconType,
+
 lastUpdate,
 
 online
 
 )
 
-VALUES (?,?,?,?,?,?,?,?)
+VALUES (?,?,?,?,?,?,?,?,?)
+
+
 
 ON CONFLICT(name)
 
 DO UPDATE SET
+
 
 lat=excluded.lat,
 
@@ -290,31 +352,47 @@ fuel=excluded.fuel,
 
 destination=excluded.destination,
 
+iconType=excluded.iconType,
+
 lastUpdate=excluded.lastUpdate,
 
 online=excluded.online
+
 
 `,
 
 [
 
+
 user.name,
+
 
 user.lat,
 
+
 user.lon,
+
 
 user.water,
 
+
 user.fuel,
+
 
 user.destination,
 
+
+user.iconType,
+
+
 user.lastUpdate,
+
 
 1
 
+
 ]
+
 
 );
 
@@ -323,7 +401,11 @@ user.lastUpdate,
 
 
 
+
+//=====================
 // 履歴保存
+//=====================
+
 
 db.run(
 
@@ -345,33 +427,48 @@ fuel,
 
 destination,
 
+iconType,
+
 created
 
 )
 
-VALUES (?,?,?,?,?,?,?)
+VALUES (?,?,?,?,?,?,?,?)
 
 `,
 
 [
 
+
 user.name,
+
 
 user.lat,
 
+
 user.lon,
+
 
 user.water,
 
+
 user.fuel,
+
 
 user.destination,
 
+
+user.iconType,
+
+
 now
+
 
 ]
 
+
 );
+
 
 
 
@@ -400,9 +497,11 @@ users
 
 
 
-//---------------------
+
+
+//=====================
 // ユーザー削除
-//---------------------
+//=====================
 
 
 socket.on(
@@ -444,7 +543,15 @@ users
 
 
 
+
+
+
+
+
+//=====================
 // 切断
+//=====================
+
 
 socket.on(
 
@@ -454,8 +561,11 @@ socket.on(
 
 
 console.log(
+
 "切断:",
+
 socket.id
+
 );
 
 
@@ -473,10 +583,19 @@ socket.id
 
 
 
+
+
+
+//=====================
+// Render用PORT
+//=====================
 
 
 const PORT =
+
 process.env.PORT || 10000;
+
+
 
 
 
@@ -490,6 +609,7 @@ PORT,
 console.log(
 
 "server start port:",
+
 PORT
 
 );
