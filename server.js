@@ -11,9 +11,6 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 
-// 地点データ保存
-let points = {};
-
 
 app.use(express.static("public"));
 
@@ -21,7 +18,7 @@ app.use(express.static("public"));
 
 //=====================
 // PostgreSQL
-// Supabase Transaction Pooler
+// Supabase
 //=====================
 
 
@@ -39,17 +36,97 @@ const pool = new Pool({
 
 
 
+
 //=====================
 // メモリ
 //=====================
 
+
 let users = {};
+
+let points = {};
 
 
 
 
 //=====================
-// 起動時 DB復元
+// 地点データ復元
+//=====================
+
+
+async function loadPoints(){
+
+
+    try{
+
+
+        const result =
+        await pool.query(
+
+            "SELECT * FROM points"
+
+        );
+
+
+
+        result.rows.forEach(point=>{
+
+
+            points[point.name]={
+
+
+                name:point.name,
+
+                type:point.type,
+
+                lat:point.lat,
+
+                lon:point.lon,
+
+                created:point.created
+
+
+            };
+
+
+        });
+
+
+
+        console.log(
+
+            "地点復元:",
+
+            Object.keys(points)
+
+        );
+
+
+    }
+
+    catch(err){
+
+
+        console.error(
+
+            "地点復元エラー",
+
+            err
+
+        );
+
+
+    }
+
+
+}
+
+
+
+
+
+//=====================
+// ユーザー復元
 //=====================
 
 
@@ -80,11 +157,23 @@ async function loadUsers(){
 
                 lon:user.lon,
 
+
+                utmZone:user.utmZone,
+
+                utmE:user.utmE,
+
+                utmN:user.utmN,
+
+
                 water:user.water,
 
                 fuel:user.fuel,
 
                 destination:user.destination,
+
+
+                iconType:user.iconType || "person",
+
 
                 online:false,
 
@@ -105,7 +194,6 @@ async function loadUsers(){
             Object.keys(users)
 
         );
-
 
 
     }
@@ -129,13 +217,6 @@ async function loadUsers(){
 
 
 
-loadUsers();
-
-
-
-
-
-
 
 //=====================
 // Socket.IO
@@ -149,29 +230,6 @@ io.on(
 (socket)=>{
 
 
-
-    socket.on(
-"addPoint",
-(point)=>{
-
-
-points[point.name]=point;
-
-
-io.emit(
-"points",
-points
-);
-
-
-}
-
-);
-
-
-
-
-
 console.log(
 
 "接続:",
@@ -183,13 +241,137 @@ socket.id
 
 
 
-// 接続時送信
+// 接続時
+// 現在位置送信
 
 socket.emit(
 
 "locations",
 
 users
+
+);
+
+
+
+// 接続時
+// 地点情報送信
+
+socket.emit(
+
+"points",
+
+points
+
+);
+
+
+
+
+
+//=====================
+// 地点登録
+//=====================
+
+
+socket.on(
+
+"addPoint",
+
+async(point)=>{
+
+
+try{
+
+
+await pool.query(
+
+`
+
+INSERT INTO points
+
+(
+
+name,
+
+type,
+
+lat,
+
+lon,
+
+created
+
+)
+
+VALUES
+
+($1,$2,$3,$4,$5)
+
+`
+
+,
+
+[
+
+point.name,
+
+point.type || "point",
+
+point.lat,
+
+point.lon,
+
+Date.now()
+
+]
+
+);
+
+
+
+points[point.name]=point;
+
+
+
+io.emit(
+
+"points",
+
+points
+
+);
+
+
+
+console.log(
+
+"地点登録:",
+
+point.name
+
+);
+
+
+
+}
+
+catch(err){
+
+
+console.error(
+
+"地点保存エラー",
+
+err
+
+);
+
+
+}
+
+
+}
 
 );
 
@@ -210,42 +392,43 @@ socket.on(
 async(data)=>{
 
 
-    const now = Date.now();
+const now=Date.now();
 
 
 
-    const user={
+const user={
 
 
-    name:data.name,
-
-    lat:data.lat,
-
-    lon:data.lon,
+name:data.name,
 
 
-    // UTM座標
+lat:data.lat,
 
-    utmZone:data.utmZone || "52S",
-
-    utmE:data.utmE,
-
-    utmN:data.utmN,
+lon:data.lon,
 
 
-    water:data.water,
+utmZone:data.utmZone || "52S",
 
-    fuel:data.fuel,
+utmE:data.utmE,
 
-    destination:data.destination,
-
-
-    iconType:data.iconType || "person",
+utmN:data.utmN,
 
 
-    online:true,
+water:data.water,
 
-    lastUpdate:now
+fuel:data.fuel,
+
+
+destination:data.destination,
+
+
+iconType:data.iconType || "person",
+
+
+online:true,
+
+
+lastUpdate:now
 
 
 };
@@ -254,28 +437,25 @@ async(data)=>{
 
 
 
-    users[data.name]=user;
+users[data.name]=user;
 
 
 
 
 
 
-    try{
+try{
 
 
-        //=====================
-        // 現在位置保存
-        //=====================
 
+await pool.query(
 
-        await pool.query(
+`
 
-        `
+INSERT INTO current_users
 
-        INSERT INTO current_users
+(
 
-        (
 name,
 lat,
 lon,
@@ -287,151 +467,163 @@ fuel,
 destination,
 online,
 lastUpdate
+
 )
 
 
-        VALUES
+VALUES
 
-        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-
-
-
-        ON CONFLICT(name)
-
-        DO UPDATE SET
+($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 
 
-        lat=$2,
+ON CONFLICT(name)
+
+DO UPDATE SET
+
+
+lat=$2,
+
 lon=$3,
+
 utmZone=$4,
+
 utmE=$5,
+
 utmN=$6,
+
 water=$7,
+
 fuel=$8,
+
 destination=$9,
+
 online=$10,
+
 lastUpdate=$11
 
 
-        `,
+`
 
+,
 
-        [
-    user.name,
-    user.lat,
-    user.lon,
-    user.utmZone,
-    user.utmE,
-    user.utmN,
-    user.water,
-    user.fuel,
-    user.destination,
-    1,
-    now
+[
+
+user.name,
+
+user.lat,
+
+user.lon,
+
+user.utmZone,
+
+user.utmE,
+
+user.utmN,
+
+user.water,
+
+user.fuel,
+
+user.destination,
+
+1,
+
+now
+
 ]
 
-        );
+);
 
 
 
 
 
 
+await pool.query(
 
-        //=====================
-        // 履歴保存
-        //=====================
+`
 
+INSERT INTO location_history
 
-        await pool.query(
+(
 
-        `
+name,
 
-        INSERT INTO location_history
+lat,
 
-        (
+lon,
 
-        name,
+water,
 
-        lat,
+fuel,
 
-        lon,
+destination
 
-        water,
-
-        fuel,
-
-        destination
-
-        )
+)
 
 
-        VALUES
+VALUES
 
-        ($1,$2,$3,$4,$5,$6)
-
-
-        `,
+($1,$2,$3,$4,$5,$6)
 
 
-        [
+`
 
-        user.name,
+,
 
-        user.lat,
+[
 
-        user.lon,
+user.name,
 
-        user.water,
+user.lat,
 
-        user.fuel,
+user.lon,
 
-        user.destination
+user.water,
 
-        ]
+user.fuel,
 
-        );
+user.destination
+
+]
+
+);
 
 
 
-    }
+}
+
+catch(err){
 
 
-    catch(err){
+console.error(
+
+"DB保存エラー",
+
+err
+
+);
 
 
-        console.error(
-
-            "DB保存エラー",
-
-            err
-
-        );
-
-
-    }
+}
 
 
 
 
 
-    // 全員へ配信
+io.emit(
 
+"locations",
 
-    io.emit(
+users
 
-        "locations",
+);
 
-        users
-
-    );
 
 
 }
 
 );
-
-
 
 
 
@@ -451,54 +643,53 @@ socket.on(
 async(name)=>{
 
 
-    delete users[name];
+delete users[name];
 
 
 
-    try{
+try{
 
 
-        await pool.query(
+await pool.query(
 
-        "DELETE FROM current_users WHERE name=$1",
+"DELETE FROM current_users WHERE name=$1",
 
-        [name]
+[name]
 
-        );
-
-
-    }
-
-    catch(err){
+);
 
 
-        console.error(
+}
 
-            "削除エラー",
-
-            err
-
-        );
+catch(err){
 
 
-    }
+console.error(
+
+"削除エラー",
+
+err
+
+);
+
+
+}
 
 
 
+io.emit(
 
-    io.emit(
+"locations",
 
-        "locations",
+users
 
-        users
+);
 
-    );
 
 
 }
 
 );
-
 
 
 
@@ -515,7 +706,7 @@ socket.on(
 
 "disconnect",
 
-async()=>{
+()=>{
 
 
 console.log(
@@ -542,16 +733,24 @@ socket.id
 
 
 
-
-
 //=====================
-// Render
+// 起動
 //=====================
 
 
 const PORT =
 
 process.env.PORT || 10000;
+
+
+
+async function startServer(){
+
+
+await loadUsers();
+
+
+await loadPoints();
 
 
 
@@ -574,3 +773,10 @@ PORT
 }
 
 );
+
+
+}
+
+
+
+startServer();
