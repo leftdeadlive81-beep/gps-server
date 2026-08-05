@@ -189,27 +189,31 @@ async(data)=>{
 
     const user={
 
+    name:data.name,
 
-        name:data.name,
+    lat:data.lat,
 
-        lat:data.lat,
+    lon:data.lon,
 
-        lon:data.lon,
+    utmZone:data.utmZone,
 
-        water:data.water,
+    utmE:data.utmE,
 
-        fuel:data.fuel,
+    utmN:data.utmN,
 
-        destination:data.destination,
+    water:data.water,
 
-        iconType:data.iconType || "person",
+    fuel:data.fuel,
 
-        online:true,
+    destination:data.destination,
 
-        lastUpdate:now
+    iconType:data.iconType || "person",
 
+    online:true,
 
-    };
+    lastUpdate:now
+
+};
 
 
 
