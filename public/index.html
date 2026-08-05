@@ -351,6 +351,22 @@ placeholder="📍次の目的地">
 
 
 
+
+<div class="card">
+
+<h3>📍地点登録</h3>
+
+<input id="pointName" 
+placeholder="地点名（例：CP1、給水所）">
+
+<button onclick="addPoint()">
+📍登録
+</button>
+
+</div>
+
+
+
 <h3>
 👥 接続ユーザー
 </h3>
@@ -553,6 +569,141 @@ let watchID=null;
 
 
 let gpsTimer=null;
+
+
+
+
+//=====================
+// 地点登録
+//=====================
+
+let points=[];
+
+let pointMarkers={};
+
+
+// 地図クリック位置
+
+let selectedPointLat=null;
+let selectedPointLon=null;
+
+
+map.on("click",function(e){
+
+
+selectedPointLat=e.latlng.lat;
+
+selectedPointLon=e.latlng.lng;
+
+
+alert(
+"地点候補\n"+
+"緯度:"+selectedPointLat.toFixed(6)+
+"\n経度:"+selectedPointLon.toFixed(6)
+);
+
+
+});
+
+
+
+
+
+function addPoint(){
+
+
+if(selectedPointLat===null){
+
+alert("先に地図をクリックしてください");
+
+return;
+
+}
+
+
+
+let name=
+document.getElementById("pointName").value;
+
+
+
+if(name===""){
+
+alert("地点名を入力してください");
+
+return;
+
+}
+
+
+
+let marker=L.marker(
+
+[
+selectedPointLat,
+selectedPointLon
+],
+
+{
+
+icon:L.icon({
+
+iconUrl:"/icon/point.png",
+
+iconSize:[50,50],
+
+iconAnchor:[25,50]
+
+})
+
+}
+
+)
+
+.addTo(map);
+
+
+
+marker.bindPopup(
+
+`
+<b>📍${name}</b>
+
+<br>
+
+${selectedPointLat.toFixed(6)}
+
+<br>
+
+${selectedPointLon.toFixed(6)}
+
+`
+
+);
+
+
+
+pointMarkers[name]=marker;
+
+
+
+document.getElementById("pointName").value="";
+
+
+alert(
+name+"を登録しました"
+);
+
+
+}
+
+
+
+
+
+
+
+
 
 
 
