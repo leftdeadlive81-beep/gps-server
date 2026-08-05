@@ -398,6 +398,83 @@ const socket = io();
 
 
 
+
+//=====================
+// Socket接続
+//=====================
+
+socket.on("connect", () => {
+
+    console.log("サーバーへ接続しました");
+
+    document.getElementById("gpsStatus").innerHTML =
+        "🟢 サーバー接続";
+
+    // GPSが開始済みなら最新位置を送信
+    if (watchID !== null) {
+
+        navigator.geolocation.getCurrentPosition(
+
+            pos => {
+
+                sendLocation(
+                    pos.coords.latitude,
+                    pos.coords.longitude
+                );
+
+            },
+
+            err => {
+
+                console.log("GPS取得失敗", err);
+
+            }
+
+        );
+
+    }
+
+});
+
+
+socket.on("disconnect", () => {
+
+    console.log("サーバーから切断");
+
+    document.getElementById("gpsStatus").innerHTML =
+        "🔴 サーバー切断";
+
+});
+
+
+socket.on("reconnect", () => {
+
+    console.log("再接続しました");
+
+    document.getElementById("gpsStatus").innerHTML =
+        "🟢 再接続";
+
+    navigator.geolocation.getCurrentPosition(
+
+        pos => {
+
+            sendLocation(
+                pos.coords.latitude,
+                pos.coords.longitude
+            );
+
+        }
+
+    );
+
+});
+
+
+
+
+
+
+
 //=====================
 // 保存データ復元
 //=====================
@@ -430,6 +507,23 @@ document.getElementById(key).value=value;
 
 
 });
+
+
+
+
+// GPS自動再開
+
+if(localStorage.getItem("gpsRunning")==="true"){
+
+    setTimeout(()=>{
+
+        startGPS();
+
+    },1000);
+
+}
+
+
 
 
 }
@@ -499,6 +593,9 @@ let gpsTimer=null;
 
 function startGPS(){
 
+localStorage.setItem("gpsRunning","true");
+
+
 
 if(watchID!==null){
 
@@ -556,7 +653,7 @@ if(lastLat===0){
 
 let utm = proj4(
 'EPSG:4326',
-'+proj=utm +zone=52 +south +datum=WGS84',
+'+proj=utm +zone=52 +datum=WGS84',
 [
 lon,
 lat
