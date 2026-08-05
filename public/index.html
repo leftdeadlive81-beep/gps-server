@@ -1604,9 +1604,9 @@ icon:L.icon({
 
 iconUrl:"/icon/point.png",
 
-iconSize:[50,50],
+iconSize:[100,100],
 
-iconAnchor:[25,25]
+iconAnchor:[50,50]
 
 })
 
@@ -1638,7 +1638,9 @@ ${p.lon.toFixed(6)}
 
 );
 
-
+if(pointMarkers[name]){
+    map.removeLayer(pointMarkers[name]);
+}
 
 pointMarkers[name]=marker;
 
