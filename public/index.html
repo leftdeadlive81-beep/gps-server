@@ -1585,30 +1585,10 @@ return;
 
 
 
-let marker=L.marker(
-
-[
-p.lat,
-p.lon
-],
-
-{
-
-icon:L.icon({
-
-iconUrl:"/icon/point.png",
-
-iconSize:[50,50],
-
-iconAnchor:[25,50]
-
-})
-
-}
-
-)
-
-.addTo(map);
+let marker = L.marker([
+    p.lat,
+    p.lon
+]).addTo(map);
 
 
 
