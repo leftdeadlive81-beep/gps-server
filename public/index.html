@@ -611,7 +611,35 @@ maximumAge:0
 
 function sendLocation(lat,lon){
 
+// UTM変換
 
+let utm = proj4(
+
+'EPSG:4326',
+
+'+proj=utm +zone=52 +south +datum=WGS84',
+
+[
+
+lon,
+
+lat
+
+]
+
+);
+
+
+let utmE = Math.round(utm[0]);
+
+let utmN = Math.round(utm[1]);
+
+
+console.log(
+"UTM:",
+utmE,
+utmN
+);
 
 // 保存
 
@@ -677,6 +705,10 @@ lat:lat,
 
 lon:lon,
 
+
+utmE:utmE,
+
+utmN:utmN,
 
 
 water:
@@ -1210,6 +1242,21 @@ ${user.iconType==="vehicle" ?
 <br>
 
 🕒 更新：
+
+
+<br>
+
+UTM:
+
+${user.utmE}
+
+E
+
+${user.utmN}
+
+N
+
+
 
 ${formatTime(user.lastUpdate)}
 
