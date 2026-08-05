@@ -60,12 +60,10 @@ async function loadPoints(){
     try{
 
 
-        const result =
-        await pool.query(
-
-            "SELECT * FROM points"
-
-        );
+       const result =
+await pool.query(
+"SELECT * FROM points ORDER BY created"
+);
 
 
 
