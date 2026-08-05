@@ -1580,19 +1580,16 @@ document.getElementById("users")
 
 
 
-
-
-
-
-
 //=====================
 // 地点受信
 //=====================
 
-
 socket.on(
 "points",
 (points)=>{
+
+
+console.log("受信points", points);
 
 
 if(!points){
@@ -1601,16 +1598,17 @@ if(!points){
 }
 
 
+
 Object.keys(points).forEach(
 
 name=>{
-
 
 
 let p=points[name];
 
 
 
+// 既存地点がある場合は削除
 if(pointMarkers[name]){
 
     map.removeLayer(pointMarkers[name]);
@@ -1619,16 +1617,11 @@ if(pointMarkers[name]){
 
 
 
-
-
 let marker=L.marker(
 
 [
-
 p.lat,
-
 p.lon
-
 ],
 
 {
@@ -1651,8 +1644,6 @@ iconAnchor:[50,50]
 
 
 
-
-
 marker.bindPopup(
 
 `
@@ -1671,9 +1662,7 @@ ${p.lon.toFixed(6)}
 
 );
 
-if(pointMarkers[name]){
-    map.removeLayer(pointMarkers[name]);
-}
+
 
 pointMarkers[name]=marker;
 
@@ -1681,7 +1670,6 @@ pointMarkers[name]=marker;
 
 }
 
-
 );
 
 
@@ -1689,6 +1677,10 @@ pointMarkers[name]=marker;
 }
 
 );
+
+
+
+
 
 
 
