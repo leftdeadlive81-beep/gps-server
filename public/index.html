@@ -1591,11 +1591,14 @@ document.getElementById("users")
 
 
 socket.on(
-
 "points",
-
 (points)=>{
 
+
+if(!points){
+    console.log("地点データなし");
+    return;
+}
 
 
 Object.keys(points).forEach(
