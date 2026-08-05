@@ -11,6 +11,10 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 
+// 地点データ保存
+let points = {};
+
+
 app.use(express.static("public"));
 
 
@@ -145,6 +149,29 @@ io.on(
 (socket)=>{
 
 
+
+    socket.on(
+"addPoint",
+(point)=>{
+
+
+points[point.name]=point;
+
+
+io.emit(
+"points",
+points
+);
+
+
+}
+
+);
+
+
+
+
+
 console.log(
 
 "接続:",
@@ -275,18 +302,15 @@ lastUpdate
 
 
         lat=$2,
-
-        lon=$3,
-
-        water=$4,
-
-        fuel=$5,
-
-        destination=$6,
-
-        online=$7,
-
-        lastUpdate=$8
+lon=$3,
+utmZone=$4,
+utmE=$5,
+utmN=$6,
+water=$7,
+fuel=$8,
+destination=$9,
+online=$10,
+lastUpdate=$11
 
 
         `,
