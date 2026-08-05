@@ -700,7 +700,18 @@ name+"を登録しました"
 
 
 
+socket.emit(
+"addPoint",
+{
 
+name:name,
+
+lat:selectedPointLat,
+
+lon:selectedPointLon
+
+}
+);
 
 
 
@@ -1545,6 +1556,97 @@ document.getElementById("users")
 }
 
 );
+
+
+
+//=====================
+// 地点受信
+//=====================
+
+
+socket.on(
+"points",
+(points)=>{
+
+
+Object.keys(points).forEach(
+
+(name)=>{
+
+
+let p=points[name];
+
+
+if(pointMarkers[name]){
+
+return;
+
+}
+
+
+
+let marker=L.marker(
+
+[
+p.lat,
+p.lon
+],
+
+{
+
+icon:L.icon({
+
+iconUrl:"/icon/point.png",
+
+iconSize:[50,50],
+
+iconAnchor:[25,50]
+
+})
+
+}
+
+)
+
+.addTo(map);
+
+
+
+marker.bindPopup(
+
+`
+<b>📍${name}</b>
+
+<br>
+
+${p.lat.toFixed(6)}
+
+<br>
+
+${p.lon.toFixed(6)}
+
+`
+
+);
+
+
+
+pointMarkers[name]=marker;
+
+
+
+}
+
+);
+
+
+}
+
+);
+
+
+
+
 
 
 
