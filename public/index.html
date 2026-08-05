@@ -253,11 +253,34 @@ placeholder="📍次の目的地">
 
 <div class="card">
 
+<div class="card">
+
 <h3>📍地点登録</h3>
 
 
 <input id="pointName" 
 placeholder="地点名（例：CP1、給水所）">
+
+
+<select id="pointType">
+
+<option value="CP">
+🏳 指揮所(CP)
+</option>
+
+<option value="water">
+💧 給水所
+</option>
+
+<option value="supply">
+📦 補給地点
+</option>
+
+<option value="point">
+📍 その他
+</option>
+
+</select>
 
 
 <button onclick="addPoint()">
@@ -555,11 +578,18 @@ pointMarkers[name]=marker;
 
 socket.emit(
 
+
+
+socket.emit(
+
 "addPoint",
 
 {
 
 name:name,
+
+type:
+document.getElementById("pointType").value,
 
 lat:selectedPointLat,
 
@@ -1580,7 +1610,7 @@ let p=points[name];
 
 if(pointMarkers[name]){
 
-return;
+    map.removeLayer(pointMarkers[name]);
 
 }
 
