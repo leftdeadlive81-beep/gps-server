@@ -60,12 +60,10 @@ async function loadPoints(){
     try{
 
 
-        const result =
-        await pool.query(
-
-            "SELECT * FROM points"
-
-        );
+       const result =
+await pool.query(
+"SELECT * FROM points ORDER BY created"
+);
 
 
 
@@ -288,25 +286,30 @@ await pool.query(
 
 `
 
+
+
 INSERT INTO points
-
 (
-
 name,
-
 type,
-
 lat,
-
 lon,
-
 created
-
 )
 
 VALUES
-
 ($1,$2,$3,$4,$5)
+
+ON CONFLICT(name)
+
+DO UPDATE SET
+
+type=$2,
+lat=$3,
+lon=$4,
+created=$5
+
+
 
 `
 
