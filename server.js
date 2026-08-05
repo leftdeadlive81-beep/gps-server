@@ -293,24 +293,18 @@ lastUpdate
 
 
         [
-
-        user.name,
-
-        user.lat,
-
-        user.lon,
-
-        user.water,
-
-        user.fuel,
-
-        user.destination,
-
-        1,
-
-        now
-
-        ]
+    user.name,
+    user.lat,
+    user.lon,
+    user.utmZone,
+    user.utmE,
+    user.utmN,
+    user.water,
+    user.fuel,
+    user.destination,
+    1,
+    now
+]
 
         );
 
