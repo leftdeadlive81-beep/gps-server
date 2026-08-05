@@ -180,7 +180,53 @@ background:#e8f0ff;
 
 }
 
+.userTable{
 
+width:100%;
+
+border-collapse:collapse;
+
+background:white;
+
+font-size:20px;
+
+}
+
+
+.userTable th{
+
+background:#ddd;
+
+padding:10px;
+
+border:1px solid #999;
+
+}
+
+
+.userTable td{
+
+padding:10px;
+
+border:1px solid #999;
+
+text-align:center;
+
+}
+
+
+.userTable tr{
+
+cursor:pointer;
+
+}
+
+
+.userTable tr:hover{
+
+background:#e8f0ff;
+
+}
 
 
 </style>
@@ -610,6 +656,7 @@ maximumAge:0
 
 
 function sendLocation(lat,lon){
+    
 
 // UTM変換
 
@@ -705,6 +752,7 @@ lat:lat,
 
 lon:lon,
 
+utmZone:"52S",
 
 utmE:utmE,
 
@@ -1072,7 +1120,29 @@ socket.on(
 (users)=>{
 
 
-let html="";
+let html=`
+
+<table class="userTable">
+
+<tr>
+
+<th>状態</th>
+
+<th>名前</th>
+
+<th>水</th>
+
+<th>燃料</th>
+
+<th>目的地</th>
+
+<th>UTM</th>
+
+<th>更新</th>
+
+</tr>
+
+`;
 
 
 
@@ -1246,17 +1316,23 @@ ${user.iconType==="vehicle" ?
 
 <br>
 
+
+
 UTM:
 
-${user.utmE}
+${user.utmZone || "52S"}
 
-E
+<br>
 
-${user.utmN}
+E:${user.utmE || ""}
 
-N
+<br>
 
+N:${user.utmN || ""}
 
+<br>
+
+🕒更新：
 
 ${formatTime(user.lastUpdate)}
 
@@ -1275,77 +1351,77 @@ ${formatTime(user.lastUpdate)}
 
 
 
+
+
 html +=
+
 `
-<div class="user ${selectedUser===user.name ? "selected":""}"
 
-onclick="focusUser('${user.name}')">
+<tr onclick="focusUser('${user.name}')">
 
-
-<b>
-
-${user.name}
-
-</b>
-
-
-<br>
-
-
-<span class="${statusClass(user)}">
+<td>
 
 ${statusText(user)}
 
-</span>
+</td>
 
 
-<br><br>
+<td>
+
+<b>${user.name}</b>
+
+</td>
 
 
-💧 水量：
-${user.water}
+<td>
 
-<br>
+💧${user.water}
 
-⛽ 燃料：
-${user.fuel}
+</td>
 
-<br>
 
-📍 目的地：
+<td>
+
+⛽${user.fuel}
+
+</td>
+
+
+<td>
+
 ${user.destination}
 
+</td>
+
+
+<td>
+
+${user.utmZone || "52S"}
 
 <br>
 
-
-🖼 アイコン：
-${user.iconType==="vehicle" ?
-"🚙車両":
-"👤隊員"}
-
+E:${user.utmE || ""}
 
 <br>
 
+N:${user.utmN || ""}
 
-🕒 最終更新：
+</td>
+
+
+<td>
+
 ${formatTime(user.lastUpdate)}
 
-
-<br><br>
-
-
-<button
-
-onclick="event.stopPropagation(); deleteUser('${user.name}')">
-
-🗑 削除
-
-</button>
+</td>
 
 
-</div>
+</tr>
+
 `;
+
+
+;
 
 
 
@@ -1354,7 +1430,11 @@ onclick="event.stopPropagation(); deleteUser('${user.name}')">
 
 );
 
+html +=`
 
+</table>
+
+`;
 
 document.getElementById("users")
 
