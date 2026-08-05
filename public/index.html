@@ -1583,6 +1583,10 @@ document.getElementById("users")
 // 地点受信
 //=====================
 
+//=====================
+// 地点受信
+//=====================
+
 socket.on(
 "points",
 (points)=>{
@@ -1592,7 +1596,6 @@ console.log("受信points", points);
 
 
 if(!points){
-    console.log("地点データなし");
     return;
 }
 
@@ -1606,8 +1609,7 @@ name=>{
 let p=points[name];
 
 
-
-// 既存地点がある場合は削除
+// 既存地点削除
 if(pointMarkers[name]){
 
     map.removeLayer(pointMarkers[name]);
@@ -1631,13 +1633,9 @@ iconUrl:"/icon/point.png",
 
 iconSize:[60,60],
 
-<<<<<<< HEAD
-iconAnchor:[25,50],
+iconAnchor:[30,60],
 
 popupAnchor:[0,-50]
-=======
-iconAnchor:[30,60]
->>>>>>> 2cfbf70e5eae9f9c05aebde5fdcfa191da54368f
 
 })
 
@@ -1678,16 +1676,9 @@ pointMarkers[name]=marker;
 );
 
 
-
 }
 
 );
-
-
-
-
-
-
 
 
 
