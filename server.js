@@ -189,17 +189,22 @@ async(data)=>{
 
     const user={
 
+
     name:data.name,
 
     lat:data.lat,
 
     lon:data.lon,
 
-    utmZone:data.utmZone,
+
+    // UTM座標
+
+    utmZone:data.utmZone || "52S",
 
     utmE:data.utmE,
 
     utmN:data.utmN,
+
 
     water:data.water,
 
@@ -207,11 +212,14 @@ async(data)=>{
 
     destination:data.destination,
 
+
     iconType:data.iconType || "person",
+
 
     online:true,
 
     lastUpdate:now
+
 
 };
 
@@ -241,29 +249,23 @@ async(data)=>{
         INSERT INTO current_users
 
         (
-
-        name,
-
-        lat,
-
-        lon,
-
-        water,
-
-        fuel,
-
-        destination,
-
-        online,
-
-        lastUpdate
-
-        )
+name,
+lat,
+lon,
+utmZone,
+utmE,
+utmN,
+water,
+fuel,
+destination,
+online,
+lastUpdate
+)
 
 
         VALUES
 
-        ($1,$2,$3,$4,$5,$6,$7,$8)
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 
 
 
