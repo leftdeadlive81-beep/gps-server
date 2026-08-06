@@ -21,6 +21,9 @@ href="https://unpkg.com/leaflet/dist/leaflet.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
 
 
+
+
+
 <style>
 
 body{
@@ -131,6 +134,99 @@ button{
     width:95%;
 
 }
+
+
+
+
+
+
+/*=====================
+ Version 2.3
+ ユーザー1行表示
+=====================*/
+
+.userHeader{
+
+display:grid;
+
+grid-template-columns:
+45px 90px 55px 55px 70px 70px 70px 90px;
+
+background:#ddd;
+
+font-weight:bold;
+
+font-size:13px;
+
+padding:6px 4px;
+
+}
+
+
+.userRow{
+
+display:grid;
+
+grid-template-columns:
+45px 90px 55px 55px 70px 70px 70px 90px;
+
+align-items:center;
+
+background:white;
+
+border-bottom:1px solid #ccc;
+
+padding:6px 4px;
+
+font-size:14px;
+
+}
+
+
+.userRow:nth-child(even){
+
+background:#f7f7f7;
+
+}
+
+
+.userDetail{
+
+display:none;
+
+background:#eeeeee;
+
+padding:8px;
+
+font-size:13px;
+
+border-bottom:1px solid #ccc;
+
+}
+
+
+.userBtn{
+
+font-size:16px;
+
+padding:2px 5px;
+
+margin:0;
+
+width:auto;
+
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
 </style>
@@ -1490,72 +1586,120 @@ ${formatTime(user.lastUpdate)}
 
 
 
-html+=
 
 
-`
 
-<div class="card"
 
+
+html+=`
+
+<div class="userRow">
+
+
+<div>
+${statusText(user)}
+</div>
+
+
+<div>
+${user.name}
+</div>
+
+
+<div>
+${user.water}
+</div>
+
+
+<div>
+${user.fuel}
+</div>
+
+
+<div>
+${user.speed || "-"}
+</div>
+
+
+<div>
+${user.direction || "-"}
+</div>
+
+
+<div>
+${new Date(user.lastUpdate)
+.toLocaleTimeString()
+.substring(0,5)}
+</div>
+
+
+<div>
+
+<button class="userBtn"
 onclick="focusUser('${user.name}')">
 
+📍
 
-<div style="font-size:18px;font-weight:bold">
+</button>
 
-${statusText(user)}
 
-${user.name}
+<button class="userBtn"
+onclick="toggleDetail('${user.name}')">
+
+▼
+
+</button>
+
 
 </div>
 
 
-
-<div>
-
-💧 ${user.water}
-
-&nbsp;
-
-⛽ ${user.fuel}
-
 </div>
 
 
-
-<div>
-
-📍 ${user.destination || "-"}
-
-</div>
+<div
+id="detail-${user.name}"
+class="userDetail">
 
 
+<b>${user.name}</b>
 
-<div style="font-size:12px">
 
+<br>
+
+UTM:
 ${user.utmZone || "52S"}
 
- E:${user.utmE || ""}
+<br>
 
- N:${user.utmN || ""}
+E:
+${user.utmE || ""}
 
-</div>
+<br>
+
+N:
+${user.utmN || ""}
 
 
+<br><br>
 
-<div style="font-size:12px">
 
-更新：
+📍目的地：
+${user.destination || "-"}
 
+
+<br>
+
+
+🕒更新：
 ${formatTime(user.lastUpdate)}
-
-</div>
-
 
 
 </div>
 
 
 `;
+
 
 
 
@@ -1679,6 +1823,31 @@ pointMarkers[name]=marker;
 }
 
 );
+
+
+
+
+function toggleDetail(name){
+
+
+let box=document.getElementById(
+"detail-"+name
+);
+
+
+if(box.style.display==="block"){
+
+box.style.display="none";
+
+}
+else{
+
+box.style.display="block";
+
+}
+
+
+}
 
 
 
