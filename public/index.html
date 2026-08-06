@@ -359,6 +359,28 @@ font-size:15px;
 }
 
 
+/*=====================
+ クロノロジー入力
+=====================*/
+
+#chronoMessage{
+
+width:70%;
+
+}
+
+
+#timeline button{
+
+width:auto;
+
+font-size:14px;
+
+}
+
+
+
+
 
 </style>
 
@@ -544,6 +566,27 @@ placeholder="地点名（例：CP1、給水所）">
 </summary>
 
 
+<br>
+
+<div class="inputRow">
+
+<input 
+id="chronoMessage"
+placeholder="活動内容を入力">
+
+<button 
+onclick="sendChronology()">
+
+送信
+
+</button>
+
+</div>
+
+
+<hr>
+
+
 <div id="timeline">
 
 </div>
@@ -727,31 +770,41 @@ let pointMarkers={};
 let chronology=[];
 
 
-function addChronology(message){
+
+socket.on(
+"chronology",
+(data)=>{
 
 
-let now=new Date();
+chronology=data;
 
 
-chronology.unshift({
+renderChronology();
 
-time:
-now.toLocaleTimeString(),
-
-message:message
 
 });
 
 
 
-if(chronology.length>50){
 
-chronology.pop();
+
+
+
+
+function addChronology(message){
+
+
+socket.emit(
+
+"addChronology",
+
+{
+
+message:message
 
 }
 
-
-renderChronology();
+);
 
 
 }
@@ -759,7 +812,6 @@ renderChronology();
 
 
 function renderChronology(){
-
 
 let html="";
 
@@ -771,32 +823,23 @@ html+=`
 
 <div class="timelineItem">
 
-
 <div class="timelineTime">
-
 ${item.time}
-
 </div>
 
 
 <div class="timelineMessage">
-
 ${item.message}
-
 </div>
-
 
 </div>
 
 `;
 
-
-
 });
 
 
 document.getElementById("timeline").innerHTML=html;
-
 
 }
 
@@ -1331,6 +1374,10 @@ document.getElementById("name").value+
 
 
 
+
+
+
+
 socket.emit(
 
 "location",
@@ -1419,7 +1466,52 @@ document.getElementById("iconType").value
 }
 
 
+//=====================
+// クロノロジー手動送信
+//=====================
 
+function sendChronology(){
+
+
+let msg =
+document.getElementById(
+"chronoMessage"
+).value.trim();
+
+
+if(msg===""){
+
+alert("内容を入力してください");
+
+return;
+
+}
+
+
+
+socket.emit(
+
+"addChronology",
+
+{
+
+message:msg,
+
+user:
+document.getElementById("name").value
+
+}
+
+);
+
+
+
+document.getElementById(
+"chronoMessage"
+).value="";
+
+
+}
 
 
 
