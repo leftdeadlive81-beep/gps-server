@@ -322,6 +322,44 @@ width:auto;
 
 }
 
+
+
+/*=====================
+ クロノロジー
+=====================*/
+
+.timelineItem{
+
+background:white;
+
+border-bottom:1px solid #ccc;
+
+padding:8px;
+
+font-size:14px;
+
+}
+
+
+.timelineTime{
+
+font-size:12px;
+
+color:#666;
+
+font-weight:bold;
+
+}
+
+
+.timelineMessage{
+
+font-size:15px;
+
+}
+
+
+
 </style>
 
 
@@ -499,6 +537,23 @@ placeholder="地点名（例：CP1、給水所）">
 </details>
 
 
+<details class="card">
+
+<summary>
+📋 クロノロジー
+</summary>
+
+
+<div id="timeline">
+
+</div>
+
+
+</details>
+
+
+
+
 <h3>
 👥 接続ユーザー
 </h3>
@@ -662,6 +717,90 @@ attribution:'OpenStreetMap'
 let markers={};
 
 let pointMarkers={};
+
+
+
+//=====================
+// クロノロジー
+//=====================
+
+let chronology=[];
+
+
+function addChronology(message){
+
+
+let now=new Date();
+
+
+chronology.unshift({
+
+time:
+now.toLocaleTimeString(),
+
+message:message
+
+});
+
+
+
+if(chronology.length>50){
+
+chronology.pop();
+
+}
+
+
+renderChronology();
+
+
+}
+
+
+
+function renderChronology(){
+
+
+let html="";
+
+
+chronology.forEach(item=>{
+
+
+html+=`
+
+<div class="timelineItem">
+
+
+<div class="timelineTime">
+
+${item.time}
+
+</div>
+
+
+<div class="timelineMessage">
+
+${item.message}
+
+</div>
+
+
+</div>
+
+`;
+
+
+
+});
+
+
+document.getElementById("timeline").innerHTML=html;
+
+
+}
+
+
 
 
 let lastLat=0;
@@ -1180,7 +1319,13 @@ new Date()
 .toLocaleTimeString();
 
 
+addChronology(
 
+"📡 "+
+document.getElementById("name").value+
+" 現在地更新"
+
+);
 
 
 
@@ -1408,12 +1553,12 @@ function statusText(user){
 
 if(user.online){
 
-return "🟢 ONLINE";
+return "🟢 ON";
 
 }
 else{
 
-return "🔴 OFFLINE";
+return "🔴 OFF";
 
 }
 
