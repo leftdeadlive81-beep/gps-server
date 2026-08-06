@@ -256,8 +256,71 @@ filter:brightness(2);
 }
 
 
+/*=====================
+ GPSボタン横並び
+=====================*/
+
+.buttonRow{
+
+display:flex;
+
+gap:6px;
+
+}
 
 
+.buttonRow button{
+
+flex:1;
+
+width:auto;
+
+}
+
+
+
+/*=====================
+ 操作ボタン
+=====================*/
+
+.gpsButton{
+
+background:#4caf50;
+
+color:white;
+
+font-weight:bold;
+
+}
+
+
+.reportButton{
+
+background:#2196f3;
+
+color:white;
+
+font-weight:bold;
+
+}
+
+
+.buttonRow{
+
+display:flex;
+
+gap:6px;
+
+}
+
+
+.buttonRow button{
+
+flex:1;
+
+width:auto;
+
+}
 
 </style>
 
@@ -339,19 +402,31 @@ placeholder="📍次の目的地">
 <div class="card">
 
 
-<button onclick="startGPS()">
+<div class="card">
+
+
+<div class="buttonRow">
+
+
+<button 
+class="gpsButton"
+onclick="startGPS()">
 
 📡 GPS開始
 
 </button>
 
 
-
-<button onclick="updateStatus()">
+<button 
+class="reportButton"
+onclick="updateStatus()">
 
 🔄 現在地報告
 
 </button>
+
+
+</div>
 
 
 
@@ -439,7 +514,7 @@ placeholder="地点名（例：CP1、給水所）">
 <div>名前</div>
 <div>💧水</div>
 <div>⛽燃料</div>
-<div>更新</div>
+<div>最終</div>
 
 
 </div>
@@ -1333,11 +1408,16 @@ Math.sqrt(1-a)
 function statusText(user){
 
 
-return user.online ?
+if(user.online){
 
-"🟢":
+return "🟢 ONLINE";
 
-"🔴";
+}
+else{
+
+return "🔴 OFFLINE";
+
+}
 
 
 }
@@ -1360,7 +1440,56 @@ return new Date(t)
 }
 
 
+function timeAgo(t){
 
+
+if(!t){
+
+return "不明";
+
+}
+
+
+let diff =
+Date.now() - t;
+
+
+
+let sec =
+Math.floor(diff / 1000);
+
+
+
+if(sec < 60){
+
+return sec + "秒前";
+
+}
+
+
+
+let min =
+Math.floor(sec / 60);
+
+
+
+if(min < 60){
+
+return min + "分前";
+
+}
+
+
+
+let hour =
+Math.floor(min / 60);
+
+
+
+return hour + "時間前";
+
+
+}
 
 
 
@@ -1704,10 +1833,12 @@ ${user.fuel}
 </div>
 
 <div>
-${new Date(user.lastUpdate)
-.toLocaleTimeString()
-.substring(0,5)}
+
+<div>
+${timeAgo(user.lastUpdate)}
 </div>
+
+
 
 </div>
 
