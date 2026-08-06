@@ -349,9 +349,14 @@ placeholder="📍次の目的地">
 
 
 
-<div class="card">
+<details class="card">
 
-<h3>📍地点登録</h3>
+<summary>
+📍地点登録
+</summary>
+
+
+<br>
 
 
 <input id="pointName" 
@@ -365,15 +370,15 @@ placeholder="地点名（例：CP1、給水所）">
 </option>
 
 <option value="water">
-💧 給水所
+💧給水所
 </option>
 
 <option value="supply">
-📦 補給地点
+📦補給地点
 </option>
 
 <option value="point">
-📍 その他
+📍その他
 </option>
 
 </select>
@@ -384,7 +389,7 @@ placeholder="地点名（例：CP1、給水所）">
 </button>
 
 
-</div>
+</details>
 
 
 <h3>
@@ -1296,9 +1301,9 @@ function statusText(user){
 
 return user.online ?
 
-"🟢 off":
+"🟢":
 
-"🔴 on";
+"🔴";
 
 
 }
