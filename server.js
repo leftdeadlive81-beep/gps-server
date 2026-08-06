@@ -131,7 +131,7 @@ time:
 new Date(
     Number(row.created)
 )
-.toLocaleTimeString(
+.toLocaleString(
 "ja-JP",
 {
     timeZone:"Asia/Tokyo",
@@ -648,9 +648,7 @@ const item={
 
 
 time:
-new Date(
-    Number(row.created)
-)
+new Date(now)
 .toLocaleString(
 "ja-JP",
 {
