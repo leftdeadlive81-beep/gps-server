@@ -126,11 +126,16 @@ async function loadChronology(){
 
             return {
 
-                time:
-                new Date(
-                    Number(row.created)
-                )
-                .toLocaleTimeString(),
+               time:
+new Date(
+    Number(row.created)
+)
+.toLocaleTimeString(
+"ja-JP",
+{
+    timeZone:"Asia/Tokyo"
+}
+),
 
 
                 message:
@@ -641,7 +646,13 @@ const item={
 
 time:
 new Date(now)
-.toLocaleTimeString(),
+.toLocaleTimeString(
+"ja-JP",
+{
+    timeZone:"Asia/Tokyo"
+    hour12:false
+}
+),
 
 
 message:
