@@ -121,7 +121,7 @@ async function loadChronology(){
 
 
         chronology =
-        result.rows.reverse().map(row=>{
+        result.rows.map(row=>{
 
 
             return {
