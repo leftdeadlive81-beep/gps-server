@@ -176,9 +176,18 @@ background:white;
 
 border-bottom:1px solid #ccc;
 
-padding:6px 4px;
+padding:10px 4px;
 
 font-size:14px;
+
+cursor:pointer;
+
+}
+
+
+.userRow:active{
+
+background:#cce5ff;
 
 }
 
@@ -1591,7 +1600,8 @@ ${formatTime(user.lastUpdate)}
 
 html+=`
 
-<div class="userRow">
+<div class="userRow"
+onclick="focusUser('${user.name}')">
 
 <div>
 ${statusText(user)}
