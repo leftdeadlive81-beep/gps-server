@@ -150,7 +150,7 @@ button{
 display:grid;
 
 grid-template-columns:
-45px 100px 60px 60px 80px;
+50px 1fr 60px 60px 70px;
 
 background:#ddd;
 
@@ -168,7 +168,7 @@ padding:6px 4px;
 display:grid;
 
 grid-template-columns:
-45px 100px 60px 60px 80px;
+50px 1fr 60px 60px 70px;
 
 align-items:center;
 
@@ -181,7 +181,6 @@ padding:6px 4px;
 font-size:14px;
 
 }
-
 
 .userRow:nth-child(even){
 
@@ -1590,8 +1589,6 @@ ${formatTime(user.lastUpdate)}
 
 
 
-
-
 html+=`
 
 <div class="userRow">
@@ -1618,49 +1615,12 @@ ${new Date(user.lastUpdate)
 .substring(0,5)}
 </div>
 
-<div>
-
-
-
 </div>
-
-
-<div
-id="detail-${user.name}"
-class="userDetail">
-
-
-<b>${user.name}</b>
-
-<br>
-
-UTM:
-${user.utmZone || "52S"}
-
-<br>
-
-E:
-${user.utmE || ""}
-
-<br>
-
-N:
-${user.utmN || ""}
-
-<br><br>
-
-📍目的地：
-${user.destination || "-"}
-
-<br>
-
-🕒更新：
-${formatTime(user.lastUpdate)}
-
-</div>
-
 
 `;
+
+
+
 
 
 
