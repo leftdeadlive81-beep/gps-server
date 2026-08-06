@@ -220,7 +220,40 @@ border-bottom:1px solid #ccc;
 
 
 
+/*=====================
+選択中マーカー点滅
+=====================*/
 
+.selected-marker{
+
+animation:markerBlink 0.6s infinite;
+
+}
+
+
+@keyframes markerBlink{
+
+0%{
+
+filter:brightness(2);
+
+}
+
+
+50%{
+
+filter:brightness(0.5);
+
+}
+
+
+100%{
+
+filter:brightness(2);
+
+}
+
+}
 
 
 
@@ -1385,11 +1418,18 @@ popupAnchor:[0,-70]
 function focusUser(name){
 
 
+if(!markers[name]){
 
-if(markers[name]){
+return;
+
+}
 
 
-let pos=markers[name].getLatLng();
+
+let marker=markers[name];
+
+
+let pos=marker.getLatLng();
 
 
 
@@ -1403,21 +1443,61 @@ pos.lng
 
 ],
 
-17
+17,
+
+{
+
+animate:true
+
+}
 
 );
 
 
 
-markers[name].openPopup();
+marker.openPopup();
+
+
+
+
+//=====================
+// 選択マーカー点滅
+//=====================
+
+
+let element=marker.getElement();
+
+
+if(element){
+
+
+element.classList.add(
+
+"selected-marker"
+
+);
+
+
+
+setTimeout(()=>{
+
+
+element.classList.remove(
+
+"selected-marker"
+
+);
+
+
+},5000);
 
 
 
 }
 
 
-}
 
+}
 
 
 
