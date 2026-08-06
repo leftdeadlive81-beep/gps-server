@@ -150,7 +150,7 @@ button{
 display:grid;
 
 grid-template-columns:
-45px 90px 55px 55px 70px 70px 70px 90px;
+45px 100px 60px 60px 80px 90px;
 
 background:#ddd;
 
@@ -392,9 +392,6 @@ placeholder="地点名（例：CP1、給水所）">
 </h3>
 
 
-<h3>
-👥 接続ユーザー
-</h3>
 
 
 <div class="userHeader">
@@ -403,8 +400,6 @@ placeholder="地点名（例：CP1、給水所）">
 <div>名前</div>
 <div>💧水</div>
 <div>⛽燃料</div>
-<div>速度</div>
-<div>方位</div>
 <div>更新</div>
 <div>操作</div>
 
@@ -1603,47 +1598,25 @@ ${formatTime(user.lastUpdate)}
 
 
 
-
-
-
-
-
-
-
 html+=`
 
 <div class="userRow">
-
 
 <div>
 ${statusText(user)}
 </div>
 
-
 <div>
 ${user.name}
 </div>
-
 
 <div>
 ${user.water}
 </div>
 
-
 <div>
 ${user.fuel}
 </div>
-
-
-<div>
-${user.speed || "-"}
-</div>
-
-
-<div>
-${user.direction || "-"}
-</div>
-
 
 <div>
 ${new Date(user.lastUpdate)
@@ -1651,29 +1624,29 @@ ${new Date(user.lastUpdate)
 .substring(0,5)}
 </div>
 
-
 <div>
 
 <button class="userBtn"
 onclick="focusUser('${user.name}')">
-
 📍
-
 </button>
 
 
 <button class="userBtn"
 onclick="toggleDetail('${user.name}')">
-
 ▼
-
 </button>
 
-
 </div>
 
-
 </div>
+`;
+
+
+
+
+
+
 
 
 <div
