@@ -168,7 +168,7 @@ padding:6px 4px;
 display:grid;
 
 grid-template-columns:
-45px 90px 55px 55px 70px 70px 70px 90px;
+45px 100px 60px 60px 80px 90px;
 
 align-items:center;
 
@@ -1631,7 +1631,6 @@ onclick="focusUser('${user.name}')">
 📍
 </button>
 
-
 <button class="userBtn"
 onclick="toggleDetail('${user.name}')">
 ▼
@@ -1640,13 +1639,6 @@ onclick="toggleDetail('${user.name}')">
 </div>
 
 </div>
-`;
-
-
-
-
-
-
 
 
 <div
@@ -1655,7 +1647,6 @@ class="userDetail">
 
 
 <b>${user.name}</b>
-
 
 <br>
 
@@ -1672,20 +1663,15 @@ ${user.utmE || ""}
 N:
 ${user.utmN || ""}
 
-
 <br><br>
-
 
 📍目的地：
 ${user.destination || "-"}
 
-
 <br>
-
 
 🕒更新：
 ${formatTime(user.lastUpdate)}
-
 
 </div>
 
@@ -1821,13 +1807,14 @@ pointMarkers[name]=marker;
 
 function toggleDetail(name){
 
-
 let box=document.getElementById(
 "detail-"+name
 );
 
 
-if(box.style.display==="block"){
+if(
+box.style.display==="block"
+){
 
 box.style.display="none";
 
@@ -1837,7 +1824,6 @@ else{
 box.style.display="block";
 
 }
-
 
 }
 
