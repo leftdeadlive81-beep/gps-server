@@ -269,6 +269,28 @@ filter:brightness(2);
 }
 
 
+
+/*=====================
+ ユーザー削除ボタン
+=====================*/
+
+.deleteButton{
+
+width:auto;
+
+font-size:12px;
+
+padding:3px 6px;
+
+margin:0;
+
+border-radius:5px;
+
+white-space:nowrap;
+
+}
+
+
 </style>
 
 </head>
@@ -1755,9 +1777,10 @@ ${timeAgo(user.lastUpdate)}
 <div>
 
 <button
-onclick="deleteUser('${user.name}')">
+class="deleteButton"
+onclick="event.stopPropagation(); deleteUser('${user.name}')">
 
-🗑削除
+🗑
 
 </button>
 
