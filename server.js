@@ -967,7 +967,9 @@ socket.emit(
 name
 );
 
+}
 
+);   // ←追加
 
 
 
