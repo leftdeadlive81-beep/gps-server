@@ -79,6 +79,7 @@ async function loadPoints(){
 }
 
 
+
 //=====================
 // クロノロジー復元
 //=====================
@@ -106,6 +107,7 @@ async function loadChronology(){
                     hour12:false
                 }
             ),
+
 
             message:
             (row.user_name
@@ -135,6 +137,7 @@ async function loadChronology(){
     }
 
 }
+
 
 
 //=====================
@@ -173,7 +176,8 @@ async function loadUsers(){
 
                 destination:user.destination,
 
-                iconType:user.iconType || "person",
+                iconType:
+                user.iconType || "person",
 
                 online:false,
 
@@ -200,8 +204,6 @@ async function loadUsers(){
     }
 
 }
-
-
 
 //=====================
 // Socket.IO
@@ -284,14 +286,21 @@ created=$5
 ,
 
 [
+
 point.name,
+
 point.type || "point",
+
 point.lat,
+
 point.lon,
+
 Date.now()
+
 ]
 
 );
+
 
 
 points[point.name]=point;
@@ -303,7 +312,15 @@ points
 );
 
 
-}catch(err){
+
+console.log(
+"地点登録:",
+point.name
+);
+
+
+}
+catch(err){
 
 console.error(
 "地点保存エラー",
@@ -313,7 +330,10 @@ err
 }
 
 
-});
+}
+
+);
+
 
 
 
@@ -333,31 +353,43 @@ try{
 const now=Date.now();
 
 
+
 const user={
 
+
 name:data.name,
+
 
 lat:null,
 
 lon:null,
 
+
 water:data.water || 0,
 
 fuel:data.fuel || 0,
 
+
 destination:data.destination || "",
 
-iconType:data.iconType || "person",
+
+iconType:
+data.iconType || "person",
+
 
 online:false,
 
+
 lastUpdate:now
+
 
 };
 
 
 
 users[data.name]=user;
+
+
 
 
 await pool.query(
@@ -367,6 +399,7 @@ await pool.query(
 INSERT INTO current_users
 
 (
+
 name,
 water,
 fuel,
@@ -374,21 +407,28 @@ destination,
 iconType,
 online,
 lastUpdate
+
 )
 
 VALUES
 
 ($1,$2,$3,$4,$5,$6,$7)
 
+
 ON CONFLICT(name)
 
 DO UPDATE SET
 
 water=$2,
+
 fuel=$3,
+
 destination=$4,
+
 iconType=$5,
+
 online=$6,
+
 lastUpdate=$7
 
 `
@@ -396,16 +436,25 @@ lastUpdate=$7
 ,
 
 [
-data.name,
+
+user.name,
+
 user.water,
+
 user.fuel,
+
 user.destination,
+
 user.iconType,
+
 0,
+
 now
+
 ]
 
 );
+
 
 
 console.log(
@@ -414,13 +463,17 @@ data.name
 );
 
 
+
 io.emit(
 "locations",
 users
 );
 
 
-}catch(err){
+
+}
+
+catch(err){
 
 console.error(
 "ユーザー登録エラー",
@@ -430,7 +483,11 @@ err
 }
 
 
-});
+}
+
+);
+
+
 
 
 
@@ -446,12 +503,15 @@ async(data)=>{
 
 if(!users[data.name]){
 
+
 console.log(
 "未登録ユーザーのGPS拒否:",
 data.name
 );
 
+
 return;
+
 
 }
 
@@ -460,9 +520,12 @@ return;
 const now=Date.now();
 
 
+
 const user={
 
+
 name:data.name,
+
 
 lat:data.lat,
 
@@ -484,7 +547,8 @@ fuel:data.fuel,
 destination:data.destination,
 
 
-iconType:data.iconType || "person",
+iconType:
+data.iconType || "person",
 
 
 online:true,
@@ -492,7 +556,9 @@ online:true,
 
 lastUpdate:now
 
+
 };
+
 
 
 
@@ -503,6 +569,11 @@ users[data.name]=user;
 try{
 
 
+
+//=====================
+// 現在位置更新
+//=====================
+
 await pool.query(
 
 `
@@ -512,16 +583,27 @@ UPDATE current_users
 SET
 
 lat=$2,
+
 lon=$3,
+
 utmZone=$4,
+
 utmE=$5,
+
 utmN=$6,
+
 water=$7,
+
 fuel=$8,
+
 destination=$9,
+
 iconType=$10,
+
 online=$11,
+
 lastUpdate=$12
+
 
 WHERE name=$1
 
@@ -530,6 +612,7 @@ WHERE name=$1
 ,
 
 [
+
 
 user.name,
 
@@ -555,11 +638,18 @@ user.iconType,
 
 now
 
+
 ]
 
 );
 
 
+
+
+
+//=====================
+// 履歴保存
+//=====================
 
 await pool.query(
 
@@ -570,10 +660,15 @@ INSERT INTO location_history
 (
 
 name,
+
 lat,
+
 lon,
+
 water,
+
 fuel,
+
 destination
 
 )
@@ -609,10 +704,15 @@ user.destination
 }
 catch(err){
 
+
 console.error(
+
 "DB保存エラー",
+
 err
+
 );
+
 
 }
 
@@ -624,10 +724,10 @@ users
 );
 
 
+
 }
 
 );
-
 
 
 
@@ -642,6 +742,7 @@ async(data)=>{
 
 
 const now=Date.now();
+
 
 
 const item={
@@ -694,8 +795,11 @@ await pool.query(
 INSERT INTO chronology
 
 (
+
 user_name,
+
 message,
+
 created
 
 )
@@ -724,24 +828,34 @@ now
 }
 catch(err){
 
+
 console.error(
+
 "クロノロジー保存エラー",
+
 err
+
 );
+
 
 }
 
 
 
 io.emit(
+
 "chronology",
+
 chronology
+
 );
+
 
 
 }
 
 );
+
 
 
 
@@ -761,6 +875,7 @@ async(name)=>{
 delete users[name];
 
 
+
 try{
 
 
@@ -776,24 +891,36 @@ await pool.query(
 }
 catch(err){
 
+
 console.error(
+
 "削除エラー",
+
 err
+
 );
+
 
 }
 
 
 
 io.emit(
+
 "locations",
+
 users
+
 );
+
 
 
 }
 
 );
+
+
+
 
 
 
@@ -809,8 +936,11 @@ socket.on(
 
 
 console.log(
+
 "切断:",
+
 socket.id
+
 );
 
 
@@ -823,6 +953,9 @@ socket.id
 }
 
 );
+
+
+
 
 
 
@@ -836,14 +969,19 @@ process.env.PORT || 10000;
 
 
 
+
 async function startServer(){
+
 
 
 await loadUsers();
 
+
 await loadPoints();
 
+
 await loadChronology();
+
 
 
 
@@ -855,17 +993,22 @@ PORT,
 
 
 console.log(
+
 "server start port:",
+
 PORT
-);
-
-
-}
 
 );
 
 
 }
+
+);
+
+
+
+}
+
 
 
 
