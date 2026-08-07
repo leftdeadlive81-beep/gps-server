@@ -2074,7 +2074,17 @@ socket.on(
 
 let html="";
 
+let lat=user.lat;
+let lon=user.lon;
 
+
+if(lat===null || lon===null){
+
+    // 仮位置（司令部など）
+    lat=32.803;
+    lon=130.707;
+
+}
 
 
 // 消えたユーザー削除
@@ -2118,23 +2128,23 @@ name=>{
 
 let user=users[name];
 
-// GPS未取得ユーザーは地図表示しない
-if(
-    user.lat===null ||
-    user.lon===null
-){
-    return;
-}
-
-
-
 let icon=createIcon(
 
 user.iconType
 
 );
 
+// GPS未取得の場合は仮位置表示
+let displayLat=user.lat;
+let displayLon=user.lon;
 
+
+if(displayLat===null || displayLon===null){
+
+    displayLat=32.803;
+    displayLon=130.707;
+
+}
 
 
 
@@ -2145,9 +2155,8 @@ markers[name].setLatLng(
 
 [
 
-user.lat,
-
-user.lon
+displayLat,
+displayLon
 
 ]
 

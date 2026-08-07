@@ -354,18 +354,41 @@ const now=Date.now();
 
 
 
-const user={
+const oldUser = users[data.name];
 
+
+const user={
 
 name:data.name,
 
+lat: oldUser ? oldUser.lat : null,
 
-lat:null,
+lon: oldUser ? oldUser.lon : null,
 
-lon:null,
+utmZone: oldUser ? oldUser.utmZone : "52S",
+
+utmE: oldUser ? oldUser.utmE : null,
+
+utmN: oldUser ? oldUser.utmN : null,
 
 
 water:data.water || 0,
+
+fuel:data.fuel || 0,
+
+destination:data.destination || "",
+
+
+iconType:
+data.iconType || "person",
+
+
+online:false,
+
+
+lastUpdate:now
+
+};
 
 fuel:data.fuel || 0,
 
