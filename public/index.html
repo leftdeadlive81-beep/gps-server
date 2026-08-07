@@ -959,6 +959,7 @@ startGPS();
 // 地図
 //=====================
 
+
 const map=L.map('map')
 .setView(
 [32.803,130.707],
@@ -966,19 +967,48 @@ const map=L.map('map')
 );
 
 
-
-L.tileLayer(
-
+// 標準地図
+const osm = L.tileLayer(
 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+{
+attribution:'OpenStreetMap'
+}
+);
+
+
+// 航空写真
+const satellite = L.tileLayer(
+'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+{
+attribution:'Esri'
+}
+);
+
+
+// 地形図
+const terrain = L.tileLayer(
+'https://tile.opentopomap.org/{z}/{x}/{y}.png',
+{
+attribution:'OpenTopoMap'
+}
+);
+
+
+// 初期表示
+osm.addTo(map);
+
+
+// 切替ボタン
+L.control.layers(
 
 {
-
-attribution:'OpenStreetMap'
+"🗺 標準地図":osm,
+"🛰 航空写真":satellite,
+"⛰ 地形図":terrain
 
 }
 
 ).addTo(map);
-
 
 
 
