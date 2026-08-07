@@ -750,6 +750,13 @@ document.getElementById("iconType").value
 registered=true;
 
 
+// 登録情報保存
+localStorage.setItem(
+"registeredUser",
+name
+);
+
+
 document.getElementById(
 "registerStatus"
 ).innerHTML=
@@ -819,6 +826,9 @@ document.getElementById("gpsStatus").innerHTML=
 window.onload=function(){
 
 
+window.onload=function(){
+
+
 [
 "name",
 "water",
@@ -840,6 +850,45 @@ document.getElementById(key).value=value;
 
 
 });
+
+
+
+//=====================
+// 登録状態復元
+//=====================
+
+let savedName = localStorage.getItem("registeredUser");
+
+
+if(savedName){
+
+    registered=true;
+
+
+    document.getElementById(
+    "registerStatus"
+    ).innerHTML=
+
+    "🟢 登録済み : "+savedName;
+
+}
+
+
+
+if(localStorage.getItem("gpsRunning")==="true"){
+
+
+setTimeout(()=>{
+
+startGPS();
+
+},1000);
+
+
+}
+
+
+};
 
 
 
@@ -2074,17 +2123,7 @@ socket.on(
 
 let html="";
 
-let lat=user.lat;
-let lon=user.lon;
 
-
-if(lat===null || lon===null){
-
-    // 仮位置（司令部など）
-    lat=32.803;
-    lon=130.707;
-
-}
 
 
 // 消えたユーザー削除
@@ -2183,9 +2222,8 @@ markers[name]=L.marker(
 
 [
 
-user.lat,
-
-user.lon
+displayLat,
+displayLon
 
 ],
 
