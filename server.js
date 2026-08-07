@@ -263,6 +263,13 @@ async(point)=>{
 try{
 
 
+console.log(
+"地点受信:",
+point
+);
+
+
+
 await pool.query(
 
 `
@@ -312,7 +319,13 @@ Date.now()
 
 
 
-points[point.name]=point;
+points[point.name]={
+    name:point.name,
+    type:point.type || "point",
+    lat:point.lat,
+    lon:point.lon,
+    created:Date.now()
+};
 
 
 io.emit(
@@ -943,17 +956,15 @@ err
 
 
 io.emit(
-
 "locations",
-
 users
-
 );
 
 
-
-}
-
+// 削除したユーザー本人へ通知
+socket.emit(
+"userDeleted",
+name
 );
 
 
