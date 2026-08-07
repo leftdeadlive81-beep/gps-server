@@ -994,6 +994,22 @@ attribution:'OpenTopoMap'
 );
 
 
+const gsi = L.tileLayer(
+'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
+{
+attribution:'国土地理院'
+}
+);
+
+const gsiPale = L.tileLayer(
+'https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',
+{
+attribution:'国土地理院 淡色地図'
+}
+);
+
+
+
 // 初期表示
 osm.addTo(map);
 
@@ -1004,7 +1020,9 @@ L.control.layers(
 {
 "🗺 標準地図":osm,
 "🛰 航空写真":satellite,
-"⛰ 地形図":terrain
+"⛰ 地形図":terrain,
+"🇯🇵 国土地理院":gsi,
+"🚒 防災淡色地図":gsiPale
 
 }
 
