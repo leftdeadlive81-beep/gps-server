@@ -2003,81 +2003,7 @@ selectedPointLon.toFixed(6)
 
 
 
-function addPoint(){
 
-console.log(
-"addPoint開始",
-selectedPointLat,
-selectedPointLon
-);
-
-
-if(selectedPointLat===null){
-
-alert(
-"先に地図をクリックしてください"
-);
-
-return;
-
-}
-
-
-let name =
-document.getElementById(
-"pointName"
-).value.trim();
-
-
-console.log(
-"地点情報",
-name,
-document.getElementById("pointType").value,
-selectedPointLat,
-selectedPointLon
-);
-
-
-if(name===""){
-
-alert(
-"地点名を入力してください"
-);
-
-return;
-
-}
-
-
-socket.emit(
-"addPoint",
-{
-
-name:name,
-
-type:
-document.getElementById(
-"pointType"
-).value,
-
-lat:selectedPointLat,
-
-lon:selectedPointLon
-
-}
-);
-
-
-alert(
-"地点登録送信しました"
-);
-
-
-document.getElementById(
-"pointName"
-).value="";
-
-}
 
 
 
@@ -2194,7 +2120,39 @@ name
 );
 
 
+
+// 選択解除
+selectedPointName=null;
+
+
+// 入力欄クリア
+document.getElementById(
+"pointName"
+).value="";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 }
+
+
+
+
+
+
+
+
 
 
 
@@ -2203,16 +2161,134 @@ name
 //=====================
 
 socket.on(
-
 "points",
 
 (points)=>{
 
 
+// 削除された地点マーカーを消す
+
+Object.keys(pointMarkers).forEach(name=>{
+
+if(!points[name]){
+
+map.removeLayer(
+pointMarkers[name]
+);
+
+delete pointMarkers[name];
+
+}
+
+});
+
+
+
+// 現在存在する地点を表示
+
 Object.keys(points).forEach(name=>{
 
 
 let p=points[name];
+
+
+
+if(pointMarkers[name]){
+
+map.removeLayer(
+pointMarkers[name]
+);
+
+}
+
+
+
+pointMarkers[name]=L.marker(
+
+[
+p.lat,
+p.lon
+],
+
+{
+icon:L.icon({
+
+iconUrl:"/icon/point.png",
+
+iconSize:[60,60],
+
+iconAnchor:[30,60],
+
+popupAnchor:[15,-70]
+
+})
+
+}
+
+)
+
+.addTo(map)
+
+.bindTooltip(
+
+name,
+
+{
+
+permanent:true,
+
+direction:"top",
+
+offset:[0,-30],
+
+className:"pointLabel"
+
+}
+
+)
+
+.on(
+"click",
+()=>{
+
+
+selectedPointName=name;
+
+
+document.getElementById(
+"pointName"
+).value=name;
+
+
+}
+
+)
+
+.bindPopup(
+
+`
+
+<b>📍${name}</b>
+
+<br>
+
+${p.lat.toFixed(6)}
+
+<br>
+
+${p.lon.toFixed(6)}
+
+`
+
+);
+
+
+});
+
+
+}
+
+);
 
 
 
