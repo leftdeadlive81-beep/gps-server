@@ -969,8 +969,73 @@ name
 
 }
 
-);   // ←追加
+);   
 
+
+//=====================
+// 地点削除
+//=====================
+
+socket.on(
+"deletePoint",
+
+async(name)=>{
+
+
+delete points[name];
+
+
+try{
+
+
+await pool.query(
+
+"DELETE FROM points WHERE name=$1",
+
+[name]
+
+);
+
+
+}
+catch(err){
+
+
+console.error(
+
+"地点削除エラー",
+
+err
+
+);
+
+
+}
+
+
+
+io.emit(
+
+"points",
+
+points
+
+);
+
+
+
+console.log(
+
+"地点削除:",
+
+name
+
+);
+
+
+}
+
+);
 
 
 
