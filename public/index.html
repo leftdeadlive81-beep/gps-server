@@ -165,7 +165,7 @@ font-size:16px;
 display:grid;
 
 grid-template-columns:
-50px 1fr 60px 60px 70px;
+50px 1fr 60px 60px 70px 60px;
 
 background:#ddd;
 
@@ -183,7 +183,7 @@ padding:6px 4px;
 display:grid;
 
 grid-template-columns:
-50px 1fr 60px 60px 70px;
+50px 1fr 60px 60px 70px 60px;
 
 align-items:center;
 
@@ -536,6 +536,7 @@ placeholder="活動内容を入力">
 
 <div>最終</div>
 
+<div>操作</div>
 
 </div>
 
@@ -744,6 +745,37 @@ console.log(
 
 
 });
+
+
+socket.on(
+"userDeleted",
+(name)=>{
+
+
+if(
+document.getElementById("name").value === name
+){
+
+localStorage.clear();
+
+registered=false;
+
+
+document.getElementById(
+"registerStatus"
+).innerHTML=
+"未登録";
+
+
+alert(
+"ユーザー登録を削除しました"
+);
+
+}
+
+
+}
+);
 
 
 
@@ -1692,41 +1724,42 @@ new Date(user.lastUpdate)
 
 html+=`
 
-<div class="userRow"
-onclick="focusUser('${user.name}')">
+<div class="userRow">
 
 
-<div>
-
+<div onclick="focusUser('${user.name}')">
 ${user.online ? "🟢ON":"🔴OFF"}
-
 </div>
 
 
-<div>
-
+<div onclick="focusUser('${user.name}')">
 ${user.name}
-
 </div>
 
 
-<div>
-
+<div onclick="focusUser('${user.name}')">
 ${user.water}
-
 </div>
 
 
-<div>
-
+<div onclick="focusUser('${user.name}')">
 ${user.fuel}
+</div>
 
+
+<div onclick="focusUser('${user.name}')">
+${timeAgo(user.lastUpdate)}
 </div>
 
 
 <div>
 
-${timeAgo(user.lastUpdate)}
+<button
+onclick="deleteUser('${user.name}')">
+
+🗑削除
+
+</button>
 
 </div>
 
@@ -1794,6 +1827,26 @@ animate:true
 
 
 markers[name].openPopup();
+
+
+}
+
+
+function deleteUser(name){
+
+if(!confirm(
+name+" を削除しますか？"
+)){
+
+return;
+
+}
+
+
+socket.emit(
+"deleteUser",
+name
+);
 
 
 }
