@@ -506,6 +506,10 @@ placeholder="地点名（例：CP1、給水所）">
 </button>
 
 
+<button onclick="deletePoint()">
+🗑削除
+</button>
+
 </details>
 
 
@@ -1964,7 +1968,7 @@ let selectedPointLat=null;
 
 let selectedPointLon=null;
 
-
+let selectedPointName = null;
 
 map.on(
 
@@ -2155,7 +2159,42 @@ document.getElementById(
 
 
 
+function deletePoint(){
 
+
+let name =
+selectedPointName ||
+document.getElementById("pointName").value.trim();
+
+
+
+if(name===""){
+
+alert(
+"削除する地点を選択してください"
+);
+
+return;
+
+}
+
+
+if(!confirm(
+name+" を削除しますか？"
+)){
+
+return;
+
+}
+
+
+socket.emit(
+"deletePoint",
+name
+);
+
+
+}
 
 
 
@@ -2229,6 +2268,24 @@ direction:"top",
 offset:[0,-30],
 
 className:"pointLabel"
+
+}
+
+)
+
+
+
+.on(
+"click",
+()=>{
+
+selectedPointName=name;
+
+
+document.getElementById(
+"pointName"
+).value=name;
+
 
 }
 
