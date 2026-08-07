@@ -387,6 +387,45 @@ font-size:14px;
 }
 
 
+
+
+.userLabel{
+
+background:white;
+
+border:1px solid #555;
+
+border-radius:5px;
+
+padding:3px 6px;
+
+font-size:14px;
+
+font-weight:bold;
+
+color:black;
+
+}
+
+
+
+
+.userLabel{
+    background:white;
+    border:1px solid #555;
+    border-radius:5px;
+    padding:3px 6px;
+    font-size:14px;
+    font-weight:bold;
+    color:black;
+}
+
+
+
+
+
+
+
 </style>
 
 
@@ -744,6 +783,44 @@ const map=L.map('map')
 [32.803,130.707],
 13
 );
+
+
+
+//=====================
+// ズームによる名前表示制御
+//=====================
+
+map.on("zoomend",()=>{
+
+    let zoom = map.getZoom();
+
+
+    Object.values(markers).forEach(marker=>{
+
+
+        if(zoom < 13){
+
+            // 広域表示：名前非表示
+            marker.closeTooltip();
+
+
+        }else{
+
+            // 詳細表示：名前表示
+            marker.openTooltip();
+
+
+        }
+
+
+    });
+
+
+});
+
+
+
+
 
 
 
@@ -1963,6 +2040,12 @@ markers[name].setIcon(icon);
 
 
 
+markers[name].setTooltipContent(
+user.name
+);
+
+
+
 }
 
 else{
@@ -1986,8 +2069,25 @@ icon:icon
 
 )
 
-.addTo(map);
+.addTo(map)
 
+.bindTooltip(
+
+user.name,
+
+{
+
+permanent:true,
+
+direction:"top",
+
+offset:[0,-60],
+
+className:"userLabel"
+
+}
+
+);
 
 
 }
