@@ -3,16 +3,13 @@ const http = require("http");
 const { Server } = require("socket.io");
 const { Pool } = require("pg");
 
-
 const app = express();
 
 const server = http.createServer(app);
 
 const io = new Server(server);
 
-
 app.use(express.static("public"));
-
 
 
 //=====================
@@ -32,7 +29,6 @@ const pool = new Pool({
 });
 
 
-
 //=====================
 // メモリ
 //=====================
@@ -44,16 +40,13 @@ let points = {};
 let chronology = [];
 
 
-
-
 //=====================
-// 地点データ復元
+// 地点復元
 //=====================
 
 async function loadPoints(){
 
     try{
-
 
         const result =
         await pool.query(
@@ -63,21 +56,7 @@ async function loadPoints(){
 
         result.rows.forEach(point=>{
 
-
-            points[point.name]={
-
-                name:point.name,
-
-                type:point.type,
-
-                lat:point.lat,
-
-                lon:point.lon,
-
-                created:point.created
-
-            };
-
+            points[point.name]=point;
 
         });
 
@@ -88,21 +67,16 @@ async function loadPoints(){
         );
 
 
-    }
-    catch(err){
-
+    }catch(err){
 
         console.error(
             "地点復元エラー",
             err
         );
 
-
     }
 
 }
-
-
 
 
 //=====================
@@ -113,7 +87,6 @@ async function loadChronology(){
 
     try{
 
-
         const result =
         await pool.query(
             "SELECT * FROM chronology ORDER BY id DESC LIMIT 100"
@@ -121,40 +94,29 @@ async function loadChronology(){
 
 
         chronology =
-        result.rows.map(row=>{
+        result.rows.map(row=>({
 
+            time:
+            new Date(
+                Number(row.created)
+            ).toLocaleString(
+                "ja-JP",
+                {
+                    timeZone:"Asia/Tokyo",
+                    hour12:false
+                }
+            ),
 
-            return {
+            message:
+            (row.user_name
+            ?
+            "["+row.user_name+"] "
+            :
+            "")
+            +
+            row.message
 
-              
-time:
-new Date(
-    Number(row.created)
-)
-.toLocaleString(
-"ja-JP",
-{
-    timeZone:"Asia/Tokyo",
-    hour12:false
-}
-),
-
-
-
-                message:
-                (row.user_name
-                ?
-                "["+row.user_name+"] "
-                :
-                "")
-                +
-                row.message
-
-            };
-
-
-        });
-
+        }));
 
 
         console.log(
@@ -163,22 +125,16 @@ new Date(
         );
 
 
-    }
-    catch(err){
-
+    }catch(err){
 
         console.error(
             "クロノロジー復元エラー",
             err
         );
 
-
     }
 
 }
-
-
-
 
 
 //=====================
@@ -189,7 +145,6 @@ async function loadUsers(){
 
     try{
 
-
         const result =
         await pool.query(
             "SELECT * FROM current_users"
@@ -198,9 +153,7 @@ async function loadUsers(){
 
         result.rows.forEach(user=>{
 
-
             users[user.name]={
-
 
                 name:user.name,
 
@@ -208,37 +161,27 @@ async function loadUsers(){
 
                 lon:user.lon,
 
-
                 utmZone:user.utmZone,
 
                 utmE:user.utmE,
 
                 utmN:user.utmN,
 
-
                 water:user.water,
 
                 fuel:user.fuel,
 
-
                 destination:user.destination,
 
-
-                iconType:
-                user.iconType || "person",
-
+                iconType:user.iconType || "person",
 
                 online:false,
 
-
                 lastUpdate:user.lastUpdate
-
 
             };
 
-
         });
-
 
 
         console.log(
@@ -247,23 +190,16 @@ async function loadUsers(){
         );
 
 
-    }
-    catch(err){
-
+    }catch(err){
 
         console.error(
             "DB復元エラー",
             err
         );
 
-
     }
 
-
 }
-
-
-
 
 
 
@@ -280,8 +216,6 @@ console.log(
 "接続:",
 socket.id
 );
-
-
 
 
 // 初期送信
@@ -302,8 +236,6 @@ socket.emit(
 "chronology",
 chronology
 );
-
-
 
 
 
@@ -352,25 +284,17 @@ created=$5
 ,
 
 [
-
 point.name,
-
 point.type || "point",
-
 point.lat,
-
 point.lon,
-
 Date.now()
-
 ]
 
 );
 
 
-
 points[point.name]=point;
-
 
 
 io.emit(
@@ -379,33 +303,134 @@ points
 );
 
 
-
-console.log(
-"地点登録:",
-point.name
-);
-
-
-}
-catch(err){
-
+}catch(err){
 
 console.error(
 "地点保存エラー",
 err
 );
 
-
 }
 
 
-}
+});
+
+
+
+//=====================
+// ユーザー登録
+//=====================
+
+socket.on(
+"registerUser",
+
+async(data)=>{
+
+
+try{
+
+
+const now=Date.now();
+
+
+const user={
+
+name:data.name,
+
+lat:null,
+
+lon:null,
+
+water:data.water || 0,
+
+fuel:data.fuel || 0,
+
+destination:data.destination || "",
+
+iconType:data.iconType || "person",
+
+online:false,
+
+lastUpdate:now
+
+};
+
+
+
+users[data.name]=user;
+
+
+await pool.query(
+
+`
+
+INSERT INTO current_users
+
+(
+name,
+water,
+fuel,
+destination,
+iconType,
+online,
+lastUpdate
+)
+
+VALUES
+
+($1,$2,$3,$4,$5,$6,$7)
+
+ON CONFLICT(name)
+
+DO UPDATE SET
+
+water=$2,
+fuel=$3,
+destination=$4,
+iconType=$5,
+online=$6,
+lastUpdate=$7
+
+`
+
+,
+
+[
+data.name,
+user.water,
+user.fuel,
+user.destination,
+user.iconType,
+0,
+now
+]
 
 );
 
 
+console.log(
+"ユーザー登録:",
+data.name
+);
 
 
+io.emit(
+"locations",
+users
+);
+
+
+}catch(err){
+
+console.error(
+"ユーザー登録エラー",
+err
+);
+
+}
+
+
+});
 
 
 
@@ -419,11 +444,23 @@ socket.on(
 async(data)=>{
 
 
+if(!users[data.name]){
+
+console.log(
+"未登録ユーザーのGPS拒否:",
+data.name
+);
+
+return;
+
+}
+
+
+
 const now=Date.now();
 
 
 const user={
-
 
 name:data.name,
 
@@ -447,15 +484,13 @@ fuel:data.fuel,
 destination:data.destination,
 
 
-iconType:
-data.iconType || "person",
+iconType:data.iconType || "person",
 
 
 online:true,
 
 
 lastUpdate:now
-
 
 };
 
@@ -472,53 +507,23 @@ await pool.query(
 
 `
 
-INSERT INTO current_users
+UPDATE current_users
 
-(
-
-name,
-lat,
-lon,
-utmZone,
-utmE,
-utmN,
-water,
-fuel,
-destination,
-online,
-lastUpdate
-
-)
-
-VALUES
-
-($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-
-
-ON CONFLICT(name)
-
-DO UPDATE SET
-
+SET
 
 lat=$2,
-
 lon=$3,
-
 utmZone=$4,
-
 utmE=$5,
-
 utmN=$6,
-
 water=$7,
-
 fuel=$8,
-
 destination=$9,
+iconType=$10,
+online=$11,
+lastUpdate=$12
 
-online=$10,
-
-lastUpdate=$11
+WHERE name=$1
 
 `
 
@@ -544,6 +549,8 @@ user.fuel,
 
 user.destination,
 
+user.iconType,
+
 1,
 
 now
@@ -551,7 +558,6 @@ now
 ]
 
 );
-
 
 
 
@@ -603,12 +609,10 @@ user.destination
 }
 catch(err){
 
-
 console.error(
 "DB保存エラー",
 err
 );
-
 
 }
 
@@ -620,13 +624,9 @@ users
 );
 
 
-
 }
 
 );
-
-
-
 
 
 
@@ -652,8 +652,8 @@ new Date(now)
 .toLocaleString(
 "ja-JP",
 {
-    timeZone:"Asia/Tokyo",
-    hour12:false
+timeZone:"Asia/Tokyo",
+hour12:false
 }
 ),
 
@@ -684,8 +684,6 @@ chronology.pop();
 
 
 
-
-
 try{
 
 
@@ -696,7 +694,6 @@ await pool.query(
 INSERT INTO chronology
 
 (
-
 user_name,
 message,
 created
@@ -727,15 +724,12 @@ now
 }
 catch(err){
 
-
 console.error(
 "クロノロジー保存エラー",
 err
 );
 
-
 }
-
 
 
 
@@ -743,7 +737,6 @@ io.emit(
 "chronology",
 chronology
 );
-
 
 
 }
@@ -783,12 +776,10 @@ await pool.query(
 }
 catch(err){
 
-
 console.error(
 "削除エラー",
 err
 );
-
 
 }
 
@@ -800,13 +791,9 @@ users
 );
 
 
-
 }
 
 );
-
-
-
 
 
 
@@ -840,9 +827,6 @@ socket.id
 
 
 
-
-
-
 //=====================
 // 起動
 //=====================
@@ -857,9 +841,7 @@ async function startServer(){
 
 await loadUsers();
 
-
 await loadPoints();
-
 
 await loadChronology();
 
