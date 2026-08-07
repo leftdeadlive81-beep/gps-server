@@ -1,3 +1,5 @@
+// server.js 修正版 ①/③
+
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -9,12 +11,12 @@ const server = http.createServer(app);
 
 const io = new Server(server);
 
+
 app.use(express.static("public"));
 
 
 //=====================
-// PostgreSQL
-// Supabase
+// PostgreSQL Supabase
 //=====================
 
 const pool = new Pool({
@@ -38,6 +40,7 @@ let users = {};
 let points = {};
 
 let chronology = [];
+
 
 
 //=====================
@@ -156,6 +159,7 @@ async function loadUsers(){
 
         result.rows.forEach(user=>{
 
+
             users[user.name]={
 
                 name:user.name,
@@ -164,11 +168,11 @@ async function loadUsers(){
 
                 lon:user.lon,
 
-                utmZone:user.utmZone,
+                utmZone:user.utmzone,
 
-                utmE:user.utmE,
+                utmE:user.utme,
 
-                utmN:user.utmN,
+                utmN:user.utmn,
 
                 water:user.water,
 
@@ -177,15 +181,17 @@ async function loadUsers(){
                 destination:user.destination,
 
                 iconType:
-                user.iconType || "person",
+                user.icontype || "person",
 
                 online:false,
 
-                lastUpdate:user.lastUpdate
+                lastUpdate:user.lastupdate
 
             };
 
+
         });
+
 
 
         console.log(
@@ -204,6 +210,9 @@ async function loadUsers(){
     }
 
 }
+
+// server.js 修正版 ②/③
+
 
 //=====================
 // Socket.IO
@@ -337,8 +346,10 @@ err
 
 
 
+
 //=====================
 // ユーザー登録
+// 自動ログイン対応
 //=====================
 
 socket.on(
@@ -353,60 +364,74 @@ try{
 const now=Date.now();
 
 
+const oldUser =
+users[data.name];
 
-const oldUser = users[data.name];
 
 
 const user={
 
+
 name:data.name,
 
-lat: oldUser ? oldUser.lat : null,
 
-lon: oldUser ? oldUser.lon : null,
-
-utmZone: oldUser ? oldUser.utmZone : "52S",
-
-utmE: oldUser ? oldUser.utmE : null,
-
-utmN: oldUser ? oldUser.utmN : null,
+lat:
+oldUser ?
+oldUser.lat :
+null,
 
 
-water:data.water || 0,
+lon:
+oldUser ?
+oldUser.lon :
+null,
 
-fuel:data.fuel || 0,
 
-destination:data.destination || "",
+utmZone:
+oldUser ?
+oldUser.utmZone :
+"52S",
+
+
+utmE:
+oldUser ?
+oldUser.utmE :
+null,
+
+
+utmN:
+oldUser ?
+oldUser.utmN :
+null,
+
+
+
+water:
+data.water || 0,
+
+
+fuel:
+data.fuel || 0,
+
+
+destination:
+data.destination || "",
+
 
 
 iconType:
 data.iconType || "person",
 
 
-online:false,
 
-
-lastUpdate:now
-
-};
-
-fuel:data.fuel || 0,
-
-
-destination:data.destination || "",
-
-
-iconType:
-data.iconType || "person",
-
-
-online:false,
+online:true,
 
 
 lastUpdate:now
 
 
 };
+
 
 
 
@@ -424,6 +449,11 @@ INSERT INTO current_users
 (
 
 name,
+lat,
+lon,
+utmZone,
+utmE,
+utmN,
 water,
 fuel,
 destination,
@@ -435,24 +465,24 @@ lastUpdate
 
 VALUES
 
-($1,$2,$3,$4,$5,$6,$7)
+($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 
 
 ON CONFLICT(name)
 
 DO UPDATE SET
 
-water=$2,
-
-fuel=$3,
-
-destination=$4,
-
-iconType=$5,
-
-online=$6,
-
-lastUpdate=$7
+lat=$2,
+lon=$3,
+utmZone=$4,
+utmE=$5,
+utmN=$6,
+water=$7,
+fuel=$8,
+destination=$9,
+iconType=$10,
+online=$11,
+lastUpdate=$12
 
 `
 
@@ -462,6 +492,16 @@ lastUpdate=$7
 
 user.name,
 
+user.lat,
+
+user.lon,
+
+user.utmZone,
+
+user.utmE,
+
+user.utmN,
+
 user.water,
 
 user.fuel,
@@ -470,7 +510,7 @@ user.destination,
 
 user.iconType,
 
-0,
+1,
 
 now
 
@@ -528,7 +568,7 @@ if(!users[data.name]){
 
 
 console.log(
-"未登録ユーザーのGPS拒否:",
+"未登録GPS拒否:",
 data.name
 );
 
@@ -555,14 +595,18 @@ lat:data.lat,
 lon:data.lon,
 
 
-utmZone:data.utmZone || "52S",
+utmZone:
+data.utmZone || "52S",
+
 
 utmE:data.utmE,
+
 
 utmN:data.utmN,
 
 
 water:data.water,
+
 
 fuel:data.fuel,
 
@@ -592,11 +636,6 @@ users[data.name]=user;
 try{
 
 
-
-//=====================
-// 現在位置更新
-//=====================
-
 await pool.query(
 
 `
@@ -606,27 +645,16 @@ UPDATE current_users
 SET
 
 lat=$2,
-
 lon=$3,
-
 utmZone=$4,
-
 utmE=$5,
-
 utmN=$6,
-
 water=$7,
-
 fuel=$8,
-
 destination=$9,
-
 iconType=$10,
-
 online=$11,
-
 lastUpdate=$12
-
 
 WHERE name=$1
 
@@ -635,7 +663,6 @@ WHERE name=$1
 ,
 
 [
-
 
 user.name,
 
@@ -661,7 +688,6 @@ user.iconType,
 
 now
 
-
 ]
 
 );
@@ -669,10 +695,6 @@ now
 
 
 
-
-//=====================
-// 履歴保存
-//=====================
 
 await pool.query(
 
@@ -683,15 +705,10 @@ INSERT INTO location_history
 (
 
 name,
-
 lat,
-
 lon,
-
 water,
-
 fuel,
-
 destination
 
 )
@@ -729,11 +746,8 @@ catch(err){
 
 
 console.error(
-
 "DB保存エラー",
-
 err
-
 );
 
 
@@ -752,6 +766,8 @@ users
 
 );
 
+
+// server.js 修正版 ③/③
 
 
 //=====================
@@ -820,9 +836,7 @@ INSERT INTO chronology
 (
 
 user_name,
-
 message,
-
 created
 
 )
@@ -992,7 +1006,6 @@ process.env.PORT || 10000;
 
 
 
-
 async function startServer(){
 
 
@@ -1036,3 +1049,4 @@ PORT
 
 
 startServer();
+
