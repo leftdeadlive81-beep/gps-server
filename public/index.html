@@ -495,7 +495,6 @@ placeholder="⛽燃料">
 
 <input
 
-<input
 id="destination"
 value=""
 placeholder="📍次の目的地">
@@ -693,6 +692,74 @@ onclick="sendChronology()">
 const socket = io();
 
 
+//=====================
+// ユーザー登録状態
+//=====================
+
+let registered=false;
+
+
+
+function registerUser(){
+
+
+let name=
+document.getElementById("name").value.trim();
+
+
+
+if(name===""){
+
+alert("名前を入力してください");
+
+return;
+
+}
+
+
+
+socket.emit(
+
+"registerUser",
+
+{
+
+name:name,
+
+water:Number(
+document.getElementById("water").value
+),
+
+fuel:Number(
+document.getElementById("fuel").value
+),
+
+destination:
+document.getElementById("destination").value,
+
+iconType:
+document.getElementById("iconType").value
+
+
+}
+
+);
+
+
+
+registered=true;
+
+
+document.getElementById(
+"registerStatus"
+).innerHTML=
+
+"🟢 登録済み : "+name;
+
+
+}
+
+
 
 //=====================
 // Socket接続
@@ -784,6 +851,9 @@ setTimeout(()=>{
 startGPS();
 
 },1000);
+
+
+
 
 
 }
@@ -1133,6 +1203,17 @@ name+"を登録しました"
 function startGPS(){
 
 
+if(!registered){
+
+alert(
+"先にユーザー登録してください"
+);
+
+return;
+
+}
+
+
 localStorage.setItem(
 "gpsRunning",
 "true"
@@ -1470,7 +1551,15 @@ new Date()
 
 
 
+if(!registered){
 
+console.log(
+"未登録のため送信停止"
+);
+
+return;
+
+}
 
 
 
@@ -2028,6 +2117,14 @@ name=>{
 
 
 let user=users[name];
+
+// GPS未取得ユーザーは地図表示しない
+if(
+    user.lat===null ||
+    user.lon===null
+){
+    return;
+}
 
 
 
