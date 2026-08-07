@@ -291,6 +291,25 @@ white-space:nowrap;
 }
 
 
+
+.pointLabel{
+
+background:#fff8dc;
+
+border:1px solid #888;
+
+border-radius:5px;
+
+padding:3px 6px;
+
+font-size:14px;
+
+font-weight:bold;
+
+color:#333;
+
+}
+
 </style>
 
 </head>
@@ -1680,7 +1699,7 @@ direction:"top",
 
 offset:[0,-60],
 
-className:"userLabel"
+className:"pointLabel"
 
 }
 
@@ -2145,6 +2164,8 @@ pointMarkers[name]
 
 
 
+
+
 pointMarkers[name]=L.marker(
 
 [
@@ -2153,7 +2174,6 @@ p.lon
 ],
 
 {
-
 icon:L.icon({
 
 iconUrl:"/icon/point.png",
@@ -2163,12 +2183,29 @@ iconSize:[60,60],
 iconAnchor:[30,60]
 
 })
-
 }
 
 )
 
 .addTo(map)
+
+.bindTooltip(
+
+name,
+
+{
+
+permanent:true,
+
+direction:"top",
+
+offset:[0,-60],
+
+className:"userLabel"
+
+}
+
+)
 
 .bindPopup(
 
