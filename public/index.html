@@ -1982,6 +1982,12 @@ selectedPointLon.toFixed(6)
 
 function addPoint(){
 
+console.log(
+"addPoint開始",
+selectedPointLat,
+selectedPointLon
+);
+
 
 if(selectedPointLat===null){
 
@@ -1990,6 +1996,63 @@ alert(
 );
 
 return;
+
+}
+
+
+let name =
+document.getElementById(
+"pointName"
+).value.trim();
+
+
+console.log(
+"地点情報",
+name,
+document.getElementById("pointType").value,
+selectedPointLat,
+selectedPointLon
+);
+
+
+if(name===""){
+
+alert(
+"地点名を入力してください"
+);
+
+return;
+
+}
+
+
+socket.emit(
+"addPoint",
+{
+
+name:name,
+
+type:
+document.getElementById(
+"pointType"
+).value,
+
+lat:selectedPointLat,
+
+lon:selectedPointLon
+
+}
+);
+
+
+alert(
+"地点登録送信しました"
+);
+
+
+document.getElementById(
+"pointName"
+).value="";
 
 }
 
