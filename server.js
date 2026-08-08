@@ -12,11 +12,13 @@
 // ・クロノロジー
 // ・ユーザー削除
 // ・交通規制情報
-// ・国土交通省「令和8年熊本地震 通れるマップ」GIS
+// ・国土交通省GISデータ
+// ・熊本県内の交通規制のみ使用
 // ・交通規制3日ごと自動更新
 // ・接続中全端末へ自動配信
 //
 // ※ JARTICは使用しません
+// ※ JARTIC関連コードは完全撤去
 // ※ adm-zip は使用しません
 // ※ ZIP展開は Node.js 標準 zlib で処理
 //============================================================
@@ -25,7 +27,6 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const { Pool } = require("pg");
-
 const zlib = require("zlib");
 
 const app = express();
@@ -67,7 +68,7 @@ let trafficRegulations = [];
 
 
 //============================================================
-// 交通規制自動更新間隔
+// 交通規制 自動更新間隔
 //============================================================
 
 const TRAFFIC_UPDATE_INTERVAL =
@@ -76,7 +77,12 @@ const TRAFFIC_UPDATE_INTERVAL =
 
 //============================================================
 // 国土交通省
+//============================================================
+//
+// 国土交通省
 // 「令和8年熊本地震 通れるマップ」
+//
+// 最新GISデータをページから自動検出する。
 //============================================================
 
 const MLIT_TRAFFIC_PAGE =
@@ -84,10 +90,33 @@ const MLIT_TRAFFIC_PAGE =
 
 
 //============================================================
-// 交通規制テストデータ
+// 熊本県の概略範囲
 //============================================================
 //
-// 実データ取得に失敗した場合でも、
+// 全国GISデータが提供された場合に備え、
+// 熊本県周辺だけを抽出するための範囲。
+//
+// ※最終的にはGeoJSONの座標を利用して判定する。
+//============================================================
+
+const KUMAMOTO_BOUNDS = {
+
+    minLon: 129.9,
+
+    maxLon: 131.4,
+
+    minLat: 32.0,
+
+    maxLat: 33.2
+
+};
+
+
+//============================================================
+// テストデータ
+//============================================================
+//
+// 国交省データ取得に失敗した場合でも
 // 既存の🚧表示機能を壊さない。
 //============================================================
 
@@ -142,7 +171,7 @@ function getTrafficTestData() {
 
 
 //============================================================
-// HTTP GET
+// HTTP GET Buffer
 //============================================================
 
 async function httpGetBuffer(url) {
@@ -286,7 +315,8 @@ async function findMlitLatestGeoJsonZipUrl() {
         //====================================================
 
         if (
-            text.includes("時点データ")
+            text.includes("時点データ") ||
+            /\.zip(?:[?#].*)?$/i.test(href)
         ) {
 
             candidates.push({
@@ -322,7 +352,7 @@ async function findMlitLatestGeoJsonZipUrl() {
 
 
     //========================================================
-    // 最後の時点データを採用
+    // 最後の候補を最新データとして採用
     //========================================================
 
     const selected =
@@ -379,8 +409,11 @@ function isGeoJSON(data) {
 
 
     return (
+
         data.type === "FeatureCollection" ||
+
         data.type === "Feature"
+
     );
 
 }
@@ -457,7 +490,437 @@ function findGeoJSONEntries(entries) {
 
 
 //============================================================
+// 座標が熊本県概略範囲内か
+//============================================================
+
+function isKumamotoCoordinate(
+    lon,
+    lat
+) {
+
+    if (
+        !Number.isFinite(lon) ||
+        !Number.isFinite(lat)
+    ) {
+
+        return false;
+
+    }
+
+
+    return (
+
+        lon >= KUMAMOTO_BOUNDS.minLon &&
+
+        lon <= KUMAMOTO_BOUNDS.maxLon &&
+
+        lat >= KUMAMOTO_BOUNDS.minLat &&
+
+        lat <= KUMAMOTO_BOUNDS.maxLat
+
+    );
+
+}
+
+
+//============================================================
+// Geometryから代表座標を取得
+//============================================================
+
+function getGeometryRepresentativeCoordinate(
+    geometry
+) {
+
+    if (!geometry) {
+
+        return null;
+
+    }
+
+
+    //========================================================
+    // Point
+    //========================================================
+
+    if (
+        geometry.type === "Point"
+    ) {
+
+        const c =
+            geometry.coordinates;
+
+
+        if (
+            Array.isArray(c) &&
+            c.length >= 2
+        ) {
+
+            return {
+
+                lon:
+                    Number(c[0]),
+
+                lat:
+                    Number(c[1])
+
+            };
+
+        }
+
+    }
+
+
+    //========================================================
+    // LineString
+    //========================================================
+
+    if (
+        geometry.type === "LineString"
+    ) {
+
+        const coordinates =
+            geometry.coordinates;
+
+
+        if (
+            Array.isArray(coordinates) &&
+            coordinates.length > 0
+        ) {
+
+            const middle =
+                coordinates[
+                    Math.floor(
+                        coordinates.length / 2
+                    )
+                ];
+
+
+            return {
+
+                lon:
+                    Number(middle[0]),
+
+                lat:
+                    Number(middle[1])
+
+            };
+
+        }
+
+    }
+
+
+    //========================================================
+    // MultiLineString
+    //========================================================
+
+    if (
+        geometry.type === "MultiLineString"
+    ) {
+
+        const lines =
+            geometry.coordinates;
+
+
+        const allCoordinates = [];
+
+
+        for (
+            const line
+            of lines || []
+        ) {
+
+            for (
+                const coordinate
+                of line || []
+            ) {
+
+                allCoordinates.push(
+                    coordinate
+                );
+
+            }
+
+        }
+
+
+        if (
+            allCoordinates.length > 0
+        ) {
+
+            const middle =
+                allCoordinates[
+                    Math.floor(
+                        allCoordinates.length / 2
+                    )
+                ];
+
+
+            return {
+
+                lon:
+                    Number(middle[0]),
+
+                lat:
+                    Number(middle[1])
+
+            };
+
+        }
+
+    }
+
+
+    //========================================================
+    // Polygon
+    //========================================================
+
+    if (
+        geometry.type === "Polygon"
+    ) {
+
+        const ring =
+            geometry.coordinates?.[0];
+
+
+        if (
+            Array.isArray(ring) &&
+            ring.length > 0
+        ) {
+
+            const middle =
+                ring[
+                    Math.floor(
+                        ring.length / 2
+                    )
+                ];
+
+
+            return {
+
+                lon:
+                    Number(middle[0]),
+
+                lat:
+                    Number(middle[1])
+
+            };
+
+        }
+
+    }
+
+
+    //========================================================
+    // MultiPolygon
+    //========================================================
+
+    if (
+        geometry.type === "MultiPolygon"
+    ) {
+
+        const firstPolygon =
+            geometry.coordinates?.[0];
+
+        const ring =
+            firstPolygon?.[0];
+
+
+        if (
+            Array.isArray(ring) &&
+            ring.length > 0
+        ) {
+
+            const middle =
+                ring[
+                    Math.floor(
+                        ring.length / 2
+                    )
+                ];
+
+
+            return {
+
+                lon:
+                    Number(middle[0]),
+
+                lat:
+                    Number(middle[1])
+
+            };
+
+        }
+
+    }
+
+
+    return null;
+
+}
+
+
+//============================================================
+// GeoJSON Featureが熊本県内か
+//============================================================
+
+function isKumamotoFeature(
+    feature
+) {
+
+    if (!feature) {
+
+        return false;
+
+    }
+
+
+    const properties =
+        feature.properties || {};
+
+
+    //========================================================
+    // propertiesに都道府県情報がある場合は優先
+    //========================================================
+
+    const prefectureCandidates = [
+
+        properties.都道府県,
+
+        properties.都道府県名,
+
+        properties.県名,
+
+        properties.prefecture,
+
+        properties.prefecture_name,
+
+        properties.PREF_NAME,
+
+        properties.PREFECTURE
+
+    ];
+
+
+    for (
+        const value
+        of prefectureCandidates
+    ) {
+
+        if (
+            value !== undefined &&
+            value !== null &&
+            String(value).trim() !== ""
+        ) {
+
+            const text =
+                String(value).trim();
+
+
+            if (
+                text.includes("熊本")
+            ) {
+
+                return true;
+
+            }
+
+
+            // 都道府県が明確に存在し、
+            // 熊本ではない場合は除外
+            return false;
+
+        }
+
+    }
+
+
+    //========================================================
+    // 都道府県コード
+    //========================================================
+
+    const codeCandidates = [
+
+        properties.都道府県コード,
+
+        properties.prefecture_code,
+
+        properties.PREF_CODE,
+
+        properties.PREFECTURE_CODE
+
+    ];
+
+
+    for (
+        const value
+        of codeCandidates
+    ) {
+
+        if (
+            value !== undefined &&
+            value !== null &&
+            String(value).trim() !== ""
+        ) {
+
+            const code =
+                String(value)
+                    .trim();
+
+
+            if (
+                code === "43" ||
+                code === "43.0"
+            ) {
+
+                return true;
+
+            }
+
+
+            return false;
+
+        }
+
+    }
+
+
+    //========================================================
+    // 最終判定
+    //
+    // 全国データで県情報が無い場合は
+    // 座標で熊本県周辺を抽出する。
+    //========================================================
+
+    const coordinate =
+        getGeometryRepresentativeCoordinate(
+            feature.geometry
+        );
+
+
+    if (!coordinate) {
+
+        return false;
+
+    }
+
+
+    return isKumamotoCoordinate(
+
+        coordinate.lon,
+
+        coordinate.lat
+
+    );
+
+}
+
+
+//============================================================
 // FeatureCollection統合
+//============================================================
+//
+// 全国GeoJSONが入っていても、
+// 熊本県内のFeatureだけを残す。
 //============================================================
 
 function mergeGeoJSON(
@@ -486,6 +949,17 @@ function mergeGeoJSON(
                 of geojson.features || []
             ) {
 
+                if (
+                    !isKumamotoFeature(
+                        feature
+                    )
+                ) {
+
+                    continue;
+
+                }
+
+
                 features.push({
 
                     ...feature,
@@ -504,11 +978,21 @@ function mergeGeoJSON(
             }
 
         }
-
         else if (
             geojson.type ===
             "Feature"
         ) {
+
+            if (
+                !isKumamotoFeature(
+                    geojson
+                )
+            ) {
+
+                continue;
+
+            }
+
 
             features.push({
 
@@ -556,7 +1040,7 @@ function logGeoJSONProperties(
     );
 
     console.log(
-        "国交省GeoJSON properties確認"
+        "国交省GeoJSON 熊本県抽出結果"
     );
 
     console.log(
@@ -603,10 +1087,6 @@ function logGeoJSONProperties(
     );
 
 
-    //========================================================
-    // 最初のFeature
-    //========================================================
-
     if (
         geojson.features.length > 0
     ) {
@@ -614,6 +1094,7 @@ function logGeoJSONProperties(
         console.log(
             "最初のFeature:"
         );
+
 
         console.log(
             JSON.stringify(
@@ -634,7 +1115,7 @@ function logGeoJSONProperties(
 
 
 //============================================================
-// GeoJSON → trafficRegulations互換データ
+// GeoJSON → 既存trafficRegulations互換データ
 //============================================================
 
 function geoJSONToTrafficArray(
@@ -665,130 +1146,31 @@ function geoJSONToTrafficArray(
         }
 
 
-        let lat = null;
-
-        let lon = null;
-
-
-        //====================================================
-        // Point
-        //====================================================
-
-        if (
-            geometry.type ===
-            "Point"
-        ) {
-
-            const coordinates =
-                geometry.coordinates;
+        const coordinate =
+            getGeometryRepresentativeCoordinate(
+                geometry
+            );
 
 
-            if (
-                Array.isArray(
-                    coordinates
-                ) &&
-                coordinates.length >= 2
-            ) {
+        if (!coordinate) {
 
-                lon =
-                    Number(
-                        coordinates[0]
-                    );
-
-                lat =
-                    Number(
-                        coordinates[1]
-                    );
-
-            }
+            continue;
 
         }
 
 
-        //====================================================
-        // LineString
-        //====================================================
+        const lon =
+            coordinate.lon;
 
-        else if (
-            geometry.type ===
-            "LineString"
-        ) {
-
-            const coordinates =
-                geometry.coordinates;
-
-
-            if (
-                coordinates.length > 0
-            ) {
-
-                const middle =
-                    coordinates[
-                        Math.floor(
-                            coordinates.length / 2
-                        )
-                    ];
-
-
-                lon =
-                    Number(
-                        middle[0]
-                    );
-
-                lat =
-                    Number(
-                        middle[1]
-                    );
-
-            }
-
-        }
-
-
-        //====================================================
-        // MultiLineString
-        //====================================================
-
-        else if (
-            geometry.type ===
-            "MultiLineString"
-        ) {
-
-            const lines =
-                geometry.coordinates;
-
-
-            if (
-                lines.length > 0 &&
-                lines[0].length > 0
-            ) {
-
-                const middle =
-                    lines[0][
-                        Math.floor(
-                            lines[0].length / 2
-                        )
-                    ];
-
-
-                lon =
-                    Number(
-                        middle[0]
-                    );
-
-                lat =
-                    Number(
-                        middle[1]
-                    );
-
-            }
-
-        }
+        const lat =
+            coordinate.lat;
 
 
         if (
-            !Number.isFinite(lat) ||
-            !Number.isFinite(lon)
+            !isKumamotoCoordinate(
+                lon,
+                lat
+            )
         ) {
 
             continue;
@@ -800,13 +1182,118 @@ function geoJSONToTrafficArray(
             feature.properties || {};
 
 
+        //====================================================
+        // 路線名
+        //====================================================
+
+        const route =
+
+            properties.路線名 ||
+
+            properties.路線 ||
+
+            properties.道路名 ||
+
+            properties.route_name ||
+
+            properties.road_name ||
+
+            properties.ROUTE_NAME ||
+
+            "道路";
+
+
+        //====================================================
+        // 規制種別
+        //====================================================
+
+        const type =
+
+            properties.規制内容 ||
+
+            properties.規制種別 ||
+
+            properties.規制名称 ||
+
+            properties.regulation_type ||
+
+            properties.REGULATION_TYPE ||
+
+            "道路規制";
+
+
+        //====================================================
+        // 理由
+        //====================================================
+
+        const reason =
+
+            properties.規制理由 ||
+
+            properties.原因 ||
+
+            properties.reason ||
+
+            properties.REASON ||
+
+            "";
+
+
+        //====================================================
+        // 区間
+        //====================================================
+
+        const section =
+
+            properties.規制区間 ||
+
+            properties.区間 ||
+
+            properties.section ||
+
+            properties.SECTION ||
+
+            "";
+
+
+        //====================================================
+        // 開始日時
+        //====================================================
+
+        const start =
+
+            properties.規制開始日時 ||
+
+            properties.開始日時 ||
+
+            properties.start ||
+
+            properties.START ||
+
+            "";
+
+
+        //====================================================
+        // ID
+        //====================================================
+
+        const id =
+
+            properties.id ||
+
+            properties.ID ||
+
+            properties.objectid ||
+
+            properties.OBJECTID ||
+
+            "mlit-" + i;
+
+
         result.push({
 
             id:
-                properties.id ||
-                properties.ID ||
-                properties.objectid ||
-                "mlit-" + i,
+                id,
 
             lat:
                 lat,
@@ -815,37 +1302,19 @@ function geoJSONToTrafficArray(
                 lon,
 
             route:
-                properties.路線名 ||
-                properties.路線 ||
-                properties.道路名 ||
-                properties.route_name ||
-                properties.road_name ||
-                "道路",
+                String(route),
 
             type:
-                properties.規制内容 ||
-                properties.規制種別 ||
-                properties.規制名称 ||
-                properties.regulation_type ||
-                "道路規制",
+                String(type),
 
             reason:
-                properties.規制理由 ||
-                properties.原因 ||
-                properties.reason ||
-                "",
+                String(reason),
 
             section:
-                properties.規制区間 ||
-                properties.区間 ||
-                properties.section ||
-                "",
+                String(section),
 
             start:
-                properties.規制開始日時 ||
-                properties.開始日時 ||
-                properties.start ||
-                "",
+                String(start),
 
             source:
                 "国土交通省",
@@ -874,9 +1343,17 @@ async function fetchMlitTrafficRegulations() {
     );
 
 
+    //========================================================
+    // 最新ZIP URL取得
+    //========================================================
+
     const zipUrl =
         await findMlitLatestGeoJsonZipUrl();
 
+
+    //========================================================
+    // ZIP取得
+    //========================================================
 
     const zipBuffer =
         await httpGetBuffer(
@@ -891,6 +1368,10 @@ async function fetchMlitTrafficRegulations() {
     );
 
 
+    //========================================================
+    // ZIP展開
+    //========================================================
+
     const entries =
         extractZipEntries(
             zipBuffer
@@ -902,6 +1383,10 @@ async function fetchMlitTrafficRegulations() {
         entries.length
     );
 
+
+    //========================================================
+    // GeoJSON検索
+    //========================================================
 
     const geoJsonEntries =
         findGeoJSONEntries(
@@ -927,7 +1412,7 @@ async function fetchMlitTrafficRegulations() {
 
 
     //========================================================
-    // 複数GeoJSONを統合
+    // 熊本県だけに絞って統合
     //========================================================
 
     const geojson =
@@ -937,13 +1422,17 @@ async function fetchMlitTrafficRegulations() {
 
 
     //========================================================
-    // properties確認
+    // 内容確認
     //========================================================
 
     logGeoJSONProperties(
         geojson
     );
 
+
+    //========================================================
+    // 既存交通規制データへ変換
+    //========================================================
 
     const regulations =
         geoJSONToTrafficArray(
@@ -952,7 +1441,7 @@ async function fetchMlitTrafficRegulations() {
 
 
     console.log(
-        "国交省道路規制:",
+        "国交省 熊本県道路規制:",
         regulations.length,
         "件"
     );
@@ -975,9 +1464,9 @@ async function fetchMlitTrafficRegulations() {
 // ZIP解析
 //============================================================
 //
-// 外部ライブラリは使用しない。
+// adm-zip等の外部ライブラリを使用せず、
 // ZIP中央ディレクトリを直接解析する。
-// DeflateはNode.js標準 zlib.inflateRawSync() で展開。
+// DeflateはNode.js標準 zlib.inflateRawSync()で展開。
 //============================================================
 
 function extractZipEntries(buffer) {
@@ -986,7 +1475,7 @@ function extractZipEntries(buffer) {
 
 
     //========================================================
-    // End of Central Directoryを後ろから探す
+    // End of Central Directory を後ろから探す
     //========================================================
 
     let eocdOffset = -1;
@@ -1035,12 +1524,6 @@ function extractZipEntries(buffer) {
     const totalEntries =
         buffer.readUInt16LE(
             eocdOffset + 10
-        );
-
-
-    const centralDirectorySize =
-        buffer.readUInt32LE(
-            eocdOffset + 12
         );
 
 
@@ -1117,10 +1600,13 @@ function extractZipEntries(buffer) {
 
         const fileNameBuffer =
             buffer.subarray(
+
                 offset + 46,
+
                 offset +
                 46 +
                 fileNameLength
+
             );
 
 
@@ -1149,9 +1635,13 @@ function extractZipEntries(buffer) {
 
 
         offset +=
+
             46 +
+
             fileNameLength +
+
             extraLength +
+
             commentLength;
 
 
@@ -1230,25 +1720,25 @@ function extractZipEntries(buffer) {
             ) {
 
                 // Stored
+
                 data =
                     Buffer.from(
                         compressedData
                     );
 
             }
-
             else if (
                 compressionMethod === 8
             ) {
 
                 // Deflate
+
                 data =
                     zlib.inflateRawSync(
                         compressedData
                     );
 
             }
-
             else {
 
                 console.log(
@@ -1262,7 +1752,6 @@ function extractZipEntries(buffer) {
             }
 
         }
-
         catch (err) {
 
             console.error(
@@ -1310,17 +1799,13 @@ function extractZipEntries(buffer) {
 // 交通規制取得
 //============================================================
 //
-// JARTICは使用しない。
+// JARTICは一切使用しない。
 // 国土交通省GISのみを使用する。
 //============================================================
 
 async function fetchTrafficRegulations() {
 
     try {
-
-        console.log(
-            "================================"
-        );
 
         console.log(
             "国土交通省交通規制取得開始"
@@ -1346,7 +1831,7 @@ async function fetchTrafficRegulations() {
 
 
         console.log(
-            "国土交通省交通規制:",
+            "国土交通省 熊本県交通規制:",
             result.regulations.length,
             "件"
         );
@@ -1355,7 +1840,6 @@ async function fetchTrafficRegulations() {
         return result.regulations;
 
     }
-
     catch (err) {
 
         console.error(
@@ -1417,7 +1901,7 @@ async function updateTrafficRegulations() {
 
 
         console.log(
-            "交通規制:",
+            "熊本県交通規制:",
             trafficRegulations.length,
             "件"
         );
@@ -1443,7 +1927,6 @@ async function updateTrafficRegulations() {
         );
 
     }
-
     catch (err) {
 
         console.error(
@@ -1488,7 +1971,6 @@ async function loadPoints() {
         );
 
     }
-
     catch (err) {
 
         console.error(
@@ -1559,7 +2041,6 @@ async function loadChronology() {
         );
 
     }
-
     catch (err) {
 
         console.error(
@@ -1642,7 +2123,6 @@ async function loadUsers() {
         );
 
     }
-
     catch (err) {
 
         console.error(
@@ -1795,7 +2275,6 @@ io.on(
                     );
 
                 }
-
                 catch (err) {
 
                     console.error(
@@ -1989,7 +2468,6 @@ io.on(
                     );
 
                 }
-
                 catch (err) {
 
                     console.error(
@@ -2179,7 +2657,6 @@ io.on(
                     );
 
                 }
-
                 catch (err) {
 
                     console.error(
@@ -2289,7 +2766,6 @@ io.on(
                     );
 
                 }
-
                 catch (err) {
 
                     console.error(
@@ -2335,7 +2811,6 @@ io.on(
                     );
 
                 }
-
                 catch (err) {
 
                     console.error(
@@ -2387,7 +2862,6 @@ io.on(
                     );
 
                 }
-
                 catch (err) {
 
                     console.error(
@@ -2473,6 +2947,7 @@ io.on(
         );
 
     }
+
 );
 
 
@@ -2511,7 +2986,12 @@ async function startServer() {
 
             console.log(
                 "交通規制データ:",
-                "国土交通省 熊本県 通れるマップ GIS"
+                "国土交通省GIS"
+            );
+
+            console.log(
+                "対象地域:",
+                "熊本県"
             );
 
             console.log(
