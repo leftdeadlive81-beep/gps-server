@@ -5,8 +5,10 @@
 
 <meta charset="UTF-8">
 
-<meta name="viewport"
-      content="width=device-width, initial-scale=1.0">
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
 
 <title>現在位置自動共有君 Version 2.3</title>
 
@@ -15,8 +17,31 @@
      Leaflet
 ================================================== -->
 
-<link rel="stylesheet"
-      href="https://unpkg.com/leaflet/dist/leaflet.css">
+<link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+
+
+<!-- ==================================================
+     Supabase
+================================================== -->
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+
+<!-- ==================================================
+     Socket.IO
+================================================== -->
+
+<script src="/socket.io/socket.io.js"></script>
+
+
+<!-- ==================================================
+     Proj4
+================================================== -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
 
 
 <style>
@@ -28,7 +53,6 @@
 *{
     box-sizing:border-box;
 }
-
 
 html,
 body{
@@ -50,23 +74,27 @@ body{
 
 
 /* ==================================================
-   Auth
+   Auth画面
 ================================================== */
 
 #authScreen{
 
-    display:none;
-
     position:fixed;
 
-    inset:0;
+    top:0;
+    left:0;
+
+    width:100%;
+    height:100%;
+
+    display:flex;
 
     justify-content:center;
     align-items:center;
 
-    background:#f2f2f2;
+    background:#eef2f5;
 
-    z-index:9999;
+    z-index:99999;
 
 }
 
@@ -79,16 +107,24 @@ body{
 
     padding:25px;
 
-    border-radius:14px;
+    border-radius:12px;
 
     box-shadow:
         0 4px 20px
-        rgba(0,0,0,.18);
+        rgba(0,0,0,.15);
 
 }
 
 
-.authBox h2,
+.authBox h2{
+
+    text-align:center;
+
+    margin-top:0;
+
+}
+
+
 .authBox h3{
 
     text-align:center;
@@ -102,14 +138,15 @@ body{
 
     padding:13px;
 
-    margin:6px 0;
-
-    border:
-        1px solid #ccc;
-
-    border-radius:8px;
+    margin:
+        6px 0;
 
     font-size:16px;
+
+    border:
+        1px solid #bbb;
+
+    border-radius:6px;
 
 }
 
@@ -118,17 +155,9 @@ body{
 
     width:100%;
 
-    padding:12px;
+    padding:13px;
 
     margin-top:8px;
-
-    border:0;
-
-    border-radius:8px;
-
-    background:#1976d2;
-
-    color:white;
 
     font-size:16px;
 
@@ -137,27 +166,19 @@ body{
 }
 
 
-.authBox button:last-of-type{
-
-    background:#666;
-
-}
-
-
-#loginMessage,
-#registerMessage{
+.authMessage{
 
     margin-top:12px;
 
-    text-align:center;
+    min-height:25px;
 
-    min-height:24px;
+    text-align:center;
 
 }
 
 
 /* ==================================================
-   App
+   アプリ
 ================================================== */
 
 #appScreen{
@@ -181,8 +202,6 @@ body{
     grid-template-columns:
         repeat(4,1fr);
 
-    gap:2px;
-
     background:#222;
 
 }
@@ -190,17 +209,15 @@ body{
 
 .tabButton{
 
-    border:0;
+    border:none;
 
-    padding:10px 4px;
-
-    background:#444;
+    background:#333;
 
     color:white;
 
-    cursor:pointer;
+    padding:10px 4px;
 
-    font-size:14px;
+    cursor:pointer;
 
 }
 
@@ -223,7 +240,7 @@ body{
 
 .tabText{
 
-    display:block;
+    font-size:12px;
 
 }
 
@@ -257,11 +274,9 @@ body{
     width:100%;
 
     height:
-        calc(100vh - 155px);
+        calc(100vh - 145px);
 
     min-height:400px;
-
-    border-radius:8px;
 
 }
 
@@ -270,9 +285,9 @@ body{
 
     display:flex;
 
-    gap:8px;
+    gap:6px;
 
-    margin-top:8px;
+    margin-top:6px;
 
 }
 
@@ -284,13 +299,15 @@ body{
 
     padding:12px;
 
-    border:0;
+    border:none;
 
-    border-radius:8px;
+    border-radius:6px;
 
     color:white;
 
-    font-size:16px;
+    font-size:15px;
+
+    cursor:pointer;
 
 }
 
@@ -309,121 +326,42 @@ body{
 }
 
 
-#gpsStatus,
-#lastSend{
+#gpsStatus{
 
-    text-align:center;
-
-    margin-top:5px;
-
-    font-size:13px;
-
-}
-
-
-/* ==================================================
-   共通カード
-================================================== */
-
-.card{
-
-    background:white;
-
-    border-radius:10px;
-
-    padding:12px;
-
-    margin-bottom:10px;
-
-    box-shadow:
-        0 1px 5px
-        rgba(0,0,0,.12);
-
-}
-
-
-.sectionTitle{
-
-    font-size:18px;
+    margin-top:6px;
 
     font-weight:bold;
 
-    margin-bottom:10px;
+}
+
+
+#lastSend{
+
+    font-size:12px;
+
+    color:#555;
 
 }
 
 
 /* ==================================================
-   入力
+   セクション
 ================================================== */
 
-.inputRow{
+.sectionTitle{
 
-    display:flex;
+    font-weight:bold;
 
-    gap:8px;
+    font-size:18px;
 
-    margin-bottom:8px;
-
-}
-
-
-.inputRow > *{
-
-    flex:1;
-
-}
-
-
-input,
-select{
-
-    width:100%;
-
-    padding:10px;
-
-    border:
-        1px solid #bbb;
-
-    border-radius:7px;
-
-    font-size:15px;
-
-}
-
-
-.settingsButton{
-
-    width:100%;
-
-    padding:11px;
-
-    margin-top:8px;
-
-    border:0;
-
-    border-radius:8px;
-
-    background:#1976d2;
-
-    color:white;
-
-    font-size:15px;
-
-}
-
-
-#registerStatus{
-
-    margin-top:8px;
-
-    text-align:center;
+    margin:
+        5px 0 10px 0;
 
 }
 
 
 /* ==================================================
-   ユーザー一覧
+   隊員一覧
 ================================================== */
 
 .userHeader,
@@ -433,10 +371,10 @@ select{
 
     grid-template-columns:
         55px
-        minmax(80px,1fr)
+        minmax(100px,1fr)
         55px
-        60px
         65px
+        70px
         45px;
 
     align-items:center;
@@ -446,13 +384,11 @@ select{
 
 .userHeader{
 
-    background:#333;
+    background:#ddd;
 
-    color:white;
+    font-weight:bold;
 
-    padding:7px;
-
-    font-size:12px;
+    padding:8px 3px;
 
 }
 
@@ -464,14 +400,14 @@ select{
     border-bottom:
         1px solid #ddd;
 
-    padding:8px 5px;
-
-    font-size:13px;
+    min-height:44px;
 
 }
 
 
 .userRow > div{
+
+    text-align:center;
 
     overflow:hidden;
 
@@ -479,31 +415,33 @@ select{
 
     white-space:nowrap;
 
+    cursor:pointer;
+
 }
 
 
 .deleteButton{
 
-    border:0;
+    border:none;
 
     background:none;
 
-    cursor:pointer;
-
     font-size:18px;
+
+    cursor:pointer;
 
 }
 
 
 /* ==================================================
-   クロノロジー
+   報連相
 ================================================== */
 
 .chronoInputRow{
 
     display:flex;
 
-    gap:6px;
+    gap:5px;
 
 }
 
@@ -512,20 +450,14 @@ select{
 
     flex:1;
 
+    padding:10px;
+
 }
 
 
-#chronoSendButton{
+.chronoInputRow button{
 
     width:70px;
-
-    border:0;
-
-    border-radius:7px;
-
-    background:#1976d2;
-
-    color:white;
 
 }
 
@@ -534,21 +466,21 @@ select{
 
     background:white;
 
+    margin-top:7px;
+
     padding:8px;
 
-    margin-top:7px;
+    border-radius:5px;
 
     border-left:
         4px solid #1976d2;
-
-    border-radius:5px;
 
 }
 
 
 .timelineTime{
 
-    font-size:11px;
+    font-size:12px;
 
     color:#666;
 
@@ -563,16 +495,89 @@ select{
 
 
 /* ==================================================
-   地点
+   設定
 ================================================== */
+
+.card{
+
+    background:white;
+
+    padding:12px;
+
+    margin-bottom:10px;
+
+    border-radius:8px;
+
+}
+
+
+.inputRow{
+
+    display:flex;
+
+    gap:6px;
+
+    margin-bottom:7px;
+
+}
+
+
+.inputRow > *{
+
+    flex:1;
+
+}
+
+
+.settingsCard input,
+.settingsCard select{
+
+    width:100%;
+
+    padding:10px;
+
+    margin-bottom:7px;
+
+    font-size:15px;
+
+}
+
+
+.settingsButton{
+
+    width:100%;
+
+    padding:11px;
+
+    border:none;
+
+    background:#1976d2;
+
+    color:white;
+
+    border-radius:5px;
+
+    font-size:15px;
+
+    cursor:pointer;
+
+}
+
+
+#registerStatus{
+
+    margin-top:8px;
+
+    font-weight:bold;
+
+}
+
 
 .pointButtonRow{
 
     display:flex;
 
-    gap:8px;
-
-    margin-top:8px;
+    gap:6px;
 
 }
 
@@ -583,21 +588,6 @@ select{
 
     padding:10px;
 
-    border:0;
-
-    border-radius:7px;
-
-    background:#1976d2;
-
-    color:white;
-
-}
-
-
-.pointButtonRow button:last-child{
-
-    background:#d32f2f;
-
 }
 
 
@@ -605,32 +595,9 @@ select{
 
     margin-top:10px;
 
-    padding:10px;
-
     background:#f5f5f5;
 
-    border-radius:7px;
-
-    line-height:1.8;
-
-}
-
-
-/* ==================================================
-   地点ラベル
-================================================== */
-
-.pointLabel{
-
-    background:white;
-
-    border:1px solid #777;
-
-    border-radius:4px;
-
-    padding:2px 5px;
-
-    font-weight:bold;
+    padding:10px;
 
 }
 
@@ -647,7 +614,7 @@ select{
 
     font-size:12px;
 
-    color:#555;
+    color:#666;
 
 }
 
@@ -656,7 +623,25 @@ select{
 
     color:#1976d2;
 
-    text-decoration:none;
+}
+
+
+/* ==================================================
+   地図ラベル
+================================================== */
+
+.pointLabel{
+
+    background:white;
+
+    border:
+        1px solid #555;
+
+    border-radius:4px;
+
+    padding:2px 5px;
+
+    font-weight:bold;
 
 }
 
@@ -667,11 +652,9 @@ select{
 
 .trafficIcon{
 
-    background:none;
+    font-size:25px;
 
-    border:0;
-
-    font-size:26px;
+    text-align:center;
 
 }
 
@@ -682,30 +665,25 @@ select{
 
 @media(max-width:600px){
 
-    .tabButton{
-
-        font-size:12px;
-
-    }
-
-
-    .tabIcon{
-
-        font-size:18px;
-
-    }
-
-
     .userHeader,
     .userRow{
 
         grid-template-columns:
             45px
-            minmax(65px,1fr)
+            minmax(80px,1fr)
             45px
-            50px
             55px
+            60px
             40px;
+
+        font-size:13px;
+
+    }
+
+    #map{
+
+        height:
+            calc(100vh - 150px);
 
     }
 
@@ -720,7 +698,7 @@ select{
 
 
 <!-- ==================================================
-     認証画面
+     Auth画面
 ================================================== -->
 
 <div id="authScreen">
@@ -754,21 +732,28 @@ select{
         >
 
 
-        <button onclick="loginUser()">
+        <button
+            onclick="loginUser()"
+        >
 
             🔐 ログイン
 
         </button>
 
 
-        <button onclick="showRegister()">
+        <button
+            onclick="showRegister()"
+        >
 
             👤 新規アカウント登録
 
         </button>
 
 
-        <div id="loginMessage"></div>
+        <div
+            id="loginMessage"
+            class="authMessage"
+        ></div>
 
     </div>
 
@@ -810,32 +795,42 @@ select{
         >
 
 
-        <button onclick="registerAuthUser()">
+        <button
+            onclick="registerAuthUser()"
+        >
 
             👤 アカウント登録
 
         </button>
 
 
-        <button onclick="showLogin()">
+        <button
+            onclick="showLogin()"
+        >
 
             🔐 ログイン画面へ戻る
 
         </button>
 
 
-        <div id="registerMessage"></div>
+        <div
+            id="registerMessage"
+            class="authMessage"
+        ></div>
 
     </div>
 
 </div>
 
 
+
 <!-- ==================================================
-     アプリ
+     アプリ画面
 ================================================== -->
 
-<div id="appScreen">
+<div
+    id="appScreen"
+>
 
 
 <!-- ==================================================
@@ -891,6 +886,7 @@ select{
 </div>
 
 
+
 <!-- ==================================================
      地図
 ================================================== -->
@@ -943,6 +939,7 @@ select{
 </div>
 
 
+
 <!-- ==================================================
      隊員一覧
 ================================================== -->
@@ -976,8 +973,9 @@ select{
 </div>
 
 
+
 <!-- ==================================================
-     クロノロジー
+     報連相
 ================================================== -->
 
 <div
@@ -1015,6 +1013,7 @@ select{
     <div id="timeline"></div>
 
 </div>
+
 
 
 <!-- ==================================================
@@ -1101,7 +1100,7 @@ select{
             onclick="registerUser()"
         >
 
-            👤 ユーザー登録
+            👤 ユーザー情報を保存
 
         </button>
 
@@ -1113,6 +1112,7 @@ select{
         </div>
 
     </div>
+
 
 
     <!-- 地点登録 -->
@@ -1155,12 +1155,16 @@ select{
 
         <div class="pointButtonRow">
 
-            <button onclick="addPoint()">
+            <button
+                onclick="addPoint()"
+            >
                 📍登録
             </button>
 
 
-            <button onclick="deletePoint()">
+            <button
+                onclick="deletePoint()"
+            >
                 🗑削除
             </button>
 
@@ -1206,6 +1210,7 @@ select{
     </div>
 
 
+
     <!-- アカウント -->
 
     <div class="card settingsCard">
@@ -1229,6 +1234,7 @@ select{
     </div>
 
 </div>
+
 
 
 <!-- ==================================================
@@ -1255,58 +1261,42 @@ select{
 </div>
 
 
-<!-- ==================================================
-     ライブラリ
-================================================== -->
-
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-<script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js"></script>
-
-<script src="/socket.io/socket.io.js"></script>
-
-
-<!-- ==================================================
-     Supabase
-================================================== -->
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
 
 <script>
 
-
-//==================================================
-// Supabase
-//==================================================
+/* ==================================================
+   Supabase設定
+================================================== */
 
 const SUPABASE_URL =
     "https://seqqgkryrhcvmxnwyybr.supabase.co";
 
 
-const SUPABASE_PUBLISHABLE_KEY =
+const SUPABASE_ANON_KEY =
     "sb_publishable_pUI0REFogJSgZYs3OJepEQ_Zl27Iw73";
 
 
 const supabaseClient =
     window.supabase.createClient(
         SUPABASE_URL,
-        SUPABASE_PUBLISHABLE_KEY
+        SUPABASE_ANON_KEY
     );
 
 
-//==================================================
-// グローバル
-//==================================================
+/* ==================================================
+   Socket.IO
+================================================== */
+
+const socket =
+    io();
+
+
+/* ==================================================
+   状態
+================================================== */
 
 let currentAuthUser =
     null;
-
-let currentUsername =
-    null;
-
-let profileLoaded =
-    false;
 
 let registered =
     false;
@@ -1335,9 +1325,6 @@ let lastLon =
 let lastSendTime =
     0;
 
-let map =
-    null;
-
 let selectedPointLat =
     null;
 
@@ -1345,9 +1332,6 @@ let selectedPointLon =
     null;
 
 let selectedPointName =
-    null;
-
-let trafficRegulationLayer =
     null;
 
 
@@ -1359,24 +1343,14 @@ const MOVE_DISTANCE =
     10;
 
 
-//==================================================
-// 任意ログインID → 内部メールアドレス
-//==================================================
-//
-// Supabase Authはemail形式を要求するため、
-// ユーザーが入力した任意文字列を内部的に
-// email形式へ変換する。
-//
-// 実際のメール送信には使用しない。
-// Confirm email OFF を前提とする。
-//
+/* ==================================================
+   任意ログインID → Auth用メール
+================================================== */
 
-function usernameToEmail(username){
+function makeAuthEmail(loginId){
 
     return (
-        username
-        .trim()
-        .toLowerCase()
+        loginId.trim().toLowerCase()
         +
         "@puttan.local"
     );
@@ -1384,215 +1358,160 @@ function usernameToEmail(username){
 }
 
 
-//==================================================
-// Auth画面
-//==================================================
+/* ==================================================
+   Auth画面切替
+================================================== */
 
 function showLogin(){
 
-    const loginBox =
-        document.getElementById(
-            "loginBox"
-        );
-
-    const registerBox =
-        document.getElementById(
-            "registerBox"
-        );
+    document.getElementById(
+        "loginBox"
+    ).style.display =
+        "block";
 
 
-    if(loginBox){
-
-        loginBox.style.display =
-            "block";
-
-    }
+    document.getElementById(
+        "registerBox"
+    ).style.display =
+        "none";
 
 
-    if(registerBox){
-
-        registerBox.style.display =
-            "none";
-
-    }
+    document.getElementById(
+        "loginMessage"
+    ).textContent =
+        "";
 
 }
 
 
 function showRegister(){
 
-    const loginBox =
-        document.getElementById(
-            "loginBox"
-        );
-
-    const registerBox =
-        document.getElementById(
-            "registerBox"
-        );
+    document.getElementById(
+        "loginBox"
+    ).style.display =
+        "none";
 
 
-    if(loginBox){
-
-        loginBox.style.display =
-            "none";
-
-    }
+    document.getElementById(
+        "registerBox"
+    ).style.display =
+        "block";
 
 
-    if(registerBox){
-
-        registerBox.style.display =
-            "block";
-
-    }
+    document.getElementById(
+        "registerMessage"
+    ).textContent =
+        "";
 
 }
 
 
-//==================================================
-// ログイン
-//==================================================
+/* ==================================================
+   Auth画面表示
+================================================== */
 
-async function loginUser(){
+function showAuth(){
 
-    const username =
-        document.getElementById(
-            "loginUsername"
-        )
-        .value
-        .trim();
+    document.getElementById(
+        "authScreen"
+    ).style.display =
+        "flex";
 
 
-    const password =
-        document.getElementById(
-            "loginPassword"
-        )
-        .value;
-
-
-    const message =
-        document.getElementById(
-            "loginMessage"
-        );
-
-
-    if(!username || !password){
-
-        message.textContent =
-            "ログインIDとパスワードを入力してください";
-
-        return;
-
-    }
-
-
-    message.textContent =
-        "ログイン中...";
-
-
-    try{
-
-        const email =
-            usernameToEmail(
-                username
-            );
-
-
-        const {
-            data,
-            error
-        } =
-            await supabaseClient.auth
-                .signInWithPassword({
-
-                    email:
-                        email,
-
-                    password:
-                        password
-
-                });
-
-
-        if(error){
-
-            console.error(
-                "ログインエラー:",
-                error
-            );
-
-            message.textContent =
-                "ログインに失敗しました：" +
-                error.message;
-
-            return;
-
-        }
-
-
-        currentAuthUser =
-            data.user;
-
-
-        currentUsername =
-            username;
-
-
-        console.log(
-            "ログイン成功:",
-            data.user.id
-        );
-
-
-        const profileOK =
-            await loadProfile(
-                data.user
-            );
-
-
-        if(!profileOK){
-
-            message.textContent =
-                "プロフィールを取得できませんでした";
-
-            return;
-
-        }
-
-
-        registered =
-            true;
-
-
-        showApp();
-
-
-        await registerSocketUser();
-
-
-    }
-    catch(error){
-
-        console.error(
-            error
-        );
-
-        message.textContent =
-            "ログイン処理でエラーが発生しました";
-
-    }
+    document.getElementById(
+        "appScreen"
+    ).style.display =
+        "none";
 
 }
 
 
-//==================================================
-// 新規Auth登録
-//==================================================
+/* ==================================================
+   アプリ画面表示
+================================================== */
+
+function showApp(){
+
+    document.getElementById(
+        "authScreen"
+    ).style.display =
+        "none";
+
+
+    document.getElementById(
+        "appScreen"
+    ).style.display =
+        "block";
+
+
+    setTimeout(
+        ()=>{
+            if(
+                typeof map !== "undefined"
+            ){
+
+                map.invalidateSize();
+
+            }
+        },
+        300
+    );
+
+}
+
+
+/* ==================================================
+   入力値チェック
+================================================== */
+
+function validateLoginId(loginId){
+
+    if(!loginId){
+
+        return "ログインIDを入力してください";
+
+    }
+
+
+    if(
+        loginId.length < 2
+    ){
+
+        return "ログインIDは2文字以上にしてください";
+
+    }
+
+
+    if(
+        loginId.length > 50
+    ){
+
+        return "ログインIDは50文字以内にしてください";
+
+    }
+
+
+    if(
+        /[\s@]/.test(loginId)
+    ){
+
+        return "ログインIDに空白や@は使用できません";
+
+    }
+
+
+    return null;
+
+}
+
+
+/* ==================================================
+   新規Auth登録
+================================================== */
 
 async function registerAuthUser(){
 
-    const username =
+    const loginId =
         document.getElementById(
             "registerUsername"
         )
@@ -1620,20 +1539,26 @@ async function registerAuthUser(){
         );
 
 
-    if(!username){
+    const validation =
+        validateLoginId(
+            loginId
+        );
+
+
+    if(validation){
 
         message.textContent =
-            "ログインIDを入力してください";
+            validation;
 
         return;
 
     }
 
 
-    if(!password){
+    if(password.length < 6){
 
         message.textContent =
-            "パスワードを入力してください";
+            "パスワードは6文字以上にしてください";
 
         return;
 
@@ -1650,25 +1575,54 @@ async function registerAuthUser(){
     }
 
 
-    if(username.length < 3){
-
-        message.textContent =
-            "ログインIDは3文字以上にしてください";
-
-        return;
-
-    }
-
-
     message.textContent =
-        "アカウント作成中...";
+        "登録処理中...";
 
 
     try{
 
-        const email =
-            usernameToEmail(
-                username
+        /* ------------------------------------------
+           既存login_id確認
+        ------------------------------------------ */
+
+        const {
+            data:existing,
+            error:checkError
+        } =
+            await supabaseClient
+                .from("profiles")
+                .select("user_id")
+                .eq(
+                    "login_id",
+                    loginId
+                )
+                .maybeSingle();
+
+
+        if(checkError){
+
+            throw checkError;
+
+        }
+
+
+        if(existing){
+
+            message.textContent =
+                "そのログインIDは既に使用されています";
+
+            return;
+
+        }
+
+
+        /* ------------------------------------------
+           Supabase Auth登録
+        ------------------------------------------ */
+
+        const authEmail =
+            makeAuthEmail(
+                loginId
             );
 
 
@@ -1676,59 +1630,49 @@ async function registerAuthUser(){
             data,
             error
         } =
-            await supabaseClient.auth
-                .signUp({
+            await supabaseClient.auth.signUp({
 
-                    email:
-                        email,
+                email:
+                    authEmail,
 
-                    password:
-                        password
+                password:
+                    password
 
-                });
+            });
 
 
         if(error){
 
-            console.error(
-                "Auth登録エラー:",
-                error
+            throw error;
+
+        }
+
+
+        if(
+            !data ||
+            !data.user
+        ){
+
+            throw new Error(
+                "Authユーザーを取得できませんでした"
             );
 
-            message.textContent =
-                "登録に失敗しました：" +
-                error.message;
-
-            return;
-
         }
 
 
-        if(!data.user){
-
-            message.textContent =
-                "Authユーザーを作成できませんでした";
-
-            return;
-
-        }
+        const user =
+            data.user;
 
 
-        console.log(
-            "Auth登録成功:",
-            data.user.id
-        );
+        /* ------------------------------------------
+           profiles登録
 
-
-        /*
-         * profilesはINSERTではなくUPSERT。
-         * idをAuthユーザーIDにすることで
-         * duplicate keyを回避する。
-         */
+           ★ id は使わない
+           ★ user_id を使用
+        ------------------------------------------ */
 
         const {
-            error:
-                profileError
+            error:profileError
         } =
             await supabaseClient
                 .from("profiles")
@@ -1736,18 +1680,27 @@ async function registerAuthUser(){
 
                     {
 
-                        id:
-                            data.user.id,
+                        user_id:
+                            user.id,
 
-                        username:
-                            username
+                        login_id:
+                            loginId,
+
+                        display_name:
+                            loginId,
+
+                        icon_type:
+                            "1",
+
+                        role:
+                            "user"
 
                     },
 
                     {
 
                         onConflict:
-                            "id"
+                            "user_id"
 
                     }
 
@@ -1761,8 +1714,10 @@ async function registerAuthUser(){
                 profileError
             );
 
+
             message.textContent =
-                "Auth登録は成功しましたが、プロフィール登録に失敗しました：" +
+                "Auth登録は成功しましたが、プロフィール登録に失敗しました："
+                +
                 profileError.message;
 
             return;
@@ -1771,283 +1726,348 @@ async function registerAuthUser(){
 
 
         message.textContent =
-            "登録しました。ログインしてください。";
+            "🟢 アカウント登録成功";
 
 
-        document.getElementById(
-            "registerUsername"
-        ).value = "";
-
-
-        document.getElementById(
-            "registerPassword"
-        ).value = "";
-
-
-        document.getElementById(
-            "registerPassword2"
-        ).value = "";
-
-
-        setTimeout(
-            ()=>{
-
-                showLogin();
-
-                document.getElementById(
-                    "loginUsername"
-                ).value =
-                    username;
-
-            },
-            500
-        );
-
-    }
-    catch(error){
-
-        console.error(
-            error
-        );
-
-        message.textContent =
-            "登録処理でエラーが発生しました";
-
-    }
-
-}
-
-
-//==================================================
-// プロフィール取得
-//==================================================
-
-async function loadProfile(user){
-
-    if(!user){
-
-        return false;
-
-    }
-
-
-    try{
+        /*
+         * Confirm email OFFの場合、
+         * そのままsessionが取得できる。
+         */
 
         const {
-            data,
-            error
+            data:sessionData
         } =
-            await supabaseClient
-                .from("profiles")
-                .select("*")
-                .eq(
-                    "id",
-                    user.id
-                )
-                .maybeSingle();
+            await supabaseClient.auth.getSession();
 
 
-        if(error){
+        if(
+            sessionData &&
+            sessionData.session
+        ){
 
-            console.error(
-                "プロフィール取得エラー:",
-                error
-            );
-
-            /*
-             * profilesがまだ無い場合でも、
-             * Authユーザーから最低限の情報を作る。
-             */
-
-            const username =
-                currentUsername ||
-                user.email
-                    .split("@")[0];
+            currentAuthUser =
+                sessionData.session.user;
 
 
-            const {
-                error:
-                    upsertError
-            } =
-                await supabaseClient
-                    .from("profiles")
-                    .upsert(
-
-                        {
-
-                            id:
-                                user.id,
-
-                            username:
-                                username
-
-                        },
-
-                        {
-
-                            onConflict:
-                                "id"
-
-                        }
-
-                    );
-
-
-            if(upsertError){
-
-                console.error(
-                    "プロフィール作成エラー:",
-                    upsertError
-                );
-
-                return false;
-
-            }
-
-
-            currentUsername =
-                username;
-
-            profileLoaded =
-                true;
-
-            return true;
-
-        }
-
-
-        const profile =
-            data;
-
-
-        if(profile){
-
-            currentUsername =
-                profile.username ||
-                currentUsername ||
-                user.email
-                    .split("@")[0];
-
-
-            /*
-             * profilesに保存されている使用者情報が
-             * あれば画面へ復元。
-             */
-
-            setProfileValue(
-                "name",
-                profile.name
+            await loadProfile(
+                currentAuthUser
             );
 
 
-            setProfileValue(
-                "water",
-                profile.water
-            );
-
-
-            setProfileValue(
-                "fuel",
-                profile.fuel
-            );
-
-
-            setProfileValue(
-                "destination",
-                profile.destination
-            );
-
-
-            setProfileValue(
-                "iconType",
-                normalizeIconType(
-                    profile.icon_type ||
-                    profile.iconType
-                )
-            );
+            showApp();
 
         }
         else{
 
-            currentUsername =
-                currentUsername ||
-                user.email
-                    .split("@")[0];
+            message.textContent =
+                "登録しました。ログインしてください。";
+
+            showLogin();
+
+            document.getElementById(
+                "loginUsername"
+            ).value =
+                loginId;
 
         }
-
-
-        /*
-         * ローカル保存値も補助的に復元。
-         */
-
-        restoreLocalUser();
-
-
-        profileLoaded =
-            true;
-
-
-        return true;
 
     }
     catch(error){
 
         console.error(
+            "登録エラー:",
             error
         );
 
-        return false;
+
+        message.textContent =
+            "登録に失敗しました："
+            +
+            (
+                error.message
+                ||
+                error
+            );
 
     }
 
 }
 
 
-//==================================================
-// プロフィール値設定
-//==================================================
+/* ==================================================
+   ログイン
+================================================== */
 
-function setProfileValue(
-    id,
-    value
-){
+async function loginUser(){
 
-    if(
-        value === null ||
-        value === undefined
-    ){
+    const loginId =
+        document.getElementById(
+            "loginUsername"
+        )
+        .value
+        .trim();
+
+
+    const password =
+        document.getElementById(
+            "loginPassword"
+        )
+        .value;
+
+
+    const message =
+        document.getElementById(
+            "loginMessage"
+        );
+
+
+    const validation =
+        validateLoginId(
+            loginId
+        );
+
+
+    if(validation){
+
+        message.textContent =
+            validation;
 
         return;
 
     }
 
 
-    const element =
-        document.getElementById(
-            id
+    if(!password){
+
+        message.textContent =
+            "パスワードを入力してください";
+
+        return;
+
+    }
+
+
+    message.textContent =
+        "ログイン中...";
+
+
+    try{
+
+        const authEmail =
+            makeAuthEmail(
+                loginId
+            );
+
+
+        const {
+            data,
+            error
+        } =
+            await supabaseClient.auth
+                .signInWithPassword({
+
+                    email:
+                        authEmail,
+
+                    password:
+                        password
+
+                });
+
+
+        if(error){
+
+            throw error;
+
+        }
+
+
+        if(
+            !data ||
+            !data.user
+        ){
+
+            throw new Error(
+                "ログインユーザーを取得できませんでした"
+            );
+
+        }
+
+
+        currentAuthUser =
+            data.user;
+
+
+        /* ------------------------------------------
+           プロフィール取得
+        ------------------------------------------ */
+
+        const profile =
+            await loadProfile(
+                currentAuthUser
+            );
+
+
+        if(!profile){
+
+            throw new Error(
+                "プロフィール情報を取得できませんでした"
+            );
+
+        }
+
+
+        showApp();
+
+    }
+    catch(error){
+
+        console.error(
+            "ログインエラー:",
+            error
         );
 
 
-    if(element){
-
-        element.value =
-            value;
+        message.textContent =
+            "ログインに失敗しました："
+            +
+            (
+                error.message
+                ||
+                error
+            );
 
     }
 
 }
 
 
-//==================================================
-// プロフィール保存
-//==================================================
+/* ==================================================
+   プロフィール取得
+================================================== */
 
-async function saveProfile(){
+async function loadProfile(user){
+
+    if(!user){
+
+        return null;
+
+    }
+
+
+    const {
+        data,
+        error
+    } =
+        await supabaseClient
+            .from("profiles")
+            .select(
+                "user_id,display_name,icon_type,role,login_id"
+            )
+            .eq(
+                "user_id",
+                user.id
+            )
+            .maybeSingle();
+
+
+    if(error){
+
+        console.error(
+            "プロフィール取得エラー:",
+            error
+        );
+
+        return null;
+
+    }
+
+
+    if(!data){
+
+        console.warn(
+            "プロフィールが存在しません"
+        );
+
+        return null;
+
+    }
+
+
+    currentAuthUser =
+        user;
+
+
+    const nameElement =
+        document.getElementById(
+            "name"
+        );
+
+
+    const iconElement =
+        document.getElementById(
+            "iconType"
+        );
+
+
+    if(
+        nameElement &&
+        data.display_name
+    ){
+
+        nameElement.value =
+            data.display_name;
+
+    }
+
+
+    if(
+        iconElement
+    ){
+
+        iconElement.value =
+            normalizeIconType(
+                data.icon_type
+            );
+
+    }
+
+
+    localStorage.setItem(
+        "name",
+        data.display_name || ""
+    );
+
+
+    localStorage.setItem(
+        "iconType",
+        normalizeIconType(
+            data.icon_type
+        )
+    );
+
+
+    /* ------------------------------------------
+       Socket側ユーザー登録
+    ------------------------------------------ */
+
+    registerSocketUser();
+
+
+    return data;
+
+}
+
+
+/* ==================================================
+   Socket側ユーザー登録
+================================================== */
+
+function registerSocketUser(){
 
     if(!currentAuthUser){
 
-        return false;
+        return;
 
     }
 
@@ -2060,323 +2080,290 @@ async function saveProfile(){
         .trim();
 
 
-    const water =
-        Number(
-            document.getElementById(
-                "water"
-            )
-            .value
-        );
+    if(!name){
 
+        return;
 
-    const fuel =
-        Number(
-            document.getElementById(
-                "fuel"
-            )
-            .value
-        );
-
-
-    const destination =
-        document.getElementById(
-            "destination"
-        )
-        .value
-        .trim();
+    }
 
 
     const iconType =
         normalizeIconType(
             document.getElementById(
                 "iconType"
-            )
-            .value
+            ).value
         );
 
 
-    const {
-        error
-    } =
-        await supabaseClient
-            .from("profiles")
-            .upsert(
+    socket.emit(
+        "registerUser",
+        {
 
-                {
+            name:
+                name,
 
-                    id:
-                        currentAuthUser.id,
+            water:
+                Number(
+                    document.getElementById(
+                        "water"
+                    ).value
+                ),
 
-                    username:
-                        currentUsername,
+            fuel:
+                Number(
+                    document.getElementById(
+                        "fuel"
+                    ).value
+                ),
 
-                    name:
-                        name,
+            destination:
+                document.getElementById(
+                    "destination"
+                ).value,
 
-                    water:
-                        water,
+            iconType:
+                iconType
 
-                    fuel:
-                        fuel,
-
-                    destination:
-                        destination,
-
-                    icon_type:
-                        iconType
-
-                },
-
-                {
-
-                    onConflict:
-                        "id"
-
-                }
-
-            );
-
-
-    if(error){
-
-        console.error(
-            "プロフィール保存エラー:",
-            error
-        );
-
-        return false;
-
-    }
-
-
-    return true;
-
-}
-
-
-//==================================================
-// アプリ表示
-//==================================================
-
-function showApp(){
-
-    const authScreen =
-        document.getElementById(
-            "authScreen"
-        );
-
-    const appScreen =
-        document.getElementById(
-            "appScreen"
-        );
-
-
-    if(authScreen){
-
-        authScreen.style.display =
-            "none";
-
-    }
-
-
-    if(appScreen){
-
-        appScreen.style.display =
-            "block";
-
-    }
-
-
-    setTimeout(
-        ()=>{
-
-            if(map){
-
-                map.invalidateSize(
-                    true
-                );
-
-            }
-
-        },
-        200
+        }
     );
 
+
+    registered =
+        true;
+
+
+    const status =
+        document.getElementById(
+            "registerStatus"
+        );
+
+
+    if(status){
+
+        status.innerHTML =
+            "🟢 登録済み : "
+            +
+            name;
+
+    }
+
 }
 
 
-//==================================================
-// Auth状態確認
-//==================================================
+/* ==================================================
+   ログアウト
+================================================== */
 
-async function initializeApplication(){
+async function logoutUser(){
 
-    /*
-     * 起動時は両方を非表示。
-     * これにより「ログイン画面が一瞬出る」
-     * 問題を防止する。
-     */
+    if(
+        !confirm(
+            "ログアウトしますか？"
+        )
+    ){
 
-    document.getElementById(
-        "authScreen"
-    ).style.display =
-        "none";
+        return;
+
+    }
 
 
-    document.getElementById(
-        "appScreen"
-    ).style.display =
-        "none";
+    /* GPS停止 */
+
+    stopGPS();
+
+
+    registered =
+        false;
+
+
+    /* Socket側の登録解除 */
+
+    const nameElement =
+        document.getElementById(
+            "name"
+        );
+
+
+    if(
+        nameElement &&
+        nameElement.value
+    ){
+
+        socket.emit(
+            "deleteUser",
+            nameElement.value
+        );
+
+    }
 
 
     try{
 
         const {
-            data,
             error
         } =
-            await supabaseClient
-                .auth
-                .getSession();
+            await supabaseClient.auth.signOut();
 
 
         if(error){
 
-            console.error(
-                "セッション取得エラー:",
-                error
-            );
+            throw error;
 
         }
 
 
-        if(
-            data &&
-            data.session &&
-            data.session.user
-        ){
-
-            currentAuthUser =
-                data.session.user;
+        currentAuthUser =
+            null;
 
 
-            console.log(
-                "ログイン済み:",
-                currentAuthUser.id
-            );
+        localStorage.removeItem(
+            "gpsRunning"
+        );
 
 
-            const profileOK =
-                await loadProfile(
-                    currentAuthUser
+        showAuth();
+
+
+        showLogin();
+
+
+        document.getElementById(
+            "loginUsername"
+        ).value =
+            "";
+
+
+        document.getElementById(
+            "loginPassword"
+        ).value =
+            "";
+
+
+    }
+    catch(error){
+
+        console.error(
+            "ログアウトエラー:",
+            error
+        );
+
+
+        alert(
+            "ログアウトに失敗しました："
+            +
+            error.message
+        );
+
+    }
+
+}
+
+
+/* ==================================================
+   Auth状態確認
+================================================== */
+
+window.addEventListener(
+    "load",
+    async ()=>{
+
+        console.log(
+            "Version 2.3 起動"
+        );
+
+
+        try{
+
+            const {
+                data,
+                error
+            } =
+                await supabaseClient.auth
+                    .getSession();
+
+
+            if(error){
+
+                console.error(
+                    "セッション取得エラー:",
+                    error
+                );
+
+                showAuth();
+
+                return;
+
+            }
+
+
+            if(
+                data &&
+                data.session &&
+                data.session.user
+            ){
+
+                console.log(
+                    "ログイン済み:",
+                    data.session.user.id
                 );
 
 
-            if(profileOK){
+                currentAuthUser =
+                    data.session.user;
 
-                registered =
-                    true;
 
-                showApp();
-
-                await registerSocketUser();
-
-                /*
-                 * GPS自動再開
-                 */
-
-                if(
-                    localStorage.getItem(
-                        "gpsRunning"
-                    ) === "true"
-                ){
-
-                    setTimeout(
-                        ()=>{
-
-                            startGPS();
-
-                        },
-                        800
+                const profile =
+                    await loadProfile(
+                        data.session.user
                     );
+
+
+                if(profile){
+
+                    showApp();
+
+                }
+                else{
+
+                    /*
+                     * Authは存在するがprofileが
+                     * 無い場合
+                     */
+
+                    await supabaseClient
+                        .auth
+                        .signOut();
+
+                    showAuth();
 
                 }
 
             }
             else{
 
-                await supabaseClient
-                    .auth
-                    .signOut();
-
-                showLoginScreen();
+                showAuth();
 
             }
 
         }
-        else{
+        catch(error){
 
-            showLoginScreen();
+            console.error(
+                "起動処理エラー:",
+                error
+            );
+
+            showAuth();
 
         }
 
     }
-    catch(error){
-
-        console.error(
-            "起動エラー:",
-            error
-        );
-
-        showLoginScreen();
-
-    }
-
-}
+);
 
 
-//==================================================
-// ログイン画面表示
-//==================================================
-
-function showLoginScreen(){
-
-    const authScreen =
-        document.getElementById(
-            "authScreen"
-        );
-
-
-    const appScreen =
-        document.getElementById(
-            "appScreen"
-        );
-
-
-    if(appScreen){
-
-        appScreen.style.display =
-            "none";
-
-    }
-
-
-    if(authScreen){
-
-        authScreen.style.display =
-            "flex";
-
-    }
-
-
-    showLogin();
-
-}
-
-
-//==================================================
-// Auth状態変更
-//==================================================
+/* ==================================================
+   Auth状態変更監視
+================================================== */
 
 supabaseClient.auth.onAuthStateChange(
     async (
@@ -2394,19 +2381,15 @@ supabaseClient.auth.onAuthStateChange(
             event === "SIGNED_OUT"
         ){
 
-            registered =
-                false;
-
             currentAuthUser =
                 null;
 
-            currentUsername =
-                null;
-
-            profileLoaded =
+            registered =
                 false;
 
-            return;
+            stopGPS();
+
+            showAuth();
 
         }
 
@@ -2414,113 +2397,22 @@ supabaseClient.auth.onAuthStateChange(
 );
 
 
-//==================================================
-// ログアウト
-//==================================================
-
-async function logoutUser(){
-
-    if(
-        !confirm(
-            "ログアウトしますか？"
-        )
-    ){
-
-        return;
-
-    }
-
-
-    stopGPS();
-
-
-    registered =
-        false;
-
-
-    profileLoaded =
-        false;
-
-
-    currentAuthUser =
-        null;
-
-
-    currentUsername =
-        null;
-
-
-    try{
-
-        const {
-            error
-        } =
-            await supabaseClient
-                .auth
-                .signOut();
-
-
-        if(error){
-
-            console.error(
-                "ログアウトエラー:",
-                error
-            );
-
-            alert(
-                "ログアウトに失敗しました：" +
-                error.message
-            );
-
-            return;
-
-        }
-
-
-        showLoginScreen();
-
-        document.getElementById(
-            "loginPassword"
-        ).value = "";
-
-
-    }
-    catch(error){
-
-        console.error(
-            error
-        );
-
-    }
-
-}
-
-
-//==================================================
-// Socket.IO
-//==================================================
-
-const socket =
-    io();
-
+/* ==================================================
+   Socket接続
+================================================== */
 
 socket.on(
     "connect",
-    async ()=>{
+    ()=>{
 
         console.log(
-            "Socket接続:"
-            ,
-            socket.id
+            "サーバー接続"
         );
 
 
-        if(
-            currentAuthUser &&
-            profileLoaded
-        ){
+        if(currentAuthUser){
 
-            await registerSocketUser();
+            registerSocketUser();
 
         }
 
@@ -2549,232 +2441,9 @@ socket.on(
 );
 
 
-//==================================================
-// Socket ユーザー登録
-//==================================================
-
-async function registerSocketUser(){
-
-    if(
-        !currentAuthUser ||
-        !profileLoaded
-    ){
-
-        return;
-
-    }
-
-
-    const name =
-        document.getElementById(
-            "name"
-        )
-        .value
-        .trim();
-
-
-    if(!name){
-
-        return;
-
-    }
-
-
-    const iconType =
-        normalizeIconType(
-            document.getElementById(
-                "iconType"
-            )
-            .value
-        );
-
-
-    socket.emit(
-        "registerUser",
-        {
-
-            name:
-                name,
-
-            water:
-                Number(
-                    document.getElementById(
-                        "water"
-                    )
-                    .value
-                ),
-
-            fuel:
-                Number(
-                    document.getElementById(
-                        "fuel"
-                    )
-                    .value
-                ),
-
-            destination:
-                document.getElementById(
-                    "destination"
-                )
-                .value,
-
-            iconType:
-                iconType
-
-        }
-    );
-
-
-    registered =
-        true;
-
-
-    const status =
-        document.getElementById(
-            "registerStatus"
-        );
-
-
-    if(status){
-
-        status.innerHTML =
-            "🟢 登録済み : " +
-            name;
-
-    }
-
-}
-
-
-//==================================================
-// アイコン種類
-//==================================================
-
-function normalizeIconType(type){
-
-    type =
-        String(
-            type || ""
-        );
-
-
-    if(type === "person"){
-
-        return "1";
-
-    }
-
-
-    if(type === "vehicle"){
-
-        return "2";
-
-    }
-
-
-    if(
-        ["1","2","3","4"]
-        .includes(type)
-    ){
-
-        return type;
-
-    }
-
-
-    return "1";
-
-}
-
-
-//==================================================
-// ローカルユーザー情報復元
-//==================================================
-
-function restoreLocalUser(){
-
-    [
-
-        "name",
-        "water",
-        "fuel",
-        "destination",
-        "iconType"
-
-    ]
-    .forEach(
-        key=>{
-
-            const value =
-                localStorage.getItem(
-                    key
-                );
-
-
-            if(value !== null){
-
-                const element =
-                    document.getElementById(
-                        key
-                    );
-
-
-                if(element){
-
-                    if(
-                        key === "iconType"
-                    ){
-
-                        element.value =
-                            normalizeIconType(
-                                value
-                            );
-
-                    }
-                    else{
-
-                        element.value =
-                            value;
-
-                    }
-
-                }
-
-            }
-
-        }
-    );
-
-
-    const iconElement =
-        document.getElementById(
-            "iconType"
-        );
-
-
-    if(
-        iconElement &&
-        !localStorage.getItem(
-            "iconType"
-        )
-    ){
-
-        iconElement.value =
-            "1";
-
-        localStorage.setItem(
-            "iconType",
-            "1"
-        );
-
-    }
-
-}
-
-
-//==================================================
-// タブ
-//==================================================
+/* ==================================================
+   タブ切替
+================================================== */
 
 function showTab(
     tabId,
@@ -2837,15 +2506,13 @@ function showTab(
 
     if(
         tabId === "mapTab" &&
-        map
+        typeof map !== "undefined"
     ){
 
         setTimeout(
             ()=>{
 
-                map.invalidateSize(
-                    true
-                );
+                map.invalidateSize();
 
             },
             100
@@ -2856,9 +2523,116 @@ function showTab(
 }
 
 
-//==================================================
-// ユーザー登録
-//==================================================
+/* ==================================================
+   アイコン種類
+================================================== */
+
+function normalizeIconType(type){
+
+    type =
+        String(
+            type || ""
+        );
+
+
+    if(
+        type === "person"
+    ){
+
+        return "1";
+
+    }
+
+
+    if(
+        type === "vehicle"
+    ){
+
+        return "2";
+
+    }
+
+
+    if(
+        [
+            "1",
+            "2",
+            "3",
+            "4"
+        ].includes(type)
+    ){
+
+        return type;
+
+    }
+
+
+    return "1";
+
+}
+
+
+/* ==================================================
+   ローカルユーザー情報復元
+================================================== */
+
+function restoreLocalUser(){
+
+    [
+        "name",
+        "water",
+        "fuel",
+        "destination",
+        "iconType"
+
+    ].forEach(
+        key=>{
+
+            const value =
+                localStorage.getItem(
+                    key
+                );
+
+
+            const element =
+                document.getElementById(
+                    key
+                );
+
+
+            if(
+                value !== null &&
+                element
+            ){
+
+                if(
+                    key === "iconType"
+                ){
+
+                    element.value =
+                        normalizeIconType(
+                            value
+                        );
+
+                }
+                else{
+
+                    element.value =
+                        value;
+
+                }
+
+            }
+
+        }
+    );
+
+}
+
+
+/* ==================================================
+   ユーザー情報保存
+================================================== */
 
 async function registerUser(){
 
@@ -2881,7 +2655,7 @@ async function registerUser(){
         .trim();
 
 
-    if(name === ""){
+    if(!name){
 
         alert(
             "名前を入力してください"
@@ -2896,395 +2670,298 @@ async function registerUser(){
         normalizeIconType(
             document.getElementById(
                 "iconType"
-            )
-            .value
+            ).value
         );
 
 
-    document.getElementById(
-        "iconType"
-    )
-    .value =
-        iconType;
+    try{
+
+        /* ------------------------------------------
+           profiles更新
+
+           ★ user_idを使用
+           ★ idは使用しない
+        ------------------------------------------ */
+
+        const {
+            error
+        } =
+            await supabaseClient
+                .from("profiles")
+                .upsert(
+
+                    {
+
+                        user_id:
+                            currentAuthUser.id,
+
+                        login_id:
+                            (
+                                await getCurrentLoginId()
+                            ),
+
+                        display_name:
+                            name,
+
+                        icon_type:
+                            iconType,
+
+                        role:
+                            "user",
+
+                        updated_at:
+                            new Date()
+                                .toISOString()
+
+                    },
+
+                    {
+
+                        onConflict:
+                            "user_id"
+
+                    }
+
+                );
 
 
-    /*
-     * 先にプロフィールを保存。
-     */
+        if(error){
 
-    const profileOK =
-        await saveProfile();
+            throw error;
+
+        }
 
 
-    if(!profileOK){
+        [
+            "name",
+            "water",
+            "fuel",
+            "destination",
+            "iconType"
+
+        ].forEach(
+            key=>{
+
+                const element =
+                    document.getElementById(
+                        key
+                    );
+
+
+                if(element){
+
+                    localStorage.setItem(
+                        key,
+                        element.value
+                    );
+
+                }
+
+            }
+        );
+
+
+        registerSocketUser();
+
+
+        document.getElementById(
+            "registerStatus"
+        ).innerHTML =
+            "🟢 登録済み : "
+            +
+            name;
+
 
         alert(
-            "プロフィール保存に失敗しました"
+            "ユーザー情報を保存しました"
         );
 
-        return;
+
+        startGPS();
 
     }
+    catch(error){
+
+        console.error(
+            "プロフィール保存エラー:",
+            error
+        );
 
 
-    /*
-     * Socket.IOにも登録。
-     */
+        alert(
+            "プロフィール保存に失敗しました："
+            +
+            error.message
+        );
 
-    await registerSocketUser();
-
-
-    /*
-     * ローカルにも保存。
-     */
-
-    [
-
-        "name",
-        "water",
-        "fuel",
-        "destination",
-        "iconType"
-
-    ]
-    .forEach(
-        key=>{
-
-            const element =
-                document.getElementById(
-                    key
-                );
-
-
-            if(element){
-
-                localStorage.setItem(
-                    key,
-                    element.value
-                );
-
-            }
-
-        }
-    );
-
-
-    registered =
-        true;
-
-
-    document.getElementById(
-        "registerStatus"
-    )
-    .innerHTML =
-        "🟢 登録済み : " +
-        name;
-
-
-    setTimeout(
-        ()=>{
-
-            startGPS();
-
-        },
-        500
-    );
+    }
 
 }
 
 
-//==================================================
-// ユーザー削除通知
-//==================================================
+/* ==================================================
+   現在のlogin_id取得
+================================================== */
 
-socket.on(
-    "userDeleted",
-    name=>{
+async function getCurrentLoginId(){
 
-        const nameElement =
-            document.getElementById(
-                "name"
-            );
+    if(!currentAuthUser){
 
-
-        if(
-            nameElement &&
-            nameElement.value === name
-        ){
-
-            registered =
-                false;
-
-
-            stopGPS();
-
-
-            localStorage.removeItem(
-                "gpsRunning"
-            );
-
-
-            const status =
-                document.getElementById(
-                    "registerStatus"
-                );
-
-
-            if(status){
-
-                status.innerHTML =
-                    "未登録";
-
-            }
-
-
-            alert(
-                "ユーザー登録を削除しました"
-            );
-
-        }
-
-    }
-);
-
-
-//==================================================
-// 地図初期化
-//==================================================
-
-function initializeMap(){
-
-    if(map){
-
-        return;
+        return "";
 
     }
 
 
-    map =
-        L.map(
-            "map"
-        )
-        .setView(
-            [32.803,130.707],
-            13
+    const {
+        data,
+        error
+    } =
+        await supabaseClient
+            .from("profiles")
+            .select("login_id")
+            .eq(
+                "user_id",
+                currentAuthUser.id
+            )
+            .maybeSingle();
+
+
+    if(error){
+
+        console.error(
+            "login_id取得エラー:",
+            error
         );
 
+        return "";
 
-    const osm =
-        L.tileLayer(
-            "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-            {
-
-                attribution:
-                    "© OpenStreetMap contributors"
-
-            }
-        );
+    }
 
 
-    const satellite =
-        L.tileLayer(
-            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-            {
+    return data?.login_id || "";
 
-                attribution:
-                    "Esri"
-
-            }
-        );
+}
 
 
-    const terrain =
-        L.tileLayer(
-            "https://tile.opentopomap.org/{z}/{x}/{y}.png",
-            {
+/* ==================================================
+   地図
+================================================== */
 
-                attribution:
-                    "OpenTopoMap"
-
-            }
-        );
-
-
-    const gsi =
-        L.tileLayer(
-            "https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png",
-            {
-
-                attribution:
-                    "国土地理院"
-
-            }
-        );
-
-
-    const gsiPale =
-        L.tileLayer(
-            "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",
-            {
-
-                attribution:
-                    "国土地理院 淡色地図"
-
-            }
-        );
-
-
-    osm.addTo(
-        map
+const map =
+    L.map("map")
+    .setView(
+        [
+            32.803,
+            130.707
+        ],
+        13
     );
 
 
-    trafficRegulationLayer =
-        L.layerGroup();
+/* ==================================================
+   地図レイヤー
+================================================== */
 
-
-    L.control.layers(
-
+const osm =
+    L.tileLayer(
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
         {
-
-            "🗺 標準地図":
-                osm,
-
-            "🛰 航空写真":
-                satellite,
-
-            "⛰ 地形図":
-                terrain,
-
-            "🇯🇵 国土地理院":
-                gsi,
-
-            "🚒 防災淡色地図":
-                gsiPale
-
-        },
-
-        {
-
-            "🚧 交通規制":
-                trafficRegulationLayer
-
+            attribution:
+                "OpenStreetMap"
         }
-
-    )
-    .addTo(
-        map
     );
 
 
-    map.on(
-        "click",
-        handleMapClick
+const satellite =
+    L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+            attribution:
+                "Esri"
+        }
     );
 
-}
 
-
-//==================================================
-// 地図クリック
-//==================================================
-
-function handleMapClick(e){
-
-    selectedPointLat =
-        e.latlng.lat;
-
-
-    selectedPointLon =
-        e.latlng.lng;
-
-
-    document.getElementById(
-        "pointLat"
-    )
-    .textContent =
-        selectedPointLat
-        .toFixed(6);
-
-
-    document.getElementById(
-        "pointLon"
-    )
-    .textContent =
-        selectedPointLon
-        .toFixed(6);
-
-
-    updatePointUTM(
-        selectedPointLat,
-        selectedPointLon
+const terrain =
+    L.tileLayer(
+        "https://tile.opentopomap.org/{z}/{x}/{y}.png",
+        {
+            attribution:
+                "OpenTopoMap"
+        }
     );
 
-}
+
+const gsi =
+    L.tileLayer(
+        "https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png",
+        {
+            attribution:
+                "国土地理院"
+        }
+    );
 
 
-//==================================================
-// UTM
-//==================================================
-
-function updatePointUTM(
-    lat,
-    lon
-){
-
-    const utm =
-        proj4(
-
-            "EPSG:4326",
-
-            "+proj=utm +zone=52 +south +datum=WGS84",
-
-            [
-                lon,
-                lat
-            ]
-
-        );
+const gsiPale =
+    L.tileLayer(
+        "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",
+        {
+            attribution:
+                "国土地理院 淡色地図"
+        }
+    );
 
 
-    document.getElementById(
-        "pointUtmZone"
-    )
-    .textContent =
-        "52S";
+osm.addTo(map);
 
 
-    document.getElementById(
-        "pointUtmE"
-    )
-    .textContent =
-        Math.round(
-            utm[0]
-        );
+/* ==================================================
+   交通規制
+================================================== */
+
+let trafficRegulationLayer =
+    L.layerGroup();
 
 
-    document.getElementById(
-        "pointUtmN"
-    )
-    .textContent =
-        Math.round(
-            utm[1]
-        );
+L.control.layers(
 
-}
+    {
+
+        "🗺 標準地図":
+            osm,
+
+        "🛰 航空写真":
+            satellite,
+
+        "⛰ 地形図":
+            terrain,
+
+        "🇯🇵 国土地理院":
+            gsi,
+
+        "🚒 防災淡色地図":
+            gsiPale
+
+    },
+
+    {
+
+        "🚧 交通規制":
+            trafficRegulationLayer
+
+    }
+
+)
+.addTo(map);
 
 
-//==================================================
-// 交通規制受信
-//==================================================
+/* ==================================================
+   交通規制受信
+================================================== */
 
 socket.on(
     "trafficRegulations",
     regulations=>{
-
-        if(!trafficRegulationLayer){
-
-            return;
-
-        }
-
 
         trafficRegulationLayer
             .clearLayers();
@@ -3316,14 +2993,10 @@ socket.on(
 
                 const marker =
                     L.marker(
-
                         [
-
                             regulation.lat,
                             regulation.lon
-
                         ],
-
                         {
 
                             icon:
@@ -3336,15 +3009,20 @@ socket.on(
                                         "🚧",
 
                                     iconSize:
-                                        [30,30],
+                                        [
+                                            30,
+                                            30
+                                        ],
 
                                     iconAnchor:
-                                        [15,15]
+                                        [
+                                            15,
+                                            15
+                                        ]
 
                                 })
 
                         }
-
                     );
 
 
@@ -3355,27 +3033,47 @@ socket.on(
                     <hr>
 
                     路線：
-                    ${regulation.route || "-"}
+                    ${
+                        regulation.route
+                        ||
+                        "-"
+                    }
 
                     <br>
 
                     規制：
-                    ${regulation.type || "-"}
+                    ${
+                        regulation.type
+                        ||
+                        "-"
+                    }
 
                     <br>
 
                     原因：
-                    ${regulation.reason || "-"}
+                    ${
+                        regulation.reason
+                        ||
+                        "-"
+                    }
 
                     <br>
 
                     区間：
-                    ${regulation.section || "-"}
+                    ${
+                        regulation.section
+                        ||
+                        "-"
+                    }
 
                     <br>
 
                     開始：
-                    ${regulation.start || "-"}
+                    ${
+                        regulation.start
+                        ||
+                        "-"
+                    }
 
                 `);
 
@@ -3392,16 +3090,13 @@ socket.on(
 );
 
 
-//==================================================
-// GPS開始
-//==================================================
+/* ==================================================
+   GPS開始
+================================================== */
 
 function startGPS(){
 
-    if(
-        !currentAuthUser ||
-        !profileLoaded
-    ){
+    if(!currentAuthUser){
 
         alert(
             "先にログインしてください"
@@ -3414,24 +3109,7 @@ function startGPS(){
 
     if(!registered){
 
-        alert(
-            "先にユーザー登録してください"
-        );
-
-        return;
-
-    }
-
-
-    if(
-        !navigator.geolocation
-    ){
-
-        alert(
-            "この端末ではGPSを利用できません"
-        );
-
-        return;
+        registerSocketUser();
 
     }
 
@@ -3451,13 +3129,6 @@ function startGPS(){
     }
 
 
-    document.getElementById(
-        "gpsStatus"
-    )
-    .innerHTML =
-        "🟡 GPS取得中";
-
-
     gpsTimer =
         setInterval(
             ()=>{
@@ -3468,10 +3139,8 @@ function startGPS(){
                         pos=>{
 
                             sendLocation(
-
                                 pos.coords.latitude,
                                 pos.coords.longitude
-
                             );
 
                         },
@@ -3483,25 +3152,12 @@ function startGPS(){
                                 err
                             );
 
-                        },
-
-                        {
-
-                            enableHighAccuracy:
-                                true,
-
-                            timeout:
-                                10000,
-
-                            maximumAge:
-                                0
-
                         }
 
                     );
 
             },
-            30000
+            SEND_INTERVAL
         );
 
 
@@ -3519,7 +3175,9 @@ function startGPS(){
                         pos.coords.longitude;
 
 
-                    if(lastLat === 0){
+                    if(
+                        lastLat === 0
+                    ){
 
                         sendLocation(
                             lat,
@@ -3530,14 +3188,11 @@ function startGPS(){
                         lastLat =
                             lat;
 
-
                         lastLon =
                             lon;
 
-
                         lastSendTime =
                             Date.now();
-
 
                         return;
 
@@ -3546,13 +3201,10 @@ function startGPS(){
 
                     const distance =
                         getDistance(
-
                             lastLat,
                             lastLon,
-
                             lat,
                             lon
-
                         );
 
 
@@ -3578,10 +3230,8 @@ function startGPS(){
                         lastLat =
                             lat;
 
-
                         lastLon =
                             lon;
-
 
                         lastSendTime =
                             now;
@@ -3599,11 +3249,18 @@ function startGPS(){
                     );
 
 
-                    document.getElementById(
-                        "gpsStatus"
-                    )
-                    .innerHTML =
-                        "🔴 GPS取得エラー";
+                    const status =
+                        document.getElementById(
+                            "gpsStatus"
+                        );
+
+
+                    if(status){
+
+                        status.innerHTML =
+                            "🔴 GPSエラー";
+
+                    }
 
                 },
 
@@ -3626,9 +3283,9 @@ function startGPS(){
 }
 
 
-//==================================================
-// GPS停止
-//==================================================
+/* ==================================================
+   GPS停止
+================================================== */
 
 function stopGPS(){
 
@@ -3661,33 +3318,20 @@ function stopGPS(){
     }
 
 
-    lastLat =
-        0;
-
-
-    lastLon =
-        0;
-
-
-    lastSendTime =
-        0;
-
-
-    localStorage.setItem(
-        "gpsRunning",
-        "false"
+    localStorage.removeItem(
+        "gpsRunning"
     );
 
 
-    const gpsStatus =
+    const status =
         document.getElementById(
             "gpsStatus"
         );
 
 
-    if(gpsStatus){
+    if(status){
 
-        gpsStatus.innerHTML =
+        status.innerHTML =
             "🔴 GPS停止中";
 
     }
@@ -3695,19 +3339,23 @@ function stopGPS(){
 }
 
 
-//==================================================
-// GPS送信
-//==================================================
+/* ==================================================
+   GPS送信
+================================================== */
 
 function sendLocation(
     lat,
     lon
 ){
 
-    if(
-        !registered ||
-        !currentAuthUser
-    ){
+    if(!currentAuthUser){
+
+        return;
+
+    }
+
+
+    if(!registered){
 
         return;
 
@@ -3741,82 +3389,32 @@ function sendLocation(
         );
 
 
-    const name =
-        document.getElementById(
-            "name"
-        )
-        .value
-        .trim();
-
-
-    const water =
-        Number(
-            document.getElementById(
-                "water"
-            )
-            .value
-        );
-
-
-    const fuel =
-        Number(
-            document.getElementById(
-                "fuel"
-            )
-            .value
-        );
-
-
-    const destination =
-        document.getElementById(
-            "destination"
-        )
-        .value;
-
-
-    const iconType =
-        normalizeIconType(
-            document.getElementById(
-                "iconType"
-            )
-            .value
-        );
-
-
-    if(!name){
-
-        return;
-
-    }
-
-
-    localStorage.setItem(
+    [
         "name",
-        name
-    );
-
-
-    localStorage.setItem(
         "water",
-        water
-    );
-
-
-    localStorage.setItem(
         "fuel",
-        fuel
-    );
-
-
-    localStorage.setItem(
         "destination",
-        destination
-    );
+        "iconType"
+
+    ].forEach(
+        key=>{
+
+            const element =
+                document.getElementById(
+                    key
+                );
 
 
-    localStorage.setItem(
-        "iconType",
-        iconType
+            if(element){
+
+                localStorage.setItem(
+                    key,
+                    element.value
+                );
+
+            }
+
+        }
     );
 
 
@@ -3843,11 +3441,20 @@ function sendLocation(
     if(lastSend){
 
         lastSend.innerHTML =
-            "最終送信：" +
+            "最終送信："
+            +
             new Date()
-            .toLocaleTimeString();
+                .toLocaleTimeString();
 
     }
+
+
+    const iconType =
+        normalizeIconType(
+            document.getElementById(
+                "iconType"
+            ).value
+        );
 
 
     socket.emit(
@@ -3855,7 +3462,9 @@ function sendLocation(
         {
 
             name:
-                name,
+                document.getElementById(
+                    "name"
+                ).value,
 
             lat:
                 lat,
@@ -3873,13 +3482,23 @@ function sendLocation(
                 utmN,
 
             water:
-                water,
+                Number(
+                    document.getElementById(
+                        "water"
+                    ).value
+                ),
 
             fuel:
-                fuel,
+                Number(
+                    document.getElementById(
+                        "fuel"
+                    ).value
+                ),
 
             destination:
-                destination,
+                document.getElementById(
+                    "destination"
+                ).value,
 
             iconType:
                 iconType
@@ -3890,19 +3509,26 @@ function sendLocation(
 }
 
 
-//==================================================
-// 現在地報告
-//==================================================
+/* ==================================================
+   現在地報告
+================================================== */
 
 function updateStatus(){
 
-    if(!registered){
+    if(!currentAuthUser){
 
         alert(
-            "先にユーザー登録してください"
+            "先にログインしてください"
         );
 
         return;
+
+    }
+
+
+    if(!registered){
+
+        registerSocketUser();
 
     }
 
@@ -3913,38 +3539,17 @@ function updateStatus(){
             pos=>{
 
                 sendLocation(
-
                     pos.coords.latitude,
-
                     pos.coords.longitude
-
                 );
 
             },
 
             err=>{
 
-                console.log(
-                    err
-                );
-
-
                 alert(
                     "現在地を取得できませんでした"
                 );
-
-            },
-
-            {
-
-                enableHighAccuracy:
-                    true,
-
-                timeout:
-                    10000,
-
-                maximumAge:
-                    0
 
             }
 
@@ -3953,9 +3558,9 @@ function updateStatus(){
 }
 
 
-//==================================================
-// 距離計算
-//==================================================
+/* ==================================================
+   距離計算
+================================================== */
 
 function getDistance(
     lat1,
@@ -4013,35 +3618,23 @@ function getDistance(
     return R *
         2 *
         Math.atan2(
-
             Math.sqrt(a),
-
-            Math.sqrt(
-                1 - a
-            )
-
+            Math.sqrt(1-a)
         );
 
 }
 
 
-//==================================================
-// クロノロジー受信
-//==================================================
+/* ==================================================
+   クロノロジー受信
+================================================== */
 
 socket.on(
     "chronology",
     data=>{
 
         chronology =
-            Array.isArray(
-                data
-            )
-            ?
-            data
-            :
-            [];
-
+            data;
 
         renderChronology();
 
@@ -4049,16 +3642,16 @@ socket.on(
 );
 
 
-//==================================================
-// クロノロジー送信
-//==================================================
+/* ==================================================
+   クロノロジー送信
+================================================== */
 
 function sendChronology(){
 
-    if(!registered){
+    if(!currentAuthUser){
 
         alert(
-            "先にユーザー登録してください"
+            "先にログインしてください"
         );
 
         return;
@@ -4095,8 +3688,7 @@ function sendChronology(){
             user:
                 document.getElementById(
                     "name"
-                )
-                .value
+                ).value
 
         }
     );
@@ -4108,9 +3700,9 @@ function sendChronology(){
 }
 
 
-//==================================================
-// クロノロジー表示
-//==================================================
+/* ==================================================
+   クロノロジー表示
+================================================== */
 
 function renderChronology(){
 
@@ -4126,11 +3718,23 @@ function renderChronology(){
                 <div class="timelineItem">
 
                     <div class="timelineTime">
-                        ${item.time || ""}
+
+                        ${
+                            item.time
+                            ||
+                            ""
+                        }
+
                     </div>
 
                     <div class="timelineMessage">
-                        ${item.message || ""}
+
+                        ${
+                            item.message
+                            ||
+                            ""
+                        }
+
                     </div>
 
                 </div>
@@ -4157,9 +3761,9 @@ function renderChronology(){
 }
 
 
-//==================================================
-// アイコン
-//==================================================
+/* ==================================================
+   アイコン
+================================================== */
 
 function createIcon(type){
 
@@ -4222,37 +3826,35 @@ function createIcon(type){
             image,
 
         iconSize:
-            [60,60],
+            [
+                60,
+                60
+            ],
 
         iconAnchor:
-            [30,60],
+            [
+                30,
+                60
+            ],
 
         popupAnchor:
-            [0,-70]
+            [
+                0,
+                -70
+            ]
 
     });
 
 }
 
 
-//==================================================
-// ユーザー表示
-//==================================================
+/* ==================================================
+   ユーザー表示
+================================================== */
 
 socket.on(
     "locations",
     users=>{
-
-        if(!map){
-
-            return;
-
-        }
-
-
-        users =
-            users || {};
-
 
         let html =
             "";
@@ -4264,7 +3866,9 @@ socket.on(
         .forEach(
             name=>{
 
-                if(!users[name]){
+                if(
+                    !users[name]
+                ){
 
                     map.removeLayer(
                         markers[name]
@@ -4299,9 +3903,7 @@ socket.on(
 
                 if(
                     lat === null ||
-                    lat === undefined ||
-                    lon === null ||
-                    lon === undefined
+                    lon === null
                 ){
 
                     lat =
@@ -4342,28 +3944,18 @@ socket.on(
 
                     markers[name] =
                         L.marker(
-
                             [
                                 lat,
                                 lon
                             ],
-
                             {
-
                                 icon:
                                     icon
-
                             }
-
                         )
-                        .addTo(
-                            map
-                        )
+                        .addTo(map)
                         .bindTooltip(
-
-                            user.name ||
-                            name,
-
+                            user.name,
                             {
 
                                 permanent:
@@ -4373,13 +3965,15 @@ socket.on(
                                     "top",
 
                                 offset:
-                                    [0,-60],
+                                    [
+                                        0,
+                                        -60
+                                    ],
 
                                 className:
                                     "pointLabel"
 
                             }
-
                         );
 
                 }
@@ -4389,7 +3983,11 @@ socket.on(
                     .bindPopup(`
 
                         <b>
-                            ${user.name || name}
+                            ${
+                                user.name
+                                ||
+                                ""
+                            }
                         </b>
 
                         <br>
@@ -4406,18 +4004,27 @@ socket.on(
                         <hr>
 
                         💧水量：
-                        ${user.water ?? "-"}
+                        ${
+                            user.water
+                            ??
+                            0
+                        }
 
                         <br>
 
                         ⛽燃料：
-                        ${user.fuel ?? "-"}
+                        ${
+                            user.fuel
+                            ??
+                            0
+                        }
 
                         <br>
 
                         📍目的地：
                         ${
-                            user.destination ||
+                            user.destination
+                            ||
                             "-"
                         }
 
@@ -4425,7 +4032,8 @@ socket.on(
 
                         UTM：
                         ${
-                            user.utmZone ||
+                            user.utmZone
+                            ||
                             "52S"
                         }
 
@@ -4433,7 +4041,8 @@ socket.on(
 
                         E：
                         ${
-                            user.utmE ??
+                            user.utmE
+                            ??
                             ""
                         }
 
@@ -4441,7 +4050,8 @@ socket.on(
 
                         N：
                         ${
-                            user.utmN ??
+                            user.utmN
+                            ??
                             ""
                         }
 
@@ -4469,9 +4079,7 @@ socket.on(
                         <div
                             onclick="
                                 focusUser(
-                                    '${escapeHtmlAttribute(
-                                        user.name || name
-                                    )}'
+                                    '${escapeHtml(user.name)}'
                                 )
                             "
                         >
@@ -4490,16 +4098,16 @@ socket.on(
                         <div
                             onclick="
                                 focusUser(
-                                    '${escapeHtmlAttribute(
-                                        user.name || name
-                                    )}'
+                                    '${escapeHtml(user.name)}'
                                 )
                             "
                         >
 
-                            ${escapeHtml(
-                                user.name || name
-                            )}
+                            ${
+                                escapeHtml(
+                                    user.name
+                                )
+                            }
 
                         </div>
 
@@ -4507,14 +4115,16 @@ socket.on(
                         <div
                             onclick="
                                 focusUser(
-                                    '${escapeHtmlAttribute(
-                                        user.name || name
-                                    )}'
+                                    '${escapeHtml(user.name)}'
                                 )
                             "
                         >
 
-                            ${user.water ?? "-"}
+                            ${
+                                user.water
+                                ??
+                                0
+                            }
 
                         </div>
 
@@ -4522,14 +4132,16 @@ socket.on(
                         <div
                             onclick="
                                 focusUser(
-                                    '${escapeHtmlAttribute(
-                                        user.name || name
-                                    )}'
+                                    '${escapeHtml(user.name)}'
                                 )
                             "
                         >
 
-                            ${user.fuel ?? "-"}
+                            ${
+                                user.fuel
+                                ??
+                                0
+                            }
 
                         </div>
 
@@ -4537,9 +4149,7 @@ socket.on(
                         <div
                             onclick="
                                 focusUser(
-                                    '${escapeHtmlAttribute(
-                                        user.name || name
-                                    )}'
+                                    '${escapeHtml(user.name)}'
                                 )
                             "
                         >
@@ -4560,9 +4170,7 @@ socket.on(
                                 onclick="
                                     event.stopPropagation();
                                     deleteUser(
-                                        '${escapeHtmlAttribute(
-                                            user.name || name
-                                        )}'
+                                        '${escapeHtml(user.name)}'
                                     )
                                 "
                             >
@@ -4581,31 +4189,23 @@ socket.on(
         );
 
 
-        const usersElement =
-            document.getElementById(
-                "users"
-            );
-
-
-        if(usersElement){
-
-            usersElement.innerHTML =
-                html;
-
-        }
+        document.getElementById(
+            "users"
+        ).innerHTML =
+            html;
 
     }
 );
 
 
-//==================================================
-// HTML安全化
-//==================================================
+/* ==================================================
+   HTMLエスケープ
+================================================== */
 
 function escapeHtml(value){
 
     return String(
-        value
+        value ?? ""
     )
     .replace(
         /&/g,
@@ -4631,26 +4231,9 @@ function escapeHtml(value){
 }
 
 
-function escapeHtmlAttribute(value){
-
-    return String(
-        value
-    )
-    .replace(
-        /\\/g,
-        "\\\\"
-    )
-    .replace(
-        /'/g,
-        "\\'"
-    );
-
-}
-
-
-//==================================================
-// ユーザーへ移動
-//==================================================
+/* ==================================================
+   ユーザーへ移動
+================================================== */
 
 function focusUser(name){
 
@@ -4663,25 +4246,19 @@ function focusUser(name){
 
     const pos =
         markers[name]
-        .getLatLng();
+            .getLatLng();
 
 
     map.setView(
-
         [
             pos.lat,
             pos.lng
         ],
-
         17,
-
         {
-
             animate:
                 true
-
         }
-
     );
 
 
@@ -4691,9 +4268,9 @@ function focusUser(name){
 }
 
 
-//==================================================
-// ユーザー削除
-//==================================================
+/* ==================================================
+   ユーザー削除
+================================================== */
 
 function deleteUser(name){
 
@@ -4717,9 +4294,54 @@ function deleteUser(name){
 }
 
 
-//==================================================
-// 最終更新時間
-//==================================================
+/* ==================================================
+   ユーザー削除通知
+================================================== */
+
+socket.on(
+    "userDeleted",
+    name=>{
+
+        const nameElement =
+            document.getElementById(
+                "name"
+            );
+
+
+        if(
+            nameElement &&
+            nameElement.value === name
+        ){
+
+            registered =
+                false;
+
+
+            stopGPS();
+
+
+            const status =
+                document.getElementById(
+                    "registerStatus"
+                );
+
+
+            if(status){
+
+                status.innerHTML =
+                    "未登録";
+
+            }
+
+        }
+
+    }
+);
+
+
+/* ==================================================
+   最終更新時間
+================================================== */
 
 function timeAgo(t){
 
@@ -4735,15 +4357,18 @@ function timeAgo(t){
             (
                 Date.now() -
                 t
-            ) /
+            )
+            /
             1000
         );
 
 
     if(sec < 60){
 
-        return sec +
-            "秒前";
+        return (
+            sec +
+            "秒前"
+        );
 
     }
 
@@ -4757,8 +4382,10 @@ function timeAgo(t){
 
     if(min < 60){
 
-        return min +
-            "分前";
+        return (
+            min +
+            "分前"
+        );
 
     }
 
@@ -4775,16 +4402,86 @@ function timeAgo(t){
 }
 
 
-//==================================================
-// 地点登録
-//==================================================
+/* ==================================================
+   地図クリック
+================================================== */
+
+map.on(
+    "click",
+    e=>{
+
+        selectedPointLat =
+            e.latlng.lat;
+
+
+        selectedPointLon =
+            e.latlng.lng;
+
+
+        document.getElementById(
+            "pointLat"
+        ).textContent =
+            selectedPointLat
+                .toFixed(6);
+
+
+        document.getElementById(
+            "pointLon"
+        ).textContent =
+            selectedPointLon
+                .toFixed(6);
+
+
+        const utm =
+            proj4(
+
+                "EPSG:4326",
+
+                "+proj=utm +zone=52 +south +datum=WGS84",
+
+                [
+                    selectedPointLon,
+                    selectedPointLat
+                ]
+
+            );
+
+
+        document.getElementById(
+            "pointUtmZone"
+        ).textContent =
+            "52S";
+
+
+        document.getElementById(
+            "pointUtmE"
+        ).textContent =
+            Math.round(
+                utm[0]
+            );
+
+
+        document.getElementById(
+            "pointUtmN"
+        ).textContent =
+            Math.round(
+                utm[1]
+            );
+
+    }
+);
+
+
+/* ==================================================
+   地点登録
+================================================== */
 
 function addPoint(){
 
-    if(!registered){
+    if(!currentAuthUser){
 
         alert(
-            "先にユーザー登録してください"
+            "先にログインしてください"
         );
 
         return;
@@ -4793,7 +4490,8 @@ function addPoint(){
 
 
     if(
-        selectedPointLat === null
+        selectedPointLat ===
+        null
     ){
 
         alert(
@@ -4834,8 +4532,7 @@ function addPoint(){
             type:
                 document.getElementById(
                     "pointType"
-                )
-                .value,
+                ).value,
 
             lat:
                 selectedPointLat,
@@ -4847,22 +4544,17 @@ function addPoint(){
     );
 
 
-    selectedPointName =
-        name;
-
-
     document.getElementById(
         "pointName"
-    )
-    .value =
+    ).value =
         "";
 
 }
 
 
-//==================================================
-// 地点削除
-//==================================================
+/* ==================================================
+   地点削除
+================================================== */
 
 function deletePoint(){
 
@@ -4910,31 +4602,19 @@ function deletePoint(){
 
     document.getElementById(
         "pointName"
-    )
-    .value =
+    ).value =
         "";
 
 }
 
 
-//==================================================
-// 地点受信
-//==================================================
+/* ==================================================
+   地点受信
+================================================== */
 
 socket.on(
     "points",
     points=>{
-
-        if(!map){
-
-            return;
-
-        }
-
-
-        points =
-            points || {};
-
 
         Object.keys(
             pointMarkers
@@ -4942,7 +4622,9 @@ socket.on(
         .forEach(
             name=>{
 
-                if(!points[name]){
+                if(
+                    !points[name]
+                ){
 
                     map.removeLayer(
                         pointMarkers[name]
@@ -4980,12 +4662,10 @@ socket.on(
 
                 pointMarkers[name] =
                     L.marker(
-
                         [
                             p.lat,
                             p.lon
                         ],
-
                         {
 
                             icon:
@@ -4995,29 +4675,33 @@ socket.on(
                                         "/icon/point.png",
 
                                     iconSize:
-                                        [60,60],
+                                        [
+                                            60,
+                                            60
+                                        ],
 
                                     iconAnchor:
-                                        [30,60],
+                                        [
+                                            30,
+                                            60
+                                        ],
 
                                     popupAnchor:
-                                        [15,-70]
+                                        [
+                                            15,
+                                            -70
+                                        ]
 
                                 })
 
                         }
-
                     )
-                    .addTo(
-                        map
-                    );
+                    .addTo(map);
 
 
                 pointMarkers[name]
                     .bindTooltip(
-
                         name,
-
                         {
 
                             permanent:
@@ -5027,13 +4711,15 @@ socket.on(
                                 "top",
 
                             offset:
-                                [0,-30],
+                                [
+                                    0,
+                                    -30
+                                ],
 
                             className:
                                 "pointLabel"
 
                         }
-
                     );
 
 
@@ -5048,8 +4734,7 @@ socket.on(
 
                             document.getElementById(
                                 "pointName"
-                            )
-                            .value =
+                            ).value =
                                 name;
 
 
@@ -5063,8 +4748,7 @@ socket.on(
 
                             document.getElementById(
                                 "pointLat"
-                            )
-                            .textContent =
+                            ).textContent =
                                 Number(
                                     p.lat
                                 )
@@ -5073,25 +4757,48 @@ socket.on(
 
                             document.getElementById(
                                 "pointLon"
-                            )
-                            .textContent =
+                            ).textContent =
                                 Number(
                                     p.lon
                                 )
                                 .toFixed(6);
 
 
-                            updatePointUTM(
+                            const utm =
+                                proj4(
 
-                                Number(
-                                    p.lat
-                                ),
+                                    "EPSG:4326",
 
-                                Number(
-                                    p.lon
-                                )
+                                    "+proj=utm +zone=52 +south +datum=WGS84",
 
-                            );
+                                    [
+                                        p.lon,
+                                        p.lat
+                                    ]
+
+                                );
+
+
+                            document.getElementById(
+                                "pointUtmZone"
+                            ).textContent =
+                                "52S";
+
+
+                            document.getElementById(
+                                "pointUtmE"
+                            ).textContent =
+                                Math.round(
+                                    utm[0]
+                                );
+
+
+                            document.getElementById(
+                                "pointUtmN"
+                            ).textContent =
+                                Math.round(
+                                    utm[1]
+                                );
 
                         }
                     );
@@ -5101,20 +4808,25 @@ socket.on(
                     .bindPopup(`
 
                         <b>
-                            📍${escapeHtml(name)}
+                            📍
+                            ${escapeHtml(name)}
                         </b>
 
                         <br>
 
-                        ${Number(
-                            p.lat
-                        ).toFixed(6)}
+                        ${
+                            Number(
+                                p.lat
+                            ).toFixed(6)
+                        }
 
                         <br>
 
-                        ${Number(
-                            p.lon
-                        ).toFixed(6)}
+                        ${
+                            Number(
+                                p.lon
+                            ).toFixed(6)
+                        }
 
                     `);
 
@@ -5125,39 +4837,12 @@ socket.on(
 );
 
 
-//==================================================
-// ページ起動
-//==================================================
+/* ==================================================
+   初期ローカル情報
+================================================== */
 
-document.addEventListener(
-    "DOMContentLoaded",
-    async ()=>{
+restoreLocalUser();
 
-        /*
-         * 地図は最初に1回だけ作成。
-         * appScreenはまだ非表示でも問題なし。
-         */
-
-        initializeMap();
-
-
-        /*
-         * ローカル値だけ先に復元。
-         * Authプロフィールの値があれば
-         * 後からプロフィール値で上書きされる。
-         */
-
-        restoreLocalUser();
-
-
-        /*
-         * Auth状態確認。
-         */
-
-        await initializeApplication();
-
-    }
-);
 
 </script>
 
