@@ -14,14 +14,14 @@
 // ・クロノロジー
 // ・ユーザー削除
 // ・交通規制情報
+// ・交通規制5分ごと自動更新
+// ・接続中全端末へ自動配信
 //============================================================
 
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const { Pool } = require("pg");
-
-
 
 const app = express();
 
@@ -30,7 +30,6 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 app.use(express.static("public"));
-
 
 
 //============================================================
@@ -42,12 +41,11 @@ const pool = new Pool({
     connectionString:
         process.env.DATABASE_URL,
 
-    ssl:{
-        rejectUnauthorized:false
+    ssl: {
+        rejectUnauthorized: false
     }
 
 });
-
 
 
 //============================================================
@@ -60,47 +58,179 @@ let points = {};
 
 let chronology = [];
 
+let trafficRegulations = [];
 
 
 //============================================================
-// 交通規制
-//============================================================
-//
-// 現在はテストデータ
-//
-// 将来的にはここを道路交通情報API等から
-// 自動取得する処理に変更する
-//
+// 交通規制更新間隔
 //============================================================
 
-let trafficRegulations = [
+// 5分 = 5 × 60 × 1000 ms
 
-    {
-        lat:32.803,
-        lon:130.707,
+const TRAFFIC_UPDATE_INTERVAL =
+    5 * 60 * 1000;
 
-        route:"国道○号",
 
-        type:"通行止め",
+//============================================================
+// 交通規制取得
+//============================================================
+//
+// 現在はテストデータ。
+// 実際の交通情報APIを接続する場合は、
+// この関数の中を変更する。
+//============================================================
 
-        reason:"道路工事",
+async function fetchTrafficRegulations() {
 
-        section:"○○交差点～○○交差点",
+    try {
 
-        start:"2026/08/08 10:00"
+        console.log(
+            "交通規制情報を取得しています..."
+        );
+
+
+        //====================================================
+        // 現在はテストデータ
+        //====================================================
+
+        const regulations = [
+
+            {
+                lat: 32.803,
+                lon: 130.707,
+
+                route: "国道○号",
+
+                type: "通行止め",
+
+                reason: "道路工事",
+
+                section:
+                    "○○交差点～○○交差点",
+
+                start:
+                    new Date()
+                        .toLocaleString(
+                            "ja-JP",
+                            {
+                                timeZone:
+                                    "Asia/Tokyo",
+
+                                hour12: false
+                            }
+                        )
+            }
+
+        ];
+
+
+        return regulations;
+
+
+    }
+    catch (err) {
+
+        console.error(
+            "交通規制取得エラー:",
+            err
+        );
+
+        return [];
+
     }
 
-];
+}
 
+
+//============================================================
+// 交通規制更新
+//============================================================
+
+async function updateTrafficRegulations() {
+
+    try {
+
+        console.log(
+            "================================"
+        );
+
+        console.log(
+            "交通規制情報 更新開始"
+        );
+
+
+        const regulations =
+            await fetchTrafficRegulations();
+
+
+        if (
+            !Array.isArray(regulations)
+        ) {
+
+            console.error(
+                "交通規制データが配列ではありません"
+            );
+
+            return;
+
+        }
+
+
+        trafficRegulations =
+            regulations;
+
+
+        console.log(
+            "交通規制:",
+            trafficRegulations.length,
+            "件"
+        );
+
+
+        //====================================================
+        // 接続中の全端末へ配信
+        //====================================================
+
+        io.emit(
+            "trafficRegulations",
+            trafficRegulations
+        );
+
+
+        console.log(
+            "交通規制を全端末へ配信しました"
+        );
+
+
+        console.log(
+            "交通規制情報 更新終了"
+        );
+
+        console.log(
+            "================================"
+        );
+
+
+    }
+    catch (err) {
+
+        console.error(
+            "交通規制更新エラー:",
+            err
+        );
+
+    }
+
+}
 
 
 //============================================================
 // 地点復元
 //============================================================
 
-async function loadPoints(){
+async function loadPoints() {
 
-    try{
+    try {
 
         const result =
             await pool.query(
@@ -108,9 +238,10 @@ async function loadPoints(){
             );
 
 
-        result.rows.forEach(point=>{
+        result.rows.forEach(point => {
 
-            points[point.name] = point;
+            points[point.name] =
+                point;
 
         });
 
@@ -122,7 +253,7 @@ async function loadPoints(){
 
 
     }
-    catch(err){
+    catch (err) {
 
         console.error(
             "地点復元エラー",
@@ -134,14 +265,13 @@ async function loadPoints(){
 }
 
 
-
 //============================================================
 // クロノロジー復元
 //============================================================
 
-async function loadChronology(){
+async function loadChronology() {
 
-    try{
+    try {
 
         const result =
             await pool.query(
@@ -150,7 +280,7 @@ async function loadChronology(){
 
 
         chronology =
-            result.rows.map(row=>({
+            result.rows.map(row => ({
 
                 time:
                     new Date(
@@ -158,19 +288,22 @@ async function loadChronology(){
                     ).toLocaleString(
                         "ja-JP",
                         {
-                            timeZone:"Asia/Tokyo",
-                            hour12:false
+                            timeZone:
+                                "Asia/Tokyo",
+
+                            hour12: false
                         }
                     ),
-
 
                 message:
                     (
                         row.user_name
-                        ?
-                        "[" + row.user_name + "] "
-                        :
-                        ""
+                            ?
+                            "[" +
+                            row.user_name +
+                            "] "
+                            :
+                            ""
                     )
                     +
                     row.message
@@ -185,7 +318,7 @@ async function loadChronology(){
 
 
     }
-    catch(err){
+    catch (err) {
 
         console.error(
             "クロノロジー復元エラー",
@@ -197,14 +330,13 @@ async function loadChronology(){
 }
 
 
-
 //============================================================
 // ユーザー復元
 //============================================================
 
-async function loadUsers(){
+async function loadUsers() {
 
-    try{
+    try {
 
         const result =
             await pool.query(
@@ -212,34 +344,36 @@ async function loadUsers(){
             );
 
 
-        result.rows.forEach(user=>{
+        result.rows.forEach(user => {
 
             users[user.name] = {
 
-                name:user.name,
+                name: user.name,
 
-                lat:user.lat,
+                lat: user.lat,
 
-                lon:user.lon,
+                lon: user.lon,
 
-                utmZone:user.utmzone,
+                utmZone: user.utmzone,
 
-                utmE:user.utme,
+                utmE: user.utme,
 
-                utmN:user.utmn,
+                utmN: user.utmn,
 
-                water:user.water,
+                water: user.water,
 
-                fuel:user.fuel,
+                fuel: user.fuel,
 
-                destination:user.destination,
+                destination:
+                    user.destination,
 
                 iconType:
                     user.icontype || "1",
 
-                online:false,
+                online: false,
 
-                lastUpdate:user.lastupdate
+                lastUpdate:
+                    user.lastupdate
 
             };
 
@@ -253,7 +387,7 @@ async function loadUsers(){
 
 
     }
-    catch(err){
+    catch (err) {
 
         console.error(
             "DB復元エラー",
@@ -265,141 +399,703 @@ async function loadUsers(){
 }
 
 
-
-//============================================================
-// 交通規制送信
-//============================================================
-
-function sendTrafficRegulations(socket){
-
-    socket.emit(
-        "trafficRegulations",
-        trafficRegulations
-    );
-
-}
-
-
-
 //============================================================
 // Socket.IO
 //============================================================
 
 io.on(
-"connection",
-(socket)=>{
+    "connection",
+    (socket) => {
 
-    console.log(
-        "接続:",
-        socket.id
-    );
-
-
-
-    //====================================================
-    // 初期データ送信
-    //====================================================
-
-    socket.emit(
-        "locations",
-        users
-    );
+        console.log(
+            "接続:",
+            socket.id
+        );
 
 
-    socket.emit(
-        "points",
-        points
-    );
+        //====================================================
+        // 初期データ送信
+        //====================================================
+
+        socket.emit(
+            "locations",
+            users
+        );
 
 
-    socket.emit(
-        "chronology",
-        chronology
-    );
+        socket.emit(
+            "points",
+            points
+        );
 
 
-    // 交通規制
-    sendTrafficRegulations(socket);
+        socket.emit(
+            "chronology",
+            chronology
+        );
 
 
+        //====================================================
+        // 現在の交通規制を新規接続端末へ送信
+        //====================================================
 
-    //====================================================
-    // 地点登録
-    //====================================================
-
-    socket.on(
-        "addPoint",
-
-        async(point)=>{
-
-            try{
-
-                console.log(
-                    "地点受信:",
-                    point
-                );
+        socket.emit(
+            "trafficRegulations",
+            trafficRegulations
+        );
 
 
-                const created =
+        //====================================================
+        // 地点登録
+        //====================================================
+
+        socket.on(
+            "addPoint",
+
+            async (point) => {
+
+                try {
+
+                    console.log(
+                        "地点受信:",
+                        point
+                    );
+
+
+                    const created =
+                        Date.now();
+
+
+                    await pool.query(
+
+                        `
+                        INSERT INTO points
+                        (
+                            name,
+                            type,
+                            lat,
+                            lon,
+                            created
+                        )
+
+                        VALUES
+                        ($1,$2,$3,$4,$5)
+
+                        ON CONFLICT(name)
+
+                        DO UPDATE SET
+
+                            type=$2,
+                            lat=$3,
+                            lon=$4,
+                            created=$5
+                        `,
+
+                        [
+
+                            point.name,
+
+                            point.type ||
+                                "point",
+
+                            point.lat,
+
+                            point.lon,
+
+                            created
+
+                        ]
+
+                    );
+
+
+                    points[point.name] = {
+
+                        name: point.name,
+
+                        type:
+                            point.type ||
+                            "point",
+
+                        lat: point.lat,
+
+                        lon: point.lon,
+
+                        created: created
+
+                    };
+
+
+                    io.emit(
+                        "points",
+                        points
+                    );
+
+
+                    console.log(
+                        "地点登録:",
+                        point.name
+                    );
+
+
+                }
+                catch (err) {
+
+                    console.error(
+                        "地点保存エラー",
+                        err
+                    );
+
+                }
+
+            }
+        );
+
+
+        //====================================================
+        // ユーザー登録
+        //====================================================
+
+        socket.on(
+            "registerUser",
+
+            async (data) => {
+
+                try {
+
+                    const now =
+                        Date.now();
+
+
+                    const oldUser =
+                        users[data.name];
+
+
+                    const user = {
+
+                        name: data.name,
+
+                        lat:
+                            oldUser
+                                ?
+                                oldUser.lat
+                                :
+                                null,
+
+                        lon:
+                            oldUser
+                                ?
+                                oldUser.lon
+                                :
+                                null,
+
+                        utmZone:
+                            oldUser
+                                ?
+                                oldUser.utmZone
+                                :
+                                "52S",
+
+                        utmE:
+                            oldUser
+                                ?
+                                oldUser.utmE
+                                :
+                                null,
+
+                        utmN:
+                            oldUser
+                                ?
+                                oldUser.utmN
+                                :
+                                null,
+
+                        water:
+                            Number(data.water) || 0,
+
+                        fuel:
+                            Number(data.fuel) || 0,
+
+                        destination:
+                            data.destination || "",
+
+                        iconType:
+                            data.iconType || "1",
+
+                        online: true,
+
+                        lastUpdate: now
+
+                    };
+
+
+                    users[data.name] =
+                        user;
+
+
+                    await pool.query(
+
+                        `
+                        INSERT INTO current_users
+                        (
+                            name,
+                            lat,
+                            lon,
+                            utmZone,
+                            utmE,
+                            utmN,
+                            water,
+                            fuel,
+                            destination,
+                            iconType,
+                            online,
+                            lastUpdate
+                        )
+
+                        VALUES
+                        (
+                            $1,$2,$3,$4,$5,$6,
+                            $7,$8,$9,$10,$11,$12
+                        )
+
+                        ON CONFLICT(name)
+
+                        DO UPDATE SET
+
+                            lat=$2,
+                            lon=$3,
+                            utmZone=$4,
+                            utmE=$5,
+                            utmN=$6,
+                            water=$7,
+                            fuel=$8,
+                            destination=$9,
+                            iconType=$10,
+                            online=$11,
+                            lastUpdate=$12
+                        `,
+
+                        [
+
+                            user.name,
+
+                            user.lat,
+
+                            user.lon,
+
+                            user.utmZone,
+
+                            user.utmE,
+
+                            user.utmN,
+
+                            user.water,
+
+                            user.fuel,
+
+                            user.destination,
+
+                            user.iconType,
+
+                            1,
+
+                            now
+
+                        ]
+
+                    );
+
+
+                    console.log(
+                        "ユーザー登録:",
+                        data.name
+                    );
+
+
+                    io.emit(
+                        "locations",
+                        users
+                    );
+
+
+                }
+                catch (err) {
+
+                    console.error(
+                        "ユーザー登録エラー",
+                        err
+                    );
+
+                }
+
+            }
+        );
+
+
+        //====================================================
+        // 位置情報受信
+        //====================================================
+
+        socket.on(
+            "location",
+
+            async (data) => {
+
+                if (!users[data.name]) {
+
+                    console.log(
+                        "未登録GPS拒否:",
+                        data.name
+                    );
+
+                    return;
+
+                }
+
+
+                const now =
                     Date.now();
 
 
-                await pool.query(
+                const user = {
 
-                    `
-                    INSERT INTO points
-                    (
-                        name,
-                        type,
-                        lat,
-                        lon,
-                        created
-                    )
+                    name: data.name,
 
-                    VALUES
-                    ($1,$2,$3,$4,$5)
+                    lat: data.lat,
 
-                    ON CONFLICT(name)
+                    lon: data.lon,
 
-                    DO UPDATE SET
+                    utmZone:
+                        data.utmZone ||
+                        "52S",
 
-                        type=$2,
-                        lat=$3,
-                        lon=$4,
-                        created=$5
-                    `,
+                    utmE: data.utmE,
 
-                    [
+                    utmN: data.utmN,
 
-                        point.name,
+                    water: data.water,
 
-                        point.type || "point",
+                    fuel: data.fuel,
 
-                        point.lat,
+                    destination:
+                        data.destination,
 
-                        point.lon,
+                    iconType:
+                        data.iconType ||
+                        "1",
 
-                        created
+                    online: true,
 
-                    ]
+                    lastUpdate: now
 
+                };
+
+
+                users[data.name] =
+                    user;
+
+
+                try {
+
+                    //========================================
+                    // 現在位置更新
+                    //========================================
+
+                    await pool.query(
+
+                        `
+                        UPDATE current_users
+
+                        SET
+
+                            lat=$2,
+                            lon=$3,
+                            utmZone=$4,
+                            utmE=$5,
+                            utmN=$6,
+                            water=$7,
+                            fuel=$8,
+                            destination=$9,
+                            iconType=$10,
+                            online=$11,
+                            lastUpdate=$12
+
+                        WHERE name=$1
+                        `,
+
+                        [
+
+                            user.name,
+
+                            user.lat,
+
+                            user.lon,
+
+                            user.utmZone,
+
+                            user.utmE,
+
+                            user.utmN,
+
+                            user.water,
+
+                            user.fuel,
+
+                            user.destination,
+
+                            user.iconType,
+
+                            1,
+
+                            now
+
+                        ]
+
+                    );
+
+
+                    //========================================
+                    // 位置履歴保存
+                    //========================================
+
+                    await pool.query(
+
+                        `
+                        INSERT INTO location_history
+                        (
+                            name,
+                            lat,
+                            lon,
+                            water,
+                            fuel,
+                            destination
+                        )
+
+                        VALUES
+                        ($1,$2,$3,$4,$5,$6)
+                        `,
+
+                        [
+
+                            user.name,
+
+                            user.lat,
+
+                            user.lon,
+
+                            user.water,
+
+                            user.fuel,
+
+                            user.destination
+
+                        ]
+
+                    );
+
+
+                }
+                catch (err) {
+
+                    console.error(
+                        "DB保存エラー",
+                        err
+                    );
+
+                }
+
+
+                io.emit(
+                    "locations",
+                    users
+                );
+
+            }
+        );
+
+
+        //====================================================
+        // クロノロジー
+        //====================================================
+
+        socket.on(
+            "addChronology",
+
+            async (data) => {
+
+                const now =
+                    Date.now();
+
+
+                const item = {
+
+                    time:
+                        new Date(now)
+                            .toLocaleString(
+                                "ja-JP",
+                                {
+                                    timeZone:
+                                        "Asia/Tokyo",
+
+                                    hour12: false
+                                }
+                            ),
+
+                    message:
+                        (
+                            data.user
+                                ?
+                                "[" +
+                                data.user +
+                                "] "
+                                :
+                                ""
+                        )
+                        +
+                        data.message
+
+                };
+
+
+                chronology.unshift(item);
+
+
+                if (
+                    chronology.length > 100
+                ) {
+
+                    chronology.pop();
+
+                }
+
+
+                try {
+
+                    await pool.query(
+
+                        `
+                        INSERT INTO chronology
+                        (
+                            user_name,
+                            message,
+                            created
+                        )
+
+                        VALUES
+                        ($1,$2,$3)
+                        `,
+
+                        [
+
+                            data.user || "",
+
+                            data.message,
+
+                            now
+
+                        ]
+
+                    );
+
+                }
+                catch (err) {
+
+                    console.error(
+                        "クロノロジー保存エラー",
+                        err
+                    );
+
+                }
+
+
+                io.emit(
+                    "chronology",
+                    chronology
+                );
+
+            }
+        );
+
+
+        //====================================================
+        // ユーザー削除
+        //====================================================
+
+        socket.on(
+            "deleteUser",
+
+            async (name) => {
+
+                delete users[name];
+
+
+                try {
+
+                    await pool.query(
+
+                        "DELETE FROM current_users WHERE name=$1",
+
+                        [name]
+
+                    );
+
+                }
+                catch (err) {
+
+                    console.error(
+                        "削除エラー",
+                        err
+                    );
+
+                }
+
+
+                io.emit(
+                    "locations",
+                    users
                 );
 
 
-                points[point.name] = {
+                socket.emit(
+                    "userDeleted",
+                    name
+                );
 
-                    name:point.name,
+            }
+        );
 
-                    type:
-                        point.type || "point",
 
-                    lat:point.lat,
+        //====================================================
+        // 地点削除
+        //====================================================
 
-                    lon:point.lon,
+        socket.on(
+            "deletePoint",
 
-                    created:created
+            async (name) => {
 
-                };
+                delete points[name];
+
+
+                try {
+
+                    await pool.query(
+
+                        "DELETE FROM points WHERE name=$1",
+
+                        [name]
+
+                    );
+
+                }
+                catch (err) {
+
+                    console.error(
+                        "地点削除エラー",
+                        err
+                    );
+
+                }
 
 
                 io.emit(
@@ -409,696 +1105,86 @@ io.on(
 
 
                 console.log(
-                    "地点登録:",
-                    point.name
-                );
-
-
-            }
-            catch(err){
-
-                console.error(
-                    "地点保存エラー",
-                    err
+                    "地点削除:",
+                    name
                 );
 
             }
-
-        }
-
-    );
+        );
 
 
+        //====================================================
+        // 手動交通規制更新
+        //====================================================
 
-    //====================================================
-    // ユーザー登録
-    // 自動ログイン対応
-    //====================================================
+        socket.on(
+            "updateTrafficRegulations",
 
-    socket.on(
-        "registerUser",
+            (regulations) => {
 
-        async(data)=>{
+                if (
+                    !Array.isArray(regulations)
+                ) {
 
-            try{
+                    console.log(
+                        "交通規制データが配列ではありません"
+                    );
 
-                const now =
-                    Date.now();
+                    return;
 
-                const oldUser =
-                    users[data.name];
-
-
-                const user = {
-
-                    name:data.name,
+                }
 
 
-                    lat:
-                        oldUser
-                        ?
-                        oldUser.lat
-                        :
-                        null,
-
-
-                    lon:
-                        oldUser
-                        ?
-                        oldUser.lon
-                        :
-                        null,
-
-
-                    utmZone:
-                        oldUser
-                        ?
-                        oldUser.utmZone
-                        :
-                        "52S",
-
-
-                    utmE:
-                        oldUser
-                        ?
-                        oldUser.utmE
-                        :
-                        null,
-
-
-                    utmN:
-                        oldUser
-                        ?
-                        oldUser.utmN
-                        :
-                        null,
-
-
-                    water:
-                        Number(data.water) || 0,
-
-
-                    fuel:
-                        Number(data.fuel) || 0,
-
-
-                    destination:
-                        data.destination || "",
-
-
-                    iconType:
-                        data.iconType || "1",
-
-
-                    online:true,
-
-                    lastUpdate:now
-
-                };
-
-
-                users[data.name] =
-                    user;
-
-
-
-                await pool.query(
-
-                    `
-                    INSERT INTO current_users
-                    (
-                        name,
-                        lat,
-                        lon,
-                        utmZone,
-                        utmE,
-                        utmN,
-                        water,
-                        fuel,
-                        destination,
-                        iconType,
-                        online,
-                        lastUpdate
-                    )
-
-                    VALUES
-                    (
-                        $1,$2,$3,$4,$5,$6,
-                        $7,$8,$9,$10,$11,$12
-                    )
-
-                    ON CONFLICT(name)
-
-                    DO UPDATE SET
-
-                        lat=$2,
-                        lon=$3,
-                        utmZone=$4,
-                        utmE=$5,
-                        utmN=$6,
-                        water=$7,
-                        fuel=$8,
-                        destination=$9,
-                        iconType=$10,
-                        online=$11,
-                        lastUpdate=$12
-                    `,
-
-                    [
-
-                        user.name,
-
-                        user.lat,
-
-                        user.lon,
-
-                        user.utmZone,
-
-                        user.utmE,
-
-                        user.utmN,
-
-                        user.water,
-
-                        user.fuel,
-
-                        user.destination,
-
-                        user.iconType,
-
-                        1,
-
-                        now
-
-                    ]
-
-                );
-
-
-                console.log(
-                    "ユーザー登録:",
-                    data.name
-                );
+                trafficRegulations =
+                    regulations;
 
 
                 io.emit(
-                    "locations",
-                    users
+                    "trafficRegulations",
+                    trafficRegulations
                 );
 
-
-            }
-            catch(err){
-
-                console.error(
-                    "ユーザー登録エラー",
-                    err
-                );
-
-            }
-
-        }
-
-    );
-
-
-
-    //====================================================
-    // 位置情報受信
-    //====================================================
-
-    socket.on(
-        "location",
-
-        async(data)=>{
-
-            if(!users[data.name]){
 
                 console.log(
-                    "未登録GPS拒否:",
-                    data.name
-                );
-
-                return;
-
-            }
-
-
-            const now =
-                Date.now();
-
-
-            const user = {
-
-                name:data.name,
-
-                lat:data.lat,
-
-                lon:data.lon,
-
-                utmZone:
-                    data.utmZone || "52S",
-
-                utmE:data.utmE,
-
-                utmN:data.utmN,
-
-                water:data.water,
-
-                fuel:data.fuel,
-
-                destination:data.destination,
-
-                iconType:
-                    data.iconType || "1",
-
-                online:true,
-
-                lastUpdate:now
-
-            };
-
-
-            users[data.name] =
-                user;
-
-
-
-            try{
-
-                //========================================
-                // 現在位置更新
-                //========================================
-
-                await pool.query(
-
-                    `
-                    UPDATE current_users
-
-                    SET
-
-                        lat=$2,
-                        lon=$3,
-                        utmZone=$4,
-                        utmE=$5,
-                        utmN=$6,
-                        water=$7,
-                        fuel=$8,
-                        destination=$9,
-                        iconType=$10,
-                        online=$11,
-                        lastUpdate=$12
-
-                    WHERE name=$1
-                    `,
-
-                    [
-
-                        user.name,
-
-                        user.lat,
-
-                        user.lon,
-
-                        user.utmZone,
-
-                        user.utmE,
-
-                        user.utmN,
-
-                        user.water,
-
-                        user.fuel,
-
-                        user.destination,
-
-                        user.iconType,
-
-                        1,
-
-                        now
-
-                    ]
-
-                );
-
-
-
-                //========================================
-                // 位置履歴保存
-                //========================================
-
-                await pool.query(
-
-                    `
-                    INSERT INTO location_history
-                    (
-                        name,
-                        lat,
-                        lon,
-                        water,
-                        fuel,
-                        destination
-                    )
-
-                    VALUES
-                    ($1,$2,$3,$4,$5,$6)
-                    `,
-
-                    [
-
-                        user.name,
-
-                        user.lat,
-
-                        user.lon,
-
-                        user.water,
-
-                        user.fuel,
-
-                        user.destination
-
-                    ]
-
-                );
-
-
-            }
-            catch(err){
-
-                console.error(
-                    "DB保存エラー",
-                    err
+                    "交通規制手動更新:",
+                    trafficRegulations.length,
+                    "件"
                 );
 
             }
+        );
 
 
+        //====================================================
+        // 切断
+        //====================================================
 
-            io.emit(
-                "locations",
-                users
-            );
+        socket.on(
+            "disconnect",
 
-        }
-
-    );
-
-
-
-    //====================================================
-    // クロノロジー登録
-    //====================================================
-
-    socket.on(
-        "addChronology",
-
-        async(data)=>{
-
-            const now =
-                Date.now();
-
-
-            const item = {
-
-                time:
-                    new Date(now)
-                    .toLocaleString(
-                        "ja-JP",
-                        {
-                            timeZone:
-                                "Asia/Tokyo",
-
-                            hour12:false
-                        }
-                    ),
-
-
-                message:
-                    (
-                        data.user
-                        ?
-                        "[" + data.user + "] "
-                        :
-                        ""
-                    )
-                    +
-                    data.message
-
-            };
-
-
-            chronology.unshift(item);
-
-
-            if(
-                chronology.length > 100
-            ){
-
-                chronology.pop();
-
-            }
-
-
-
-            try{
-
-                await pool.query(
-
-                    `
-                    INSERT INTO chronology
-                    (
-                        user_name,
-                        message,
-                        created
-                    )
-
-                    VALUES
-                    ($1,$2,$3)
-                    `,
-
-                    [
-
-                        data.user || "",
-
-                        data.message,
-
-                        now
-
-                    ]
-
-                );
-
-            }
-            catch(err){
-
-                console.error(
-                    "クロノロジー保存エラー",
-                    err
-                );
-
-            }
-
-
-
-            io.emit(
-                "chronology",
-                chronology
-            );
-
-        }
-
-    );
-
-
-
-    //====================================================
-    // ユーザー削除
-    //====================================================
-
-    socket.on(
-        "deleteUser",
-
-        async(name)=>{
-
-            delete users[name];
-
-
-            try{
-
-                await pool.query(
-
-                    "DELETE FROM current_users WHERE name=$1",
-
-                    [name]
-
-                );
-
-            }
-            catch(err){
-
-                console.error(
-                    "削除エラー",
-                    err
-                );
-
-            }
-
-
-
-            io.emit(
-                "locations",
-                users
-            );
-
-
-            // 削除したユーザー本人へ通知
-            socket.emit(
-                "userDeleted",
-                name
-            );
-
-        }
-
-    );
-
-
-
-    //====================================================
-    // 地点削除
-    //====================================================
-
-    socket.on(
-        "deletePoint",
-
-        async(name)=>{
-
-            delete points[name];
-
-
-            try{
-
-                await pool.query(
-
-                    "DELETE FROM points WHERE name=$1",
-
-                    [name]
-
-                );
-
-            }
-            catch(err){
-
-                console.error(
-                    "地点削除エラー",
-                    err
-                );
-
-            }
-
-
-
-            io.emit(
-                "points",
-                points
-            );
-
-
-            console.log(
-                "地点削除:",
-                name
-            );
-
-        }
-
-    );
-
-
-
-    //====================================================
-    // 交通規制情報更新
-    //====================================================
-    //
-    // 管理者画面や外部APIから
-    // trafficRegulations を更新した場合、
-    // 接続中の全端末へ即時配信する。
-    //
-    //====================================================
-
-    socket.on(
-        "updateTrafficRegulations",
-
-        (regulations)=>{
-
-            if(
-                !Array.isArray(regulations)
-            ){
+            () => {
 
                 console.log(
-                    "交通規制データが配列ではありません"
+                    "切断:",
+                    socket.id
                 );
 
-                return;
-
             }
+        );
 
-
-            trafficRegulations =
-                regulations;
-
-
-            io.emit(
-                "trafficRegulations",
-                trafficRegulations
-            );
-
-
-            console.log(
-                "交通規制更新:",
-                trafficRegulations.length
-            );
-
-        }
-
-    );
-
-
-
-    //====================================================
-    // 切断
-    //====================================================
-
-    socket.on(
-        "disconnect",
-
-        ()=>{
-
-            console.log(
-                "切断:",
-                socket.id
-            );
-
-        }
-
-    );
-
-}
-
+    }
 );
 
 
-
 //============================================================
-// 起動
+// サーバー起動
 //============================================================
 
 const PORT =
     process.env.PORT || 10000;
 
 
-
-async function startServer(){
+async function startServer() {
 
     await loadUsers();
 
@@ -1111,11 +1197,44 @@ async function startServer(){
 
         PORT,
 
-        ()=>{
+        async () => {
+
+            console.log(
+                "================================"
+            );
 
             console.log(
                 "server start port:",
                 PORT
+            );
+
+            console.log(
+                "交通規制自動更新:",
+                "5分ごと"
+            );
+
+            console.log(
+                "================================"
+            );
+
+
+            //================================================
+            // 起動直後に1回取得
+            //================================================
+
+            await updateTrafficRegulations();
+
+
+            //================================================
+            // 5分ごとに自動更新
+            //================================================
+
+            setInterval(
+
+                updateTrafficRegulations,
+
+                TRAFFIC_UPDATE_INTERVAL
+
             );
 
         }
@@ -1123,7 +1242,6 @@ async function startServer(){
     );
 
 }
-
 
 
 startServer();
