@@ -1410,3 +1410,94 @@ async function updateTrafficRegulations() {
     }
 
 }
+
+//============================================================
+// サーバー起動
+//============================================================
+
+const PORT =
+    process.env.PORT ||
+    10000;
+
+
+async function startServer() {
+
+    await loadUsers();
+
+    await loadPoints();
+
+    await loadChronology();
+
+
+    server.listen(
+
+        PORT,
+
+        async () => {
+
+            console.log(
+                "================================"
+            );
+
+            console.log(
+                "server start port:",
+                PORT
+            );
+
+            console.log(
+                "交通規制自動更新:",
+                "3日ごと"
+            );
+
+            console.log(
+                "交通規制データ:",
+                "国土交通省 熊本地震 通れるマップ GIS"
+            );
+
+            console.log(
+                "ZIP処理:",
+                "Node.js標準 zlib"
+            );
+
+            console.log(
+                "adm-zip:",
+                "使用しません"
+            );
+
+            console.log(
+                "JARTIC:",
+                "使用しません"
+            );
+
+            console.log(
+                "================================"
+            );
+
+
+            //================================================
+            // 起動直後に1回取得
+            //================================================
+
+            await updateTrafficRegulations();
+
+
+            //================================================
+            // 3日ごとに更新
+            //================================================
+
+            setInterval(
+
+                updateTrafficRegulations,
+
+                TRAFFIC_UPDATE_INTERVAL
+
+            );
+
+        }
+
+    );
+
+}
+
+
+startServer();
