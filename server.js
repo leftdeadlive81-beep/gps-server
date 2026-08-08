@@ -419,6 +419,47 @@ async function findKumamotoZipUrl() {
     }
 
 
+console.log(
+    "ZIP候補:",
+    [...html.matchAll(
+        /https?:\/\/[^"'<> \t\r\n]+\.zip[^"'<> \t\r\n]*/gi
+    )].map(
+        m => m[0]
+    )
+);
+
+console.log(
+    "ZIP文字列:",
+    [...html.matchAll(
+        /[^"'<> \t\r\n]*\.zip[^"'<> \t\r\n]*/gi
+    )].map(
+        m => m[0]
+    )
+);
+
+console.log(
+    "kisei候補:",
+    [...html.matchAll(
+        /[^"'<> \t\r\n]*kisei[^"'<> \t\r\n]*/gi
+    )].map(
+        m => m[0]
+    )
+);
+
+console.log(
+    "43候補:",
+    [...html.matchAll(
+        /[^"'<> \t\r\n]{0,100}43[^"'<> \t\r\n]{0,100}/gi
+    )].slice(
+        0,
+        20
+    ).map(
+        m => m[0]
+    )
+);
+
+
+
     if (!selected) {
 
         //====================================================
