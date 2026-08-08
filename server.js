@@ -72,8 +72,9 @@ let trafficRegulations = [];
 //============================================================
 
 // JARTIC公式オープンデータページ
-const JARTIC_OPEN_DATA_PAGE =
-    "https://www.jartic.or.jp/service/opendata/";
+const JARTIC_KUMAMOTO_ZIP_URL =
+    process.env.JARTIC_KUMAMOTO_ZIP_URL || "";
+
 
 
 // 3日ごとに更新
@@ -257,323 +258,51 @@ async function httpGetBuffer(url) {
 // 前提にせず、HTML中のZIPリンク候補を抽出して判定する。
 //============================================================
 
+//============================================================
+// JARTIC熊本県ZIP URL取得
+//============================================================
+
 async function findKumamotoZipUrl() {
 
     console.log(
-        "JARTIC熊本県ZIP URLを検索しています..."
+        "JARTIC熊本県ZIP URLを取得しています..."
     );
 
-    const response =
-        await fetch(
-            JARTIC_OPEN_DATA_PAGE,
-            {
-                headers: {
-                    "User-Agent":
-                        "Mozilla/5.0 Puttan/2.3"
-                }
-            }
-        );
 
-    if (!response.ok) {
+    if (
+        !JARTIC_KUMAMOTO_ZIP_URL ||
+        JARTIC_KUMAMOTO_ZIP_URL.trim() === ""
+    ) {
 
         throw new Error(
-            "JARTICページ取得失敗: HTTP " +
-            response.status
+            "JARTIC_KUMAMOTO_ZIP_URL が設定されていません"
         );
 
     }
 
-    const html =
-        await response.text();
 
-    console.log(
-        "JARTICページ取得:",
-        html.length,
-        "bytes"
-    );
+    const url =
+        JARTIC_KUMAMOTO_ZIP_URL.trim();
 
 
-    //========================================================
-    // ① HTML中の全<a href="...">...</a>を取得
-    //========================================================
-
-    const links = [];
-
-    const anchorRegex =
-        /<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-
-    let match;
-
-    while (
-        (match = anchorRegex.exec(html)) !== null
+    if (
+        !/^https?:\/\//i.test(url)
     ) {
 
-        const href =
-            match[1];
-
-        const text =
-            match[2]
-            .replace(
-                /<[^>]+>/g,
-                " "
-            )
-            .replace(
-                /&nbsp;/gi,
-                " "
-            )
-            .replace(
-                /\s+/g,
-                " "
-            )
-            .trim();
-
-        links.push({
-            href,
-            text
-        });
-
-    }
-
-
-    console.log(
-        "JARTICリンク数:",
-        links.length
-    );
-
-
-    //========================================================
-    // ② 熊本県のリンクを探す
-    //========================================================
-
-    for (
-        const link
-        of links
-    ) {
-
-        const text =
-            String(
-                link.text || ""
-            );
-
-        const href =
-            String(
-                link.href || ""
-            );
-
-
-        if (
-            text.includes("熊本県") &&
-            /\.zip(?:[?#].*)?$/i.test(
-                href
-            )
-        ) {
-
-            const zipUrl =
-                new URL(
-                    href,
-                    JARTIC_OPEN_DATA_PAGE
-                ).href;
-
-            console.log(
-                "JARTIC熊本県ZIP:",
-                zipUrl
-            );
-
-            return zipUrl;
-
-        }
-
-    }
-
-
-    //========================================================
-    // ③ href側に熊本県を示す文字が含まれる場合
-    //========================================================
-
-    for (
-        const link
-        of links
-    ) {
-
-        const href =
-            String(
-                link.href || ""
-            );
-
-        const text =
-            String(
-                link.text || ""
-            );
-
-
-        const combined =
-            (
-                href +
-                " " +
-                text
-            )
-            .toLowerCase();
-
-
-        if (
-            combined.includes("kumamoto") &&
-            /\.zip(?:[?#].*)?$/i.test(
-                href
-            )
-        ) {
-
-            const zipUrl =
-                new URL(
-                    href,
-                    JARTIC_OPEN_DATA_PAGE
-                ).href;
-
-            console.log(
-                "JARTIC熊本県ZIP:",
-                zipUrl
-            );
-
-            return zipUrl;
-
-        }
-
-    }
-
-
-    //========================================================
-    // ④ 熊本県の周辺HTMLを調べる
-    //
-    // JARTICのHTML構造変更に備え、
-    // 「熊本県」が出現する位置の周辺から
-    // ZIP URLを探す。
-    //========================================================
-
-    const kumamotoPositions = [];
-
-    let position = 0;
-
-    while (
-        (position =
-            html.indexOf(
-                "熊本県",
-                position
-            )
-        ) !== -1
-    ) {
-
-        kumamotoPositions.push(
-            position
+        throw new Error(
+            "JARTIC_KUMAMOTO_ZIP_URL がURLではありません"
         );
 
-        position +=
-            "熊本県".length;
-
     }
 
 
     console.log(
-        "熊本県文字出現数:",
-        kumamotoPositions.length
+        "JARTIC熊本県ZIP:",
+        url
     );
 
 
-    for (
-        const pos
-        of kumamotoPositions
-    ) {
-
-        const start =
-            Math.max(
-                0,
-                pos - 2000
-            );
-
-        const end =
-            Math.min(
-                html.length,
-                pos + 2000
-            );
-
-        const area =
-            html.substring(
-                start,
-                end
-            );
-
-
-        const zipMatches =
-            area.match(
-                /(?:href\s*=\s*["']|["'])([^"']+\.zip(?:[?#][^"']*)?)/gi
-            );
-
-
-        if (
-            zipMatches &&
-            zipMatches.length > 0
-        ) {
-
-            for (
-                const candidate
-                of zipMatches
-            ) {
-
-                const urlMatch =
-                    candidate.match(
-                        /["']?([^"'\s]+\.zip(?:[?#][^"'\s]*)?)/i
-                    );
-
-
-                if (
-                    !urlMatch
-                ) {
-
-                    continue;
-
-                }
-
-
-                const href =
-                    urlMatch[1];
-
-
-                try {
-
-                    const zipUrl =
-                        new URL(
-                            href,
-                            JARTIC_OPEN_DATA_PAGE
-                        ).href;
-
-
-                    console.log(
-                        "JARTIC熊本県ZIP:",
-                        zipUrl
-                    );
-
-
-                    return zipUrl;
-
-                }
-                catch {
-
-                    // 次の候補へ
-
-                }
-
-            }
-
-        }
-
-    }
-
-
-    //========================================================
-    // 見つからなかった場合
-    //========================================================
-
-    throw new Error(
-        "JARTICページから熊本県ZIPリンクを取得できませんでした"
-    );
+    return url;
 
 }
 
