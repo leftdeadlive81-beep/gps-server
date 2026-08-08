@@ -763,9 +763,12 @@ function getGeometryRepresentativeCoordinate(
 // GeoJSON Featureが熊本県内か
 //============================================================
 
-function isKumamotoFeature(
-    feature
-) {
+//============================================================
+// GeoJSON Featureが
+// 「熊本県」かつ「実際の通行規制あり」か判定
+//============================================================
+
+function isActualTrafficRegulationFeature(feature) {
 
     if (!feature) {
 
@@ -779,7 +782,7 @@ function isKumamotoFeature(
 
 
     //========================================================
-    // propertiesに都道府県情報がある場合は優先
+    // ① 熊本県判定
     //========================================================
 
     const prefectureCandidates = [
@@ -801,6 +804,11 @@ function isKumamotoFeature(
     ];
 
 
+    let isKumamoto = false;
+
+    let prefectureFound = false;
+
+
     for (
         const value
         of prefectureCandidates
@@ -812,6 +820,9 @@ function isKumamotoFeature(
             String(value).trim() !== ""
         ) {
 
+            prefectureFound = true;
+
+
             const text =
                 String(value).trim();
 
@@ -820,14 +831,12 @@ function isKumamotoFeature(
                 text.includes("熊本")
             ) {
 
-                return true;
+                isKumamoto = true;
 
             }
 
 
-            // 都道府県が明確に存在し、
-            // 熊本ではない場合は除外
-            return false;
+            break;
 
         }
 
@@ -835,7 +844,21 @@ function isKumamotoFeature(
 
 
     //========================================================
-    // 都道府県コード
+    // 都道府県情報がある場合
+    //========================================================
+
+    if (
+        prefectureFound &&
+        !isKumamoto
+    ) {
+
+        return false;
+
+    }
+
+
+    //========================================================
+    // ② 都道府県コード
     //========================================================
 
     const codeCandidates = [
@@ -863,19 +886,53 @@ function isKumamotoFeature(
         ) {
 
             const code =
-                String(value)
-                    .trim();
+                String(value).trim();
 
 
             if (
-                code === "43" ||
-                code === "43.0"
+                code !== "43" &&
+                code !== "43.0"
             ) {
 
-                return true;
+                return false;
 
             }
 
+
+            isKumamoto = true;
+
+            break;
+
+        }
+
+    }
+
+
+    //========================================================
+    // 都道府県情報が無い場合は座標で判定
+    //========================================================
+
+    if (!isKumamoto) {
+
+        const coordinate =
+            getGeometryRepresentativeCoordinate(
+                feature.geometry
+            );
+
+
+        if (!coordinate) {
+
+            return false;
+
+        }
+
+
+        if (
+            !isKumamotoCoordinate(
+                coordinate.lon,
+                coordinate.lat
+            )
+        ) {
 
             return false;
 
@@ -885,32 +942,99 @@ function isKumamotoFeature(
 
 
     //========================================================
-    // 最終判定
+    // ③ 実際の交通規制が存在するか
+    //========================================================
     //
-    // 全国データで県情報が無い場合は
-    // 座標で熊本県周辺を抽出する。
+    // 国交省GISには道路データ等も含まれるため、
+    // 「規制開始_内容」または「規制内容」が
+    // 実際に設定されているFeatureだけを採用する。
+    //
     //========================================================
 
-    const coordinate =
-        getGeometryRepresentativeCoordinate(
-            feature.geometry
-        );
+    const regulationStartContent =
+        String(
+            properties.規制開始_内容 ??
+            ""
+        ).trim();
 
 
-    if (!coordinate) {
+    const regulationContent =
+        String(
+            properties.規制内容 ??
+            ""
+        ).trim();
+
+
+    const regulationType =
+        String(
+            properties.規制種別 ??
+            ""
+        ).trim();
+
+
+    const regulationReason =
+        String(
+            properties.規制理由 ??
+            ""
+        ).trim();
+
+
+    //========================================================
+    // 規制内容が存在するもの
+    //========================================================
+
+    const hasRegulationContent =
+
+        regulationStartContent !== "" ||
+
+        regulationContent !== "";
+
+
+    //========================================================
+    // 規制種別・理由だけ存在する場合も対象
+    //========================================================
+
+    const hasRegulationInfo =
+
+        hasRegulationContent ||
+
+        regulationType !== "" ||
+
+        regulationReason !== "";
+
+
+    if (!hasRegulationInfo) {
 
         return false;
 
     }
 
 
-    return isKumamotoCoordinate(
+    //========================================================
+    // 「解除」されたデータを除外
+    //========================================================
 
-        coordinate.lon,
+    const combinedText = (
 
-        coordinate.lat
+        regulationStartContent +
+        " " +
+        regulationContent +
+        " " +
+        regulationType
 
     );
+
+
+    if (
+        combinedText.includes("解除")
+    ) {
+
+        return false;
+
+    }
+
+
+    return true;
 
 }
 
@@ -949,15 +1073,13 @@ function mergeGeoJSON(
                 of geojson.features || []
             ) {
 
-                if (
-                    !isKumamotoFeature(
-                        feature
-                    )
-                ) {
-
-                    continue;
-
-                }
+              if (
+    !isActualTrafficRegulationFeature(
+        feature
+    )
+) {
+    continue;
+}
 
 
                 features.push({
@@ -983,16 +1105,13 @@ function mergeGeoJSON(
             "Feature"
         ) {
 
-            if (
-                !isKumamotoFeature(
-                    geojson
-                )
-            ) {
-
-                continue;
-
-            }
-
+           if (
+    !isActualTrafficRegulationFeature(
+        geojson
+    )
+) {
+    continue;
+}
 
             features.push({
 
@@ -1118,9 +1237,7 @@ function logGeoJSONProperties(
 // GeoJSON → 既存trafficRegulations互換データ
 //============================================================
 
-function geoJSONToTrafficArray(
-    geojson
-) {
+function geoJSONToTrafficArray(geojson) {
 
     const result = [];
 
@@ -1133,6 +1250,21 @@ function geoJSONToTrafficArray(
 
         const feature =
             geojson.features[i];
+
+
+        //====================================================
+        // 実際の交通規制だけ
+        //====================================================
+
+        if (
+            !isActualTrafficRegulationFeature(
+                feature
+            )
+        ) {
+
+            continue;
+
+        }
 
 
         const geometry =
@@ -1159,32 +1291,9 @@ function geoJSONToTrafficArray(
         }
 
 
-        const lon =
-            coordinate.lon;
-
-        const lat =
-            coordinate.lat;
-
-
-        if (
-            !isKumamotoCoordinate(
-                lon,
-                lat
-            )
-        ) {
-
-            continue;
-
-        }
-
-
         const properties =
             feature.properties || {};
 
-
-        //====================================================
-        // 路線名
-        //====================================================
 
         const route =
 
@@ -1204,27 +1313,19 @@ function geoJSONToTrafficArray(
 
 
         //====================================================
-        // 規制種別
+        // 「規制開始_内容」を最優先
         //====================================================
 
         const type =
+
+            properties.規制開始_内容 ||
 
             properties.規制内容 ||
 
             properties.規制種別 ||
 
-            properties.規制名称 ||
-
-            properties.regulation_type ||
-
-            properties.REGULATION_TYPE ||
-
             "道路規制";
 
-
-        //====================================================
-        // 理由
-        //====================================================
 
         const reason =
 
@@ -1234,14 +1335,8 @@ function geoJSONToTrafficArray(
 
             properties.reason ||
 
-            properties.REASON ||
-
             "";
 
-
-        //====================================================
-        // 区間
-        //====================================================
 
         const section =
 
@@ -1249,33 +1344,19 @@ function geoJSONToTrafficArray(
 
             properties.区間 ||
 
-            properties.section ||
-
-            properties.SECTION ||
-
             "";
 
 
-        //====================================================
-        // 開始日時
-        //====================================================
-
         const start =
+
+            properties.規制開始_日時 ||
 
             properties.規制開始日時 ||
 
             properties.開始日時 ||
 
-            properties.start ||
-
-            properties.START ||
-
             "";
 
-
-        //====================================================
-        // ID
-        //====================================================
 
         const id =
 
@@ -1293,13 +1374,13 @@ function geoJSONToTrafficArray(
         result.push({
 
             id:
-                id,
+                String(id),
 
             lat:
-                lat,
+                coordinate.lat,
 
             lon:
-                lon,
+                coordinate.lon,
 
             route:
                 String(route),
