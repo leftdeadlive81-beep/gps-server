@@ -1,6 +1,7 @@
+```html
 <!-- 現在位置自動共有君 Version 2.3
      HTML修正版 ①/4
-     自動ログイン対応版
+     自動ログイン対応・アイコン4種類対応
 -->
 
 <!DOCTYPE html>
@@ -340,14 +341,30 @@ value="隊員A"
 placeholder="名前">
 
 
+<!--
+  アイコン種類
+  1 = 隊員
+  2 = 小型
+  3 = 中型
+  4 = 大型
+-->
+
 <select id="iconType">
 
-<option value="person">
-👤隊員
+<option value="1">
+👤 隊員
 </option>
 
-<option value="vehicle">
-🚙車両
+<option value="2">
+🚙 小型
+</option>
+
+<option value="3">
+🚚 中型
+</option>
+
+<option value="4">
+🚛 大型
 </option>
 
 </select>
@@ -457,6 +474,7 @@ onclick="updateStatus()">
 
 <div id="map"></div>
 
+
 <!-- HTML修正版 ②/4 -->
 
 
@@ -507,7 +525,9 @@ placeholder="地点名（例：CP1、給水所）">
 
 
 <button onclick="deletePoint()">
+
 🗑削除
+
 </button>
 
 </details>
@@ -587,13 +607,10 @@ placeholder="活動内容を入力">
 
 
 <div id="users"></div>
+```
 
-
-
-
-
+```html
 <script>
-
 
 const socket = io();
 
@@ -634,6 +651,35 @@ const MOVE_DISTANCE=10;
 
 
 //=====================
+// アイコン種類の旧データ変換
+//=====================
+
+function normalizeIconType(type){
+
+    type=String(type || "");
+
+    // 旧Version 2.3の値を新形式へ変換
+    if(type==="person"){
+        return "1";
+    }
+
+    if(type==="vehicle"){
+        return "2";
+    }
+
+    // 新しい4種類
+    if(["1","2","3","4"].includes(type)){
+        return type;
+    }
+
+    // 不明な値は隊員
+    return "1";
+
+}
+
+
+
+//=====================
 // 自動ログイン復元
 //=====================
 
@@ -665,6 +711,19 @@ document.getElementById(key);
 
 if(element){
 
+    // iconTypeだけ旧形式を変換
+    if(key==="iconType"){
+
+        value=normalizeIconType(value);
+
+        localStorage.setItem(
+            "iconType",
+            value
+        );
+
+    }
+
+
 element.value=value;
 
 }
@@ -674,6 +733,30 @@ element.value=value;
 
 
 });
+
+
+
+// iconTypeが存在しない場合
+// デフォルトを「1：隊員」にする
+
+let iconElement=
+document.getElementById("iconType");
+
+
+
+if(
+iconElement &&
+!localStorage.getItem("iconType")
+){
+
+iconElement.value="1";
+
+localStorage.setItem(
+"iconType",
+"1"
+);
+
+}
 
 
 
@@ -688,6 +771,13 @@ if(savedName){
 
 
 setTimeout(()=>{
+
+
+let savedIconType=
+normalizeIconType(
+localStorage.getItem("iconType")
+);
+
 
 
 socket.emit(
@@ -715,7 +805,7 @@ localStorage.getItem("destination") || "",
 
 
 iconType:
-localStorage.getItem("iconType") || "person"
+savedIconType
 
 
 }
@@ -837,8 +927,6 @@ document.getElementById(
 
 }
 
-);
-
 
 
 
@@ -870,6 +958,20 @@ return;
 
 
 
+let iconType=
+normalizeIconType(
+document.getElementById("iconType").value
+);
+
+
+
+document.getElementById(
+"iconType"
+).value=
+iconType;
+
+
+
 socket.emit(
 
 "registerUser",
@@ -895,7 +997,7 @@ document.getElementById("destination").value,
 
 
 iconType:
-document.getElementById("iconType").value
+iconType
 
 
 }
@@ -912,8 +1014,7 @@ registered=true;
 "name",
 "water",
 "fuel",
-"destination",
-"iconType"
+"destination"
 
 ].forEach(key=>{
 
@@ -928,6 +1029,15 @@ document.getElementById(key).value
 
 
 });
+
+
+
+// iconTypeは正規化した値を保存
+
+localStorage.setItem(
+"iconType",
+iconType
+);
 
 
 
@@ -952,9 +1062,10 @@ startGPS();
 
 }
 
-<!-- HTML修正版 ③/4 -->
+```
 
 
+```javascript
 //=====================
 // 地図
 //=====================
@@ -990,7 +1101,6 @@ const terrain = L.tileLayer(
 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
 {
 attribution:'OpenTopoMap'
-}
 );
 
 
@@ -1305,6 +1415,19 @@ return;
 
 
 
+let iconType=
+normalizeIconType(
+document.getElementById("iconType").value
+);
+
+
+
+document.getElementById(
+"iconType"
+).value=
+iconType;
+
+
 
 socket.emit(
 
@@ -1347,7 +1470,7 @@ document.getElementById("destination").value,
 
 
 iconType:
-document.getElementById("iconType").value
+iconType
 
 
 
@@ -1585,45 +1708,66 @@ document.getElementById(
 
 }
 
-
-<!-- HTML修正版 ④/4 -->
-
-
+```
+```javascript id="p9f4f7"
 //=====================
 // アイコン
 //=====================
 
 function createIcon(type){
 
+    let image;
 
-let image;
-
-
-if(type==="vehicle"){
-
-image="/icon/vehicle.png";
-
-}
-else{
-
-image="/icon/person.png";
-
-}
+    // 念のため旧形式も変換
+    type=normalizeIconType(type);
 
 
+    switch(type){
 
-return L.icon({
+        // 1：隊員
+        case "1":
+            image="/icon/person.png";
+            break;
 
-iconUrl:image,
 
-iconSize:[60,60],
+        // 2：小型
+        case "2":
+            image="/icon/vehicle_small.png";
+            break;
 
-iconAnchor:[30,60],
 
-popupAnchor:[0,-70]
+        // 3：中型
+        case "3":
+            image="/icon/vehicle_medium.png";
+            break;
 
-});
 
+        // 4：大型
+        case "4":
+            image="/icon/vehicle_large.png";
+            break;
+
+
+        // 万一不明なら隊員
+        default:
+            image="/icon/person.png";
+            break;
+
+    }
+
+
+
+    return L.icon({
+
+        iconUrl:image,
+
+        iconSize:[60,60],
+
+        iconAnchor:[30,60],
+
+        popupAnchor:[0,-70]
+
+    });
 
 }
 
@@ -2178,20 +2322,6 @@ document.getElementById(
 "pointName"
 ).value="";
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 }
 
 
@@ -2238,11 +2368,6 @@ Object.keys(points).forEach(name=>{
 
 
 let p=points[name];
-
-
-
-
-
 
 
 
@@ -2358,3 +2483,4 @@ ${p.lon.toFixed(6)}
 
 
 </html>
+```
