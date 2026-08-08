@@ -14,12 +14,10 @@
 // ・クロノロジー
 // ・ユーザー削除
 // ・交通規制情報
-// ・交通規制実データ取得
-// ・交通規制5分ごと自動更新
+// ・JARTIC交通規制オープンデータ
+// ・熊本県交通規制
 // ・接続中全端末へ自動配信
 //
-// 交通規制データ
-// TRAFFIC_API_URL に公開JSON / GeoJSON取得先を設定
 //============================================================
 
 const express = require("express");
@@ -66,481 +64,550 @@ let trafficRegulations = [];
 
 
 //============================================================
-// 交通規制設定
+// 交通規制更新間隔
 //============================================================
 
-// 5分
+// JARTICのオープンデータは
+// 毎月更新されるため、5分ごとの取得は不要。
+//
+//
+// ここでは1時間ごとにチェックする。
+// 同じデータの場合は再配信しない。
+
 const TRAFFIC_UPDATE_INTERVAL =
-    5 * 60 * 1000;
-
-
-//------------------------------------------------------------
-// 実データ取得先
-//
-// Render等の環境変数に設定する:
-//
-// TRAFFIC_API_URL=https://取得先...
-//
-// URLが未設定の場合は、既存のテストデータを使用。
-//------------------------------------------------------------
-
-const TRAFFIC_API_URL =
-    process.env.TRAFFIC_API_URL || "";
+    60 * 60 * 1000;
 
 
 //============================================================
-// 熊本県範囲
+// JARTIC
 //============================================================
 //
-// 実データが全国分を返す場合に熊本県付近だけを抽出する。
-// 厳密な県境判定ではなく、まず熊本県を包含する範囲で
-// 絞り込む方式。
+// JARTICは交通規制オープンデータを
+// 都道府県別ZIPファイルで公開している。
+//
+// 現在公開されている交通規制情報は
+// 2026年05月分。
+//
+// 熊本県も公開対象。
 //============================================================
 
-const KUMAMOTO_BOUNDS = {
-
-    minLat: 32.0,
-
-    maxLat: 33.2,
-
-    minLon: 129.9,
-
-    maxLon: 131.3
-
-};
+const JARTIC_OPEN_DATA_URL =
+    "https://www.jartic.or.jp/service/opendata/";
 
 
 //============================================================
-// 熊本県内判定
+// HTTP取得
 //============================================================
 
-function isKumamotoLocation(
-    lat,
-    lon
-) {
+async function fetchText(url) {
 
-    if (
-        typeof lat !== "number" ||
-        typeof lon !== "number"
-    ) {
+    const response =
+        await fetch(url, {
 
-        return false;
+            headers: {
+
+                "User-Agent":
+                    "Puttan-Version-2.3"
+
+            }
+
+        });
+
+
+    if (!response.ok) {
+
+        throw new Error(
+            "HTTP " +
+            response.status +
+            " " +
+            response.statusText
+        );
 
     }
 
 
-    return (
+    return await response.text();
 
-        lat >= KUMAMOTO_BOUNDS.minLat &&
+}
 
-        lat <= KUMAMOTO_BOUNDS.maxLat &&
 
-        lon >= KUMAMOTO_BOUNDS.minLon &&
+//============================================================
+// JARTIC公開ページから
+// 熊本県ZIPのURLを探す
+//============================================================
 
-        lon <= KUMAMOTO_BOUNDS.maxLon
+async function findKumamotoZipUrl() {
 
+    const html =
+        await fetchText(
+            JARTIC_OPEN_DATA_URL
+        );
+
+
+    //--------------------------------------------------------
+    // 熊本県のリンクを探す
+    //--------------------------------------------------------
+
+    const links = [];
+
+    const regex =
+        /<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+
+
+    let match;
+
+
+    while (
+        (match = regex.exec(html))
+        !== null
+    ) {
+
+        const href =
+            match[1];
+
+        const text =
+            match[2]
+                .replace(/<[^>]+>/g, "")
+                .trim();
+
+
+        if (
+            text.includes("熊本県")
+        ) {
+
+            links.push(href);
+
+        }
+
+    }
+
+
+    //--------------------------------------------------------
+    // ZIPリンクを優先
+    //--------------------------------------------------------
+
+    let zip =
+        links.find(
+            url =>
+                url
+                    .toLowerCase()
+                    .includes(".zip")
+        );
+
+
+    //--------------------------------------------------------
+    // 相対URLの場合
+    //--------------------------------------------------------
+
+    if (zip) {
+
+        return new URL(
+            zip,
+            JARTIC_OPEN_DATA_URL
+        ).href;
+
+    }
+
+
+    //--------------------------------------------------------
+    // 熊本県リンクが見つからない場合
+    //--------------------------------------------------------
+
+    throw new Error(
+        "JARTIC公開ページから熊本県ZIPを取得できませんでした"
     );
 
 }
 
 
 //============================================================
-// 数値変換
+// ZIP / CSV取得
+//============================================================
+//
+// 注意：
+// JARTICの交通規制データはZIP内にCSVが入っている。
+// そのため本番環境では unzipper を使用する。
+//
+// package.json に以下を追加すること:
+//
+// "unzipper": "^0.12.0"
+// "iconv-lite": "^0.6.3"
 //============================================================
 
-function toNumber(value) {
+async function downloadKumamotoTrafficCSV() {
 
-    if (
-        value === null ||
-        value === undefined ||
-        value === ""
-    ) {
+    const zipUrl =
+        await findKumamotoZipUrl();
 
-        return null;
 
-    }
-
-
-    const n =
-        Number(value);
-
-
-    if (Number.isNaN(n)) {
-
-        return null;
-
-    }
-
-
-    return n;
-
-}
-
-
-//============================================================
-// 交通規制種別を整理
-//============================================================
-
-function normalizeTrafficType(
-    value
-) {
-
-    if (!value) {
-
-        return "交通規制";
-
-    }
-
-
-    const text =
-        String(value);
-
-
-    if (
-        text.includes("通行止") ||
-        text.includes("全面通行止")
-    ) {
-
-        return "通行止め";
-
-    }
-
-
-    if (
-        text.includes("片側") ||
-        text.includes("交互")
-    ) {
-
-        return "片側交互通行";
-
-    }
-
-
-    if (
-        text.includes("車線") ||
-        text.includes("車線規制")
-    ) {
-
-        return "車線規制";
-
-    }
-
-
-    if (
-        text.includes("工事")
-    ) {
-
-        return "道路工事";
-
-    }
-
-
-    return text;
-
-}
-
-
-//============================================================
-// GeoJSON座標から代表座標を取得
-//============================================================
-
-function getGeoJSONPoint(
-    geometry
-) {
-
-    if (!geometry) {
-
-        return null;
-
-    }
-
-
-    const coordinates =
-        geometry.coordinates;
-
-
-    if (!coordinates) {
-
-        return null;
-
-    }
-
-
-    //--------------------------------------------------------
-    // Point
-    //--------------------------------------------------------
-
-    if (
-        geometry.type === "Point"
-    ) {
-
-        if (
-            Array.isArray(coordinates) &&
-            coordinates.length >= 2
-        ) {
-
-            return {
-
-                lon:
-                    Number(
-                        coordinates[0]
-                    ),
-
-                lat:
-                    Number(
-                        coordinates[1]
-                    )
-
-            };
-
-        }
-
-    }
-
-
-    //--------------------------------------------------------
-    // LineString / MultiPoint
-    //--------------------------------------------------------
-
-    if (
-        geometry.type === "LineString" ||
-        geometry.type === "MultiPoint"
-    ) {
-
-        if (
-            Array.isArray(coordinates) &&
-            coordinates.length > 0
-        ) {
-
-            const index =
-                Math.floor(
-                    coordinates.length / 2
-                );
-
-
-            const p =
-                coordinates[index];
-
-
-            if (
-                Array.isArray(p) &&
-                p.length >= 2
-            ) {
-
-                return {
-
-                    lon:
-                        Number(p[0]),
-
-                    lat:
-                        Number(p[1])
-
-                };
-
-            }
-
-        }
-
-    }
-
-
-    //--------------------------------------------------------
-    // MultiLineString
-    //--------------------------------------------------------
-
-    if (
-        geometry.type === "MultiLineString"
-    ) {
-
-        if (
-            Array.isArray(coordinates) &&
-            coordinates.length > 0 &&
-            Array.isArray(
-                coordinates[0]
-            )
-        ) {
-
-            const line =
-                coordinates[
-                    Math.floor(
-                        coordinates.length / 2
-                    )
-                ];
-
-
-            if (
-                Array.isArray(line) &&
-                line.length > 0
-            ) {
-
-                const p =
-                    line[
-                        Math.floor(
-                            line.length / 2
-                        )
-                    ];
-
-
-                if (
-                    Array.isArray(p) &&
-                    p.length >= 2
-                ) {
-
-                    return {
-
-                        lon:
-                            Number(p[0]),
-
-                        lat:
-                            Number(p[1])
-
-                    };
-
-                }
-
-            }
-
-        }
-
-    }
-
-
-    //--------------------------------------------------------
-    // Polygon / MultiPolygon
-    //--------------------------------------------------------
-
-    function searchNested(
-        value
-    ) {
-
-        if (
-            Array.isArray(value)
-        ) {
-
-            if (
-                value.length >= 2 &&
-                typeof value[0] === "number" &&
-                typeof value[1] === "number"
-            ) {
-
-                return {
-
-                    lon:
-                        Number(value[0]),
-
-                    lat:
-                        Number(value[1])
-
-                };
-
-            }
-
-
-            for (
-                const child of value
-            ) {
-
-                const result =
-                    searchNested(child);
-
-
-                if (result) {
-
-                    return result;
-
-                }
-
-            }
-
-        }
-
-
-        return null;
-
-    }
-
-
-    return searchNested(
-        coordinates
+    console.log(
+        "JARTIC熊本県データ:",
+        zipUrl
     );
 
-}
+
+    const response =
+        await fetch(zipUrl, {
+
+            headers: {
+
+                "User-Agent":
+                    "Puttan-Version-2.3"
+
+            }
+
+        });
 
 
-//============================================================
-// 交通規制1件をプッたん形式へ変換
-//============================================================
+    if (!response.ok) {
 
-function normalizeTrafficItem(
-    item,
-    index
-) {
-
-    if (!item) {
-
-        return null;
+        throw new Error(
+            "熊本県ZIP取得失敗 HTTP " +
+            response.status
+        );
 
     }
 
 
-    //--------------------------------------------------------
-    // GeoJSON Feature
-    //--------------------------------------------------------
-
-    let properties =
-        item.properties || item;
+    const arrayBuffer =
+        await response.arrayBuffer();
 
 
-    let lat =
-        toNumber(
-            item.lat ??
-            item.latitude ??
-            properties.lat ??
-            properties.latitude
+    const buffer =
+        Buffer.from(
+            arrayBuffer
         );
 
 
-    let lon =
-        toNumber(
-            item.lon ??
-            item.lng ??
-            item.longitude ??
-            properties.lon ??
-            properties.lng ??
-            properties.longitude
+    const unzipper =
+        require("unzipper");
+
+
+    const iconv =
+        require("iconv-lite");
+
+
+    const directory =
+        await unzipper.Open.buffer(
+            buffer
         );
 
 
     //--------------------------------------------------------
-    // GeoJSON geometry
+    // CSVを探す
     //--------------------------------------------------------
 
-    if (
-        (
-            lat === null ||
-            lon === null
-        ) &&
-        item.geometry
+    const csvFile =
+        directory.files.find(
+            file =>
+                file.path
+                    .toLowerCase()
+                    .endsWith(".csv")
+        );
+
+
+    if (!csvFile) {
+
+        throw new Error(
+            "熊本県ZIP内にCSVがありません"
+        );
+
+    }
+
+
+    const csvBuffer =
+        await csvFile.buffer();
+
+
+    //--------------------------------------------------------
+    // JARTIC CSVはShift-JIS
+    //--------------------------------------------------------
+
+    const csvText =
+        iconv.decode(
+            csvBuffer,
+            "Shift_JIS"
+        );
+
+
+    return csvText;
+
+}
+
+
+//============================================================
+// CSV解析
+//============================================================
+//
+// JARTIC拡張版標準フォーマットは
+// 項目数が多いため、ここではヘッダー名から
+// 必要項目を探す。
+//
+//============================================================
+
+function parseCSVLine(line) {
+
+    const result = [];
+
+    let current = "";
+
+    let insideQuote = false;
+
+
+    for (
+        let i = 0;
+        i < line.length;
+        i++
     ) {
 
-        const point =
-            getGeoJSONPoint(
-                item.geometry
+        const c =
+            line[i];
+
+
+        if (c === '"') {
+
+            if (
+                insideQuote &&
+                line[i + 1] === '"'
+            ) {
+
+                current += '"';
+
+                i++;
+
+            }
+            else {
+
+                insideQuote =
+                    !insideQuote;
+
+            }
+
+        }
+        else if (
+            c === "," &&
+            !insideQuote
+        ) {
+
+            result.push(
+                current
+            );
+
+            current = "";
+
+        }
+        else {
+
+            current += c;
+
+        }
+
+    }
+
+
+    result.push(
+        current
+    );
+
+
+    return result;
+
+}
+
+
+//============================================================
+// CSV全文解析
+//============================================================
+
+function parseTrafficCSV(csvText) {
+
+    const lines =
+        csvText
+            .split(/\r?\n/)
+            .filter(
+                line =>
+                    line.trim() !== ""
             );
 
 
-        if (point) {
+    if (
+        lines.length < 2
+    ) {
 
-            lat =
-                point.lat;
+        return [];
 
-            lon =
-                point.lon;
+    }
+
+
+    const headers =
+        parseCSVLine(
+            lines[0]
+        );
+
+
+    const rows = [];
+
+
+    for (
+        let i = 1;
+        i < lines.length;
+        i++
+    ) {
+
+        const values =
+            parseCSVLine(
+                lines[i]
+            );
+
+
+        const row = {};
+
+
+        headers.forEach(
+            (header, index) => {
+
+                row[header] =
+                    values[index] || "";
+
+            }
+        );
+
+
+        rows.push(row);
+
+    }
+
+
+    return rows;
+
+}
+
+
+//============================================================
+// 数値取得
+//============================================================
+
+function findNumber(row, names) {
+
+    for (
+        const name of names
+    ) {
+
+        if (
+            row[name] !== undefined &&
+            row[name] !== ""
+        ) {
+
+            const n =
+                Number(
+                    row[name]
+                );
+
+
+            if (
+                Number.isFinite(n)
+            ) {
+
+                return n;
+
+            }
 
         }
 
     }
 
+
+    return null;
+
+}
+
+
+//============================================================
+// 文字列取得
+//============================================================
+
+function findValue(row, names) {
+
+    for (
+        const name of names
+    ) {
+
+        if (
+            row[name] !== undefined &&
+            row[name] !== ""
+        ) {
+
+            return row[name];
+
+        }
+
+    }
+
+
+    return "";
+
+}
+
+
+//============================================================
+// 交通規制データ変換
+//============================================================
+
+function convertTrafficRow(
+    row,
+    index
+) {
+
+    //--------------------------------------------------------
+    // 緯度
+    //--------------------------------------------------------
+
+    const lat =
+        findNumber(
+            row,
+            [
+
+                "緯度",
+
+                "latitude",
+
+                "Latitude",
+
+                "lat",
+
+                "LAT"
+
+            ]
+        );
+
+
+    //--------------------------------------------------------
+    // 経度
+    //--------------------------------------------------------
+
+    const lon =
+        findNumber(
+            row,
+            [
+
+                "経度",
+
+                "longitude",
+
+                "Longitude",
+
+                "lon",
+
+                "LON"
+
+            ]
+        );
+
+
+    //--------------------------------------------------------
+    // 座標が取得できないデータは
+    // 地図表示対象から除外
+    //--------------------------------------------------------
 
     if (
         lat === null ||
@@ -553,120 +620,174 @@ function normalizeTrafficItem(
 
 
     //--------------------------------------------------------
-    // 熊本県付近だけ採用
+    // 規制種別
     //--------------------------------------------------------
 
-    if (
-        !isKumamotoLocation(
-            lat,
-            lon
-        )
-    ) {
+    const type =
+        findValue(
+            row,
+            [
 
-        return null;
+                "規制種別名称",
 
-    }
+                "規制種別",
+
+                "規制内容",
+
+                "規制種別名",
+
+                "restriction"
+
+            ]
+        );
 
 
     //--------------------------------------------------------
-    // 各種項目
+    // 道路名
     //--------------------------------------------------------
 
     const route =
-        properties.route ??
-        properties.roadName ??
-        properties.road_name ??
-        properties.路線名 ??
-        properties.路線 ??
-        properties.name ??
-        "道路";
+        findValue(
+            row,
+            [
+
+                "路線名",
+
+                "道路名称",
+
+                "道路名",
+
+                "road",
+
+                "route"
+
+            ]
+        );
 
 
-    const rawType =
-        properties.type ??
-        properties.regulationType ??
-        properties.regulation_type ??
-        properties.規制種別 ??
-        properties.規制内容 ??
-        properties.status ??
-        "交通規制";
-
+    //--------------------------------------------------------
+    // 規制理由
+    //--------------------------------------------------------
 
     const reason =
-        properties.reason ??
-        properties.cause ??
-        properties.原因 ??
-        properties.理由 ??
-        "";
+        findValue(
+            row,
+            [
 
+                "規制理由",
+
+                "理由",
+
+                "reason"
+
+            ]
+        );
+
+
+    //--------------------------------------------------------
+    // 規制区間
+    //--------------------------------------------------------
 
     const section =
-        properties.section ??
-        properties.sectionName ??
-        properties.区間 ??
-        properties.規制区間 ??
-        "";
+        findValue(
+            row,
+            [
 
+                "規制区間",
+
+                "区間",
+
+                "規制場所",
+
+                "場所",
+
+                "section"
+
+            ]
+        );
+
+
+    //--------------------------------------------------------
+    // 開始
+    //--------------------------------------------------------
 
     const start =
-        properties.start ??
-        properties.startTime ??
-        properties.start_time ??
-        properties.開始日時 ??
-        "";
+        findValue(
+            row,
+            [
 
+                "規制開始日時",
+
+                "開始日時",
+
+                "規制開始",
+
+                "start"
+
+            ]
+        );
+
+
+    //--------------------------------------------------------
+    // 終了
+    //--------------------------------------------------------
 
     const end =
-        properties.end ??
-        properties.endTime ??
-        properties.end_time ??
-        properties.終了日時 ??
-        "";
+        findValue(
+            row,
+            [
 
+                "規制終了日時",
 
-    const id =
-        properties.id ??
-        item.id ??
-        (
-            "traffic-" +
-            index
+                "終了日時",
+
+                "規制終了",
+
+                "end"
+
+            ]
         );
 
 
     return {
 
-        id: String(id),
+        id:
+            "jartic-" +
+            index,
 
-        lat: lat,
+        lat:lat,
 
-        lon: lon,
+        lon:lon,
 
         route:
-            String(route),
+            route ||
+            "道路名不明",
 
         type:
-            normalizeTrafficType(
-                rawType
-            ),
+            type ||
+            "交通規制",
 
         reason:
-            String(reason),
+            reason ||
+            "",
 
         section:
-            String(section),
+            section ||
+            "",
 
         start:
-            String(start),
+            start ||
+            "",
 
         end:
-            String(end),
+            end ||
+            "",
 
         source:
-            "公開交通規制データ",
+            "JARTIC",
 
-        updated:
-            new Date()
-                .toISOString()
+        sourceUrl:
+            JARTIC_OPEN_DATA_URL
 
     };
 
@@ -674,260 +795,78 @@ function normalizeTrafficItem(
 
 
 //============================================================
-// 配列データを変換
-//============================================================
-
-function normalizeTrafficData(
-    data
-) {
-
-    let items = [];
-
-
-    //--------------------------------------------------------
-    // GeoJSON FeatureCollection
-    //--------------------------------------------------------
-
-    if (
-        data &&
-        data.type ===
-            "FeatureCollection" &&
-        Array.isArray(
-            data.features
-        )
-    ) {
-
-        items =
-            data.features;
-
-    }
-
-
-    //--------------------------------------------------------
-    // GeoJSON Feature
-    //--------------------------------------------------------
-
-    else if (
-        data &&
-        data.type === "Feature"
-    ) {
-
-        items = [data];
-
-    }
-
-
-    //--------------------------------------------------------
-    // 通常の配列
-    //--------------------------------------------------------
-
-    else if (
-        Array.isArray(data)
-    ) {
-
-        items = data;
-
-    }
-
-
-    //--------------------------------------------------------
-    // { data: [...] }
-    //--------------------------------------------------------
-
-    else if (
-        data &&
-        Array.isArray(
-            data.data
-        )
-    ) {
-
-        items =
-            data.data;
-
-    }
-
-
-    //--------------------------------------------------------
-    // { results: [...] }
-    //--------------------------------------------------------
-
-    else if (
-        data &&
-        Array.isArray(
-            data.results
-        )
-    ) {
-
-        items =
-            data.results;
-
-    }
-
-
-    const result = [];
-
-
-    items.forEach(
-        (item, index) => {
-
-            const normalized =
-                normalizeTrafficItem(
-                    item,
-                    index
-                );
-
-
-            if (normalized) {
-
-                result.push(
-                    normalized
-                );
-
-            }
-
-        }
-    );
-
-
-    return result;
-
-}
-
-
-//============================================================
 // 交通規制取得
-//============================================================
-//
-// TRAFFIC_API_URL が設定されていれば実データを取得。
-// 未設定の場合はテストデータ。
 //============================================================
 
 async function fetchTrafficRegulations() {
 
-    //--------------------------------------------------------
-    // 実データURLなし
-    //--------------------------------------------------------
-
-    if (
-        !TRAFFIC_API_URL
-    ) {
-
-        console.log(
-            "TRAFFIC_API_URL 未設定"
-        );
-
-        console.log(
-            "交通規制テストデータを使用します"
-        );
-
-
-        return [
-
-            {
-
-                id:
-                    "test-traffic-1",
-
-                lat:
-                    32.803,
-
-                lon:
-                    130.707,
-
-                route:
-                    "テスト道路",
-
-                type:
-                    "通行止め",
-
-                reason:
-                    "道路工事",
-
-                section:
-                    "テスト区間",
-
-                start:
-                    new Date()
-                        .toLocaleString(
-                            "ja-JP",
-                            {
-                                timeZone:
-                                    "Asia/Tokyo",
-
-                                hour12:
-                                    false
-                            }
-                        ),
-
-                end:
-                    "",
-
-                source:
-                    "プッたんテストデータ",
-
-                updated:
-                    new Date()
-                        .toISOString()
-
-            }
-
-        ];
-
-    }
-
-
-    //--------------------------------------------------------
-    // 実データ取得
-    //--------------------------------------------------------
-
     try {
 
         console.log(
-            "交通規制実データ取得:",
-            TRAFFIC_API_URL
+            "================================"
+        );
+
+        console.log(
+            "JARTIC交通規制取得開始"
         );
 
 
-        const response =
-            await fetch(
-                TRAFFIC_API_URL,
-                {
+        //----------------------------------------------------
+        // CSV取得
+        //----------------------------------------------------
 
-                    headers: {
-
-                        "User-Agent":
-                            "Puttan/2.3"
-
-                    }
-
-                }
-            );
+        const csvText =
+            await downloadKumamotoTrafficCSV();
 
 
-        if (
-            !response.ok
-        ) {
+        //----------------------------------------------------
+        // CSV解析
+        //----------------------------------------------------
 
-            throw new Error(
-                "HTTP " +
-                response.status
-            );
-
-        }
-
-
-        const data =
-            await response.json();
-
-
-        const regulations =
-            normalizeTrafficData(
-                data
+        const rows =
+            parseTrafficCSV(
+                csvText
             );
 
 
         console.log(
-            "実データ取得:",
+            "JARTIC CSV:",
+            rows.length,
+            "件"
+        );
+
+
+        //----------------------------------------------------
+        // プッたん用データへ変換
+        //----------------------------------------------------
+
+        const regulations = [];
+
+
+        rows.forEach(
+            (row, index) => {
+
+                const item =
+                    convertTrafficRow(
+                        row,
+                        index
+                    );
+
+
+                if (item) {
+
+                    regulations.push(
+                        item
+                    );
+
+                }
+
+            }
+        );
+
+
+        console.log(
+            "地図表示可能:",
             regulations.length,
             "件"
         );
@@ -939,30 +878,9 @@ async function fetchTrafficRegulations() {
     catch (err) {
 
         console.error(
-            "交通規制実データ取得エラー:",
+            "JARTIC交通規制取得エラー:",
             err
         );
-
-
-        //----------------------------------------------------
-        // 実データ取得失敗時は既存データを維持
-        //----------------------------------------------------
-
-        if (
-            Array.isArray(
-                trafficRegulations
-            ) &&
-            trafficRegulations.length > 0
-        ) {
-
-            console.log(
-                "前回取得済み交通規制データを維持します"
-            );
-
-
-            return trafficRegulations;
-
-        }
 
 
         return [];
@@ -994,9 +912,7 @@ async function updateTrafficRegulations() {
 
 
         if (
-            !Array.isArray(
-                regulations
-            )
+            !Array.isArray(regulations)
         ) {
 
             console.error(
@@ -1127,8 +1043,7 @@ async function loadChronology() {
                                 timeZone:
                                     "Asia/Tokyo",
 
-                                hour12:
-                                    false
+                                hour12:false
 
                             }
                         ),
@@ -1254,7 +1169,7 @@ async function loadUsers() {
 
 io.on(
     "connection",
-    (socket) => {
+    socket => {
 
         console.log(
             "接続:",
@@ -1263,7 +1178,7 @@ io.on(
 
 
         //====================================================
-        // 初期データ送信
+        // 初期データ
         //====================================================
 
         socket.emit(
@@ -1297,7 +1212,7 @@ io.on(
         socket.on(
             "addPoint",
 
-            async (point) => {
+            async point => {
 
                 try {
 
@@ -1341,7 +1256,7 @@ io.on(
                             point.name,
 
                             point.type ||
-                                "point",
+                            "point",
 
                             point.lat,
 
@@ -1381,11 +1296,6 @@ io.on(
                     );
 
 
-                    console.log(
-                        "地点登録:",
-                        point.name
-                    );
-
                 }
                 catch (err) {
 
@@ -1407,7 +1317,7 @@ io.on(
         socket.on(
             "registerUser",
 
-            async (data) => {
+            async data => {
 
                 try {
 
@@ -1595,7 +1505,7 @@ io.on(
         socket.on(
             "location",
 
-            async (data) => {
+            async data => {
 
                 if (
                     !users[data.name]
@@ -1722,7 +1632,7 @@ io.on(
 
 
                     //------------------------------------------------
-                    // 位置履歴保存
+                    // 位置履歴
                     //------------------------------------------------
 
                     await pool.query(
@@ -1787,7 +1697,7 @@ io.on(
         socket.on(
             "addChronology",
 
-            async (data) => {
+            async data => {
 
                 const now =
                     Date.now();
@@ -1804,8 +1714,7 @@ io.on(
                                     timeZone:
                                         "Asia/Tokyo",
 
-                                    hour12:
-                                        false
+                                    hour12:false
 
                                 }
                             ),
@@ -1858,7 +1767,8 @@ io.on(
 
                         [
 
-                            data.user || "",
+                            data.user ||
+                            "",
 
                             data.message,
 
@@ -1895,7 +1805,7 @@ io.on(
         socket.on(
             "deleteUser",
 
-            async (name) => {
+            async name => {
 
                 delete users[name];
 
@@ -1943,7 +1853,7 @@ io.on(
         socket.on(
             "deletePoint",
 
-            async (name) => {
+            async name => {
 
                 delete points[name];
 
@@ -1991,17 +1901,13 @@ io.on(
         socket.on(
             "updateTrafficRegulations",
 
-            (regulations) => {
+            regulations => {
 
                 if (
                     !Array.isArray(
                         regulations
                     )
                 ) {
-
-                    console.log(
-                        "交通規制データが配列ではありません"
-                    );
 
                     return;
 
@@ -2017,12 +1923,6 @@ io.on(
                     trafficRegulations
                 );
 
-
-                console.log(
-                    "交通規制手動更新:",
-                    trafficRegulations.length,
-                    "件"
-                );
 
             }
         );
@@ -2043,6 +1943,7 @@ io.on(
                 );
 
             }
+
         );
 
     }
@@ -2054,12 +1955,9 @@ io.on(
 //============================================================
 
 const PORT =
-    process.env.PORT || 10000;
+    process.env.PORT ||
+    10000;
 
-
-//============================================================
-// 起動
-//============================================================
 
 async function startServer() {
 
@@ -2081,58 +1979,30 @@ async function startServer() {
             );
 
             console.log(
-                "現在位置自動共有君 Version 2.3"
-            );
-
-            console.log(
                 "server start port:",
                 PORT
             );
 
             console.log(
-                "交通規制自動更新:",
-                "5分ごと"
+                "JARTIC交通規制:",
+                "実データ"
             );
-
-
-            if (
-                TRAFFIC_API_URL
-            ) {
-
-                console.log(
-                    "交通規制実データURL:",
-                    TRAFFIC_API_URL
-                );
-
-            }
-            else {
-
-                console.log(
-                    "交通規制実データURL: 未設定"
-                );
-
-                console.log(
-                    "現在はテストデータを使用"
-                );
-
-            }
-
 
             console.log(
                 "================================"
             );
 
 
-            //================================================
-            // 起動直後に1回取得
-            //================================================
+            //------------------------------------------------
+            // 起動直後に取得
+            //------------------------------------------------
 
             await updateTrafficRegulations();
 
 
-            //================================================
-            // 5分ごとに自動更新
-            //================================================
+            //------------------------------------------------
+            // 定期更新
+            //------------------------------------------------
 
             setInterval(
 
