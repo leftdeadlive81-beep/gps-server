@@ -1,9 +1,29 @@
-// server.js 修正版 ①/③
+
+//============================================================
+// 現在位置自動共有君 Version 2.3
+// server.js
+//
+// ①～⑫ 適用版
+//
+// ・PostgreSQL / Supabase
+// ・ユーザー登録
+// ・GPS位置情報
+// ・UTM座標
+// ・アイコン4種類
+// ・地点登録
+// ・地点削除
+// ・クロノロジー
+// ・ユーザー削除
+// ・交通規制情報
+//============================================================
+
 
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const { Pool } = require("pg");
+
+
 
 const app = express();
 
@@ -15,9 +35,10 @@ const io = new Server(server);
 app.use(express.static("public"));
 
 
-//=====================
-// PostgreSQL Supabase
-//=====================
+
+//============================================================
+// PostgreSQL / Supabase
+//============================================================
 
 const pool = new Pool({
 
@@ -31,9 +52,10 @@ const pool = new Pool({
 });
 
 
-//=====================
+
+//============================================================
 // メモリ
-//=====================
+//============================================================
 
 let users = {};
 
@@ -42,24 +64,28 @@ let points = {};
 let chronology = [];
 
 
+// 交通規制
+let trafficRegulations = [];
 
-//=====================
+
+
+//============================================================
 // 地点復元
-//=====================
+//============================================================
 
 async function loadPoints(){
 
     try{
 
         const result =
-        await pool.query(
-            "SELECT * FROM points ORDER BY created"
-        );
+            await pool.query(
+                "SELECT * FROM points ORDER BY created"
+            );
 
 
         result.rows.forEach(point=>{
 
-            points[point.name]=point;
+            points[point.name] = point;
 
         });
 
@@ -70,7 +96,8 @@ async function loadPoints(){
         );
 
 
-    }catch(err){
+    }
+    catch(err){
 
         console.error(
             "地点復元エラー",
@@ -83,45 +110,47 @@ async function loadPoints(){
 
 
 
-//=====================
+//============================================================
 // クロノロジー復元
-//=====================
+//============================================================
 
 async function loadChronology(){
 
     try{
 
         const result =
-        await pool.query(
-            "SELECT * FROM chronology ORDER BY id DESC LIMIT 100"
-        );
+            await pool.query(
+                "SELECT * FROM chronology ORDER BY id DESC LIMIT 100"
+            );
 
 
         chronology =
-        result.rows.map(row=>({
+            result.rows.map(row=>({
 
-            time:
-            new Date(
-                Number(row.created)
-            ).toLocaleString(
-                "ja-JP",
-                {
-                    timeZone:"Asia/Tokyo",
-                    hour12:false
-                }
-            ),
+                time:
+                    new Date(
+                        Number(row.created)
+                    ).toLocaleString(
+                        "ja-JP",
+                        {
+                            timeZone:"Asia/Tokyo",
+                            hour12:false
+                        }
+                    ),
 
 
-            message:
-            (row.user_name
-            ?
-            "["+row.user_name+"] "
-            :
-            "")
-            +
-            row.message
+                message:
+                    (
+                        row.user_name
+                        ?
+                        "[" + row.user_name + "] "
+                        :
+                        ""
+                    )
+                    +
+                    row.message
 
-        }));
+            }));
 
 
         console.log(
@@ -130,7 +159,8 @@ async function loadChronology(){
         );
 
 
-    }catch(err){
+    }
+    catch(err){
 
         console.error(
             "クロノロジー復元エラー",
@@ -143,24 +173,23 @@ async function loadChronology(){
 
 
 
-//=====================
+//============================================================
 // ユーザー復元
-//=====================
+//============================================================
 
 async function loadUsers(){
 
     try{
 
         const result =
-        await pool.query(
-            "SELECT * FROM current_users"
-        );
+            await pool.query(
+                "SELECT * FROM current_users"
+            );
 
 
         result.rows.forEach(user=>{
 
-
-            users[user.name]={
+            users[user.name] = {
 
                 name:user.name,
 
@@ -181,7 +210,7 @@ async function loadUsers(){
                 destination:user.destination,
 
                 iconType:
-                user.icontype || "person",
+                    user.icontype || "1",
 
                 online:false,
 
@@ -189,9 +218,7 @@ async function loadUsers(){
 
             };
 
-
         });
-
 
 
         console.log(
@@ -200,7 +227,8 @@ async function loadUsers(){
         );
 
 
-    }catch(err){
+    }
+    catch(err){
 
         console.error(
             "DB復元エラー",
@@ -211,918 +239,855 @@ async function loadUsers(){
 
 }
 
-// server.js 修正版 ②/③
 
 
-//=====================
+//============================================================
+// 交通規制情報
+//============================================================
+//
+// 現段階ではサーバー内部の配列を使用。
+// 将来的に道路交通情報API等から取得して
+// この配列を更新できる構造。
+//============================================================
+
+function sendTrafficRegulations(socket){
+
+    socket.emit(
+        "trafficRegulations",
+        trafficRegulations
+    );
+
+}
+
+
+
+//============================================================
 // Socket.IO
-//=====================
+//============================================================
 
 io.on(
-"connection",
-(socket)=>{
+    "connection",
+    (socket)=>{
 
+        console.log(
+            "接続:",
+            socket.id
+        );
 
-console.log(
-"接続:",
-socket.id
-);
 
 
-// 初期送信
+        //====================================================
+        // 初期データ送信
+        //====================================================
 
-socket.emit(
-"locations",
-users
-);
+        socket.emit(
+            "locations",
+            users
+        );
 
 
-socket.emit(
-"points",
-points
-);
+        socket.emit(
+            "points",
+            points
+        );
 
 
-socket.emit(
-"chronology",
-chronology
-);
+        socket.emit(
+            "chronology",
+            chronology
+        );
 
 
+        // 交通規制
+        sendTrafficRegulations(socket);
 
-//=====================
-// 地点登録
-//=====================
 
-socket.on(
-"addPoint",
 
-async(point)=>{
+        //====================================================
+        // 地点登録
+        //====================================================
 
+        socket.on(
+            "addPoint",
 
-try{
+            async(point)=>{
 
+                try{
 
-console.log(
-"地点受信:",
-point
-);
+                    console.log(
+                        "地点受信:",
+                        point
+                    );
 
 
+                    const created = Date.now();
 
-await pool.query(
 
-`
+                    await pool.query(
 
-INSERT INTO points
+                        `
+                        INSERT INTO points
+                        (
+                            name,
+                            type,
+                            lat,
+                            lon,
+                            created
+                        )
+                        VALUES
+                        ($1,$2,$3,$4,$5)
 
-(
-name,
-type,
-lat,
-lon,
-created
-)
+                        ON CONFLICT(name)
 
-VALUES
+                        DO UPDATE SET
 
-($1,$2,$3,$4,$5)
+                            type=$2,
+                            lat=$3,
+                            lon=$4,
+                            created=$5
+                        `,
 
-ON CONFLICT(name)
+                        [
 
-DO UPDATE SET
+                            point.name,
 
-type=$2,
-lat=$3,
-lon=$4,
-created=$5
+                            point.type || "point",
 
-`
+                            point.lat,
 
-,
+                            point.lon,
 
-[
+                            created
 
-point.name,
+                        ]
 
-point.type || "point",
+                    );
 
-point.lat,
 
-point.lon,
+                    points[point.name] = {
 
-Date.now()
+                        name:point.name,
 
-]
+                        type:
+                            point.type || "point",
 
-);
+                        lat:point.lat,
 
+                        lon:point.lon,
 
+                        created:created
 
-points[point.name]={
-    name:point.name,
-    type:point.type || "point",
-    lat:point.lat,
-    lon:point.lon,
-    created:Date.now()
-};
+                    };
 
 
-io.emit(
-"points",
-points
-);
+                    io.emit(
+                        "points",
+                        points
+                    );
 
 
+                    console.log(
+                        "地点登録:",
+                        point.name
+                    );
 
-console.log(
-"地点登録:",
-point.name
-);
 
+                }
+                catch(err){
 
-}
-catch(err){
+                    console.error(
+                        "地点保存エラー",
+                        err
+                    );
 
-console.error(
-"地点保存エラー",
-err
-);
+                }
 
-}
+            }
 
+        );
 
-}
 
-);
 
+        //====================================================
+        // ユーザー登録
+        // 自動ログイン対応
+        //====================================================
 
+        socket.on(
+            "registerUser",
 
+            async(data)=>{
 
+                try{
 
-//=====================
-// ユーザー登録
-// 自動ログイン対応
-//=====================
+                    const now = Date.now();
 
-socket.on(
-"registerUser",
+                    const oldUser =
+                        users[data.name];
 
-async(data)=>{
 
+                    const user = {
 
-try{
+                        name:data.name,
 
 
-const now=Date.now();
+                        lat:
+                            oldUser
+                            ?
+                            oldUser.lat
+                            :
+                            null,
 
 
-const oldUser =
-users[data.name];
+                        lon:
+                            oldUser
+                            ?
+                            oldUser.lon
+                            :
+                            null,
 
 
+                        utmZone:
+                            oldUser
+                            ?
+                            oldUser.utmZone
+                            :
+                            "52S",
 
-const user={
 
+                        utmE:
+                            oldUser
+                            ?
+                            oldUser.utmE
+                            :
+                            null,
 
-name:data.name,
 
+                        utmN:
+                            oldUser
+                            ?
+                            oldUser.utmN
+                            :
+                            null,
 
-lat:
-oldUser ?
-oldUser.lat :
-null,
 
+                        water:
+                            Number(data.water) || 0,
 
-lon:
-oldUser ?
-oldUser.lon :
-null,
 
+                        fuel:
+                            Number(data.fuel) || 0,
 
-utmZone:
-oldUser ?
-oldUser.utmZone :
-"52S",
 
+                        destination:
+                            data.destination || "",
 
-utmE:
-oldUser ?
-oldUser.utmE :
-null,
 
+                        iconType:
+                            data.iconType || "1",
 
-utmN:
-oldUser ?
-oldUser.utmN :
-null,
 
+                        online:true,
 
+                        lastUpdate:now
 
-water:
-data.water || 0,
+                    };
 
 
-fuel:
-data.fuel || 0,
+                    users[data.name] = user;
 
 
-destination:
-data.destination || "",
 
+                    await pool.query(
 
+                        `
+                        INSERT INTO current_users
+                        (
+                            name,
+                            lat,
+                            lon,
+                            utmZone,
+                            utmE,
+                            utmN,
+                            water,
+                            fuel,
+                            destination,
+                            iconType,
+                            online,
+                            lastUpdate
+                        )
 
-iconType:
-data.iconType || "person",
+                        VALUES
+                        (
+                            $1,$2,$3,$4,$5,$6,
+                            $7,$8,$9,$10,$11,$12
+                        )
 
+                        ON CONFLICT(name)
 
+                        DO UPDATE SET
 
-online:true,
+                            lat=$2,
+                            lon=$3,
+                            utmZone=$4,
+                            utmE=$5,
+                            utmN=$6,
+                            water=$7,
+                            fuel=$8,
+                            destination=$9,
+                            iconType=$10,
+                            online=$11,
+                            lastUpdate=$12
+                        `,
 
+                        [
 
-lastUpdate:now
+                            user.name,
 
+                            user.lat,
 
-};
+                            user.lon,
 
+                            user.utmZone,
 
+                            user.utmE,
 
+                            user.utmN,
 
-users[data.name]=user;
+                            user.water,
 
+                            user.fuel,
 
+                            user.destination,
 
+                            user.iconType,
 
-await pool.query(
+                            1,
 
-`
+                            now
 
-INSERT INTO current_users
+                        ]
 
-(
+                    );
 
-name,
-lat,
-lon,
-utmZone,
-utmE,
-utmN,
-water,
-fuel,
-destination,
-iconType,
-online,
-lastUpdate
 
-)
+                    console.log(
+                        "ユーザー登録:",
+                        data.name
+                    );
 
-VALUES
 
-($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                    io.emit(
+                        "locations",
+                        users
+                    );
 
 
-ON CONFLICT(name)
+                }
+                catch(err){
 
-DO UPDATE SET
+                    console.error(
+                        "ユーザー登録エラー",
+                        err
+                    );
 
-lat=$2,
-lon=$3,
-utmZone=$4,
-utmE=$5,
-utmN=$6,
-water=$7,
-fuel=$8,
-destination=$9,
-iconType=$10,
-online=$11,
-lastUpdate=$12
+                }
 
-`
+            }
 
-,
+        );
 
-[
 
-user.name,
 
-user.lat,
+        //====================================================
+        // 位置情報受信
+        //====================================================
 
-user.lon,
+        socket.on(
+            "location",
 
-user.utmZone,
+            async(data)=>{
 
-user.utmE,
+                if(!users[data.name]){
 
-user.utmN,
+                    console.log(
+                        "未登録GPS拒否:",
+                        data.name
+                    );
 
-user.water,
+                    return;
 
-user.fuel,
+                }
 
-user.destination,
 
-user.iconType,
+                const now = Date.now();
 
-1,
 
-now
+                const user = {
 
-]
+                    name:data.name,
 
-);
+                    lat:data.lat,
 
+                    lon:data.lon,
 
+                    utmZone:
+                        data.utmZone || "52S",
 
-console.log(
-"ユーザー登録:",
-data.name
-);
+                    utmE:data.utmE,
 
+                    utmN:data.utmN,
 
+                    water:data.water,
 
-io.emit(
-"locations",
-users
-);
+                    fuel:data.fuel,
 
+                    destination:data.destination,
 
+                    iconType:
+                        data.iconType || "1",
 
-}
+                    online:true,
 
-catch(err){
+                    lastUpdate:now
 
-console.error(
-"ユーザー登録エラー",
-err
-);
+                };
 
-}
 
+                users[data.name] = user;
 
-}
 
-);
 
+                try{
 
+                    //========================================
+                    // 現在位置更新
+                    //========================================
 
+                    await pool.query(
 
+                        `
+                        UPDATE current_users
 
-//=====================
-// 位置情報受信
-//=====================
+                        SET
 
-socket.on(
-"location",
+                            lat=$2,
+                            lon=$3,
+                            utmZone=$4,
+                            utmE=$5,
+                            utmN=$6,
+                            water=$7,
+                            fuel=$8,
+                            destination=$9,
+                            iconType=$10,
+                            online=$11,
+                            lastUpdate=$12
 
-async(data)=>{
+                        WHERE name=$1
+                        `,
 
+                        [
 
-if(!users[data.name]){
+                            user.name,
 
+                            user.lat,
 
-console.log(
-"未登録GPS拒否:",
-data.name
-);
+                            user.lon,
 
+                            user.utmZone,
 
-return;
+                            user.utmE,
 
+                            user.utmN,
 
-}
+                            user.water,
 
+                            user.fuel,
 
+                            user.destination,
 
-const now=Date.now();
+                            user.iconType,
 
+                            1,
 
+                            now
 
-const user={
+                        ]
 
+                    );
 
-name:data.name,
 
 
-lat:data.lat,
+                    //========================================
+                    // 位置履歴保存
+                    //========================================
 
-lon:data.lon,
+                    await pool.query(
 
+                        `
+                        INSERT INTO location_history
+                        (
+                            name,
+                            lat,
+                            lon,
+                            water,
+                            fuel,
+                            destination
+                        )
 
-utmZone:
-data.utmZone || "52S",
+                        VALUES
+                        ($1,$2,$3,$4,$5,$6)
+                        `,
 
+                        [
 
-utmE:data.utmE,
+                            user.name,
 
+                            user.lat,
 
-utmN:data.utmN,
+                            user.lon,
 
+                            user.water,
 
-water:data.water,
+                            user.fuel,
 
+                            user.destination
 
-fuel:data.fuel,
+                        ]
 
+                    );
 
-destination:data.destination,
 
+                }
+                catch(err){
 
-iconType:
-data.iconType || "person",
+                    console.error(
+                        "DB保存エラー",
+                        err
+                    );
 
+                }
 
-online:true,
 
 
-lastUpdate:now
+                io.emit(
+                    "locations",
+                    users
+                );
 
+            }
 
-};
+        );
 
 
 
+        //====================================================
+        // クロノロジー登録
+        //====================================================
 
-users[data.name]=user;
+        socket.on(
+            "addChronology",
 
+            async(data)=>{
 
+                const now = Date.now();
 
-try{
 
+                const item = {
 
-await pool.query(
+                    time:
+                        new Date(now)
+                        .toLocaleString(
+                            "ja-JP",
+                            {
+                                timeZone:
+                                    "Asia/Tokyo",
 
-`
+                                hour12:false
+                            }
+                        ),
 
-UPDATE current_users
 
-SET
+                    message:
+                        (
+                            data.user
+                            ?
+                            "[" + data.user + "] "
+                            :
+                            ""
+                        )
+                        +
+                        data.message
 
-lat=$2,
-lon=$3,
-utmZone=$4,
-utmE=$5,
-utmN=$6,
-water=$7,
-fuel=$8,
-destination=$9,
-iconType=$10,
-online=$11,
-lastUpdate=$12
+                };
 
-WHERE name=$1
 
-`
+                chronology.unshift(item);
 
-,
 
-[
+                if(chronology.length > 100){
 
-user.name,
+                    chronology.pop();
 
-user.lat,
+                }
 
-user.lon,
 
-user.utmZone,
 
-user.utmE,
+                try{
 
-user.utmN,
+                    await pool.query(
 
-user.water,
+                        `
+                        INSERT INTO chronology
+                        (
+                            user_name,
+                            message,
+                            created
+                        )
 
-user.fuel,
+                        VALUES
+                        ($1,$2,$3)
+                        `,
 
-user.destination,
+                        [
 
-user.iconType,
+                            data.user || "",
 
-1,
+                            data.message,
 
-now
+                            now
 
-]
+                        ]
 
-);
+                    );
 
+                }
+                catch(err){
 
+                    console.error(
+                        "クロノロジー保存エラー",
+                        err
+                    );
 
+                }
 
 
-await pool.query(
 
-`
+                io.emit(
+                    "chronology",
+                    chronology
+                );
 
-INSERT INTO location_history
+            }
 
-(
+        );
 
-name,
-lat,
-lon,
-water,
-fuel,
-destination
 
-)
 
-VALUES
+        //====================================================
+        // ユーザー削除
+        //====================================================
 
-($1,$2,$3,$4,$5,$6)
+        socket.on(
+            "deleteUser",
 
-`
+            async(name)=>{
 
-,
+                delete users[name];
 
-[
 
-user.name,
+                try{
 
-user.lat,
+                    await pool.query(
 
-user.lon,
+                        "DELETE FROM current_users WHERE name=$1",
 
-user.water,
+                        [name]
 
-user.fuel,
+                    );
 
-user.destination
+                }
+                catch(err){
 
-]
+                    console.error(
+                        "削除エラー",
+                        err
+                    );
 
-);
+                }
 
 
 
-}
-catch(err){
+                io.emit(
+                    "locations",
+                    users
+                );
 
 
-console.error(
-"DB保存エラー",
-err
-);
+                // 削除したユーザー本人へ通知
+                socket.emit(
+                    "userDeleted",
+                    name
+                );
 
+            }
 
-}
+        );
 
 
 
-io.emit(
-"locations",
-users
-);
+        //====================================================
+        // 地点削除
+        //====================================================
 
+        socket.on(
+            "deletePoint",
 
+            async(name)=>{
 
-}
+                delete points[name];
 
-);
 
+                try{
 
-// server.js 修正版 ③/③
+                    await pool.query(
 
+                        "DELETE FROM points WHERE name=$1",
 
-//=====================
-// クロノロジー登録
-//=====================
+                        [name]
 
-socket.on(
-"addChronology",
+                    );
 
-async(data)=>{
+                }
+                catch(err){
 
+                    console.error(
+                        "地点削除エラー",
+                        err
+                    );
 
-const now=Date.now();
+                }
 
 
 
-const item={
+                io.emit(
+                    "points",
+                    points
+                );
 
 
-time:
-new Date(now)
-.toLocaleString(
-"ja-JP",
-{
-timeZone:"Asia/Tokyo",
-hour12:false
-}
-),
+                console.log(
+                    "地点削除:",
+                    name
+                );
 
+            }
 
-message:
-(data.user
-?
-"["+data.user+"] "
-:
-"")
-+
-data.message
+        );
 
 
-};
 
+        //====================================================
+        // 交通規制情報
+        //====================================================
+        //
+        // 将来、管理者画面やAPIから
+        // trafficRegulations を更新した場合に
+        // 全端末へ即時配信するためのイベント。
+        //
+        //====================================================
 
+        socket.on(
+            "updateTrafficRegulations",
 
-chronology.unshift(item);
+            (regulations)=>{
 
+                if(!Array.isArray(regulations)){
 
+                    return;
 
-if(chronology.length>100){
+                }
 
-chronology.pop();
 
-}
+                trafficRegulations =
+                    regulations;
 
 
+                io.emit(
+                    "trafficRegulations",
+                    trafficRegulations
+                );
 
-try{
 
+                console.log(
+                    "交通規制更新:",
+                    trafficRegulations.length
+                );
 
-await pool.query(
+            }
 
-`
+        );
 
-INSERT INTO chronology
 
-(
 
-user_name,
-message,
-created
+        //====================================================
+        // 切断
+        //====================================================
 
-)
+        socket.on(
+            "disconnect",
 
-VALUES
+            ()=>{
 
-($1,$2,$3)
+                console.log(
+                    "切断:",
+                    socket.id
+                );
 
-`
+            }
 
-,
+        );
 
-[
-
-data.user || "",
-
-data.message,
-
-now
-
-]
-
-);
-
-
-}
-catch(err){
-
-
-console.error(
-
-"クロノロジー保存エラー",
-
-err
-
-);
-
-
-}
-
-
-
-io.emit(
-
-"chronology",
-
-chronology
-
-);
-
-
-
-}
-
-);
-
-
-
-
-
-
-
-//=====================
-// ユーザー削除
-//=====================
-
-socket.on(
-"deleteUser",
-
-async(name)=>{
-
-
-delete users[name];
-
-
-
-try{
-
-
-await pool.query(
-
-"DELETE FROM current_users WHERE name=$1",
-
-[name]
-
-);
-
-
-}
-catch(err){
-
-
-console.error(
-
-"削除エラー",
-
-err
-
-);
-
-
-}
-
-
-
-io.emit(
-"locations",
-users
-);
-
-
-// 削除したユーザー本人へ通知
-socket.emit(
-"userDeleted",
-name
-);
-
-}
-
-);   
-
-
-//=====================
-// 地点削除
-//=====================
-
-socket.on(
-"deletePoint",
-
-async(name)=>{
-
-
-delete points[name];
-
-
-try{
-
-
-await pool.query(
-
-"DELETE FROM points WHERE name=$1",
-
-[name]
-
-);
-
-
-}
-catch(err){
-
-
-console.error(
-
-"地点削除エラー",
-
-err
-
-);
-
-
-}
-
-
-
-io.emit(
-
-"points",
-
-points
+    }
 
 );
 
 
 
-console.log(
-
-"地点削除:",
-
-name
-
-);
-
-
-}
-
-);
-
-
-
-
-//=====================
-// 切断
-//=====================
-
-socket.on(
-"disconnect",
-
-()=>{
-
-
-console.log(
-
-"切断:",
-
-socket.id
-
-);
-
-
-}
-
-);
-
-
-
-}
-
-);
-
-
-
-
-
-
-
-//=====================
+//============================================================
 // 起動
-//=====================
+//============================================================
 
 const PORT =
-process.env.PORT || 10000;
+    process.env.PORT || 10000;
 
 
 
 async function startServer(){
 
+    await loadUsers();
+
+    await loadPoints();
+
+    await loadChronology();
 
 
-await loadUsers();
+    server.listen(
 
+        PORT,
 
-await loadPoints();
+        ()=>{
 
+            console.log(
+                "server start port:",
+                PORT
+            );
 
-await loadChronology();
+        }
 
-
-
-
-server.listen(
-
-PORT,
-
-()=>{
-
-
-console.log(
-
-"server start port:",
-
-PORT
-
-);
-
+    );
 
 }
-
-);
-
-
-
-}
-
 
 
 

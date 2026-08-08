@@ -1,10 +1,3 @@
-<!-- 現在位置自動共有君 Version 2.3
-     タブ方式統合版
-     自動ログイン対応
-     アイコン4種類対応
-     地点登録・UTM表示対応
--->
-
 <!DOCTYPE html>
 <html lang="ja">
 
@@ -12,145 +5,70 @@
 
 <meta charset="UTF-8">
 
-<meta name="viewport"
-      content="width=device-width, initial-scale=1.0">
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0">
 
 <title>現在位置自動共有君 Version 2.3</title>
 
 
-<link rel="stylesheet"
-      href="https://unpkg.com/leaflet/dist/leaflet.css">
+<link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet/dist/leaflet.css">
 
 
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script
+    src="https://unpkg.com/leaflet/dist/leaflet.js">
+</script>
 
-<script src="/socket.io/socket.io.js"></script>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+<script
+    src="/socket.io/socket.io.js">
+</script>
+
+
+<script
+    src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js">
+</script>
+
 
 
 <style>
 
-/*=====================
- 全体
-=====================*/
+/*==================================================
+  基本
+==================================================*/
+
+*{
+    box-sizing:border-box;
+}
+
 
 body{
 
     font-family:sans-serif;
 
-    margin:6px;
+    margin:0;
 
     background:#f5f5f5;
 
     font-size:16px;
 
-}
-
-
-/*=====================
- タブ
-=====================*/
-
-.tabBar{
-
-    display:grid;
-
-    grid-template-columns:
-    repeat(4,1fr);
-
-    gap:4px;
-
-    margin-bottom:6px;
-
-    position:sticky;
-
-    top:0;
-
-    z-index:1000;
-
-    background:#f5f5f5;
-
-    padding-bottom:4px;
+    overflow-x:hidden;
 
 }
 
 
-.tabButton{
+h2{
 
-    border:1px solid #aaa;
+    font-size:22px;
 
-    background:#ddd;
+    text-align:center;
 
-    border-radius:8px;
-
-    padding:7px 3px;
-
-    margin:0;
-
-    width:100%;
-
-    font-size:14px;
-
-    font-weight:bold;
-
-    cursor:pointer;
+    margin:8px;
 
 }
 
-
-.tabButton.active{
-
-    background:#2196f3;
-
-    color:white;
-
-    border-color:#1976d2;
-
-}
-
-
-.tabIcon{
-
-    display:block;
-
-    font-size:20px;
-
-    line-height:20px;
-
-}
-
-
-.tabText{
-
-    display:block;
-
-    margin-top:2px;
-
-}
-
-
-/*=====================
- タブ内容
-=====================*/
-
-.tabContent{
-
-    display:none;
-
-}
-
-
-.tabContent.active{
-
-    display:block;
-
-}
-
-
-/*=====================
- カード
-=====================*/
 
 .card{
 
@@ -173,21 +91,138 @@ body{
 
     font-weight:bold;
 
-    margin-bottom:6px;
+    margin:5px 0 8px 0;
 
 }
 
 
-/*=====================
- 入力
-=====================*/
+
+/*==================================================
+  タブ
+==================================================*/
+
+#tabBar{
+
+    display:grid;
+
+    grid-template-columns:
+        repeat(4,1fr);
+
+    gap:4px;
+
+    padding:5px;
+
+    background:#222;
+
+    position:sticky;
+
+    top:0;
+
+    z-index:1000;
+
+}
+
+
+.tabButton{
+
+    border:none;
+
+    border-radius:8px;
+
+    background:#555;
+
+    color:white;
+
+    padding:7px 3px;
+
+    margin:0;
+
+    width:100%;
+
+    min-height:55px;
+
+    cursor:pointer;
+
+}
+
+
+.tabButton.active{
+
+    background:#1976d2;
+
+}
+
+
+.tabIcon{
+
+    display:block;
+
+    font-size:23px;
+
+    line-height:25px;
+
+}
+
+
+.tabText{
+
+    display:block;
+
+    font-size:13px;
+
+    margin-top:2px;
+
+}
+
+
+
+/*==================================================
+  タブ内容
+==================================================*/
+
+.tabContent{
+
+    display:none;
+
+    padding:6px;
+
+}
+
+
+.tabContent.active{
+
+    display:block;
+
+}
+
+
+
+/*==================================================
+  地図
+==================================================*/
+
+#map{
+
+    height:65vh;
+
+    width:100%;
+
+    border-radius:10px;
+
+    overflow:hidden;
+
+}
+
+
+
+/*==================================================
+  入力
+==================================================*/
 
 input,
 select{
 
     width:95%;
-
-    box-sizing:border-box;
 
     font-size:18px;
 
@@ -214,14 +249,15 @@ select{
 .inputRow input,
 .inputRow select{
 
-    width:50%;
+    width:45%;
 
 }
 
 
-/*=====================
- ボタン
-=====================*/
+
+/*==================================================
+  ボタン
+==================================================*/
 
 button{
 
@@ -234,6 +270,77 @@ button{
     border-radius:8px;
 
     cursor:pointer;
+
+}
+
+
+.buttonRow{
+
+    display:flex;
+
+    gap:6px;
+
+}
+
+
+.buttonRow button{
+
+    flex:1;
+
+    width:auto;
+
+    white-space:nowrap;
+
+    font-size:16px;
+
+}
+
+
+.settingsButton{
+
+    width:100%;
+
+    background:#1976d2;
+
+    color:white;
+
+    font-weight:bold;
+
+}
+
+
+.pointButtonRow{
+
+    display:flex;
+
+    gap:5px;
+
+}
+
+
+.pointButtonRow button{
+
+    flex:1;
+
+}
+
+
+
+/*==================================================
+  GPS
+==================================================*/
+
+#gpsPanel{
+
+    background:white;
+
+    border-radius:10px;
+
+    padding:6px;
+
+    margin-top:6px;
+
+    box-shadow:0 1px 3px #aaa;
 
 }
 
@@ -252,10 +359,6 @@ button{
     flex:1;
 
     margin:3px;
-
-    white-space:nowrap;
-
-    font-size:16px;
 
 }
 
@@ -282,42 +385,13 @@ button{
 }
 
 
-.settingsButton{
-
-    width:100%;
-
-    background:#2196f3;
-
-    color:white;
-
-    font-weight:bold;
-
-}
-
-
-.pointButtonRow{
-
-    display:flex;
-
-    gap:6px;
-
-}
-
-
-.pointButtonRow button{
-
-    flex:1;
-
-}
-
-
 #gpsStatus{
 
     font-size:18px;
 
     font-weight:bold;
 
-    margin-top:4px;
+    margin:4px;
 
 }
 
@@ -326,68 +400,22 @@ button{
 
     font-size:15px;
 
-}
-
-
-/*=====================
- 地図
-=====================*/
-
-#map{
-
-    height:65vh;
-
-    width:100%;
-
-    border-radius:10px;
+    margin:4px;
 
 }
 
 
-/*=====================
- 地点情報
-=====================*/
 
-.pointInfo{
-
-    background:#f7f7f7;
-
-    border:1px solid #ccc;
-
-    border-radius:6px;
-
-    padding:7px;
-
-    margin-top:7px;
-
-    font-size:15px;
-
-    line-height:1.7;
-
-}
-
-
-.pointInfo hr{
-
-    border:none;
-
-    border-top:1px solid #ccc;
-
-    margin:5px 0;
-
-}
-
-
-/*=====================
- ユーザー一覧
-=====================*/
+/*==================================================
+  隊員一覧
+==================================================*/
 
 .userHeader{
 
     display:grid;
 
     grid-template-columns:
-    50px 1fr 55px 55px 70px 50px;
+        50px 1fr 55px 55px 65px 50px;
 
     background:#ddd;
 
@@ -405,7 +433,7 @@ button{
     display:grid;
 
     grid-template-columns:
-    50px 1fr 55px 55px 70px 50px;
+        50px 1fr 55px 55px 65px 50px;
 
     align-items:center;
 
@@ -439,9 +467,10 @@ button{
 }
 
 
-/*=====================
- クロノロジー
-=====================*/
+
+/*==================================================
+  クロノロジー
+==================================================*/
 
 .chronoInputRow{
 
@@ -497,9 +526,50 @@ button{
 }
 
 
-/*=====================
- マーカー
-=====================*/
+
+/*==================================================
+  登録
+==================================================*/
+
+.settingsCard{
+
+    margin-bottom:8px;
+
+}
+
+
+.pointInfo{
+
+    background:#f5f5f5;
+
+    border-radius:6px;
+
+    padding:8px;
+
+    margin-top:8px;
+
+    font-size:15px;
+
+    line-height:1.7;
+
+}
+
+
+.pointInfo hr{
+
+    border:none;
+
+    border-top:1px solid #ccc;
+
+    margin:5px 0;
+
+}
+
+
+
+/*==================================================
+  地図ラベル
+==================================================*/
 
 .pointLabel{
 
@@ -520,142 +590,213 @@ button{
 }
 
 
+
+/*==================================================
+  選択マーカー
+==================================================*/
+
+.selected-marker{
+
+    animation:markerBlink 0.6s infinite;
+
+}
+
+
+@keyframes markerBlink{
+
+    0%{
+        filter:brightness(2);
+    }
+
+    50%{
+        filter:brightness(0.5);
+    }
+
+    100%{
+        filter:brightness(2);
+    }
+
+}
+
+
+
+/*==================================================
+  交通規制
+==================================================*/
+
+.trafficIcon{
+
+    font-size:28px;
+
+    text-align:center;
+
+    line-height:30px;
+
+}
+
+
+
+/*==================================================
+  スマートフォン
+==================================================*/
+
+@media(max-width:600px){
+
+    #map{
+
+        height:58vh;
+
+    }
+
+
+    .tabButton{
+
+        min-height:50px;
+
+    }
+
+
+    .tabIcon{
+
+        font-size:20px;
+
+    }
+
+
+    .tabText{
+
+        font-size:12px;
+
+    }
+
+
+    .userHeader,
+    .userRow{
+
+        grid-template-columns:
+            42px 1fr 45px 50px 55px 45px;
+
+        font-size:12px;
+
+    }
+
+
+    .userHeader{
+
+        font-size:11px;
+
+    }
+
+
+    .deleteButton{
+
+        font-size:11px;
+
+        padding:2px 4px;
+
+    }
+
+}
+
 </style>
 
 </head>
 
 
+
 <body>
 
 
+
 <!--==================================================
- タブ
+    タブ
 ===================================================-->
 
-<div class="tabBar">
+<div id="tabBar">
 
 
-<button
-    class="tabButton active"
-    onclick="showTab('mapTab',this)">
+    <button
+        class="tabButton active"
+        onclick="showTab('mapTab',this)">
 
-    <span class="tabIcon">🗺️</span>
+        <span class="tabIcon">🗺️</span>
 
-    <span class="tabText">地図</span>
+        <span class="tabText">地図</span>
 
-</button>
-
-
-<button
-    class="tabButton"
-    onclick="showTab('usersTab',this)">
-
-    <span class="tabIcon">👥</span>
-
-    <span class="tabText">隊員一覧</span>
-
-</button>
+    </button>
 
 
-<button
-    class="tabButton"
-    onclick="showTab('chronoTab',this)">
 
-    <span class="tabIcon">📋</span>
+    <button
+        class="tabButton"
+        onclick="showTab('usersTab',this)">
 
-    <span class="tabText">報連相</span>
+        <span class="tabIcon">👥</span>
 
-</button>
+        <span class="tabText">隊員一覧</span>
+
+    </button>
 
 
-<button
-    class="tabButton"
-    onclick="showTab('settingsTab',this)">
 
-    <span class="tabIcon">⚙️</span>
+    <button
+        class="tabButton"
+        onclick="showTab('chronoTab',this)">
 
-    <span class="tabText">登録</span>
+        <span class="tabIcon">📋</span>
 
-</button>
+        <span class="tabText">報連相</span>
+
+    </button>
+
+
+
+    <button
+        class="tabButton"
+        onclick="showTab('settingsTab',this)">
+
+        <span class="tabIcon">⚙️</span>
+
+        <span class="tabText">登録</span>
+
+    </button>
 
 
 </div>
 
 
+
 <!--==================================================
- 地図タブ
+    地図タブ
 ===================================================-->
 
-<div id="mapTab"
-     class="tabContent active">
+<div
+    id="mapTab"
+    class="tabContent active">
 
 
-
-
-
-<div id="map"></div>
-
-
-<!-- GPSは地図の下 -->
-
-<div class="card">
-
-    <div class="gpsButtonRow">
-
-        <button
-            class="gpsButton"
-            onclick="startGPS()">
-
-            📡 GPS開始
-
-        </button>
-
-
-        <button
-            class="reportButton"
-            onclick="updateStatus()">
-
-            🔄 現在地報告
-
-        </button>
-
-    </div>
-
-
-    <div id="gpsStatus">
-
-        🔴 GPS停止中
-
-    </div>
-
-
-    <div id="lastSend">
-
-        最終送信：-
-
-    </div>
-
-</div>
+    <div id="map"></div>
 
 
 </div>
 
 
+
 <!--==================================================
- 隊員一覧タブ
+    隊員一覧タブ
 ===================================================-->
 
-<div id="usersTab"
-     class="tabContent">
+<div
+    id="usersTab"
+    class="tabContent">
 
-
-<div class="card">
 
     <div class="sectionTitle">
 
         👥 接続ユーザー
 
     </div>
+
 
 
     <div class="userHeader">
@@ -675,25 +816,21 @@ button{
     </div>
 
 
+
     <div id="users"></div>
 
-</div>
-
 
 </div>
+
 
 
 <!--==================================================
- 報連相タブ
+    報連相タブ
 ===================================================-->
 
-<div id="chronoTab"
-     class="tabContent">
-
-
 <div
-    id="chronoInputArea"
-    class="card">
+    id="chronoTab"
+    class="tabContent">
 
 
     <div class="sectionTitle">
@@ -703,11 +840,13 @@ button{
     </div>
 
 
+
     <div class="chronoInputRow">
 
         <input
             id="chronoMessage"
             placeholder="活動内容を入力">
+
 
 
         <button
@@ -721,101 +860,238 @@ button{
     </div>
 
 
+
+    <div id="timeline"></div>
+
+
 </div>
 
-
-<div id="timeline"></div>
-
-
-</div>
 
 
 <!--==================================================
- 設定タブ
+    登録タブ
 ===================================================-->
 
-<div id="settingsTab"
-     class="tabContent">
+<div
+    id="settingsTab"
+    class="tabContent">
 
 
-<!-- 使用者情報 -->
+    <!-- 使用者情報 -->
 
-<div class="card settingsCard">
+    <div class="card settingsCard">
 
 
-    <div class="sectionTitle">
+        <div class="sectionTitle">
 
-        👤 使用者情報
+            👤 使用者情報
+
+        </div>
+
+
+
+        <div class="inputRow">
+
+
+            <input
+                id="name"
+                value="隊員A"
+                placeholder="名前">
+
+
+
+            <select id="iconType">
+
+                <option value="1">
+                    👤 隊員
+                </option>
+
+                <option value="2">
+                    🚙 小型
+                </option>
+
+                <option value="3">
+                    🚚 中型
+                </option>
+
+                <option value="4">
+                    🚛 大型
+                </option>
+
+            </select>
+
+
+        </div>
+
+
+
+        <div class="inputRow">
+
+
+            <input
+                id="water"
+                type="number"
+                value="100"
+                placeholder="💧水量">
+
+
+
+            <input
+                id="fuel"
+                type="number"
+                value="100"
+                placeholder="⛽燃料">
+
+
+        </div>
+
+
+
+        <input
+            id="destination"
+            placeholder="📍次の目的地">
+
+
+
+        <button
+            class="settingsButton"
+            onclick="registerUser()">
+
+            👤 ユーザー登録
+
+        </button>
+
+
+
+        <div id="registerStatus">
+
+            未登録
+
+        </div>
+
 
     </div>
 
 
-    <div class="inputRow">
+
+    <!-- 地点登録 -->
+
+    <div class="card settingsCard">
+
+
+        <div class="sectionTitle">
+
+            📍 地点登録
+
+        </div>
+
+
 
         <input
-            id="name"
-            value="隊員A"
-            placeholder="名前">
+            id="pointName"
+            placeholder="地点名（例：CP1、給水所）">
 
 
-        <select id="iconType">
 
-            <option value="1">
-                👤 隊員
+        <select id="pointType">
+
+            <option value="CP">
+                🏳 指揮所(CP)
             </option>
 
-            <option value="2">
-                🚙 小型
+            <option value="water">
+                💧給水所
             </option>
 
-            <option value="3">
-                🚚 中型
+            <option value="supply">
+                📦補給地点
             </option>
 
-            <option value="4">
-                🚛 大型
+            <option value="point">
+                📍その他
             </option>
 
         </select>
 
-    </div>
 
 
-    <div class="inputRow">
-
-        <input
-            id="water"
-            type="number"
-            value="100"
-            placeholder="💧水量">
+        <div class="pointButtonRow">
 
 
-        <input
-            id="fuel"
-            type="number"
-            value="100"
-            placeholder="⛽燃料">
+            <button
+                onclick="addPoint()">
 
-    </div>
+                📍登録
 
-
-    <input
-        id="destination"
-        placeholder="📍次の目的地">
+            </button>
 
 
-    <button
-        class="settingsButton"
-        onclick="registerUser()">
 
-        👤 ユーザー登録
+            <button
+                onclick="deletePoint()">
 
-    </button>
+                🗑削除
+
+            </button>
 
 
-    <div id="registerStatus">
+        </div>
 
-        未登録
+
+
+        <div class="pointInfo">
+
+
+            <div>
+
+                📍 緯度：
+                <span id="pointLat">-</span>
+
+            </div>
+
+
+
+            <div>
+
+                📍 経度：
+                <span id="pointLon">-</span>
+
+            </div>
+
+
+
+            <hr>
+
+
+
+            <div>
+
+                🧭 UTM：
+                <span id="pointUtmZone">-</span>
+
+            </div>
+
+
+
+            <div>
+
+                E：
+                <span id="pointUtmE">-</span>
+
+            </div>
+
+
+
+            <div>
+
+                N：
+                <span id="pointUtmN">-</span>
+
+            </div>
+
+
+        </div>
+
 
     </div>
 
@@ -823,102 +1099,58 @@ button{
 </div>
 
 
-<!-- 地点登録 -->
 
-<div class="card settingsCard">
+<!--==================================================
+    GPSパネル
+    最下段固定位置
+===================================================-->
 
-
-    <div class="sectionTitle">
-
-        📍 地点登録
-
-    </div>
+<div id="gpsPanel">
 
 
-    <input
-        id="pointName"
-        placeholder="地点名（例：CP1、給水所）">
+    <div class="gpsButtonRow">
 
-
-    <select id="pointType">
-
-        <option value="CP">
-            🏳 指揮所(CP)
-        </option>
-
-        <option value="water">
-            💧給水所
-        </option>
-
-        <option value="supply">
-            📦補給地点
-        </option>
-
-        <option value="point">
-            📍その他
-        </option>
-
-    </select>
-
-
-    <div class="pointButtonRow">
 
         <button
-            onclick="addPoint()">
+            class="gpsButton"
+            onclick="startGPS()">
 
-            📍登録
+            📡 GPS開始
 
         </button>
 
 
-        <button
-            onclick="deletePoint()">
 
-            🗑削除
+        <button
+            class="reportButton"
+            onclick="updateStatus()">
+
+            🔄 現在地報告
 
         </button>
 
+
     </div>
 
 
-    <div class="pointInfo">
 
-        <div>
-            📍 緯度：
-            <span id="pointLat">-</span>
-        </div>
+    <div id="gpsStatus">
 
-        <div>
-            📍 経度：
-            <span id="pointLon">-</span>
-        </div>
+        🔴 GPS停止中
+
+    </div>
 
 
-        <hr>
 
+    <div id="lastSend">
 
-        <div>
-            🧭 UTM：
-            <span id="pointUtmZone">-</span>
-        </div>
-
-        <div>
-            E：
-            <span id="pointUtmE">-</span>
-        </div>
-
-        <div>
-            N：
-            <span id="pointUtmN">-</span>
-        </div>
+        最終送信：-
 
     </div>
 
 
 </div>
 
-
-</div>
 
 
 <script>
@@ -959,12 +1191,6 @@ const SEND_INTERVAL = 30000;
 const MOVE_DISTANCE = 10;
 
 
-let selectedPointLat = null;
-
-let selectedPointLon = null;
-
-let selectedPointName = null;
-
 
 //==================================================
 // タブ切替
@@ -973,68 +1199,86 @@ let selectedPointName = null;
 function showTab(tabId, button){
 
 
-document.querySelectorAll(".tabContent")
-.forEach(tab=>{
+    document
+        .querySelectorAll(".tabContent")
+        .forEach(tab=>{
 
-    tab.classList.remove("active");
+            tab.classList.remove("active");
 
-});
-
-
-document.getElementById(tabId)
-.classList.add("active");
+        });
 
 
-document.querySelectorAll(".tabButton")
-.forEach(btn=>{
+    document
+        .querySelectorAll(".tabButton")
+        .forEach(btn=>{
 
-    btn.classList.remove("active");
+            btn.classList.remove("active");
 
-});
-
-
-button.classList.add("active");
+        });
 
 
-// 地図タブへ戻ったときに地図サイズを再計算
+    const tab =
+        document.getElementById(tabId);
 
-if(tabId==="mapTab"){
 
-    setTimeout(()=>{
+    if(tab){
 
-        map.invalidateSize();
+        tab.classList.add("active");
 
-    },100);
+    }
+
+
+    if(button){
+
+        button.classList.add("active");
+
+    }
+
+
+    // 地図タブを開いたとき
+    // Leafletの表示サイズを再計算
+
+    if(tabId === "mapTab"){
+
+        setTimeout(()=>{
+
+            map.invalidateSize();
+
+        },100);
+
+    }
 
 }
 
-}
 
 
 //==================================================
-// アイコン種類
+// アイコン種類の旧データ変換
 //==================================================
 
 function normalizeIconType(type){
 
-    type=String(type || "");
+    type = String(type || "");
 
 
-    if(type==="person"){
+    if(type === "person"){
 
         return "1";
 
     }
 
 
-    if(type==="vehicle"){
+    if(type === "vehicle"){
 
         return "2";
 
     }
 
 
-    if(["1","2","3","4"].includes(type)){
+    if(
+        ["1","2","3","4"]
+        .includes(type)
+    ){
 
         return type;
 
@@ -1046,213 +1290,232 @@ function normalizeIconType(type){
 }
 
 
+
 //==================================================
 // 自動ログイン復元
 //==================================================
 
-window.onload=function(){
+window.onload = function(){
 
 
-[
-"name",
-"water",
-"fuel",
-"destination",
-"iconType"
+    [
 
-].forEach(key=>{
+        "name",
+        "water",
+        "fuel",
+        "destination",
+        "iconType"
 
-
-let value=localStorage.getItem(key);
+    ].forEach(key=>{
 
 
-if(value!==null){
-
-    let element=
-        document.getElementById(key);
+        let value =
+            localStorage.getItem(key);
 
 
-    if(element){
-
-        if(key==="iconType"){
-
-            value=
-                normalizeIconType(value);
-
-            localStorage.setItem(
-                "iconType",
-                value
-            );
-
-        }
+        if(value !== null){
 
 
-        element.value=value;
-
-    }
-
-}
+            const element =
+                document.getElementById(key);
 
 
-});
+            if(element){
 
 
-let iconElement=
-document.getElementById("iconType");
+                if(key === "iconType"){
+
+                    value =
+                        normalizeIconType(value);
 
 
-if(
-iconElement &&
-!localStorage.getItem("iconType")
-){
+                    localStorage.setItem(
+                        "iconType",
+                        value
+                    );
 
-    iconElement.value="1";
-
-    localStorage.setItem(
-        "iconType",
-        "1"
-    );
-
-}
+                }
 
 
-let savedName=
-localStorage.getItem("name");
-
-
-if(savedName){
-
-
-    setTimeout(()=>{
-
-
-        let savedIconType=
-            normalizeIconType(
-                localStorage.getItem(
-                    "iconType"
-                )
-            );
-
-
-        socket.emit(
-
-            "registerUser",
-
-            {
-
-                name:savedName,
-
-                water:Number(
-                    localStorage.getItem(
-                        "water"
-                    ) || 0
-                ),
-
-                fuel:Number(
-                    localStorage.getItem(
-                        "fuel"
-                    ) || 0
-                ),
-
-                destination:
-                    localStorage.getItem(
-                        "destination"
-                    ) || "",
-
-                iconType:
-                    savedIconType
+                element.value = value;
 
             }
 
+        }
+
+    });
+
+
+
+    const iconElement =
+        document.getElementById("iconType");
+
+
+    if(
+        iconElement &&
+        !localStorage.getItem("iconType")
+    ){
+
+        iconElement.value = "1";
+
+
+        localStorage.setItem(
+            "iconType",
+            "1"
         );
 
-
-        registered=true;
-
-
-        document.getElementById(
-            "registerStatus"
-        ).innerHTML=
-            "🟢 自動登録 : "+
-            savedName;
+    }
 
 
-    },1000);
 
-}
+    const savedName =
+        localStorage.getItem("name");
 
 
-if(
-localStorage.getItem("gpsRunning")
-==="true"
-){
+    if(savedName){
 
-    setTimeout(()=>{
 
-        startGPS();
+        setTimeout(()=>{
 
-    },2000);
 
-}
+            const savedIconType =
+                normalizeIconType(
+                    localStorage.getItem(
+                        "iconType"
+                    )
+                );
 
+
+            socket.emit(
+                "registerUser",
+                {
+
+                    name:savedName,
+
+                    water:Number(
+                        localStorage.getItem(
+                            "water"
+                        ) || 0
+                    ),
+
+                    fuel:Number(
+                        localStorage.getItem(
+                            "fuel"
+                        ) || 0
+                    ),
+
+                    destination:
+                        localStorage.getItem(
+                            "destination"
+                        ) || "",
+
+                    iconType:
+                        savedIconType
+
+                }
+            );
+
+
+            registered = true;
+
+
+            document.getElementById(
+                "registerStatus"
+            ).innerHTML =
+                "🟢 自動登録 : " +
+                savedName;
+
+
+        },1000);
+
+    }
+
+
+
+    if(
+        localStorage.getItem(
+            "gpsRunning"
+        ) === "true"
+    ){
+
+        setTimeout(()=>{
+
+            startGPS();
+
+        },2000);
+
+    }
 
 };
 
 
+
 //==================================================
-// 接続
+// Socket 接続
 //==================================================
 
 socket.on(
-"connect",
-()=>{
+    "connect",
+    ()=>{
 
-    console.log("サーバー接続");
-
-});
-
-
-socket.on(
-"disconnect",
-()=>{
-
-    document.getElementById(
-        "gpsStatus"
-    ).innerHTML=
-        "🔴 サーバー切断";
-
-});
-
-
-socket.on(
-"userDeleted",
-(name)=>{
-
-
-    if(
-        document.getElementById(
-            "name"
-        ).value === name
-    ){
-
-        localStorage.clear();
-
-        registered=false;
-
-
-        document.getElementById(
-            "registerStatus"
-        ).innerHTML=
-            "未登録";
-
-
-        alert(
-            "ユーザー登録を削除しました"
+        console.log(
+            "サーバー接続"
         );
 
     }
+);
 
-});
+
+
+socket.on(
+    "disconnect",
+    ()=>{
+
+        document.getElementById(
+            "gpsStatus"
+        ).innerHTML =
+            "🔴 サーバー切断";
+
+    }
+);
+
+
+
+//==================================================
+// ユーザー削除通知
+//==================================================
+
+socket.on(
+    "userDeleted",
+    (name)=>{
+
+
+        if(
+            document.getElementById(
+                "name"
+            ).value === name
+        ){
+
+            localStorage.clear();
+
+            registered = false;
+
+
+            document.getElementById(
+                "registerStatus"
+            ).innerHTML =
+                "未登録";
+
+
+            alert(
+                "ユーザー登録を削除しました"
+            );
+
+        }
+
+    }
+);
+
 
 
 //==================================================
@@ -1262,281 +1525,346 @@ socket.on(
 function registerUser(){
 
 
-let name=
-document.getElementById(
-    "name"
-).value.trim();
+    const name =
+        document.getElementById(
+            "name"
+        )
+        .value
+        .trim();
 
 
-if(name===""){
+    if(name === ""){
 
-    alert(
-        "名前を入力してください"
-    );
+        alert(
+            "名前を入力してください"
+        );
 
-    return;
-
-}
-
-
-let iconType=
-normalizeIconType(
-    document.getElementById(
-        "iconType"
-    ).value
-);
-
-
-document.getElementById(
-    "iconType"
-).value=
-    iconType;
-
-
-socket.emit(
-    "registerUser",
-    {
-
-        name:name,
-
-        water:Number(
-            document.getElementById(
-                "water"
-            ).value
-        ),
-
-        fuel:Number(
-            document.getElementById(
-                "fuel"
-            ).value
-        ),
-
-        destination:
-            document.getElementById(
-                "destination"
-            ).value,
-
-        iconType:iconType
+        return;
 
     }
-);
 
 
-registered=true;
+    const iconType =
+        normalizeIconType(
+            document.getElementById(
+                "iconType"
+            ).value
+        );
 
 
-[
-"name",
-"water",
-"fuel",
-"destination",
-"iconType"
+    document.getElementById(
+        "iconType"
+    ).value = iconType;
 
-].forEach(key=>{
 
-    localStorage.setItem(
 
-        key,
+    socket.emit(
+        "registerUser",
+        {
 
-        document.getElementById(
-            key
-        ).value
+            name:name,
 
+            water:Number(
+                document.getElementById(
+                    "water"
+                ).value
+            ),
+
+            fuel:Number(
+                document.getElementById(
+                    "fuel"
+                ).value
+            ),
+
+            destination:
+                document.getElementById(
+                    "destination"
+                ).value,
+
+            iconType:iconType
+
+        }
     );
 
-});
 
 
-document.getElementById(
-    "registerStatus"
-).innerHTML=
-    "🟢 登録済み : "+name;
+    registered = true;
 
 
-// 登録後GPS自動開始
 
-setTimeout(()=>{
+    [
 
-    startGPS();
+        "name",
+        "water",
+        "fuel",
+        "destination",
+        "iconType"
 
-},1000);
+    ].forEach(key=>{
 
+        localStorage.setItem(
+            key,
+            document.getElementById(
+                key
+            ).value
+        );
+
+    });
+
+
+
+    document.getElementById(
+        "registerStatus"
+    ).innerHTML =
+        "🟢 登録済み : " +
+        name;
+
+
+
+    setTimeout(()=>{
+
+        startGPS();
+
+    },1000);
 
 }
+
 
 
 //==================================================
 // 地図
 //==================================================
 
-const map=
-L.map("map")
-.setView(
-    [32.803,130.707],
-    13
-);
+const map =
+    L.map("map")
+    .setView(
+        [32.803,130.707],
+        13
+    );
 
 
-const osm=
-L.tileLayer(
 
-    "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+// 標準地図
 
-    {
-        attribution:"OpenStreetMap"
-    }
-
-);
-
-
-const satellite=
-L.tileLayer(
-
-    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-
-    {
-        attribution:"Esri"
-    }
-
-);
+const osm =
+    L.tileLayer(
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {
+            attribution:
+                "OpenStreetMap"
+        }
+    );
 
 
-const terrain=
-L.tileLayer(
 
-    "https://tile.opentopomap.org/{z}/{x}/{y}.png",
+// 航空写真
 
-    {
-        attribution:"OpenTopoMap"
-    }
-
-);
-
-
-const gsi=
-L.tileLayer(
-
-    "https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png",
-
-    {
-        attribution:"国土地理院"
-    }
-
-);
+const satellite =
+    L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+            attribution:
+                "Esri"
+        }
+    );
 
 
-const gsiPale=
-L.tileLayer(
 
-    "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",
+// 地形図
 
-    {
-        attribution:"国土地理院 淡色地図"
-    }
+const terrain =
+    L.tileLayer(
+        "https://tile.opentopomap.org/{z}/{x}/{y}.png",
+        {
+            attribution:
+                "OpenTopoMap"
+        }
+    );
 
-);
 
+
+// 国土地理院
+
+const gsi =
+    L.tileLayer(
+        "https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png",
+        {
+            attribution:
+                "国土地理院"
+        }
+    );
+
+
+
+// 防災淡色地図
+
+const gsiPale =
+    L.tileLayer(
+        "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",
+        {
+            attribution:
+                "国土地理院 淡色地図"
+        }
+    );
+
+
+
+// 初期地図
 
 osm.addTo(map);
 
+
+
+//==================================================
+// 交通規制レイヤー
+//==================================================
+
+let trafficRegulationLayer =
+    L.layerGroup();
+
+
+
+//==================================================
+// 地図レイヤー切替
+//==================================================
 
 L.control.layers(
 
     {
 
-        "🗺 標準地図":osm,
+        "🗺 標準地図":
+            osm,
 
-        "🛰 航空写真":satellite,
+        "🛰 航空写真":
+            satellite,
 
-        "⛰ 地形図":terrain,
+        "⛰ 地形図":
+            terrain,
 
-        "🇯🇵 国土地理院":gsi,
+        "🇯🇵 国土地理院":
+            gsi,
 
-        "🚒 防災淡色地図":gsiPale
+        "🚒 防災淡色地図":
+            gsiPale
+
+    },
+
+    {
+
+        "🚧 交通規制":
+            trafficRegulationLayer
 
     }
 
 ).addTo(map);
 
 
+
 //==================================================
-// 地図クリック
-// 緯度・経度・UTM表示
+// 交通規制受信
 //==================================================
 
-map.on(
-"click",
-(e)=>{
+socket.on(
+    "trafficRegulations",
+    (regulations)=>{
 
 
-selectedPointLat=
-    e.latlng.lat;
+        trafficRegulationLayer
+            .clearLayers();
 
 
-selectedPointLon=
-    e.latlng.lng;
+        if(!Array.isArray(regulations)){
+
+            return;
+
+        }
 
 
-// 緯度
-
-document.getElementById(
-    "pointLat"
-).textContent=
-    selectedPointLat.toFixed(6);
+        regulations.forEach(
+            regulation=>{
 
 
-// 経度
+                if(
+                    regulation.lat == null ||
+                    regulation.lon == null
+                ){
 
-document.getElementById(
-    "pointLon"
-).textContent=
-    selectedPointLon.toFixed(6);
+                    return;
 
-
-// UTM
-
-const utm=
-    proj4(
-
-        "EPSG:4326",
-
-        "+proj=utm +zone=52 +south +datum=WGS84",
-
-        [
-            selectedPointLon,
-            selectedPointLat
-        ]
-
-    );
+                }
 
 
-const utmE=
-    Math.round(utm[0]);
+                const marker =
+                    L.marker(
+                        [
+                            regulation.lat,
+                            regulation.lon
+                        ],
+                        {
+
+                            icon:
+                                L.divIcon({
+
+                                    className:
+                                        "trafficIcon",
+
+                                    html:"🚧",
+
+                                    iconSize:
+                                        [30,30],
+
+                                    iconAnchor:
+                                        [15,15]
+
+                                })
+
+                        }
+                    );
 
 
-const utmN=
-    Math.round(utm[1]);
+
+                marker.bindPopup(`
+
+                    <b>🚧 交通規制</b>
+
+                    <hr>
+
+                    路線：
+                    ${regulation.route || "-"}
+
+                    <br>
+
+                    規制：
+                    ${regulation.type || "-"}
+
+                    <br>
+
+                    原因：
+                    ${regulation.reason || "-"}
+
+                    <br>
+
+                    区間：
+                    ${regulation.section || "-"}
+
+                    <br>
+
+                    開始：
+                    ${regulation.start || "-"}
+
+                `);
 
 
-document.getElementById(
-    "pointUtmZone"
-).textContent=
-    "52S";
 
+                trafficRegulationLayer
+                    .addLayer(marker);
 
-document.getElementById(
-    "pointUtmE"
-).textContent=
-    utmE;
+            }
+        );
 
+    }
+);
 
-document.getElementById(
-    "pointUtmN"
-).textContent=
-    utmN;
-
-
-});
 
 
 //==================================================
@@ -1546,154 +1874,167 @@ document.getElementById(
 function startGPS(){
 
 
-if(!registered){
+    if(!registered){
 
-    alert(
-        "先にユーザー登録してください"
-    );
-
-    return;
-
-}
-
-
-localStorage.setItem(
-    "gpsRunning",
-    "true"
-);
-
-
-if(watchID!==null){
-
-    return;
-
-}
-
-
-gpsTimer=
-setInterval(()=>{
-
-
-    navigator.geolocation.getCurrentPosition(
-
-        pos=>{
-
-            sendLocation(
-
-                pos.coords.latitude,
-
-                pos.coords.longitude
-
-            );
-
-        }
-
-    );
-
-
-},30000);
-
-
-watchID=
-navigator.geolocation.watchPosition(
-
-    pos=>{
-
-
-        let lat=
-            pos.coords.latitude;
-
-
-        let lon=
-            pos.coords.longitude;
-
-
-        if(lastLat===0){
-
-            sendLocation(
-                lat,
-                lon
-            );
-
-
-            lastLat=lat;
-
-            lastLon=lon;
-
-            lastSendTime=
-                Date.now();
-
-
-            return;
-
-        }
-
-
-        let distance=
-            getDistance(
-
-                lastLat,
-                lastLon,
-                lat,
-                lon
-
-            );
-
-
-        let now=
-            Date.now();
-
-
-        if(
-
-            distance>=MOVE_DISTANCE ||
-
-            now-lastSendTime>=
-                SEND_INTERVAL
-
-        ){
-
-            sendLocation(
-                lat,
-                lon
-            );
-
-
-            lastLat=lat;
-
-            lastLon=lon;
-
-            lastSendTime=now;
-
-        }
-
-
-    },
-
-
-    err=>{
-
-        console.log(
-            "GPSエラー",
-            err
+        alert(
+            "先にユーザー登録してください"
         );
 
-    },
-
-
-    {
-
-        enableHighAccuracy:true,
-
-        timeout:10000,
-
-        maximumAge:0
+        return;
 
     }
 
-);
+
+    localStorage.setItem(
+        "gpsRunning",
+        "true"
+    );
+
+
+    if(watchID !== null){
+
+        return;
+
+    }
+
+
+
+    gpsTimer =
+        setInterval(()=>{
+
+
+            navigator.geolocation
+                .getCurrentPosition(
+
+                    pos=>{
+
+                        sendLocation(
+
+                            pos.coords.latitude,
+
+                            pos.coords.longitude
+
+                        );
+
+                    },
+
+                    err=>{
+
+                        console.log(
+                            "GPSタイマーエラー",
+                            err
+                        );
+
+                    }
+
+                );
+
+
+        },30000);
+
+
+
+    watchID =
+        navigator.geolocation
+            .watchPosition(
+
+                pos=>{
+
+
+                    const lat =
+                        pos.coords.latitude;
+
+
+                    const lon =
+                        pos.coords.longitude;
+
+
+
+                    if(lastLat === 0){
+
+                        sendLocation(
+                            lat,
+                            lon
+                        );
+
+
+                        lastLat = lat;
+
+                        lastLon = lon;
+
+                        lastSendTime =
+                            Date.now();
+
+
+                        return;
+
+                    }
+
+
+
+                    const distance =
+                        getDistance(
+                            lastLat,
+                            lastLon,
+                            lat,
+                            lon
+                        );
+
+
+                    const now =
+                        Date.now();
+
+
+
+                    if(
+                        distance >=
+                            MOVE_DISTANCE
+                        ||
+                        now-lastSendTime >=
+                            SEND_INTERVAL
+                    ){
+
+                        sendLocation(
+                            lat,
+                            lon
+                        );
+
+
+                        lastLat = lat;
+
+                        lastLon = lon;
+
+                        lastSendTime = now;
+
+                    }
+
+                },
+
+
+                err=>{
+
+                    console.log(
+                        "GPSエラー",
+                        err
+                    );
+
+                },
+
+
+                {
+
+                    enableHighAccuracy:true,
+
+                    timeout:10000,
+
+                    maximumAge:0
+
+                }
+
+            );
 
 }
+
 
 
 //==================================================
@@ -1706,120 +2047,126 @@ function sendLocation(
 ){
 
 
-const utm=
-    proj4(
+    const utm =
+        proj4(
+            "EPSG:4326",
 
-        "EPSG:4326",
+            "+proj=utm +zone=52 +south +datum=WGS84",
 
-        "+proj=utm +zone=52 +south +datum=WGS84",
-
-        [lon,lat]
-
-    );
+            [lon,lat]
+        );
 
 
-const utmE=
-    Math.round(utm[0]);
+    const utmE =
+        Math.round(
+            utm[0]
+        );
 
 
-const utmN=
-    Math.round(utm[1]);
+    const utmN =
+        Math.round(
+            utm[1]
+        );
 
 
-[
-"name",
-"water",
-"fuel",
-"destination",
-"iconType"
 
-].forEach(key=>{
+    [
 
-    localStorage.setItem(
+        "name",
+        "water",
+        "fuel",
+        "destination",
+        "iconType"
 
-        key,
+    ].forEach(key=>{
 
-        document.getElementById(
-            key
-        ).value
-
-    );
-
-});
-
-
-document.getElementById(
-    "gpsStatus"
-).innerHTML=
-    "🟢 GPS稼働中";
-
-
-document.getElementById(
-    "lastSend"
-).innerHTML=
-    "最終送信："+
-    new Date()
-    .toLocaleTimeString();
-
-
-if(!registered){
-
-    return;
-
-}
-
-
-let iconType=
-    normalizeIconType(
-        document.getElementById(
-            "iconType"
-        ).value
-    );
-
-
-socket.emit(
-    "location",
-    {
-
-        name:
+        localStorage.setItem(
+            key,
             document.getElementById(
-                "name"
-            ).value,
-
-        lat:lat,
-
-        lon:lon,
-
-        utmZone:"52S",
-
-        utmE:utmE,
-
-        utmN:utmN,
-
-        water:Number(
-            document.getElementById(
-                "water"
+                key
             ).value
-        ),
+        );
 
-        fuel:Number(
-            document.getElementById(
-                "fuel"
-            ).value
-        ),
+    });
 
-        destination:
-            document.getElementById(
-                "destination"
-            ).value,
 
-        iconType:iconType
+
+    document.getElementById(
+        "gpsStatus"
+    ).innerHTML =
+        "🟢 GPS稼働中";
+
+
+
+    document.getElementById(
+        "lastSend"
+    ).innerHTML =
+        "最終送信：" +
+        new Date()
+        .toLocaleTimeString();
+
+
+
+    if(!registered){
+
+        return;
 
     }
 
-);
+
+
+    const iconType =
+        normalizeIconType(
+            document.getElementById(
+                "iconType"
+            ).value
+        );
+
+
+
+    socket.emit(
+        "location",
+        {
+
+            name:
+                document.getElementById(
+                    "name"
+                ).value,
+
+            lat:lat,
+
+            lon:lon,
+
+            utmZone:"52S",
+
+            utmE:utmE,
+
+            utmN:utmN,
+
+            water:Number(
+                document.getElementById(
+                    "water"
+                ).value
+            ),
+
+            fuel:Number(
+                document.getElementById(
+                    "fuel"
+                ).value
+            ),
+
+            destination:
+                document.getElementById(
+                    "destination"
+                ).value,
+
+            iconType:iconType
+
+        }
+    );
 
 }
+
 
 
 //==================================================
@@ -1829,43 +2176,44 @@ socket.emit(
 function updateStatus(){
 
 
-if(!registered){
+    if(!registered){
 
-    alert(
-        "先にユーザー登録してください"
-    );
-
-    return;
-
-}
-
-
-navigator.geolocation.getCurrentPosition(
-
-    pos=>{
-
-        sendLocation(
-
-            pos.coords.latitude,
-
-            pos.coords.longitude
-
+        alert(
+            "先にユーザー登録してください"
         );
 
-    },
-
-    err=>{
-
-        console.log(
-            "GPSエラー",
-            err
-        );
+        return;
 
     }
 
-);
+
+    navigator.geolocation
+        .getCurrentPosition(
+
+            pos=>{
+
+                sendLocation(
+
+                    pos.coords.latitude,
+
+                    pos.coords.longitude
+
+                );
+
+            },
+
+            err=>{
+
+                alert(
+                    "現在地を取得できませんでした"
+                );
+
+            }
+
+        );
 
 }
+
 
 
 //==================================================
@@ -1879,148 +2227,153 @@ function getDistance(
     lon2
 ){
 
-
-const R=6371000;
-
-
-const dLat=
-    (lat2-lat1)
-    *
-    Math.PI/180;
+    const R = 6371000;
 
 
-const dLon=
-    (lon2-lon1)
-    *
-    Math.PI/180;
+    const dLat =
+        (lat2-lat1)
+        *
+        Math.PI/180;
 
 
-const a=
-
-    Math.sin(dLat/2)**2
-
-    +
-
-    Math.cos(
-        lat1*Math.PI/180
-    )
-
-    *
-
-    Math.cos(
-        lat2*Math.PI/180
-    )
-
-    *
-
-    Math.sin(dLon/2)**2;
+    const dLon =
+        (lon2-lon1)
+        *
+        Math.PI/180;
 
 
-return R*
+    const a =
+        Math.sin(dLat/2)**2
+        +
+        Math.cos(
+            lat1*Math.PI/180
+        )
+        *
+        Math.cos(
+            lat2*Math.PI/180
+        )
+        *
+        Math.sin(dLon/2)**2;
 
-    2*
 
-    Math.atan2(
-
-        Math.sqrt(a),
-
-        Math.sqrt(1-a)
-
-    );
+    return R *
+        2 *
+        Math.atan2(
+            Math.sqrt(a),
+            Math.sqrt(1-a)
+        );
 
 }
 
 
+
 //==================================================
-// クロノロジー
+// クロノロジー受信
 //==================================================
 
 socket.on(
-"chronology",
-(data)=>{
+    "chronology",
+    (data)=>{
 
-    chronology=data;
+        chronology = data;
 
-    renderChronology();
-
-});
-
-
-function sendChronology(){
-
-
-let msg=
-    document.getElementById(
-        "chronoMessage"
-    ).value.trim();
-
-
-if(msg===""){
-
-    return;
-
-}
-
-
-socket.emit(
-    "addChronology",
-    {
-
-        message:msg,
-
-        user:
-            document.getElementById(
-                "name"
-            ).value
+        renderChronology();
 
     }
 );
 
 
-document.getElementById(
-    "chronoMessage"
-).value="";
+
+//==================================================
+// クロノロジー送信
+//==================================================
+
+function sendChronology(){
+
+
+    const msg =
+        document.getElementById(
+            "chronoMessage"
+        )
+        .value
+        .trim();
+
+
+    if(msg === ""){
+
+        return;
+
+    }
+
+
+
+    socket.emit(
+        "addChronology",
+        {
+
+            message:msg,
+
+            user:
+                document.getElementById(
+                    "name"
+                ).value
+
+        }
+    );
+
+
+
+    document.getElementById(
+        "chronoMessage"
+    ).value = "";
 
 }
 
+
+
+//==================================================
+// クロノロジー表示
+//==================================================
 
 function renderChronology(){
 
 
-let html="";
+    let html = "";
 
 
-chronology.forEach(item=>{
+    chronology.forEach(item=>{
 
 
-    html+=`
+        html += `
 
-        <div class="timelineItem">
+            <div class="timelineItem">
 
-            <div class="timelineTime">
+                <div class="timelineTime">
 
-                ${item.time}
+                    ${item.time}
+
+                </div>
+
+                <div class="timelineMessage">
+
+                    ${item.message}
+
+                </div>
 
             </div>
 
-            <div class="timelineMessage">
+        `;
 
-                ${item.message}
-
-            </div>
-
-        </div>
-
-    `;
-
-});
+    });
 
 
-document.getElementById(
-    "timeline"
-).innerHTML=html;
+
+    document.getElementById(
+        "timeline"
+    ).innerHTML = html;
 
 }
+
 
 
 //==================================================
@@ -2030,68 +2383,73 @@ document.getElementById(
 function createIcon(type){
 
 
-type=
-    normalizeIconType(type);
+    type =
+        normalizeIconType(type);
 
 
-let image;
+    let image;
 
 
-switch(type){
-
-    case "1":
-
-        image=
-            "/icon/person.png";
-
-        break;
+    switch(type){
 
 
-    case "2":
+        case "1":
 
-        image=
-            "/icon/vehicle_small.png";
+            image =
+                "/icon/person.png";
 
-        break;
-
-
-    case "3":
-
-        image=
-            "/icon/vehicle_medium.png";
-
-        break;
+            break;
 
 
-    case "4":
+        case "2":
 
-        image=
-            "/icon/vehicle_large.png";
+            image =
+                "/icon/vehicle_small.png";
 
-        break;
+            break;
 
 
-    default:
+        case "3":
 
-        image=
-            "/icon/person.png";
+            image =
+                "/icon/vehicle_medium.png";
+
+            break;
+
+
+        case "4":
+
+            image =
+                "/icon/vehicle_large.png";
+
+            break;
+
+
+        default:
+
+            image =
+                "/icon/person.png";
+
+            break;
+
+    }
+
+
+
+    return L.icon({
+
+        iconUrl:image,
+
+        iconSize:[60,60],
+
+        iconAnchor:[30,60],
+
+        popupAnchor:[0,-70]
+
+    });
 
 }
 
-
-return L.icon({
-
-    iconUrl:image,
-
-    iconSize:[60,60],
-
-    iconAnchor:[30,60],
-
-    popupAnchor:[0,-70]
-
-});
-
-}
 
 
 //==================================================
@@ -2099,312 +2457,321 @@ return L.icon({
 //==================================================
 
 socket.on(
-"locations",
-(users)=>{
+    "locations",
+    (users)=>{
 
 
-let html="";
+        let html = "";
 
 
-Object.keys(markers)
-.forEach(name=>{
+
+        Object.keys(markers)
+            .forEach(name=>{
 
 
-    if(!users[name]){
-
-        map.removeLayer(
-            markers[name]
-        );
-
-        delete markers[name];
-
-    }
-
-});
+                if(!users[name]){
 
 
-Object.keys(users)
-.forEach(name=>{
+                    map.removeLayer(
+                        markers[name]
+                    );
 
 
-    let user=
-        users[name];
-
-
-    let lat=
-        user.lat;
-
-
-    let lon=
-        user.lon;
-
-
-    if(
-        lat===null ||
-        lon===null
-    ){
-
-        lat=32.803;
-
-        lon=130.707;
-
-    }
-
-
-    let icon=
-        createIcon(
-            user.iconType
-        );
-
-
-    if(markers[name]){
-
-
-        markers[name]
-        .setLatLng(
-            [lat,lon]
-        );
-
-
-        markers[name]
-        .setIcon(icon);
-
-
-    }
-    else{
-
-
-        markers[name]=
-            L.marker(
-
-                [lat,lon],
-
-                {
-                    icon:icon
-                }
-
-            )
-
-            .addTo(map)
-
-            .bindTooltip(
-
-                user.name,
-
-                {
-
-                    permanent:true,
-
-                    direction:"top",
-
-                    offset:[
-                        0,
-                        -60
-                    ],
-
-                    className:
-                        "pointLabel"
+                    delete markers[name];
 
                 }
 
-            );
-
-    }
+            });
 
 
-    markers[name]
-    .bindPopup(
 
-        `
-
-        <b>${user.name}</b>
-
-        <br>
-
-        状態:
-        ${user.online
-            ? "🟢ON"
-            : "🔴OFF"}
-
-        <hr>
-
-        💧水量:
-        ${user.water}
-
-        <br>
-
-        ⛽燃料:
-        ${user.fuel}
-
-        <br>
-
-        📍目的地:
-        ${user.destination || "-"}
-
-        <br><br>
-
-        UTM:
-        ${user.utmZone || "52S"}
-
-        <br>
-
-        E:
-        ${user.utmE || ""}
-
-        <br>
-
-        N:
-        ${user.utmN || ""}
-
-        <br><br>
-
-        🕒
-        ${
-            user.lastUpdate
-            ?
-            new Date(
-                user.lastUpdate
-            ).toLocaleString()
-            :
-            "-"
-        }
-
-        `
-
-    );
+        Object.keys(users)
+            .forEach(name=>{
 
 
-    html+=`
+                const user =
+                    users[name];
 
-        <div class="userRow">
 
-            <div
-                onclick="focusUser('${user.name}')">
+                let lat = user.lat;
 
-                ${
-                    user.online
-                    ? "🟢ON"
-                    : "🔴OFF"
+                let lon = user.lon;
+
+
+
+                if(
+                    lat === null ||
+                    lon === null
+                ){
+
+                    lat = 32.803;
+
+                    lon = 130.707;
+
                 }
 
-            </div>
 
 
-            <div
-                onclick="focusUser('${user.name}')">
-
-                ${user.name}
-
-            </div>
+                const icon =
+                    createIcon(
+                        user.iconType
+                    );
 
 
-            <div
-                onclick="focusUser('${user.name}')">
 
-                ${user.water}
-
-            </div>
+                if(markers[name]){
 
 
-            <div
-                onclick="focusUser('${user.name}')">
-
-                ${user.fuel}
-
-            </div>
+                    markers[name]
+                        .setLatLng(
+                            [lat,lon]
+                        );
 
 
-            <div
-                onclick="focusUser('${user.name}')">
-
-                ${timeAgo(
-                    user.lastUpdate
-                )}
-
-            </div>
+                    markers[name]
+                        .setIcon(icon);
 
 
-            <div>
-
-                <button
-                    class="deleteButton"
-                    onclick="
-                        event.stopPropagation();
-                        deleteUser('${user.name}')
-                    ">
-
-                    🗑
-
-                </button>
-
-            </div>
-
-        </div>
-
-    `;
-
-});
+                }
+                else{
 
 
-document.getElementById(
-    "users"
-).innerHTML=html;
+                    markers[name] =
+                        L.marker(
+                            [lat,lon],
+                            {
+                                icon:icon
+                            }
+                        )
+                        .addTo(map)
+                        .bindTooltip(
+                            user.name,
+                            {
+
+                                permanent:true,
+
+                                direction:"top",
+
+                                offset:
+                                    [0,-60],
+
+                                className:
+                                    "pointLabel"
+
+                            }
+                        );
+
+                }
 
 
-});
+
+                markers[name]
+                    .bindPopup(`
+
+                        <b>
+                            ${user.name}
+                        </b>
+
+                        <br>
+
+                        状態：
+                        ${
+                            user.online
+                            ?
+                            "🟢ON"
+                            :
+                            "🔴OFF"
+                        }
+
+                        <hr>
+
+                        💧水量：
+                        ${user.water}
+
+                        <br>
+
+                        ⛽燃料：
+                        ${user.fuel}
+
+                        <br>
+
+                        📍目的地：
+                        ${
+                            user.destination
+                            || "-"
+                        }
+
+                        <br><br>
+
+                        UTM：
+                        ${
+                            user.utmZone
+                            || "52S"
+                        }
+
+                        <br>
+
+                        E：
+                        ${
+                            user.utmE
+                            || ""
+                        }
+
+                        <br>
+
+                        N：
+                        ${
+                            user.utmN
+                            || ""
+                        }
+
+                        <br><br>
+
+                        🕒
+                        ${
+                            user.lastUpdate
+                            ?
+                            new Date(
+                                user.lastUpdate
+                            )
+                            .toLocaleString()
+                            :
+                            "-"
+                        }
+
+                    `);
+
+
+
+                html += `
+
+                    <div class="userRow">
+
+                        <div
+                            onclick="
+                                focusUser('${user.name}')
+                            ">
+
+                            ${
+                                user.online
+                                ?
+                                "🟢ON"
+                                :
+                                "🔴OFF"
+                            }
+
+                        </div>
+
+
+                        <div
+                            onclick="
+                                focusUser('${user.name}')
+                            ">
+
+                            ${user.name}
+
+                        </div>
+
+
+                        <div
+                            onclick="
+                                focusUser('${user.name}')
+                            ">
+
+                            ${user.water}
+
+                        </div>
+
+
+                        <div
+                            onclick="
+                                focusUser('${user.name}')
+                            ">
+
+                            ${user.fuel}
+
+                        </div>
+
+
+                        <div
+                            onclick="
+                                focusUser('${user.name}')
+                            ">
+
+                            ${
+                                timeAgo(
+                                    user.lastUpdate
+                                )
+                            }
+
+                        </div>
+
+
+                        <div>
+
+                            <button
+                                class="deleteButton"
+                                onclick="
+                                    event.stopPropagation();
+                                    deleteUser('${user.name}')
+                                ">
+
+                                🗑
+
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                `;
+
+            });
+
+
+
+        document.getElementById(
+            "users"
+        ).innerHTML = html;
+
+    }
+);
+
 
 
 //==================================================
-// ユーザー移動
+// ユーザーへ移動
 //==================================================
 
 function focusUser(name){
 
 
-if(!markers[name]){
+    if(!markers[name]){
 
-    return;
+        return;
 
-}
-
-
-let pos=
-    markers[name].getLatLng();
-
-
-map.setView(
-
-    [
-        pos.lat,
-        pos.lng
-    ],
-
-    17,
-
-    {
-        animate:true
     }
 
-);
+
+    const pos =
+        markers[name]
+        .getLatLng();
 
 
-markers[name].openPopup();
-
-
-// 地図タブへ移動
-
-let mapButton=
-    document.querySelector(
-        ".tabButton"
+    map.setView(
+        [pos.lat,pos.lng],
+        17,
+        {
+            animate:true
+        }
     );
 
 
-showTab(
-    "mapTab",
-    mapButton
-);
+    markers[name]
+        .openPopup();
 
 }
+
 
 
 //==================================================
@@ -2414,65 +2781,159 @@ showTab(
 function deleteUser(name){
 
 
-if(!confirm(
-    name+" を削除しますか？"
-)){
+    if(
+        !confirm(
+            name +
+            " を削除しますか？"
+        )
+    ){
 
-    return;
+        return;
+
+    }
+
+
+    socket.emit(
+        "deleteUser",
+        name
+    );
 
 }
 
-
-socket.emit(
-    "deleteUser",
-    name
-);
-
-}
 
 
 //==================================================
-// 時間表示
+// 最終更新時間
 //==================================================
 
 function timeAgo(t){
 
 
-if(!t){
+    if(!t){
 
-    return "-";
+        return "-";
 
-}
+    }
 
 
-let sec=
-    Math.floor(
-        (Date.now()-t)/1000
+    const sec =
+        Math.floor(
+            (Date.now()-t)/1000
+        );
+
+
+    if(sec < 60){
+
+        return sec + "秒前";
+
+    }
+
+
+    const min =
+        Math.floor(sec/60);
+
+
+    if(min < 60){
+
+        return min + "分前";
+
+    }
+
+
+    return (
+        Math.floor(min/60)
+        +
+        "時間前"
     );
 
-
-if(sec<60){
-
-    return sec+"秒前";
-
 }
 
 
-let min=
-    Math.floor(sec/60);
+
+//==================================================
+// 地点選択
+//==================================================
+
+let selectedPointLat = null;
+
+let selectedPointLon = null;
+
+let selectedPointName = null;
 
 
-if(min<60){
 
-    return min+"分前";
+map.on(
+    "click",
+    (e)=>{
 
-}
+
+        selectedPointLat =
+            e.latlng.lat;
 
 
-return Math.floor(min/60)
-    +"時間前";
+        selectedPointLon =
+            e.latlng.lng;
 
-}
+
+
+        // 緯度・経度表示
+
+        document.getElementById(
+            "pointLat"
+        ).textContent =
+            selectedPointLat
+            .toFixed(6);
+
+
+        document.getElementById(
+            "pointLon"
+        ).textContent =
+            selectedPointLon
+            .toFixed(6);
+
+
+
+        // UTM変換
+
+        const utm =
+            proj4(
+
+                "EPSG:4326",
+
+                "+proj=utm +zone=52 +south +datum=WGS84",
+
+                [
+                    selectedPointLon,
+                    selectedPointLat
+                ]
+
+            );
+
+
+        document.getElementById(
+            "pointUtmZone"
+        ).textContent =
+            "52S";
+
+
+        document.getElementById(
+            "pointUtmE"
+        ).textContent =
+            Math.round(
+                utm[0]
+            );
+
+
+        document.getElementById(
+            "pointUtmN"
+        ).textContent =
+            Math.round(
+                utm[1]
+            );
+
+    }
+);
+
 
 
 //==================================================
@@ -2482,70 +2943,62 @@ return Math.floor(min/60)
 function addPoint(){
 
 
-console.log(
-    "addPoint開始",
-    selectedPointLat,
-    selectedPointLon
-);
+    if(selectedPointLat === null){
 
+        alert(
+            "先に地図をクリックして登録位置を選択してください"
+        );
 
-if(selectedPointLat===null){
-
-    alert(
-        "先に地図をクリックしてください"
-    );
-
-    return;
-
-}
-
-
-let name=
-    document.getElementById(
-        "pointName"
-    ).value.trim();
-
-
-if(name===""){
-
-    alert(
-        "地点名を入力してください"
-    );
-
-    return;
-
-}
-
-
-socket.emit(
-    "addPoint",
-    {
-
-        name:name,
-
-        type:
-            document.getElementById(
-                "pointType"
-            ).value,
-
-        lat:selectedPointLat,
-
-        lon:selectedPointLon
+        return;
 
     }
-);
 
 
-alert(
-    "地点登録送信しました"
-);
+    const name =
+        document.getElementById(
+            "pointName"
+        )
+        .value
+        .trim();
 
 
-document.getElementById(
-    "pointName"
-).value="";
+    if(name === ""){
+
+        alert(
+            "地点名を入力してください"
+        );
+
+        return;
+
+    }
+
+
+
+    socket.emit(
+        "addPoint",
+        {
+
+            name:name,
+
+            type:
+                document.getElementById(
+                    "pointType"
+                ).value,
+
+            lat:selectedPointLat,
+
+            lon:selectedPointLon
+
+        }
+    );
+
+
+    document.getElementById(
+        "pointName"
+    ).value = "";
 
 }
+
 
 
 //==================================================
@@ -2555,49 +3008,53 @@ document.getElementById(
 function deletePoint(){
 
 
-let name=
+    const name =
+        selectedPointName ||
+        document.getElementById(
+            "pointName"
+        )
+        .value
+        .trim();
 
-    selectedPointName ||
+
+    if(name === ""){
+
+        alert(
+            "削除する地点を選択してください"
+        );
+
+        return;
+
+    }
+
+
+    if(
+        !confirm(
+            name +
+            " を削除しますか？"
+        )
+    ){
+
+        return;
+
+    }
+
+
+    socket.emit(
+        "deletePoint",
+        name
+    );
+
+
+    selectedPointName = null;
+
 
     document.getElementById(
         "pointName"
-    ).value.trim();
-
-
-if(name===""){
-
-    alert(
-        "削除する地点を選択してください"
-    );
-
-    return;
+    ).value = "";
 
 }
 
-
-if(!confirm(
-    name+" を削除しますか？"
-)){
-
-    return;
-
-}
-
-
-socket.emit(
-    "deletePoint",
-    name
-);
-
-
-selectedPointName=null;
-
-
-document.getElementById(
-    "pointName"
-).value="";
-
-}
 
 
 //==================================================
@@ -2605,200 +3062,210 @@ document.getElementById(
 //==================================================
 
 socket.on(
-"points",
-(points)=>{
+    "points",
+    (points)=>{
 
 
-Object.keys(pointMarkers)
-.forEach(name=>{
+        Object.keys(pointMarkers)
+            .forEach(name=>{
 
 
-    if(!points[name]){
-
-        map.removeLayer(
-            pointMarkers[name]
-        );
-
-        delete pointMarkers[name];
-
-    }
-
-});
+                if(!points[name]){
 
 
-Object.keys(points)
-.forEach(name=>{
+                    map.removeLayer(
+                        pointMarkers[name]
+                    );
 
 
-    let p=
-        points[name];
+                    delete pointMarkers[name];
+
+                }
+
+            });
 
 
-    if(pointMarkers[name]){
 
-        map.removeLayer(
-            pointMarkers[name]
-        );
-
-    }
+        Object.keys(points)
+            .forEach(name=>{
 
 
-    pointMarkers[name]=
-        L.marker(
-
-            [
-                p.lat,
-                p.lon
-            ],
-
-            {
-
-                icon:L.icon({
-
-                    iconUrl:
-                        "/icon/point.png",
-
-                    iconSize:
-                        [60,60],
-
-                    iconAnchor:
-                        [30,60],
-
-                    popupAnchor:
-                        [15,-70]
-
-                })
-
-            }
-
-        )
-
-        .addTo(map)
-
-        .bindTooltip(
-
-            name,
-
-            {
-
-                permanent:true,
-
-                direction:"top",
-
-                offset:[
-                    0,
-                    -30
-                ],
-
-                className:
-                    "pointLabel"
-
-            }
-
-        )
-
-        .on(
-            "click",
-            ()=>{
+                const p =
+                    points[name];
 
 
-                selectedPointName=
-                    name;
+
+                if(pointMarkers[name]){
+
+                    map.removeLayer(
+                        pointMarkers[name]
+                    );
+
+                }
 
 
-                document.getElementById(
-                    "pointName"
-                ).value=
-                    name;
 
-
-                // 地点の座標を設定画面へ表示
-
-                selectedPointLat=
-                    p.lat;
-
-
-                selectedPointLon=
-                    p.lon;
-
-
-                document.getElementById(
-                    "pointLat"
-                ).textContent=
-                    p.lat.toFixed(6);
-
-
-                document.getElementById(
-                    "pointLon"
-                ).textContent=
-                    p.lon.toFixed(6);
-
-
-                const utm=
-                    proj4(
-
-                        "EPSG:4326",
-
-                        "+proj=utm +zone=52 +south +datum=WGS84",
-
+                pointMarkers[name] =
+                    L.marker(
                         [
-                            p.lon,
-                            p.lat
-                        ]
+                            p.lat,
+                            p.lon
+                        ],
+                        {
 
+                            icon:
+                                L.icon({
+
+                                    iconUrl:
+                                        "/icon/point.png",
+
+                                    iconSize:
+                                        [60,60],
+
+                                    iconAnchor:
+                                        [30,60],
+
+                                    popupAnchor:
+                                        [15,-70]
+
+                                })
+
+                        }
+                    )
+                    .addTo(map);
+
+
+
+                pointMarkers[name]
+                    .bindTooltip(
+                        name,
+                        {
+
+                            permanent:true,
+
+                            direction:"top",
+
+                            offset:
+                                [0,-30],
+
+                            className:
+                                "pointLabel"
+
+                        }
                     );
 
 
-                document.getElementById(
-                    "pointUtmZone"
-                ).textContent=
-                    "52S";
+
+                pointMarkers[name]
+                    .on(
+                        "click",
+                        ()=>{
 
 
-                document.getElementById(
-                    "pointUtmE"
-                ).textContent=
-                    Math.round(
-                        utm[0]
+                            selectedPointName =
+                                name;
+
+
+                            document.getElementById(
+                                "pointName"
+                            ).value =
+                                name;
+
+
+
+                            selectedPointLat =
+                                p.lat;
+
+
+                            selectedPointLon =
+                                p.lon;
+
+
+
+                            document.getElementById(
+                                "pointLat"
+                            ).textContent =
+                                Number(
+                                    p.lat
+                                )
+                                .toFixed(6);
+
+
+                            document.getElementById(
+                                "pointLon"
+                            ).textContent =
+                                Number(
+                                    p.lon
+                                )
+                                .toFixed(6);
+
+
+
+                            const utm =
+                                proj4(
+
+                                    "EPSG:4326",
+
+                                    "+proj=utm +zone=52 +south +datum=WGS84",
+
+                                    [
+                                        p.lon,
+                                        p.lat
+                                    ]
+
+                                );
+
+
+                            document.getElementById(
+                                "pointUtmZone"
+                            ).textContent =
+                                "52S";
+
+
+                            document.getElementById(
+                                "pointUtmE"
+                            ).textContent =
+                                Math.round(
+                                    utm[0]
+                                );
+
+
+                            document.getElementById(
+                                "pointUtmN"
+                            ).textContent =
+                                Math.round(
+                                    utm[1]
+                                );
+
+                        }
                     );
 
 
-                document.getElementById(
-                    "pointUtmN"
-                ).textContent=
-                    Math.round(
-                        utm[1]
-                    );
 
-            }
+                pointMarkers[name]
+                    .bindPopup(`
 
-        )
+                        <b>
+                            📍${name}
+                        </b>
 
-        .bindPopup(
+                        <br>
 
-            `
+                        ${Number(p.lat).toFixed(6)}
 
-            <b>📍${name}</b>
+                        <br>
 
-            <br>
+                        ${Number(p.lon).toFixed(6)}
 
-            ${p.lat.toFixed(6)}
+                    `);
 
-            <br>
+            });
 
-            ${p.lon.toFixed(6)}
-
-            `
-
-        );
-
-
-});
-
-
-});
+    }
+);
 
 </script>
+
 
 </body>
 
