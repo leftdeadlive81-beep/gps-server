@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+
+<html lang="ja">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+   content="width=device-width, initial-scale=1.0">
+
+<title>現在位置自動共有君 Version 2.3 マニュアル</title>
+
+<style>
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+
+    margin: 0;
+
+    padding: 0;
+
+    font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        "Noto Sans JP",
+        sans-serif;
+
+    background: #f4f6f8;
+
+    color: #222;
+
+    line-height: 1.7;
+
+}
+
+header {
+
+    background: #1f4e79;
+
+    color: white;
+
+    padding: 22px 15px;
+
+    text-align: center;
+
+}
+
+header h1 {
+
+    margin: 0;
+
+    font-size: 22px;
+
+}
+
+header p {
+
+    margin: 5px 0 0;
+
+    font-size: 13px;
+
+}
+
+.container {
+
+    max-width: 900px;
+
+    margin: 0 auto;
+
+    padding: 15px;
+
+}
+
+.card {
+
+    background: white;
+
+    border-radius: 10px;
+
+    padding: 18px;
+
+    margin-bottom: 15px;
+
+    box-shadow:
+        0 2px 6px rgba(0,0,0,0.08);
+
+}
+
+.card h2 {
+
+    margin-top: 0;
+
+    padding-bottom: 8px;
+
+    border-bottom: 2px solid #1f4e79;
+
+    font-size: 19px;
+
+}
+
+.card h3 {
+
+    font-size: 16px;
+
+    margin-top: 20px;
+
+}
+
+ul {
+
+    padding-left: 22px;
+
+}
+
+.notice {
+
+    background: #eef6ff;
+
+    border-left: 5px solid #1f4e79;
+
+    padding: 12px;
+
+    margin: 12px 0;
+
+}
+
+.warning {
+
+    background: #fff7e6;
+
+    border-left: 5px solid #e6a700;
+
+    padding: 12px;
+
+    margin: 12px 0;
+
+}
+
+.back {
+
+    text-align: center;
+
+    margin: 25px 0;
+
+}
+
+.back a {
+
+    display: inline-block;
+
+    padding: 10px 20px;
+
+    background: #1f4e79;
+
+    color: white;
+
+    text-decoration: none;
+
+    border-radius: 8px;
+
+}
+
+footer {
+
+    text-align: center;
+
+    color: #666;
+
+    font-size: 12px;
+
+    padding: 20px 10px 30px;
+
+}
+
+table {
+
+    width: 100%;
+
+    border-collapse: collapse;
+
+    margin-top: 10px;
+
+}
+
+th,
+td {
+
+    border: 1px solid #ccc;
+
+    padding: 8px;
+
+    text-align: left;
+
+}
+
+th {
+
+    background: #eef2f5;
+
+}
+
+@media (max-width: 600px) {
+
+    header h1 {
+
+        font-size: 19px;
+
+    }
+
+    .card {
+
+        padding: 15px;
+
+    }
+
+    .card h2 {
+
+        font-size: 17px;
+
+    }
+
+    table {
+
+        font-size: 13px;
+
+    }
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<header>
+
+<h1>現在位置自動共有君</h1>
+
+<p>Version 2.3　操作マニュアル</p>
+
+</header>
+
+<div class="container">
+
+<!-- ================================================ -->
+
+<div class="card">
+
+<h2>📖 このアプリについて</h2>
+
+<p>
+
+「現在位置自動共有君」は、複数のユーザーの現在位置や活動状況を
+リアルタイムで共有するための情報共有アプリです。
+
+</p>
+
+<p>
+
+地図上でユーザーの位置を確認できるほか、
+地点登録、UTM座標、クロノロジー、交通規制情報などを
+利用できます。
+
+</p>
+
+</div>
+
+<!-- ================================================ -->
+
+<div class="card">
+
+<h2>👤 1. ユーザー登録</h2>
+
+<p>
+
+アプリを使用する前に、自分のユーザー情報を登録します。
+
+</p>
+
+<h3>登録できる情報</h3>
+
+<ul>
+
+<li>名前</li>
+
+<li>現在位置</li>
+
+<li>水分量</li>
+
+<li>燃料</li>
+
+<li>目的地</li>
+
+<li>アイコン</li>
+
+</ul>
+
+<div class="notice">
+
+<strong>ポイント：</strong><br>
+
+登録されたユーザーは、他の接続端末にも共有されます。
+
+</div>
+
+</div>
+
+<!-- ================================================ -->
+
+<div class="card">
+
+<h2>📍 2. GPS現在位置共有</h2>
+
+<p>
+
+スマートフォンなどのGPS機能を利用して、
+現在位置をサーバーへ送信します。
+
+</p>
+
+<p>
+
+取得した位置情報は、接続している端末へ自動的に配信され、
+地図上で確認できます。
+
+</p>
+
+<h3>表示される情報</h3>
+
+<ul>
+
+<li>ユーザー名</li>
+
+<li>現在位置</li>
+
+<li>アイコン</li>
+
+<li>UTM座標</li>
+
+<li>水分量</li>
+
+<li>燃料</li>
+
+<li>目的地</li>
+
+<li>最終更新時刻</li>
+
+</ul>
+
+<div class="warning">
+
+<strong>注意：</strong><br>
+
+GPSの精度や更新状況は、スマートフォンの設定、
+電波状況、端末の状態などによって変化します。
+
+</div>
+
+</div>
+
+<!-- ================================================ -->
+
+<div class="card">
+
+<h2>🗺 3. 地図</h2>
+
+<p>
+
+地図上に登録ユーザーの現在位置が表示されます。
+
+</p>
+
+<p>
+
+地図の種類を切り替えられる構成になっており、
+用途に応じて地図を選択できます。
+
+</p>
+
+<h3>地図の例</h3>
+
+<ul>
+
+<li>🗺 標準地図</li>
+
+<li>🛰 航空写真</li>
+
+<li>⛰ 地形図</li>
+
+<li>🇯🇵 国土地理院</li>
+
+<li>🚒 防災淡色地図</li>
+
+</ul>
+
+</div>
+
+<!-- ================================================ -->
+
+<div class="card">
+
+<h2>🧭 4. UTM座標</h2>
+
+<p>
+
+現在位置からUTM座標を表示できます。
+
+</p>
+
+<table>
+
+<tr>
+
+<th>項目</th>
+
+<th>内容</th>
+
+</tr>
+
+<tr>
+
+<td>UTM Zone</td>
+
+<td>UTMゾーン</td>
+
+</tr>
+
+<tr>
+
+<td>E</td>
+
+<td>東距</td>
+
+</tr>
+
+<tr>
+
+<td>N</td>
+
+<td>北距</td>
+
+</tr>
+
+</table>
+
+<p>
+
+地図上の位置確認だけでなく、
+座標を利用した位置情報の共有にも利用できます。
+
+</p>
+
+</div>
+
+<!-- ================================================ -->
+
+<div class="card">
+
+<h2>📌 5. 地点登録</h2>
+
+<p>
+
+任意の場所を「地点」として登録できます。
+
+</p>
+
+<p>
+
+登録された地点はサーバーに保存され、
+接続している端末へ自動的に共有されます。
+
+</p>
+
+<h3>地点に設定できる情報</h3>
+
+<ul>
+
+<li>地点名</li>
+
+<li>地点種類</li>
+
+<li>緯度</li>
+
+<li>経度</li>
+
+</ul>
+
+<div class="notice">
+
+登録した地点は、必要に応じて削除できます。
+
+</div>
+
+</div>
+
+<!-- ================================================ -->
+
+<div class="card">
+
+<h2>📜 6. クロノロジー</h2>
+
+<p>
+
+活動状況や連絡事項などを時系列で記録・共有できます。
+
+</p>
+
+<p>
+
+新しいメッセージが上に表示されます。
+
+</p>
+
+<p>
+
+サーバーには最大100件のクロノロジーが保存され、
+アプリ起動時にも復元されます。
+
+</p>
+
+</div>
+
+<!-- ================================================ -->
+
+<div class="card">
+
+<h2>🚧 7. 交通規制情報</h2>
+
+<p>
+
+国土交通省が提供する道路関連GISデータを利用して、
+熊本県内の交通規制情報を取得します。
+
+</p>
+
+<h3>自動更新</h3>
+
+<ul>
+
+<li>アプリ起動時に最新データを取得</li>
+
+<li>その後、3日ごとに自動更新</li>
+
+<li>更新された情報は接続中の全端末へ自動配信</li>
+
+</ul>
+
+<div class="notice">
+
+交通規制情報は国土交通省GISデータを元にしています。
+
+</div>
+
+<div class="warning">
+
+<strong>注意：</strong><br>
+
+実際の通行可否については、現地の標識・係員等の情報も
+必ず確認してください。
+
+</div>
+
+</div>
+
+<!-- ================================================ -->
+
+<div class="card">
+
+<h2>👥 8. ユーザー一覧</h2>
+
+<p>
+
+現在登録されているユーザーを確認できます。
+
+</p>
+
+<p>
+
+各ユーザーについて、現在位置、状態、アイコン、
+水分、燃料、目的地などの情報を確認できます。
+
+</p>
+
+</div>
+
+<!-- ================================================ -->
+
+<div class="card">
+
+<h2>🗑 9. ユーザー削除</h2>
+
+<p>
+
+不要になったユーザーは削除できます。
+
+</p>
+
+<p>
+
+ユーザーを削除すると、サーバー上の現在ユーザー情報からも
+削除され、接続中の端末へ変更内容が通知されます。
+
+</p>
+
+</div>
+
+<!-- ================================================ -->
+
+<div class="card">
+
+<h2>🗑 10. 地点削除</h2>
+
+<p>
+
+登録済みの地点を削除できます。
+
+</p>
+
+<p>
+
+地点を削除すると、サーバー上の地点情報も削除され、
+接続中の端末に反映されます。
+
+</p>
+
+</div>
+
+<!-- ================================================ -->
+
+<div class="card">
+
+<h2>🔄 11. リアルタイム共有</h2>
+
+<p>
+
+本アプリはSocket.IOを利用して、
+サーバーと接続中の端末間で情報をリアルタイムに共有します。
+
+</p>
+
+<ul>
+
+<li>ユーザー位置</li>
+
+<li>ユーザー登録</li>
+
+<li>地点情報</li>
+
+<li>クロノロジー</li>
+
+<li>交通規制情報</li>
+
+</ul>
+
+<p>
+
+ある端末で情報が更新されると、
+接続中の他の端末にも自動的に反映されます。
+
+</p>
+
+</div>
+
+<!-- ================================================ -->
+
+<div class="card">
+
+<h2>💾 12. データ保存</h2>
+
+<p>
+
+本アプリではPostgreSQLを利用して、
+必要な情報をサーバー側に保存します。
+
+</p>
+
+<h3>保存される主な情報</h3>
+
+<ul>
+
+<li>現在ユーザー</li>
+
+<li>位置履歴</li>
+
+<li>登録地点</li>
+
+<li>クロノロジー</li>
+
+</ul>
+
+</div>
+
+<!-- ================================================ -->
+
+<div class="card">
+
+<h2>⚠️ 13. ご利用上の注意</h2>
+
+<ul>
+
+<li>
+GPSの位置情報には誤差があります。
+</li>
+
+<li>
+通信環境によって情報の更新が遅れる場合があります。
+</li>
+
+<li>
+端末の省電力機能などによってGPS更新が制限される場合があります。
+</li>
+
+<li>
+交通規制情報は最新情報との時間差が発生する場合があります。
+</li>
+
+<li>
+重要な判断を行う場合は、現地の状況や公式情報も確認してください。
+</li>
+
+</ul>
+
+</div>
+
+<!-- ================================================ -->
+
+<div class="card">
+
+<h2>ℹ️ 14. Version 2.3</h2>
+
+<table>
+
+<tr>
+
+<th>項目</th>
+
+<th>内容</th>
+
+</tr>
+
+<tr>
+
+<td>ユーザー管理</td>
+
+<td>ユーザー登録・削除</td>
+
+</tr>
+
+<tr>
+
+<td>位置情報</td>
+
+<td>GPSリアルタイム共有</td>
+
+</tr>
+
+<tr>
+
+<td>座標</td>
+
+<td>UTM対応</td>
+
+</tr>
+
+<tr>
+
+<td>地点</td>
+
+<td>登録・削除</td>
+
+</tr>
+
+<tr>
+
+<td>クロノロジー</td>
+
+<td>最大100件</td>
+
+</tr>
+
+<tr>
+
+<td>交通規制</td>
+
+<td>国土交通省GIS</td>
+
+</tr>
+
+<tr>
+
+<td>対象地域</td>
+
+<td>熊本県</td>
+
+</tr>
+
+<tr>
+
+<td>自動更新</td>
+
+<td>3日ごと</td>
+
+</tr>
+
+<tr>
+
+<td>データベース</td>
+
+<td>PostgreSQL / Supabase</td>
+
+</tr>
+
+</table>
+
+</div>
+
+<div class="back">
+
+<a href="/">← アプリに戻る</a>
+
+</div>
+
+</div>
+
+<footer>
+
+現在位置自動共有君 Version 2.3<br>
+
+© 2026
+
+</footer>
+
+</body>
+
+</html>
