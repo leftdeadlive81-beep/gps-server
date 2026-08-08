@@ -1,358 +1,746 @@
+
 <!DOCTYPE html>
-<html lang="ja">
+
+<html lang="ja">s
 
 <head>
 
 <meta charset="UTF-8">
 
-<meta name="viewport"
-      content="width=device-width, initial-scale=1.0">
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
 
-<title>ぷったん Version 2.3</title>
+<title>現在位置自動共有君 Version 2.3</title>
 
-<link rel="stylesheet"
-      href="https://unpkg.com/leaflet/dist/leaflet.css">
 
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<!-- ==================================================
+     Leaflet
+================================================== -->
 
-<script src="https://cdn.jsdelivr.net/npm/proj4@2.9.2/dist/proj4.js"></script>
+<link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet/dist/leaflet.css"
+/>
 
-<script src="/socket.io/socket.io.js"></script>
+
+<!-- ==================================================
+     Supabase
+================================================== -->
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 
+<!-- ==================================================
+     Socket.IO
+================================================== -->
+
+<script src="/socket.io/socket.io.js"></script>
+
+
+<!-- ==================================================
+     Proj4
+================================================== -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
+
+
 <style>
 
+/* ==================================================
+   基本
+================================================== */
+
 *{
+
     box-sizing:border-box;
+
 }
 
+
+html,
 body{
+
     margin:0;
+
     padding:0;
+
+    width:100%;
+
+    height:100%;
+
     font-family:
-        Arial,
-        "Noto Sans JP",
+
+        "Segoe UI",
+        "Meiryo",
         sans-serif;
-    background:#f2f4f7;
-    color:#222;
+
+    background:#f3f4f6;
+
 }
 
-button{
-    cursor:pointer;
-}
 
+button,
 input,
-select,
-button{
-    font-size:16px;
+select{
+
+    font-family:inherit;
+
 }
+
+
+button{
+
+    cursor:pointer;
+
+}
+
+
+/* ==================================================
+   認証画面
+================================================== */
 
 #authScreen{
-    min-height:100vh;
+
+    position:fixed;
+
+    inset:0;
+
     display:flex;
+
     justify-content:center;
+
     align-items:center;
-    padding:20px;
+
+    background:#e9eef3;
+
+    z-index:9999;
+
 }
+
 
 #loginBox,
 #registerBox{
-    width:100%;
-    max-width:420px;
+
+    width:min(420px,92vw);
+
     background:white;
+
+    border-radius:16px;
+
     padding:25px;
-    border-radius:14px;
-    box-shadow:0 3px 15px rgba(0,0,0,.15);
+
+    box-shadow:
+        0 5px 25px rgba(0,0,0,.15);
+
 }
+
+
+#loginBox h2,
+#registerBox h2{
+
+    text-align:center;
+
+    margin-top:0;
+
+}
+
+
+#loginBox h3,
+#registerBox h3{
+
+    text-align:center;
+
+}
+
 
 #loginBox input,
 #registerBox input{
+
+    display:block;
+
     width:100%;
-    padding:12px;
-    margin:7px 0;
+
+    margin:10px 0;
+
+    padding:13px;
+
     border:1px solid #ccc;
-    border-radius:7px;
+
+    border-radius:8px;
+
+    font-size:16px;
+
 }
+
 
 #loginBox button,
 #registerBox button{
+
     width:100%;
-    padding:12px;
+
     margin-top:8px;
+
+    padding:12px;
+
     border:0;
-    border-radius:7px;
-    background:#1976d2;
+
+    border-radius:8px;
+
+    background:#2563eb;
+
     color:white;
+
+    font-size:16px;
+
 }
+
+
+#loginBox button:hover,
+#registerBox button:hover{
+
+    opacity:.9;
+
+}
+
 
 #loginMessage,
 #registerMessage{
-    margin-top:12px;
-    min-height:22px;
-    color:#d32f2f;
+
+    margin-top:15px;
+
+    min-height:24px;
+
+    text-align:center;
+
+    color:#444;
+
 }
+
+
+/* ==================================================
+   アプリ
+================================================== */
 
 #appScreen{
+
     display:none;
+
+    width:100%;
+
+    min-height:100vh;
+
 }
+
+
+/* ==================================================
+   タブ
+================================================== */
 
 .tabButtons{
+
     display:grid;
+
     grid-template-columns:
         repeat(4,1fr);
-    background:#222;
-    position:sticky;
-    top:0;
-    z-index:1000;
+
+    background:#1f2937;
+
+    width:100%;
+
 }
+
 
 .tabButton{
-    padding:10px 4px;
+
     border:0;
-    background:#333;
+
+    background:#1f2937;
+
     color:white;
+
+    padding:9px 4px;
+
+    min-height:58px;
+
 }
+
 
 .tabButton.active{
-    background:#1976d2;
+
+    background:#2563eb;
+
 }
+
 
 .tabIcon{
+
     display:block;
+
     font-size:20px;
+
 }
+
 
 .tabText{
+
     display:block;
-    font-size:13px;
+
+    font-size:12px;
+
+    margin-top:2px;
+
 }
+
 
 .tabContent{
+
     display:none;
+
     padding:8px;
+
 }
+
 
 .tabContent.active{
+
     display:block;
+
 }
+
+
+/* ==================================================
+   地図
+================================================== */
 
 #map{
+
     width:100%;
-    height:65vh;
-    min-height:400px;
+
+    height:calc(100vh - 155px);
+
+    min-height:450px;
+
+    border-radius:8px;
+
 }
 
+
 .gpsButtonRow{
+
     display:flex;
-    gap:6px;
-    margin-top:6px;
+
+    gap:8px;
+
+    margin-top:8px;
+
 }
+
 
 .gpsButton,
 .reportButton{
+
     flex:1;
-    padding:12px;
+
     border:0;
-    border-radius:7px;
+
+    border-radius:8px;
+
+    padding:12px;
+
     color:white;
+
+    font-size:16px;
+
 }
+
 
 .gpsButton{
-    background:#1976d2;
+
+    background:#16a34a;
+
 }
+
 
 .reportButton{
-    background:#388e3c;
+
+    background:#2563eb;
+
 }
 
-#gpsStatus,
-#lastSend{
-    background:white;
-    padding:8px;
-    margin-top:4px;
-    border-radius:5px;
+
+#gpsStatus{
+
+    text-align:center;
+
+    padding:5px;
+
+    font-weight:bold;
+
 }
+
+
+#lastSend{
+
+    text-align:center;
+
+    font-size:12px;
+
+    color:#555;
+
+}
+
+
+/* ==================================================
+   セクション
+================================================== */
 
 .sectionTitle{
+
     font-size:18px;
+
     font-weight:bold;
-    padding:10px 4px;
+
+    margin-bottom:10px;
+
 }
+
+
+/* ==================================================
+   隊員一覧
+================================================== */
 
 .userHeader,
 .userRow{
+
     display:grid;
+
     grid-template-columns:
-        55px
+        70px
         minmax(80px,1fr)
         55px
         65px
-        70px
+        65px
         45px;
+
     align-items:center;
-    gap:3px;
+
 }
+
 
 .userHeader{
-    background:#444;
+
+    background:#374151;
+
     color:white;
-    padding:7px 3px;
+
+    padding:7px 4px;
+
     font-size:13px;
+
+    text-align:center;
+
 }
+
 
 .userRow{
+
     background:white;
+
     border-bottom:1px solid #ddd;
-    padding:8px 3px;
-    font-size:14px;
+
+    min-height:45px;
+
+    font-size:13px;
+
+    text-align:center;
+
 }
+
 
 .userRow > div{
+
     overflow:hidden;
+
     text-overflow:ellipsis;
+
     white-space:nowrap;
+
 }
+
 
 .deleteButton{
+
     border:0;
-    background:#d32f2f;
+
+    background:#dc2626;
+
     color:white;
+
     border-radius:5px;
-    padding:5px;
+
+    padding:5px 7px;
+
 }
+
+
+/* ==================================================
+   クロノロジー
+================================================== */
 
 .chronoInputRow{
+
     display:flex;
-    gap:5px;
+
+    gap:6px;
+
 }
+
 
 #chronoMessage{
+
     flex:1;
-    padding:10px;
+
+    min-width:0;
+
+    padding:11px;
+
+    border:1px solid #ccc;
+
+    border-radius:7px;
+
 }
+
 
 #chronoSendButton{
-    padding:10px 15px;
+
+    width:65px;
+
+    border:0;
+
+    border-radius:7px;
+
+    background:#2563eb;
+
+    color:white;
+
 }
+
+
+#timeline{
+
+    margin-top:10px;
+
+    max-height:65vh;
+
+    overflow-y:auto;
+
+}
+
 
 .timelineItem{
+
+    display:grid;
+
+    grid-template-columns:80px 1fr;
+
+    border-bottom:1px solid #ddd;
+
     background:white;
-    margin-top:6px;
-    padding:9px;
-    border-radius:6px;
+
+    padding:8px;
+
 }
+
 
 .timelineTime{
+
     font-size:12px;
-    color:#666;
+
+    color:#555;
+
 }
+
 
 .timelineMessage{
-    margin-top:3px;
+
+    word-break:break-word;
+
 }
+
+
+/* ==================================================
+   カード
+================================================== */
 
 .card{
+
     background:white;
-    margin-bottom:10px;
+
+    border-radius:10px;
+
     padding:12px;
-    border-radius:9px;
+
+    margin-bottom:10px;
+
+    box-shadow:
+        0 1px 5px rgba(0,0,0,.08);
+
 }
 
-.inputRow{
-    display:flex;
-    gap:5px;
-    margin-bottom:6px;
-}
-
-.inputRow input,
-.inputRow select{
-    flex:1;
-}
 
 .settingsCard input,
 .settingsCard select{
+
     width:100%;
-    padding:10px;
-    margin-bottom:6px;
+
+    padding:11px;
+
+    margin-bottom:8px;
+
+    border:1px solid #ccc;
+
+    border-radius:7px;
+
 }
+
+
+.inputRow{
+
+    display:grid;
+
+    grid-template-columns:1fr 1fr;
+
+    gap:8px;
+
+}
+
 
 .settingsButton{
+
     width:100%;
-    padding:11px;
+
     border:0;
+
     border-radius:7px;
-    background:#1976d2;
+
+    background:#2563eb;
+
     color:white;
+
+    padding:11px;
+
+    font-size:15px;
+
 }
 
-.pointButtonRow{
-    display:flex;
-    gap:5px;
-}
-
-.pointButtonRow button{
-    flex:1;
-    padding:10px;
-    border:0;
-    border-radius:6px;
-}
-
-.pointInfo{
-    margin-top:10px;
-    padding:10px;
-    background:#f5f5f5;
-    border-radius:6px;
-    line-height:1.8;
-}
 
 #registerStatus{
-    margin-top:8px;
-}
 
-.footer{
     text-align:center;
-    padding:15px;
+
+    margin-top:8px;
+
     font-size:13px;
+
 }
 
-.footer a{
-    color:#1976d2;
+
+.pointButtonRow{
+
+    display:flex;
+
+    gap:8px;
+
 }
+
+
+.pointButtonRow button{
+
+    flex:1;
+
+    padding:10px;
+
+    border:0;
+
+    border-radius:7px;
+
+    background:#2563eb;
+
+    color:white;
+
+}
+
+
+.pointButtonRow button:last-child{
+
+    background:#dc2626;
+
+}
+
+
+.pointInfo{
+
+    margin-top:10px;
+
+    padding:10px;
+
+    background:#f3f4f6;
+
+    border-radius:7px;
+
+    line-height:1.8;
+
+}
+
+
+/* ==================================================
+   地図ラベル
+================================================== */
 
 .pointLabel{
+
     background:white;
-    border:1px solid #777;
-    border-radius:4px;
+
+    border:1px solid #555;
+
+    border-radius:5px;
+
     padding:2px 5px;
+
+    font-weight:bold;
+
+    color:#111;
+
 }
 
-.trafficIcon{
-    font-size:26px;
+
+/* ==================================================
+   フッター
+================================================== */
+
+.footer{
+
     text-align:center;
-}
 
-@media(max-width:600px){
+    padding:12px;
 
-    #map{
-        height:58vh;
-        min-height:350px;
-    }
+    font-size:12px;
 
-    .userHeader,
-    .userRow{
-        grid-template-columns:
-            48px
-            minmax(60px,1fr)
-            45px
-            50px
-            60px
-            40px;
-        font-size:12px;
-    }
+    color:#555;
 
 }
+
+
+.footer a{
+
+    color:#2563eb;
+
+    text-decoration:none;
+
+}
+
 
 </style>
 
@@ -380,7 +768,7 @@ button{
 
         <input
             type="text"
-            id="loginId"
+            id="loginUsername"
             placeholder="ログインID"
             autocomplete="username"
         >
@@ -427,7 +815,7 @@ button{
 
         <input
             type="text"
-            id="registerId"
+            id="registerUsername"
             placeholder="任意のログインID"
             autocomplete="username"
         >
@@ -471,391 +859,468 @@ button{
 
 
 <!-- ==================================================
-     アプリ
+     アプリ画面
 ================================================== -->
 
 <div id="appScreen">
 
 
-<!-- ==================================================
-     タブ
-================================================== -->
+    <!-- ==================================================
+         タブ
+    ================================================== -->
 
-<div class="tabButtons">
+    <div class="tabButtons">
 
-    <button
-        class="tabButton active"
-        onclick="showTab('mapTab',this)"
-    >
-        <span class="tabIcon">🗺️</span>
-        <span class="tabText">地図</span>
-    </button>
-
-
-    <button
-        class="tabButton"
-        onclick="showTab('usersTab',this)"
-    >
-        <span class="tabIcon">👥</span>
-        <span class="tabText">隊員一覧</span>
-    </button>
-
-
-    <button
-        class="tabButton"
-        onclick="showTab('chronoTab',this)"
-    >
-        <span class="tabIcon">📋</span>
-        <span class="tabText">報連相</span>
-    </button>
-
-
-    <button
-        class="tabButton"
-        onclick="showTab('settingsTab',this)"
-    >
-        <span class="tabIcon">⚙️</span>
-        <span class="tabText">登録</span>
-    </button>
-
-</div>
-
-
-<!-- ==================================================
-     地図タブ
-================================================== -->
-
-<div
-    id="mapTab"
-    class="tabContent active"
->
-
-    <div id="map"></div>
-
-
-    <div class="gpsButtonRow">
 
         <button
-            class="gpsButton"
-            onclick="startGPS()"
+            class="tabButton active"
+            onclick="showTab('mapTab',this)"
         >
-            📡 GPS開始
+
+            <span class="tabIcon">🗺️</span>
+
+            <span class="tabText">地図</span>
+
         </button>
 
 
         <button
-            class="reportButton"
-            onclick="updateStatus()"
+            class="tabButton"
+            onclick="showTab('usersTab',this)"
         >
-            🔄 現在地報告
+
+            <span class="tabIcon">👥</span>
+
+            <span class="tabText">隊員一覧</span>
+
+        </button>
+
+
+        <button
+            class="tabButton"
+            onclick="showTab('chronoTab',this)"
+        >
+
+            <span class="tabIcon">📋</span>
+
+            <span class="tabText">報連相</span>
+
+        </button>
+
+
+        <button
+            class="tabButton"
+            onclick="showTab('settingsTab',this)"
+        >
+
+            <span class="tabIcon">⚙️</span>
+
+            <span class="tabText">登録</span>
+
         </button>
 
     </div>
 
 
-    <div id="gpsStatus">
-        🔴 GPS停止中
-    </div>
+    <!-- ==================================================
+         地図タブ
+    ================================================== -->
+
+    <div
+        id="mapTab"
+        class="tabContent active"
+    >
+
+        <div id="map"></div>
 
 
-    <div id="lastSend">
-        最終送信：-
-    </div>
+        <div class="gpsButtonRow">
 
-</div>
+            <button
+                class="gpsButton"
+                onclick="startGPS()"
+            >
 
+                📡 GPS開始
 
-<!-- ==================================================
-     隊員一覧
-================================================== -->
-
-<div
-    id="usersTab"
-    class="tabContent"
->
-
-    <div class="sectionTitle">
-        👥 接続ユーザー
-    </div>
+            </button>
 
 
-    <div class="userHeader">
+            <button
+                class="reportButton"
+                onclick="updateStatus()"
+            >
 
-        <div>状態</div>
-        <div>名前</div>
-        <div>💧水</div>
-        <div>⛽燃料</div>
-        <div>最終</div>
-        <div>操作</div>
+                🔄 現在地報告
 
-    </div>
+            </button>
 
-
-    <div id="users"></div>
-
-</div>
-
-
-<!-- ==================================================
-     報連相
-================================================== -->
-
-<div
-    id="chronoTab"
-    class="tabContent"
->
-
-    <div class="sectionTitle">
-        📋 報連相
-    </div>
-
-
-    <div class="chronoInputRow">
-
-        <input
-            id="chronoMessage"
-            placeholder="活動内容を入力"
-        >
-
-
-        <button
-            id="chronoSendButton"
-            onclick="sendChronology()"
-        >
-            送信
-        </button>
-
-    </div>
-
-
-    <div id="timeline"></div>
-
-</div>
-
-
-<!-- ==================================================
-     登録
-================================================== -->
-
-<div
-    id="settingsTab"
-    class="tabContent"
->
-
-
-    <div class="card settingsCard">
-
-        <div class="sectionTitle">
-            👤 使用者情報
         </div>
 
 
-        <div class="inputRow">
+        <div id="gpsStatus">
+
+            🔴 GPS停止中
+
+        </div>
+
+
+        <div id="lastSend">
+
+            最終送信：-
+
+        </div>
+
+    </div>
+
+
+    <!-- ==================================================
+         隊員一覧タブ
+    ================================================== -->
+
+    <div
+        id="usersTab"
+        class="tabContent"
+    >
+
+        <div class="sectionTitle">
+
+            👥 接続ユーザー
+
+        </div>
+
+
+        <div class="userHeader">
+
+            <div>状態</div>
+
+            <div>名前</div>
+
+            <div>💧水</div>
+
+            <div>⛽燃料</div>
+
+            <div>最終</div>
+
+            <div>操作</div>
+
+        </div>
+
+
+        <div id="users"></div>
+
+    </div>
+
+
+    <!-- ==================================================
+         報連相タブ
+    ================================================== -->
+
+    <div
+        id="chronoTab"
+        class="tabContent"
+    >
+
+        <div class="sectionTitle">
+
+            📋 報連相
+
+        </div>
+
+
+        <div class="chronoInputRow">
 
             <input
-                id="name"
-                value="隊員A"
-                placeholder="名前"
+                id="chronoMessage"
+                placeholder="活動内容を入力"
             >
 
 
-            <select id="iconType">
+            <button
+                id="chronoSendButton"
+                onclick="sendChronology()"
+            >
 
-                <option value="1">
-                    👤 隊員
+                送信
+
+            </button>
+
+        </div>
+
+
+        <div id="timeline"></div>
+
+    </div>
+
+
+    <!-- ==================================================
+         登録タブ
+    ================================================== -->
+
+    <div
+        id="settingsTab"
+        class="tabContent"
+    >
+
+
+        <!-- 使用者情報 -->
+
+        <div class="card settingsCard">
+
+            <div class="sectionTitle">
+
+                👤 使用者情報
+
+            </div>
+
+
+            <div class="inputRow">
+
+                <input
+                    id="name"
+                    value="隊員A"
+                    placeholder="名前"
+                >
+
+
+                <select id="iconType">
+
+                    <option value="1">
+
+                        👤 隊員
+
+                    </option>
+
+                    <option value="2">
+
+                        🚙 小型
+
+                    </option>
+
+                    <option value="3">
+
+                        🚚 中型
+
+                    </option>
+
+                    <option value="4">
+
+                        🚛 大型
+
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="inputRow">
+
+                <input
+                    id="water"
+                    type="number"
+                    value="100"
+                    placeholder="💧水量"
+                >
+
+
+                <input
+                    id="fuel"
+                    type="number"
+                    value="100"
+                    placeholder="⛽燃料"
+                >
+
+            </div>
+
+
+            <input
+                id="destination"
+                placeholder="📍次の目的地"
+            >
+
+
+            <button
+                class="settingsButton"
+                onclick="registerUser()"
+            >
+
+                👤 ユーザー登録
+
+            </button>
+
+
+            <div id="registerStatus">
+
+                未登録
+
+            </div>
+
+        </div>
+
+
+        <!-- 地点登録 -->
+
+        <div class="card settingsCard">
+
+            <div class="sectionTitle">
+
+                📍 地点登録
+
+            </div>
+
+
+            <input
+                id="pointName"
+                placeholder="地点名（例：CP1、給水所）"
+            >
+
+
+            <select id="pointType">
+
+                <option value="CP">
+
+                    🏳 指揮所(CP)
+
                 </option>
 
-                <option value="2">
-                    🚙 小型
+                <option value="water">
+
+                    💧給水所
+
                 </option>
 
-                <option value="3">
-                    🚚 中型
+                <option value="supply">
+
+                    📦補給地点
+
                 </option>
 
-                <option value="4">
-                    🚛 大型
+                <option value="point">
+
+                    📍その他
+
                 </option>
 
             </select>
 
+
+            <div class="pointButtonRow">
+
+                <button onclick="addPoint()">
+
+                    📍登録
+
+                </button>
+
+
+                <button onclick="deletePoint()">
+
+                    🗑削除
+
+                </button>
+
+            </div>
+
+
+            <div class="pointInfo">
+
+                <div>
+
+                    📍 緯度：
+                    <span id="pointLat">-</span>
+
+                </div>
+
+
+                <div>
+
+                    📍 経度：
+                    <span id="pointLon">-</span>
+
+                </div>
+
+
+                <hr>
+
+
+                <div>
+
+                    🧭 UTM：
+                    <span id="pointUtmZone">-</span>
+
+                </div>
+
+
+                <div>
+
+                    E：
+                    <span id="pointUtmE">-</span>
+
+                </div>
+
+
+                <div>
+
+                    N：
+                    <span id="pointUtmN">-</span>
+
+                </div>
+
+            </div>
+
         </div>
 
 
-        <div class="inputRow">
+        <!-- アカウント -->
 
-            <input
-                id="water"
-                type="number"
-                value="100"
-                placeholder="💧水量"
+        <div class="card settingsCard">
+
+            <div class="sectionTitle">
+
+                🔐 アカウント
+
+            </div>
+
+
+            <button
+                class="settingsButton"
+                onclick="logoutUser()"
             >
 
+                🚪 ログアウト
 
-            <input
-                id="fuel"
-                type="number"
-                value="100"
-                placeholder="⛽燃料"
-            >
-
-        </div>
-
-
-        <input
-            id="destination"
-            placeholder="📍次の目的地"
-        >
-
-
-        <button
-            class="settingsButton"
-            onclick="registerUser()"
-        >
-            👤 ユーザー登録
-        </button>
-
-
-        <div id="registerStatus">
-            未登録
-        </div>
-
-    </div>
-
-
-    <!-- 地点登録 -->
-
-    <div class="card settingsCard">
-
-        <div class="sectionTitle">
-            📍 地点登録
-        </div>
-
-
-        <input
-            id="pointName"
-            placeholder="地点名（例：CP1、給水所）"
-        >
-
-
-        <select id="pointType">
-
-            <option value="CP">
-                🏳 指揮所(CP)
-            </option>
-
-            <option value="water">
-                💧給水所
-            </option>
-
-            <option value="supply">
-                📦補給地点
-            </option>
-
-            <option value="point">
-                📍その他
-            </option>
-
-        </select>
-
-
-        <div class="pointButtonRow">
-
-            <button onclick="addPoint()">
-                📍登録
-            </button>
-
-
-            <button onclick="deletePoint()">
-                🗑削除
             </button>
 
         </div>
 
-
-        <div class="pointInfo">
-
-            <div>
-                📍 緯度：
-                <span id="pointLat">-</span>
-            </div>
+    </div>
 
 
-            <div>
-                📍 経度：
-                <span id="pointLon">-</span>
-            </div>
+    <!-- ==================================================
+         フッター
+    ================================================== -->
+
+    <div class="footer">
+
+        <div>
+
+            現在位置自動共有君 Version 2.3
+
+        </div>
 
 
-            <hr>
+        <div>
 
+            <a href="/manual.html">
 
-            <div>
-                🧭 UTM：
-                <span id="pointUtmZone">-</span>
-            </div>
+                📖 マニュアル
 
-
-            <div>
-                E：
-                <span id="pointUtmE">-</span>
-            </div>
-
-
-            <div>
-                N：
-                <span id="pointUtmN">-</span>
-            </div>
+            </a>
 
         </div>
 
     </div>
-
-
-    <!-- アカウント -->
-
-    <div class="card settingsCard">
-
-        <div class="sectionTitle">
-            🔐 アカウント
-        </div>
-
-
-        <div id="currentLoginId">
-            ログインID：-
-        </div>
-
-
-        <button
-            class="settingsButton"
-            onclick="logoutUser()"
-        >
-            🚪 ログアウト
-        </button>
-
-    </div>
-
-</div>
-
-
-<!-- ==================================================
-     フッター
-================================================== -->
-
-<div class="footer">
-
-    <div>
-        現在位置自動共有君 Version 2.3
-    </div>
-
-
-    <div>
-        <a href="/manual.html">
-            📖 マニュアル
-        </a>
-    </div>
-
-</div>
 
 </div>
 
@@ -883,56 +1348,59 @@ const supabaseClient =
 
 
 //==================================================
-// ログインID → 内部メール形式
-//
-// Supabase Auth は email 形式を要求するため、
-// 画面ではログインIDだけを使用し、
-// 内部的に変換する。
+// 任意文字列をAuth用内部IDへ変換
 //==================================================
 
-function loginIdToEmail(loginId){
+async function makeAuthEmail(username){
 
-    const bytes =
-        new TextEncoder()
-            .encode(loginId);
-
-
-    let binary = "";
+    const data =
+        new TextEncoder().encode(
+            username
+        );
 
 
-    bytes.forEach(
-        byte=>{
-            binary +=
-                String.fromCharCode(byte);
-        }
-    );
+    const hashBuffer =
+        await crypto.subtle.digest(
+            "SHA-256",
+            data
+        );
 
 
-    const encoded =
-        btoa(binary)
-            .replace(/\+/g,"-")
-            .replace(/\//g,"_")
-            .replace(/=+$/,"");
+    const hashArray =
+        Array.from(
+            new Uint8Array(
+                hashBuffer
+            )
+        );
+
+
+    const hash =
+        hashArray
+            .map(
+                b =>
+                    b.toString(16)
+                     .padStart(2,"0")
+            )
+            .join("");
 
 
     return (
-        "id_" +
-        encoded +
-        "@puttan.local"
+        hash +
+        "@users.puttan.local"
     );
 
 }
 
 
 //==================================================
-// Supabase Auth ログイン
+// ログイン
 //==================================================
 
 async function loginUser(){
 
-    const loginId =
+    const username =
         document.getElementById(
-            "loginId"
+            "loginUsername"
         )
         .value
         .trim();
@@ -945,7 +1413,10 @@ async function loginUser(){
         .value;
 
 
-    if(!loginId || !password){
+    if(
+        !username ||
+        !password
+    ){
 
         document.getElementById(
             "loginMessage"
@@ -963,30 +1434,68 @@ async function loginUser(){
         "ログイン中...";
 
 
-    const email =
-        loginIdToEmail(loginId);
+    try{
+
+        const authEmail =
+            await makeAuthEmail(
+                username
+            );
 
 
-    const {
-        data,
-        error
-    } =
-        await supabaseClient.auth
-            .signInWithPassword({
+        const {
+            data,
+            error
+        } =
+            await supabaseClient
+                .auth
+                .signInWithPassword({
 
-                email:
-                    email,
+                    email:
+                        authEmail,
 
-                password:
-                    password
+                    password:
+                        password
 
-            });
+                });
 
 
-    if(error){
+        if(error){
+
+            console.error(
+                "ログインエラー:",
+                error
+            );
+
+
+            document.getElementById(
+                "loginMessage"
+            ).textContent =
+                "ログインに失敗しました";
+
+            return;
+
+        }
+
+
+        localStorage.setItem(
+            "loginUsername",
+            username
+        );
+
+
+        await loadProfile(
+            data.user.id,
+            username
+        );
+
+
+        showApp();
+
+    }
+    catch(error){
 
         console.error(
-            "ログインエラー:",
+            "ログイン処理エラー:",
             error
         );
 
@@ -994,26 +1503,9 @@ async function loginUser(){
         document.getElementById(
             "loginMessage"
         ).textContent =
-            "ログインに失敗しました";
-
-
-        return;
+            "ログイン処理でエラーが発生しました";
 
     }
-
-
-    localStorage.setItem(
-        "loginId",
-        loginId
-    );
-
-
-    await loadProfile(
-        data.user
-    );
-
-
-    showApp();
 
 }
 
@@ -1024,9 +1516,9 @@ async function loginUser(){
 
 async function registerAuthUser(){
 
-    const loginId =
+    const username =
         document.getElementById(
-            "registerId"
+            "registerUsername"
         )
         .value
         .trim();
@@ -1046,19 +1538,7 @@ async function registerAuthUser(){
         .value;
 
 
-    if(!loginId || !password){
-
-        document.getElementById(
-            "registerMessage"
-        ).textContent =
-            "ログインIDとパスワードを入力してください";
-
-        return;
-
-    }
-
-
-    if(loginId.length < 1){
+    if(!username){
 
         document.getElementById(
             "registerMessage"
@@ -1070,12 +1550,12 @@ async function registerAuthUser(){
     }
 
 
-    if(password.length < 6){
+    if(!password){
 
         document.getElementById(
             "registerMessage"
         ).textContent =
-            "パスワードは6文字以上にしてください";
+            "パスワードを入力してください";
 
         return;
 
@@ -1094,36 +1574,158 @@ async function registerAuthUser(){
     }
 
 
+    if(password.length < 6){
+
+        document.getElementById(
+            "registerMessage"
+        ).textContent =
+            "パスワードは6文字以上にしてください";
+
+        return;
+
+    }
+
+
     document.getElementById(
         "registerMessage"
     ).textContent =
         "アカウント作成中...";
 
 
-    const email =
-        loginIdToEmail(loginId);
+    try{
+
+        const authEmail =
+            await makeAuthEmail(
+                username
+            );
 
 
-    const {
-        data,
-        error
-    } =
-        await supabaseClient.auth
-            .signUp({
+        const {
+            data,
+            error
+        } =
+            await supabaseClient
+                .auth
+                .signUp({
 
-                email:
-                    email,
+                    email:
+                        authEmail,
 
-                password:
-                    password
+                    password:
+                        password
 
-            });
+                });
 
 
-    if(error){
+        if(error){
+
+            console.error(
+                "Auth登録エラー:",
+                error
+            );
+
+
+            document.getElementById(
+                "registerMessage"
+            ).textContent =
+                "アカウント登録に失敗しました：" +
+                error.message;
+
+            return;
+
+        }
+
+
+        if(!data.user){
+
+            document.getElementById(
+                "registerMessage"
+            ).textContent =
+                "アカウント登録に失敗しました";
+
+            return;
+
+        }
+
+
+        const {
+            error:
+                profileError
+        } =
+            await supabaseClient
+                .from("profiles")
+                .upsert(
+                    {
+
+                        user_id:
+                            data.user.id,
+
+                        display_name:
+                            username,
+
+                        icon_type:
+                            "1",
+
+                        role:
+                            "user",
+
+                        updated_at:
+                            new Date()
+                                .toISOString()
+
+                    },
+                    {
+
+                        onConflict:
+                            "user_id"
+
+                    }
+                );
+
+
+        if(profileError){
+
+            console.error(
+                "プロフィール登録エラー:",
+                profileError
+            );
+
+
+            document.getElementById(
+                "registerMessage"
+            ).textContent =
+                "プロフィール登録に失敗しました：" +
+                profileError.message;
+
+            return;
+
+        }
+
+
+        localStorage.setItem(
+            "loginUsername",
+            username
+        );
+
+
+        document.getElementById(
+            "registerMessage"
+        ).textContent =
+            "登録しました。ログインしてください。";
+
+
+        await supabaseClient
+            .auth
+            .signOut();
+
+
+        showLogin();
+
+    }
+    catch(error){
 
         console.error(
-            "アカウント登録エラー:",
+            "登録処理エラー:",
             error
         );
 
@@ -1131,95 +1733,9 @@ async function registerAuthUser(){
         document.getElementById(
             "registerMessage"
         ).textContent =
-            "登録に失敗しました：" +
-            error.message;
-
-        return;
+            "登録処理でエラーが発生しました";
 
     }
-
-
-    if(!data.user){
-
-        document.getElementById(
-            "registerMessage"
-        ).textContent =
-            "アカウント登録に失敗しました";
-
-        return;
-
-    }
-
-
-    //==================================================
-    // profiles登録
-    //==================================================
-
-    const {
-        error:
-            profileError
-    } =
-        await supabaseClient
-            .from("profiles")
-            .insert({
-
-                user_id:
-                    data.user.id,
-
-                display_name:
-                    loginId,
-
-                icon_type:
-                    "1",
-
-                role:
-                    "user"
-
-            });
-
-
-    if(profileError){
-
-        console.error(
-            "profiles登録エラー:",
-            profileError
-        );
-
-        // Authだけ作成された場合は、
-        // エラー内容を表示する
-        document.getElementById(
-            "registerMessage"
-        ).textContent =
-            "Auth登録は成功しましたが、プロフィール登録に失敗しました：" +
-            profileError.message;
-
-        return;
-
-    }
-
-
-    document.getElementById(
-        "registerMessage"
-    ).textContent =
-        "登録しました。ログインしてください。";
-
-
-    document.getElementById(
-        "registerId"
-    ).value = "";
-
-
-    document.getElementById(
-        "registerPassword"
-    ).value = "";
-
-
-    document.getElementById(
-        "registerPassword2"
-    ).value = "";
-
-
-    showLogin();
 
 }
 
@@ -1228,14 +1744,10 @@ async function registerAuthUser(){
 // プロフィール取得
 //==================================================
 
-async function loadProfile(user){
-
-    if(!user){
-
-        return;
-
-    }
-
+async function loadProfile(
+    userId,
+    fallbackName
+){
 
     const {
         data,
@@ -1243,10 +1755,12 @@ async function loadProfile(user){
     } =
         await supabaseClient
             .from("profiles")
-            .select("*")
+            .select(
+                "display_name,icon_type,role"
+            )
             .eq(
                 "user_id",
-                user.id
+                userId
             )
             .maybeSingle();
 
@@ -1263,46 +1777,54 @@ async function loadProfile(user){
     }
 
 
-    if(!data){
-
-        return;
-
-    }
-
-
-    if(data.display_name){
-
-        localStorage.setItem(
-            "loginId",
+    const displayName =
+        data &&
+        data.display_name
+            ?
             data.display_name
+            :
+            fallbackName;
+
+
+    const nameElement =
+        document.getElementById(
+            "name"
         );
 
-        document.getElementById(
-            "currentLoginId"
-        ).textContent =
-            "ログインID：" +
-            data.display_name;
+
+    if(nameElement){
+
+        nameElement.value =
+            displayName;
+
+
+        localStorage.setItem(
+            "name",
+            displayName
+        );
 
     }
 
 
-    if(data.icon_type){
+    if(
+        data &&
+        data.icon_type
+    ){
 
-        const icon =
-            normalizeIconType(
-                data.icon_type
+        const iconElement =
+            document.getElementById(
+                "iconType"
             );
 
 
-        document.getElementById(
-            "iconType"
-        ).value =
-            icon;
+        if(iconElement){
 
-        localStorage.setItem(
-            "iconType",
-            icon
-        );
+            iconElement.value =
+                normalizeIconType(
+                    data.icon_type
+                );
+
+        }
 
     }
 
@@ -1310,7 +1832,7 @@ async function loadProfile(user){
 
 
 //==================================================
-// ログイン画面
+// 登録画面
 //==================================================
 
 function showRegister(){
@@ -1328,6 +1850,10 @@ function showRegister(){
 
 }
 
+
+//==================================================
+// ログイン画面
+//==================================================
 
 function showLogin(){
 
@@ -1363,26 +1889,12 @@ function showApp(){
         "block";
 
 
-    const loginId =
-        localStorage.getItem(
-            "loginId"
-        );
-
-
-    if(loginId){
-
-        document.getElementById(
-            "currentLoginId"
-        ).textContent =
-            "ログインID：" +
-            loginId;
-
-    }
-
-
     setTimeout(()=>{
 
-        if(typeof map !== "undefined"){
+        if(
+            typeof map !==
+            "undefined"
+        ){
 
             map.invalidateSize();
 
@@ -1398,34 +1910,6 @@ function showApp(){
 //==================================================
 
 async function logoutUser(){
-
-    if(watchID !== null){
-
-        navigator.geolocation
-            .clearWatch(
-                watchID
-            );
-
-        watchID = null;
-
-    }
-
-
-    if(gpsTimer !== null){
-
-        clearInterval(
-            gpsTimer
-        );
-
-        gpsTimer = null;
-
-    }
-
-
-    localStorage.removeItem(
-        "gpsRunning"
-    );
-
 
     const {
         error
@@ -1447,7 +1931,9 @@ async function logoutUser(){
     }
 
 
-    registered = false;
+    localStorage.removeItem(
+        "loginUsername"
+    );
 
 
     document.getElementById(
@@ -1468,7 +1954,7 @@ async function logoutUser(){
 
 
 //==================================================
-// Supabase Auth 状態確認
+// Auth状態確認
 //==================================================
 
 window.addEventListener(
@@ -1488,14 +1974,15 @@ window.addEventListener(
             data.session.user
         ){
 
-            console.log(
-                "ログイン済み:",
-                data.session.user.id
-            );
+            const savedUsername =
+                localStorage.getItem(
+                    "loginUsername"
+                );
 
 
             await loadProfile(
-                data.session.user
+                data.session.user.id,
+                savedUsername || "隊員"
             );
 
 
@@ -1525,26 +2012,44 @@ window.addEventListener(
 // Socket.IO
 //==================================================
 
-const socket = io();
+const socket =
+    io();
 
 
-let registered = false;
+let registered =
+    false;
 
-let markers = {};
 
-let pointMarkers = {};
+let markers =
+    {};
 
-let chronology = [];
 
-let watchID = null;
+let pointMarkers =
+    {};
 
-let gpsTimer = null;
 
-let lastLat = 0;
+let chronology =
+    [];
 
-let lastLon = 0;
 
-let lastSendTime = 0;
+let watchID =
+    null;
+
+
+let gpsTimer =
+    null;
+
+
+let lastLat =
+    0;
+
+
+let lastLon =
+    0;
+
+
+let lastSendTime =
+    0;
 
 
 const SEND_INTERVAL =
@@ -1570,10 +2075,11 @@ function showTab(
         )
         .forEach(
             tab=>{
-                tab.classList
-                    .remove(
-                        "active"
-                    );
+
+                tab.classList.remove(
+                    "active"
+                );
+
             }
         );
 
@@ -1584,10 +2090,11 @@ function showTab(
         )
         .forEach(
             btn=>{
-                btn.classList
-                    .remove(
-                        "active"
-                    );
+
+                btn.classList.remove(
+                    "active"
+                );
+
             }
         );
 
@@ -1616,13 +2123,19 @@ function showTab(
     }
 
 
-    if(tabId === "mapTab"){
+    if(
+        tabId ===
+        "mapTab"
+    ){
 
-        setTimeout(()=>{
+        setTimeout(
+            ()=>{
 
-            map.invalidateSize();
+                map.invalidateSize();
 
-        },100);
+            },
+            100
+        );
 
     }
 
@@ -1636,7 +2149,9 @@ function showTab(
 function normalizeIconType(type){
 
     type =
-        String(type || "");
+        String(
+            type || ""
+        );
 
 
     if(type === "person"){
@@ -1654,8 +2169,12 @@ function normalizeIconType(type){
 
 
     if(
-        ["1","2","3","4"]
-            .includes(type)
+        [
+            "1",
+            "2",
+            "3",
+            "4"
+        ].includes(type)
     ){
 
         return type;
@@ -1687,7 +2206,7 @@ window.addEventListener(
         ].forEach(
             key=>{
 
-                let value =
+                const value =
                     localStorage.getItem(
                         key
                     );
@@ -1708,22 +2227,18 @@ window.addEventListener(
                             "iconType"
                         ){
 
-                            value =
+                            element.value =
                                 normalizeIconType(
                                     value
                                 );
 
+                        }
+                        else{
 
-                            localStorage.setItem(
-                                "iconType",
-                                value
-                            );
+                            element.value =
+                                value;
 
                         }
-
-
-                        element.value =
-                            value;
 
                     }
 
@@ -1749,10 +2264,23 @@ window.addEventListener(
             iconElement.value =
                 "1";
 
+        }
 
-            localStorage.setItem(
-                "iconType",
-                "1"
+
+        if(
+            localStorage.getItem(
+                "gpsRunning"
+            ) ===
+            "true"
+        ){
+
+            setTimeout(
+                ()=>{
+
+                    startGPS();
+
+                },
+                2000
             );
 
         }
@@ -1762,7 +2290,7 @@ window.addEventListener(
 
 
 //==================================================
-// Socket 接続
+// Socket接続
 //==================================================
 
 socket.on(
@@ -1781,10 +2309,18 @@ socket.on(
     "disconnect",
     ()=>{
 
-        document.getElementById(
-            "gpsStatus"
-        ).innerHTML =
-            "🔴 サーバー切断";
+        const status =
+            document.getElementById(
+                "gpsStatus"
+            );
+
+
+        if(status){
+
+            status.innerHTML =
+                "🔴 サーバー切断";
+
+        }
 
     }
 );
@@ -1798,15 +2334,22 @@ socket.on(
     "userDeleted",
     (name)=>{
 
-        if(
+        const nameElement =
             document.getElementById(
                 "name"
-            ).value === name
+            );
+
+
+        if(
+            nameElement &&
+            nameElement.value === name
         ){
 
             localStorage.clear();
 
-            registered = false;
+
+            registered =
+                false;
 
 
             document.getElementById(
@@ -1829,7 +2372,7 @@ socket.on(
 // ユーザー登録
 //==================================================
 
-async function registerUser(){
+function registerUser(){
 
     const name =
         document.getElementById(
@@ -1897,7 +2440,8 @@ async function registerUser(){
     );
 
 
-    registered = true;
+    registered =
+        true;
 
 
     [
@@ -1929,11 +2473,14 @@ async function registerUser(){
         name;
 
 
-    setTimeout(()=>{
+    setTimeout(
+        ()=>{
 
-        startGPS();
+            startGPS();
 
-    },1000);
+        },
+        1000
+    );
 
 }
 
@@ -1943,9 +2490,14 @@ async function registerUser(){
 //==================================================
 
 const map =
-    L.map("map")
+    L.map(
+        "map"
+    )
     .setView(
-        [32.803,130.707],
+        [
+            32.803,
+            130.707
+        ],
         13
     );
 
@@ -1958,8 +2510,10 @@ const osm =
     L.tileLayer(
         "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
         {
+
             attribution:
                 "OpenStreetMap"
+
         }
     );
 
@@ -1968,8 +2522,10 @@ const satellite =
     L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         {
+
             attribution:
                 "Esri"
+
         }
     );
 
@@ -1978,8 +2534,10 @@ const terrain =
     L.tileLayer(
         "https://tile.opentopomap.org/{z}/{x}/{y}.png",
         {
+
             attribution:
                 "OpenTopoMap"
+
         }
     );
 
@@ -1988,8 +2546,10 @@ const gsi =
     L.tileLayer(
         "https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png",
         {
+
             attribution:
                 "国土地理院"
+
         }
     );
 
@@ -1998,13 +2558,17 @@ const gsiPale =
     L.tileLayer(
         "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",
         {
+
             attribution:
                 "国土地理院 淡色地図"
+
         }
     );
 
 
-osm.addTo(map);
+osm.addTo(
+    map
+);
 
 
 //==================================================
@@ -2043,7 +2607,10 @@ L.control.layers(
 
     }
 
-).addTo(map);
+)
+.addTo(
+    map
+);
 
 
 //==================================================
@@ -2102,10 +2669,16 @@ socket.on(
                                         "🚧",
 
                                     iconSize:
-                                        [30,30],
+                                        [
+                                            30,
+                                            30
+                                        ],
 
                                     iconAnchor:
-                                        [15,15]
+                                        [
+                                            15,
+                                            15
+                                        ]
 
                                 })
 
@@ -2180,7 +2753,10 @@ function startGPS(){
     );
 
 
-    if(watchID !== null){
+    if(
+        watchID !==
+        null
+    ){
 
         return;
 
@@ -2198,11 +2774,9 @@ function startGPS(){
 
                             sendLocation(
 
-                                pos.coords
-                                    .latitude,
+                                pos.coords.latitude,
 
-                                pos.coords
-                                    .longitude
+                                pos.coords.longitude
 
                             );
 
@@ -2231,16 +2805,17 @@ function startGPS(){
                 pos=>{
 
                     const lat =
-                        pos.coords
-                            .latitude;
+                        pos.coords.latitude;
 
 
                     const lon =
-                        pos.coords
-                            .longitude;
+                        pos.coords.longitude;
 
 
-                    if(lastLat === 0){
+                    if(
+                        lastLat ===
+                        0
+                    ){
 
                         sendLocation(
                             lat,
@@ -2267,13 +2842,10 @@ function startGPS(){
 
                     const distance =
                         getDistance(
-
                             lastLat,
                             lastLon,
-
                             lat,
                             lon
-
                         );
 
 
@@ -2286,7 +2858,7 @@ function startGPS(){
                             MOVE_DISTANCE
                         ||
                         now -
-                        lastSendTime >=
+                            lastSendTime >=
                             SEND_INTERVAL
                     ){
 
@@ -2351,13 +2923,14 @@ function sendLocation(
 
     const utm =
         proj4(
-
             "EPSG:4326",
 
             "+proj=utm +zone=52 +south +datum=WGS84",
 
-            [lon,lat]
-
+            [
+                lon,
+                lat
+            ]
         );
 
 
@@ -2384,12 +2957,20 @@ function sendLocation(
     ].forEach(
         key=>{
 
-            localStorage.setItem(
-                key,
+            const element =
                 document.getElementById(
                     key
-                ).value
-            );
+                );
+
+
+            if(element){
+
+                localStorage.setItem(
+                    key,
+                    element.value
+                );
+
+            }
 
         }
     );
@@ -2510,6 +3091,12 @@ function updateStatus(){
 
             err=>{
 
+                console.log(
+                    "現在地取得エラー",
+                    err
+                );
+
+
                 alert(
                     "現在地を取得できませんでした"
                 );
@@ -2537,29 +3124,45 @@ function getDistance(
 
 
     const dLat =
-        (lat2-lat1)
+        (
+            lat2 -
+            lat1
+        )
         *
-        Math.PI/180;
+        Math.PI /
+        180;
 
 
     const dLon =
-        (lon2-lon1)
+        (
+            lon2 -
+            lon1
+        )
         *
-        Math.PI/180;
+        Math.PI /
+        180;
 
 
     const a =
-        Math.sin(dLat/2)**2
+        Math.sin(
+            dLat / 2
+        ) ** 2
         +
         Math.cos(
-            lat1*Math.PI/180
+            lat1 *
+            Math.PI /
+            180
         )
         *
         Math.cos(
-            lat2*Math.PI/180
+            lat2 *
+            Math.PI /
+            180
         )
         *
-        Math.sin(dLon/2)**2;
+        Math.sin(
+            dLon / 2
+        ) ** 2;
 
 
     return R *
@@ -2582,6 +3185,7 @@ socket.on(
 
         chronology =
             data;
+
 
         renderChronology();
 
@@ -2652,11 +3256,15 @@ function renderChronology(){
                 <div class="timelineItem">
 
                     <div class="timelineTime">
+
                         ${item.time}
+
                     </div>
 
                     <div class="timelineMessage">
+
                         ${item.message}
+
                     </div>
 
                 </div>
@@ -2740,13 +3348,22 @@ function createIcon(type){
             image,
 
         iconSize:
-            [60,60],
+            [
+                60,
+                60
+            ],
 
         iconAnchor:
-            [30,60],
+            [
+                30,
+                60
+            ],
 
         popupAnchor:
-            [0,-70]
+            [
+                0,
+                -70
+            ]
 
     });
 
@@ -2765,118 +3382,221 @@ socket.on(
             "";
 
 
-        Object.keys(markers)
-            .forEach(
-                name=>{
+        Object.keys(
+            markers
+        )
+        .forEach(
+            name=>{
 
-                    if(!users[name]){
+                if(
+                    !users[name]
+                ){
 
-                        map.removeLayer(
-                            markers[name]
-                        );
+                    map.removeLayer(
+                        markers[name]
+                    );
 
 
-                        delete markers[name];
-
-                    }
+                    delete markers[name];
 
                 }
-            );
+
+            }
+        );
 
 
-        Object.keys(users)
-            .forEach(
-                name=>{
+        Object.keys(
+            users
+        )
+        .forEach(
+            name=>{
 
-                    const user =
-                        users[name];
-
-
-                    let lat =
-                        user.lat;
+                const user =
+                    users[name];
 
 
-                    let lon =
-                        user.lon;
+                let lat =
+                    user.lat;
 
 
-                    if(
-                        lat === null ||
-                        lon === null
-                    ){
-
-                        lat =
-                            32.803;
-
-                        lon =
-                            130.707;
-
-                    }
+                let lon =
+                    user.lon;
 
 
-                    const icon =
-                        createIcon(
-                            user.iconType
+                if(
+                    lat === null ||
+                    lon === null
+                ){
+
+                    lat =
+                        32.803;
+
+
+                    lon =
+                        130.707;
+
+                }
+
+
+                const icon =
+                    createIcon(
+                        user.iconType
+                    );
+
+
+                if(
+                    markers[name]
+                ){
+
+                    markers[name]
+                        .setLatLng(
+                            [
+                                lat,
+                                lon
+                            ]
                         );
-
-
-                    if(markers[name]){
-
-                        markers[name]
-                            .setLatLng(
-                                [lat,lon]
-                            );
-
-
-                        markers[name]
-                            .setIcon(
-                                icon
-                            );
-
-                    }
-                    else{
-
-                        markers[name] =
-                            L.marker(
-                                [lat,lon],
-                                {
-                                    icon:
-                                        icon
-                                }
-                            )
-                            .addTo(map)
-                            .bindTooltip(
-                                user.name,
-                                {
-
-                                    permanent:
-                                        true,
-
-                                    direction:
-                                        "top",
-
-                                    offset:
-                                        [0,-60],
-
-                                    className:
-                                        "pointLabel"
-
-                                }
-                            );
-
-                    }
 
 
                     markers[name]
-                        .bindPopup(`
+                        .setIcon(
+                            icon
+                        );
 
-                            <b>
-                                ${user.name}
-                            </b>
+                }
+                else{
 
-                            <br>
+                    markers[name] =
+                        L.marker(
+                            [
+                                lat,
+                                lon
+                            ],
+                            {
 
-                            状態：
+                                icon:
+                                    icon
+
+                            }
+                        )
+                        .addTo(
+                            map
+                        )
+                        .bindTooltip(
+                            user.name,
+                            {
+
+                                permanent:
+                                    true,
+
+                                direction:
+                                    "top",
+
+                                offset:
+                                    [
+                                        0,
+                                        -60
+                                    ],
+
+                                className:
+                                    "pointLabel"
+
+                            }
+                        );
+
+                }
+
+
+                markers[name]
+                    .bindPopup(`
+
+                        <b>
+                            ${user.name}
+                        </b>
+
+                        <br>
+
+                        状態：
+                        ${
+                            user.online
+                            ?
+                            "🟢ON"
+                            :
+                            "🔴OFF"
+                        }
+
+                        <hr>
+
+                        💧水量：
+                        ${user.water}
+
+                        <br>
+
+                        ⛽燃料：
+                        ${user.fuel}
+
+                        <br>
+
+                        📍目的地：
+                        ${
+                            user.destination
+                            ||
+                            "-"
+                        }
+
+                        <br><br>
+
+                        UTM：
+                        ${
+                            user.utmZone
+                            ||
+                            "52S"
+                        }
+
+                        <br>
+
+                        E：
+                        ${
+                            user.utmE
+                            ||
+                            ""
+                        }
+
+                        <br>
+
+                        N：
+                        ${
+                            user.utmN
+                            ||
+                            ""
+                        }
+
+                        <br><br>
+
+                        🕒
+                        ${
+                            user.lastUpdate
+                            ?
+                            new Date(
+                                user.lastUpdate
+                            )
+                            .toLocaleString()
+                            :
+                            "-"
+                        }
+
+                    `);
+
+
+                html += `
+
+                    <div class="userRow">
+
+                        <div
+                            onclick="
+                                focusUser('${user.name}')
+                            "
+                        >
+
                             ${
                                 user.online
                                 ?
@@ -2885,143 +3605,79 @@ socket.on(
                                 "🔴OFF"
                             }
 
-                            <hr>
-
-                            💧水量：
-                            ${user.water}
-
-                            <br>
-
-                            ⛽燃料：
-                            ${user.fuel}
-
-                            <br>
-
-                            📍目的地：
-                            ${
-                                user.destination
-                                || "-"
-                            }
-
-                            <br><br>
-
-                            UTM：
-                            ${
-                                user.utmZone
-                                || "52S"
-                            }
-
-                            <br>
-
-                            E：
-                            ${
-                                user.utmE
-                                || ""
-                            }
-
-                            <br>
-
-                            N：
-                            ${
-                                user.utmN
-                                || ""
-                            }
-
-                            <br><br>
-
-                            🕒
-                            ${
-                                user.lastUpdate
-                                ?
-                                new Date(
-                                    user.lastUpdate
-                                ).toLocaleString()
-                                :
-                                "-"
-                            }
-
-                        `);
+                        </div>
 
 
-                    html += `
+                        <div
+                            onclick="
+                                focusUser('${user.name}')
+                            "
+                        >
 
-                        <div class="userRow">
-
-                            <div
-                                onclick="
-                                    focusUser('${user.name}')
-                                "
-                            >
-                                ${
-                                    user.online
-                                    ?
-                                    "🟢ON"
-                                    :
-                                    "🔴OFF"
-                                }
-                            </div>
-
-
-                            <div
-                                onclick="
-                                    focusUser('${user.name}')
-                                "
-                            >
-                                ${user.name}
-                            </div>
-
-
-                            <div
-                                onclick="
-                                    focusUser('${user.name}')
-                                "
-                            >
-                                ${user.water}
-                            </div>
-
-
-                            <div
-                                onclick="
-                                    focusUser('${user.name}')
-                                "
-                            >
-                                ${user.fuel}
-                            </div>
-
-
-                            <div
-                                onclick="
-                                    focusUser('${user.name}')
-                                "
-                            >
-                                ${
-                                    timeAgo(
-                                        user.lastUpdate
-                                    )
-                                }
-                            </div>
-
-
-                            <div>
-
-                                <button
-                                    class="deleteButton"
-                                    onclick="
-                                        event.stopPropagation();
-                                        deleteUser('${user.name}')
-                                    "
-                                >
-                                    🗑
-                                </button>
-
-                            </div>
+                            ${user.name}
 
                         </div>
 
-                    `;
 
-                }
-            );
+                        <div
+                            onclick="
+                                focusUser('${user.name}')
+                            "
+                        >
+
+                            ${user.water}
+
+                        </div>
+
+
+                        <div
+                            onclick="
+                                focusUser('${user.name}')
+                            "
+                        >
+
+                            ${user.fuel}
+
+                        </div>
+
+
+                        <div
+                            onclick="
+                                focusUser('${user.name}')
+                            "
+                        >
+
+                            ${
+                                timeAgo(
+                                    user.lastUpdate
+                                )
+                            }
+
+                        </div>
+
+
+                        <div>
+
+                            <button
+                                class="deleteButton"
+                                onclick="
+                                    event.stopPropagation();
+                                    deleteUser('${user.name}')
+                                "
+                            >
+
+                                🗑
+
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                `;
+
+            }
+        );
 
 
         document.getElementById(
@@ -3039,7 +3695,9 @@ socket.on(
 
 function focusUser(name){
 
-    if(!markers[name]){
+    if(
+        !markers[name]
+    ){
 
         return;
 
@@ -3052,11 +3710,16 @@ function focusUser(name){
 
 
     map.setView(
-        [pos.lat,pos.lng],
+        [
+            pos.lat,
+            pos.lng
+        ],
         17,
         {
+
             animate:
                 true
+
         }
     );
 
@@ -3108,35 +3771,45 @@ function timeAgo(t){
 
     const sec =
         Math.floor(
-            (Date.now()-t)/1000
+            (
+                Date.now() -
+                t
+            ) /
+            1000
         );
 
 
     if(sec < 60){
 
-        return sec +
-            "秒前";
+        return (
+            sec +
+            "秒前"
+        );
 
     }
 
 
     const min =
         Math.floor(
-            sec/60
+            sec /
+            60
         );
 
 
     if(min < 60){
 
-        return min +
-            "分前";
+        return (
+            min +
+            "分前"
+        );
 
     }
 
 
     return (
         Math.floor(
-            min/60
+            min /
+            60
         )
         +
         "時間前"
@@ -3360,199 +4033,219 @@ socket.on(
     "points",
     (points)=>{
 
-        Object.keys(pointMarkers)
-            .forEach(
-                name=>{
+        Object.keys(
+            pointMarkers
+        )
+        .forEach(
+            name=>{
 
-                    if(!points[name]){
+                if(
+                    !points[name]
+                ){
 
-                        map.removeLayer(
-                            pointMarkers[name]
-                        );
+                    map.removeLayer(
+                        pointMarkers[name]
+                    );
 
 
-                        delete pointMarkers[name];
-
-                    }
+                    delete pointMarkers[name];
 
                 }
-            );
+
+            }
+        );
 
 
-        Object.keys(points)
-            .forEach(
-                name=>{
+        Object.keys(
+            points
+        )
+        .forEach(
+            name=>{
 
-                    const p =
-                        points[name];
+                const p =
+                    points[name];
 
 
-                    if(
+                if(
+                    pointMarkers[name]
+                ){
+
+                    map.removeLayer(
                         pointMarkers[name]
-                    ){
+                    );
 
-                        map.removeLayer(
-                            pointMarkers[name]
-                        );
-
-                    }
+                }
 
 
-                    pointMarkers[name] =
-                        L.marker(
-                            [
-                                p.lat,
-                                p.lon
-                            ],
-                            {
+                pointMarkers[name] =
+                    L.marker(
+                        [
+                            p.lat,
+                            p.lon
+                        ],
+                        {
 
-                                icon:
-                                    L.icon({
+                            icon:
+                                L.icon({
 
-                                        iconUrl:
-                                            "/icon/point.png",
+                                    iconUrl:
+                                        "/icon/point.png",
 
-                                        iconSize:
-                                            [60,60],
-
-                                        iconAnchor:
-                                            [30,60],
-
-                                        popupAnchor:
-                                            [15,-70]
-
-                                    })
-
-                            }
-                        )
-                        .addTo(map);
-
-
-                    pointMarkers[name]
-                        .bindTooltip(
-                            name,
-                            {
-
-                                permanent:
-                                    true,
-
-                                direction:
-                                    "top",
-
-                                offset:
-                                    [0,-30],
-
-                                className:
-                                    "pointLabel"
-
-                            }
-                        );
-
-
-                    pointMarkers[name]
-                        .on(
-                            "click",
-                            ()=>{
-
-                                selectedPointName =
-                                    name;
-
-
-                                document.getElementById(
-                                    "pointName"
-                                ).value =
-                                    name;
-
-
-                                selectedPointLat =
-                                    p.lat;
-
-
-                                selectedPointLon =
-                                    p.lon;
-
-
-                                document.getElementById(
-                                    "pointLat"
-                                ).textContent =
-                                    Number(
-                                        p.lat
-                                    )
-                                    .toFixed(6);
-
-
-                                document.getElementById(
-                                    "pointLon"
-                                ).textContent =
-                                    Number(
-                                        p.lon
-                                    )
-                                    .toFixed(6);
-
-
-                                const utm =
-                                    proj4(
-
-                                        "EPSG:4326",
-
-                                        "+proj=utm +zone=52 +south +datum=WGS84",
-
+                                    iconSize:
                                         [
-                                            p.lon,
-                                            p.lat
+                                            60,
+                                            60
+                                        ],
+
+                                    iconAnchor:
+                                        [
+                                            30,
+                                            60
+                                        ],
+
+                                    popupAnchor:
+                                        [
+                                            15,
+                                            -70
                                         ]
 
-                                    );
+                                })
+
+                        }
+                    )
+                    .addTo(
+                        map
+                    );
 
 
-                                document.getElementById(
-                                    "pointUtmZone"
-                                ).textContent =
-                                    "52S";
+                pointMarkers[name]
+                    .bindTooltip(
+                        name,
+                        {
+
+                            permanent:
+                                true,
+
+                            direction:
+                                "top",
+
+                            offset:
+                                [
+                                    0,
+                                    -30
+                                ],
+
+                            className:
+                                "pointLabel"
+
+                        }
+                    );
 
 
-                                document.getElementById(
-                                    "pointUtmE"
-                                ).textContent =
-                                    Math.round(
-                                        utm[0]
-                                    );
+                pointMarkers[name]
+                    .on(
+                        "click",
+                        ()=>{
+
+                            selectedPointName =
+                                name;
 
 
-                                document.getElementById(
-                                    "pointUtmN"
-                                ).textContent =
-                                    Math.round(
-                                        utm[1]
-                                    );
-
-                            }
-                        );
+                            document.getElementById(
+                                "pointName"
+                            ).value =
+                                name;
 
 
-                    pointMarkers[name]
-                        .bindPopup(`
+                            selectedPointLat =
+                                p.lat;
 
-                            <b>
-                                📍${name}
-                            </b>
 
-                            <br>
+                            selectedPointLon =
+                                p.lon;
 
-                            ${Number(
-                                p.lat
-                            ).toFixed(6)}
 
-                            <br>
+                            document.getElementById(
+                                "pointLat"
+                            ).textContent =
+                                Number(
+                                    p.lat
+                                )
+                                .toFixed(6);
 
-                            ${Number(
-                                p.lon
-                            ).toFixed(6)}
 
-                        `);
+                            document.getElementById(
+                                "pointLon"
+                            ).textContent =
+                                Number(
+                                    p.lon
+                                )
+                                .toFixed(6);
 
-                }
-            );
+
+                            const utm =
+                                proj4(
+
+                                    "EPSG:4326",
+
+                                    "+proj=utm +zone=52 +south +datum=WGS84",
+
+                                    [
+                                        p.lon,
+                                        p.lat
+                                    ]
+
+                                );
+
+
+                            document.getElementById(
+                                "pointUtmZone"
+                            ).textContent =
+                                "52S";
+
+
+                            document.getElementById(
+                                "pointUtmE"
+                            ).textContent =
+                                Math.round(
+                                    utm[0]
+                                );
+
+
+                            document.getElementById(
+                                "pointUtmN"
+                            ).textContent =
+                                Math.round(
+                                    utm[1]
+                                );
+
+                        }
+                    );
+
+
+                pointMarkers[name]
+                    .bindPopup(`
+
+                        <b>
+                            📍${name}
+                        </b>
+
+                        <br>
+
+                        ${Number(
+                            p.lat
+                        ).toFixed(6)}
+
+                        <br>
+
+                        ${Number(
+                            p.lon
+                        ).toFixed(6)}
+
+                    `);
+
+            }
+        );
 
     }
 );
