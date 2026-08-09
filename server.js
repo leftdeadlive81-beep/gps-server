@@ -33,7 +33,12 @@ const app = express();
 
 const server = http.createServer(app);
 
-const io = new Server(server);
+const io = new Server(server, {
+    transports: ["polling", "websocket"],
+    allowUpgrades: true,
+    pingInterval: 25000,
+    pingTimeout: 60000
+});
 
 app.use(express.static("public"));
 
