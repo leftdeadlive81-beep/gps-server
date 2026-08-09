@@ -2973,199 +2973,750 @@ socket.on(
 );
 
 
-        //====================================================
-        // GPS位置情報
-        //====================================================
+//====================================================
+// GPS位置情報
+//====================================================
+//
+// ・user_idを基準にGPSを管理
+// ・未登録ユーザーのGPSは拒否
+// ・緯度 / 経度をチェック
+// ・UTM座標対応
+// ・current_usersへ現在位置を保存
+// ・location_historyへ位置履歴を保存
+// ・全接続端末へリアルタイム配信
+//
+// ※ ユーザー登録時の基本情報はGPS更新で消さない
+// ※ Web版・アプリ版の両方から同じlocationイベントを使用可能
+//
+//====================================================
 
-        socket.on(
-            "location",
-            async data => {
+socket.on(
+    "location",
+    async data => {
 
-                if (
-                    !users[
-                        data.name
+        try {
+
+            //================================================
+            // ① GPSデータ存在確認
+            //================================================
+
+            if (
+                !data ||
+                typeof data !== "object"
+            ) {
+
+                console.log(
+                    "GPS受信拒否: データなし"
+                );
+
+                return;
+
+            }
+
+
+            //================================================
+            // ② user_id取得
+            //================================================
+            //
+            // 基本はuser_idを使用。
+            // 旧クライアントとの互換性のため
+            // data.nameも予備として使用。
+            //
+            //================================================
+
+            const userId =
+                String(
+                    data.user_id ||
+                    data.name ||
+                    ""
+                ).trim();
+
+
+            if (!userId) {
+
+                console.log(
+                    "GPS受信拒否: user_idなし"
+                );
+
+                return;
+
+            }
+
+
+            //================================================
+            // ③ 登録ユーザー確認
+            //================================================
+
+            const oldUser =
+                users[userId];
+
+
+            if (!oldUser) {
+
+                console.log(
+                    "未登録GPS拒否:",
+                    userId
+                );
+
+                return;
+
+            }
+
+
+            //================================================
+            // ④ 現在時刻
+            //================================================
+
+            const now =
+                Date.now();
+
+
+            //================================================
+            // ⑤ 表示名
+            //================================================
+
+            const displayName =
+                String(
+                    oldUser.display_name ||
+                    data.display_name ||
+                    data.name ||
+                    userId
+                ).trim();
+
+
+            //================================================
+            // ⑥ 緯度・経度
+            //================================================
+
+            const lat =
+                Number(
+                    data.lat
+                );
+
+
+            const lon =
+                Number(
+                    data.lon
+                );
+
+
+            //================================================
+            // ⑦ GPS座標チェック
+            //================================================
+
+            if (
+                !Number.isFinite(lat) ||
+                !Number.isFinite(lon)
+            ) {
+
+                console.log(
+                    "GPS受信拒否: 座標不正",
+                    {
+                        user_id:
+                            userId,
+
+                        lat:
+                            data.lat,
+
+                        lon:
+                            data.lon
+                    }
+                );
+
+                return;
+
+            }
+
+
+            //================================================
+            // 緯度範囲チェック
+            //================================================
+
+            if (
+                lat < -90 ||
+                lat > 90
+            ) {
+
+                console.log(
+                    "GPS受信拒否: 緯度範囲外",
+                    lat
+                );
+
+                return;
+
+            }
+
+
+            //================================================
+            // 経度範囲チェック
+            //================================================
+
+            if (
+                lon < -180 ||
+                lon > 180
+            ) {
+
+                console.log(
+                    "GPS受信拒否: 経度範囲外",
+                    lon
+                );
+
+                return;
+
+            }
+
+
+            //================================================
+            // ⑧ UTM
+            //================================================
+
+            const utmZone =
+                String(
+                    data.utmZone ||
+                    oldUser.utmZone ||
+                    "52S"
+                );
+
+
+            const utmEValue =
+                Number(
+                    data.utmE
+                );
+
+
+            const utmNValue =
+                Number(
+                    data.utmN
+                );
+
+
+            const utmE =
+                Number.isFinite(
+                    utmEValue
+                )
+                    ?
+                    utmEValue
+                    :
+                    (
+                        oldUser.utmE ??
+                        null
+                    );
+
+
+            const utmN =
+                Number.isFinite(
+                    utmNValue
+                )
+                    ?
+                    utmNValue
+                    :
+                    (
+                        oldUser.utmN ??
+                        null
+                    );
+
+
+            //================================================
+            // ⑨ 物資情報
+            //================================================
+
+            const waterValue =
+                Number(
+                    data.water
+                );
+
+
+            const fuelValue =
+                Number(
+                    data.fuel
+                );
+
+
+            const water =
+                Number.isFinite(
+                    waterValue
+                )
+                    ?
+                    waterValue
+                    :
+                    (
+                        Number(
+                            oldUser.water
+                        ) || 0
+                    );
+
+
+            const fuel =
+                Number.isFinite(
+                    fuelValue
+                )
+                    ?
+                    fuelValue
+                    :
+                    (
+                        Number(
+                            oldUser.fuel
+                        ) || 0
+                    );
+
+
+            //================================================
+            // ⑩ 行動・目的地
+            //================================================
+
+            const movement =
+                data.movement ??
+                oldUser.movement ??
+                "";
+
+
+            const destination =
+                data.destination ??
+                oldUser.destination ??
+                "";
+
+
+            //================================================
+            // ⑪ アイコン
+            //================================================
+
+            const iconType =
+                String(
+                    data.iconType ||
+                    data.icon ||
+                    oldUser.icon ||
+                    "1"
+                );
+
+
+            //================================================
+            // ⑫ メモリ上のユーザー情報更新
+            //================================================
+            //
+            // spreadでoldUserを残すことで、
+            //
+            // display_name
+            // account_name
+            // role
+            // unit
+            // rank
+            // vehicle
+            // vehicle_type
+            // phone
+            // status
+            // status_next
+            // health
+            //
+            // などをGPS更新で消さない。
+            //
+            //================================================
+
+            users[userId] = {
+
+                ...oldUser,
+
+                user_id:
+                    userId,
+
+                name:
+                    displayName,
+
+                display_name:
+                    displayName,
+
+                lat:
+                    lat,
+
+                lon:
+                    lon,
+
+                utmZone:
+                    utmZone,
+
+                utmE:
+                    utmE,
+
+                utmN:
+                    utmN,
+
+                movement:
+                    movement,
+
+                destination:
+                    destination,
+
+                water:
+                    water,
+
+                fuel:
+                    fuel,
+
+                icon:
+                    iconType,
+
+                iconType:
+                    iconType,
+
+                online:
+                    true,
+
+                lastUpdate:
+                    now
+
+            };
+
+
+            //================================================
+            // ⑬ usersテーブル更新
+            //================================================
+            //
+            // GPS受信時にusersテーブル全体を更新せず、
+            // GPSに関連する項目だけ更新する。
+            //
+            //================================================
+
+            await pool.query(
+
+                `
+                UPDATE users
+
+                SET
+                    destination = $2,
+                    icon = $3,
+                    updated_at = $4
+
+                WHERE user_id = $1
+                `,
+
+                [
+
+                    userId,
+
+                    destination,
+
+                    iconType,
+
+                    now
+
+                ]
+
+            );
+
+
+            //================================================
+            // ⑭ current_users更新
+            //================================================
+            //
+            // まず既存ユーザーをUPDATEする。
+            //
+            //================================================
+
+            const currentResult =
+                await pool.query(
+
+                    `
+                    UPDATE current_users
+
+                    SET
+
+                        name = $2,
+
+                        lat = $3,
+
+                        lon = $4,
+
+                        utmzone = $5,
+
+                        utme = $6,
+
+                        utmn = $7,
+
+                        water = $8,
+
+                        fuel = $9,
+
+                        destination = $10,
+
+                        icontype = $11,
+
+                        online = $12,
+
+                        lastupdate = $13,
+
+                        device_id = $14
+
+                    WHERE user_id = $1
+                    `,
+
+                    [
+
+                        userId,
+
+                        displayName,
+
+                        lat,
+
+                        lon,
+
+                        utmZone,
+
+                        utmE,
+
+                        utmN,
+
+                        water,
+
+                        fuel,
+
+                        destination,
+
+                        iconType,
+
+                        1,
+
+                        now,
+
+                        data.device_id ||
+                        userId
+
                     ]
-                ) {
 
-                    console.log(
-                        "未登録GPS拒否:",
-                        data.name
-                    );
+                );
+
+
+            //================================================
+            // ⑮ current_usersに存在しない場合
+            //================================================
+            //
+            // UPDATE対象がなかった場合はINSERT。
+            //
+            //================================================
 
-                    return;
+            if (
+                currentResult.rowCount === 0
+            ) {
 
-                }
+                await pool.query(
 
+                    `
+                    INSERT INTO current_users
+                    (
+                        user_id,
+                        name,
+                        lat,
+                        lon,
+                        utmzone,
+                        utme,
+                        utmn,
+                        water,
+                        fuel,
+                        destination,
+                        icontype,
+                        online,
+                        lastupdate,
+                        device_id
+                    )
 
-                const now =
-                    Date.now();
+                    VALUES
+                    (
+                        $1,
+                        $2,
+                        $3,
+                        $4,
+                        $5,
+                        $6,
+                        $7,
+                        $8,
+                        $9,
+                        $10,
+                        $11,
+                        $12,
+                        $13,
+                        $14
+                    )
 
+                    ON CONFLICT(user_id)
 
-                const user = {
+                    DO UPDATE SET
 
-                    name:
-                        data.name,
+                        name =
+                            EXCLUDED.name,
 
-                    lat:
-                        data.lat,
+                        lat =
+                            EXCLUDED.lat,
 
-                    lon:
-                        data.lon,
+                        lon =
+                            EXCLUDED.lon,
 
-                    utmZone:
-                        data.utmZone ||
-                        "52S",
+                        utmzone =
+                            EXCLUDED.utmzone,
 
-                    utmE:
-                        data.utmE,
+                        utme =
+                            EXCLUDED.utme,
 
-                    utmN:
-                        data.utmN,
+                        utmn =
+                            EXCLUDED.utmn,
 
-                    water:
-                        data.water,
+                        water =
+                            EXCLUDED.water,
 
-                    fuel:
-                        data.fuel,
+                        fuel =
+                            EXCLUDED.fuel,
 
-                    destination:
-                        data.destination,
+                        destination =
+                            EXCLUDED.destination,
 
-                    iconType:
-                        data.iconType ||
-                        "1",
+                        icontype =
+                            EXCLUDED.icontype,
 
-                    online:
-                        true,
+                        online =
+                            EXCLUDED.online,
 
-                    lastUpdate:
-                        now
+                        lastupdate =
+                            EXCLUDED.lastupdate,
 
-                };
+                        device_id =
+                            EXCLUDED.device_id
+                    `,
 
+                    [
 
-                users[
-                    data.name
-                ] =
-                    user;
+                        userId,
 
+                        displayName,
 
-                try {
+                        lat,
 
-                    //========================================
-                    // 現在位置更新
-                    //========================================
+                        lon,
 
-                    await pool.query(
+                        utmZone,
 
-                        `
-                        UPDATE current_users
+                        utmE,
 
-                        SET
+                        utmN,
 
-                            lat=$2,
-                            lon=$3,
-                            utmZone=$4,
-                            utmE=$5,
-                            utmN=$6,
-                            water=$7,
-                            fuel=$8,
-                            destination=$9,
-                            iconType=$10,
-                            online=$11,
-                            lastUpdate=$12
+                        water,
 
-                        WHERE name=$1
-                        `,
+                        fuel,
 
-                        [
+                        destination,
 
-                            user.name,
+                        iconType,
 
-                            user.lat,
+                        1,
 
-                            user.lon,
+                        now,
 
-                            user.utmZone,
+                        data.device_id ||
+                        userId
 
-                            user.utmE,
+                    ]
 
-                            user.utmN,
-
-                            user.water,
-
-                            user.fuel,
-
-                            user.destination,
-
-                            user.iconType,
-
-                            1,
-
-                            now
-
-                        ]
-
-                    );
-
-
-                    //========================================
-                    // 位置履歴
-                    //========================================
-
-                    await pool.query(
-
-                        `
-                        INSERT INTO location_history
-                        (
-                            name,
-                            lat,
-                            lon,
-                            water,
-                            fuel,
-                            destination
-                        )
-
-                        VALUES
-                        ($1,$2,$3,$4,$5,$6)
-                        `,
-
-                        [
-
-                            user.name,
-
-                            user.lat,
-
-                            user.lon,
-
-                            user.water,
-
-                            user.fuel,
-
-                            user.destination
-
-                        ]
-
-                    );
-
-                }
-                catch (err) {
-
-                    console.error(
-                        "DB保存エラー",
-                        err
-                    );
-
-                }
-
-
-                io.emit(
-                    "locations",
-                    users
                 );
 
             }
-        );
+
+
+            //================================================
+            // ⑯ GPS位置履歴保存
+            //================================================
+            //
+            // location_historyに1件保存。
+            //
+            //================================================
+
+            await pool.query(
+
+                `
+                INSERT INTO location_history
+                (
+                    name,
+                    lat,
+                    lon,
+                    water,
+                    fuel,
+                    destination,
+                    created,
+                    user_id
+                )
+
+                VALUES
+                (
+                    $1,
+                    $2,
+                    $3,
+                    $4,
+                    $5,
+                    $6,
+                    $7,
+                    $8
+                )
+                `,
+
+                [
+
+                    displayName,
+
+                    lat,
+
+                    lon,
+
+                    water,
+
+                    fuel,
+
+                    destination,
+
+                    now,
+
+                    userId
+
+                ]
+
+            );
+
+
+            //================================================
+            // ⑰ 全端末へ最新位置を配信
+            //================================================
+
+            io.emit(
+                "locations",
+                users
+            );
+
+
+            //================================================
+            // ⑱ サーバーログ
+            //================================================
+
+            console.log(
+                "GPS更新:",
+                userId,
+                displayName,
+                lat,
+                lon
+            );
+
+        }
+        catch (err) {
+
+            //================================================
+            // GPS処理全体のエラー
+            //================================================
+
+            console.error(
+                "GPS位置情報保存エラー:",
+                err
+            );
+
+        }
+
+    }
+);
+
+
+
 
 
         //====================================================
