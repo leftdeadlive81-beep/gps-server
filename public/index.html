@@ -253,6 +253,30 @@ input, select {
 
 .footer { text-align: center; padding: 15px; font-size: 12px; color: #666; }
 .footer a { color: #1976d2; }
+
+.utmCenterBox {
+    background: rgba(255,255,255,.92);
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-family: "Consolas", monospace;
+    line-height: 1.5;
+    color: #111;
+    white-space: nowrap;
+    box-shadow: 0 1px 4px rgba(0,0,0,.3);
+}
+
+.leaflet-control-scale-line {
+    background: rgba(255,255,255,.92) !important;
+    border: 2px solid #333 !important;
+    border-top: none !important;
+    color: #111 !important;
+    font-size: 13px !important;
+    font-weight: bold !important;
+    padding: 2px 6px !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,.3);
+}
 #mapTab.active ~ .footer { display: none; }
 
 @media (max-width: 600px) {
@@ -1015,6 +1039,40 @@ L.control.scale({
     imperial: false,
     position: "bottomleft"
 }).addTo(map);
+
+/* ==================================================
+   画面中心のUTM座標を常時表示
+================================================== */
+
+const utmCenterControl = L.control({ position: "bottomright" });
+
+utmCenterControl.onAdd = function(){
+    const div = L.DomUtil.create("div", "utmCenterBox");
+    div.id = "utmCenterBox";
+    div.innerHTML = "UTM 52S<br>E: -　N: -";
+    L.DomEvent.disableClickPropagation(div);
+    return div;
+};
+
+utmCenterControl.addTo(map);
+
+function updateUtmCenterDisplay(){
+    const center = map.getCenter();
+
+    const utm = proj4(
+        "EPSG:4326",
+        "+proj=utm +zone=52 +south +datum=WGS84",
+        [center.lng, center.lat]
+    );
+
+    const box = document.getElementById("utmCenterBox");
+    if(box){
+        box.innerHTML = `UTM 52S<br>E: ${Math.round(utm[0])}　N: ${Math.round(utm[1])}`;
+    }
+}
+
+map.on("move", updateUtmCenterDisplay);
+updateUtmCenterDisplay();
 
 /* ==================================================
    交通規制受信
