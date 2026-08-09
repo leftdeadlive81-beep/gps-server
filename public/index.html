@@ -2654,6 +2654,12 @@ async function resolveSocketUserId(){
    ユーザー情報保存
 ================================================== */
 
+/* ==================================================
+   ユーザー情報保存
+   Version 2.3
+   user_id 自由入力方式
+================================================== */
+
 async function registerUser(){
 
     if(!currentAuthUser){
@@ -2666,6 +2672,33 @@ async function registerUser(){
 
     }
 
+
+    /* ==============================================
+       ユーザーID
+    ============================================== */
+
+    const userId =
+        document.getElementById(
+            "userId"
+        )
+        .value
+        .trim();
+
+
+    if(!userId){
+
+        alert(
+            "ユーザーIDを入力してください"
+        );
+
+        return;
+
+    }
+
+
+    /* ==============================================
+       表示名
+    ============================================== */
 
     const name =
         document.getElementById(
@@ -2686,6 +2719,10 @@ async function registerUser(){
     }
 
 
+    /* ==============================================
+       アイコン
+    ============================================== */
+
     const iconType =
         normalizeIconType(
             document.getElementById(
@@ -2693,6 +2730,10 @@ async function registerUser(){
             ).value
         );
 
+
+    /* ==============================================
+       水
+    ============================================== */
 
     const water =
         Number(
@@ -2702,6 +2743,10 @@ async function registerUser(){
         ) || 0;
 
 
+    /* ==============================================
+       燃料
+    ============================================== */
+
     const fuel =
         Number(
             document.getElementById(
@@ -2709,6 +2754,10 @@ async function registerUser(){
             ).value
         ) || 0;
 
+
+    /* ==============================================
+       目的地
+    ============================================== */
 
     const destination =
         document.getElementById(
@@ -2719,15 +2768,18 @@ async function registerUser(){
 
     try{
 
-        const userId =
-            await resolveSocketUserId();
+        /* ==========================================
+           ログイン中のアカウント名
+        ========================================== */
+
+        const accountName =
+            await getCurrentLoginId();
 
 
-        if(!userId){
+        if(!accountName){
 
             alert(
-                "ユーザーIDを取得できませんでした。\n" +
-                "usersテーブルにaccount_nameが登録されているか確認してください。"
+                "アカウント名を取得できませんでした"
             );
 
             return;
@@ -2735,8 +2787,153 @@ async function registerUser(){
         }
 
 
+        /* ==========================================
+           user_id 重複チェック
+        ========================================== */
+
+        const {
+            data: existingUser,
+            error: checkError
+        } =
+            await supabaseClient
+                .from("users")
+                .select(
+                    "user_id"
+                )
+                .eq(
+                    "user_id",
+                    userId
+                )
+                .maybeSingle();
+
+
+        if(checkError){
+
+            console.error(
+                "user_id確認エラー:",
+                checkError
+            );
+
+            alert(
+                "ユーザーIDの確認に失敗しました"
+            );
+
+            return;
+
+        }
+
+
+        if(existingUser){
+
+            alert(
+                "このユーザーIDは既に使用されています。\n" +
+                "別のユーザーIDを入力してください。"
+            );
+
+            return;
+
+        }
+
+
+        /* ==========================================
+           usersテーブルへ登録
+        ========================================== */
+
+        const now =
+            Date.now();
+
+
+        const {
+            error: insertError
+        } =
+            await supabaseClient
+                .from("users")
+                .insert({
+
+                    user_id:
+                        userId,
+
+                    display_name:
+                        name,
+
+                    account_name:
+                        accountName,
+
+                    role:
+                        "user",
+
+                    unit:
+                        "",
+
+                    rank:
+                        "",
+
+                    vehicle:
+                        "",
+
+                    vehicle_type:
+                        "",
+
+                    icon:
+                        iconType,
+
+                    phone:
+                        "",
+
+                    status:
+                        "",
+
+                    status_next:
+                        "",
+
+                    health:
+                        "",
+
+                    destination:
+                        destination,
+
+                    created_at:
+                        now,
+
+                    updated_at:
+                        now
+
+                });
+
+
+        if(insertError){
+
+            console.error(
+                "users登録エラー:",
+                insertError
+            );
+
+            alert(
+                "ユーザー登録に失敗しました。\n" +
+                insertError.message
+            );
+
+            return;
+
+        }
+
+
+        /* ==========================================
+           Socket用ユーザーID
+        ========================================== */
+
         socketUserId =
             userId;
+
+
+        /* ==========================================
+           ローカル保存
+        ========================================== */
+
+        localStorage.setItem(
+            "puttan_user_id",
+            userId
+        );
 
 
         localStorage.setItem(
@@ -2769,8 +2966,16 @@ async function registerUser(){
         );
 
 
-        registerSocketUser();
+        /* ==========================================
+           Socket登録
+        ========================================== */
 
+        await registerSocketUser();
+
+
+        /* ==========================================
+           登録状態表示
+        ========================================== */
 
         const status =
             document.getElementById(
@@ -2785,9 +2990,23 @@ async function registerUser(){
                 +
                 escapeHtml(
                     name
-                );
+                )
+                +
+                " ["
+                +
+                escapeHtml(
+                    userId
+                )
+                +
+                "]";
 
         }
+
+
+        alert(
+            "ユーザー登録が完了しました"
+        );
+
 
     }
     catch(error){
@@ -2805,6 +3024,219 @@ async function registerUser(){
     }
 
 }
+
+
+/* ==================================================
+   Socket側ユーザー登録
+================================================== */
+
+async function registerSocketUser(){
+
+    if(!currentAuthUser){
+
+        return;
+
+    }
+
+
+    /* ==============================================
+       user_id がなければ localStorage から取得
+    ============================================== */
+
+    if(!socketUserId){
+
+        socketUserId =
+            localStorage.getItem(
+                "puttan_user_id"
+            );
+
+    }
+
+
+    if(!socketUserId){
+
+        console.warn(
+            "SocketユーザーIDがありません"
+        );
+
+        return;
+
+    }
+
+
+    const name =
+        document.getElementById(
+            "name"
+        )
+        .value
+        .trim();
+
+
+    if(!name){
+
+        return;
+
+    }
+
+
+    const iconType =
+        normalizeIconType(
+            document.getElementById(
+                "iconType"
+            ).value
+        );
+
+
+    const accountName =
+        await getCurrentLoginId();
+
+
+    if(!accountName){
+
+        console.warn(
+            "アカウント名が取得できません"
+        );
+
+        return;
+
+    }
+
+
+    const water =
+        Number(
+            document.getElementById(
+                "water"
+            ).value
+        ) || 0;
+
+
+    const fuel =
+        Number(
+            document.getElementById(
+                "fuel"
+            ).value
+        ) || 0;
+
+
+    const destination =
+        document.getElementById(
+            "destination"
+        ).value
+        .trim();
+
+
+    /* ==============================================
+       Socket送信
+    ============================================== */
+
+    socket.emit(
+        "registerUser",
+        {
+
+            user_id:
+                socketUserId,
+
+            display_name:
+                name,
+
+            account_name:
+                accountName,
+
+            icon:
+                iconType,
+
+            water:
+                water,
+
+            fuel:
+                fuel,
+
+            destination:
+                destination
+
+        }
+    );
+
+
+    registered =
+        true;
+
+
+    const status =
+        document.getElementById(
+            "registerStatus"
+        );
+
+
+    if(status){
+
+        status.innerHTML =
+            "🟢 登録済み : "
+            +
+            escapeHtml(
+                name
+            )
+            +
+            " ["
+            +
+            escapeHtml(
+                socketUserId
+            )
+            +
+            "]";
+
+    }
+
+}
+
+
+/* ==================================================
+   user_id 解決
+   Version 2.3
+================================================== */
+
+/*
+   以前の
+
+   account_name
+        ↓
+   users検索
+        ↓
+   user_id取得
+
+   方式は廃止。
+
+   user_id は登録画面から直接入力し、
+   localStorage に保存したものを使用する。
+*/
+
+async function resolveSocketUserId(){
+
+    const localUserId =
+        localStorage.getItem(
+            "puttan_user_id"
+        );
+
+
+    if(localUserId){
+
+        socketUserId =
+            localUserId;
+
+        return localUserId;
+
+    }
+
+
+    console.warn(
+        "保存されているuser_idがありません"
+    );
+
+
+    return null;
+
+}
+
 
 
 /* ==================================================
