@@ -2491,196 +2491,486 @@ io.on(
 
 
         //====================================================
-        // ユーザー登録
-        //====================================================
+// ユーザー登録
+//====================================================
 
-        socket.on(
-            "registerUser",
-            async data => {
+socket.on(
+    "registerUser",
+    async data => {
 
-                try {
+        try {
 
-                    const now =
-                        Date.now();
-
-
-                    const oldUser =
-                        users[
-                            data.name
-                        ];
+            const now =
+                Date.now();
 
 
-                    const user = {
+            //================================================
+            // user_id 必須
+            //================================================
 
-                        name:
-                            data.name,
+            if (
+                !data ||
+                !data.user_id
+            ) {
 
-                        lat:
-                            oldUser
-                                ?
-                                oldUser.lat
-                                :
-                                null,
+                console.log(
+                    "ユーザー登録拒否: user_idなし"
+                );
 
-                        lon:
-                            oldUser
-                                ?
-                                oldUser.lon
-                                :
-                                null,
-
-                        utmZone:
-                            oldUser
-                                ?
-                                oldUser.utmZone
-                                :
-                                "52S",
-
-                        utmE:
-                            oldUser
-                                ?
-                                oldUser.utmE
-                                :
-                                null,
-
-                        utmN:
-                            oldUser
-                                ?
-                                oldUser.utmN
-                                :
-                                null,
-
-                        water:
-                            Number(
-                                data.water
-                            ) ||
-                            0,
-
-                        fuel:
-                            Number(
-                                data.fuel
-                            ) ||
-                            0,
-
-                        destination:
-                            data.destination ||
-                            "",
-
-                        iconType:
-                            data.iconType ||
-                            "1",
-
-                        online:
-                            true,
-
-                        lastUpdate:
-                            now
-
-                    };
-
-
-                    users[
-                        data.name
-                    ] =
-                        user;
-
-
-                    await pool.query(
-
-                        `
-                        INSERT INTO current_users
-                        (
-                            name,
-                            lat,
-                            lon,
-                            utmZone,
-                            utmE,
-                            utmN,
-                            water,
-                            fuel,
-                            destination,
-                            iconType,
-                            online,
-                            lastUpdate
-                        )
-
-                        VALUES
-                        (
-                            $1,$2,$3,$4,$5,$6,
-                            $7,$8,$9,$10,$11,$12
-                        )
-
-                        ON CONFLICT(name)
-
-                        DO UPDATE SET
-
-                            lat=$2,
-                            lon=$3,
-                            utmZone=$4,
-                            utmE=$5,
-                            utmN=$6,
-                            water=$7,
-                            fuel=$8,
-                            destination=$9,
-                            iconType=$10,
-                            online=$11,
-                            lastUpdate=$12
-                        `,
-
-                        [
-
-                            user.name,
-
-                            user.lat,
-
-                            user.lon,
-
-                            user.utmZone,
-
-                            user.utmE,
-
-                            user.utmN,
-
-                            user.water,
-
-                            user.fuel,
-
-                            user.destination,
-
-                            user.iconType,
-
-                            1,
-
-                            now
-
-                        ]
-
-                    );
-
-
-                    console.log(
-                        "ユーザー登録:",
-                        data.name
-                    );
-
-
-                    io.emit(
-                        "locations",
-                        users
-                    );
-
-                }
-                catch (err) {
-
-                    console.error(
-                        "ユーザー登録エラー",
-                        err
-                    );
-
-                }
+                return;
 
             }
-        );
+
+
+            const userId =
+                String(
+                    data.user_id
+                ).trim();
+
+
+            //================================================
+            // 既存ユーザー
+            //================================================
+
+            const oldUser =
+                users[
+                    userId
+                ];
+
+
+            //================================================
+            // ユーザー情報
+            //================================================
+
+            const user = {
+
+                //============================================
+                // ユーザー基本情報
+                //============================================
+
+                user_id:
+                    userId,
+
+                display_name:
+                    data.display_name ||
+                    (
+                        oldUser
+                            ?
+                            oldUser.display_name
+                            :
+                            ""
+                    ),
+
+                account_name:
+                    data.account_name ||
+                    (
+                        oldUser
+                            ?
+                            oldUser.account_name
+                            :
+                            ""
+                    ),
+
+                role:
+                    data.role ||
+                    (
+                        oldUser
+                            ?
+                            oldUser.role
+                            :
+                            "user"
+                    ),
+
+                unit:
+                    data.unit ||
+                    (
+                        oldUser
+                            ?
+                            oldUser.unit
+                            :
+                            ""
+                    ),
+
+                rank:
+                    data.rank ||
+                    (
+                        oldUser
+                            ?
+                            oldUser.rank
+                            :
+                            ""
+                    ),
+
+                vehicle:
+                    data.vehicle ||
+                    (
+                        oldUser
+                            ?
+                            oldUser.vehicle
+                            :
+                            ""
+                    ),
+
+                vehicle_type:
+                    data.vehicle_type ||
+                    (
+                        oldUser
+                            ?
+                            oldUser.vehicle_type
+                            :
+                            ""
+                    ),
+
+                icon:
+                    data.icon ||
+                    (
+                        oldUser
+                            ?
+                            oldUser.icon
+                            :
+                            "1"
+                    ),
+
+                phone:
+                    data.phone ||
+                    (
+                        oldUser
+                            ?
+                            oldUser.phone
+                            :
+                            ""
+                    ),
+
+                status:
+                    data.status ||
+                    (
+                        oldUser
+                            ?
+                            oldUser.status
+                            :
+                            ""
+                    ),
+
+                status_next:
+                    data.status_next ||
+                    (
+                        oldUser
+                            ?
+                            oldUser.status_next
+                            :
+                            ""
+                    ),
+
+                health:
+                    data.health ||
+                    (
+                        oldUser
+                            ?
+                            oldUser.health
+                            :
+                            ""
+                    ),
+
+                destination:
+                    data.destination ||
+                    (
+                        oldUser
+                            ?
+                            oldUser.destination
+                            :
+                            ""
+                    ),
+
+                //============================================
+                // 現在位置
+                //============================================
+
+                lat:
+                    oldUser
+                        ?
+                        oldUser.lat
+                        :
+                        null,
+
+                lon:
+                    oldUser
+                        ?
+                        oldUser.lon
+                        :
+                        null,
+
+                utmZone:
+                    oldUser
+                        ?
+                        oldUser.utmZone
+                        :
+                        "52S",
+
+                utmE:
+                    oldUser
+                        ?
+                        oldUser.utmE
+                        :
+                        null,
+
+                utmN:
+                    oldUser
+                        ?
+                        oldUser.utmN
+                        :
+                        null,
+
+                //============================================
+                // 状態
+                //============================================
+
+                movement:
+                    data.movement ||
+                    (
+                        oldUser
+                            ?
+                            oldUser.movement
+                            :
+                            ""
+                    ),
+
+                online:
+                    true,
+
+                lastUpdate:
+                    now,
+
+                //============================================
+                // 物資
+                //============================================
+
+                water:
+                    Number(
+                        data.water
+                    ) ||
+                    0,
+
+                fuel:
+                    Number(
+                        data.fuel
+                    ) ||
+                    0
+
+            };
+
+
+            //================================================
+            // メモリ更新
+            //================================================
+
+            users[
+                userId
+            ] =
+                user;
+
+
+            //================================================
+            // users テーブル
+            //================================================
+
+            await pool.query(
+
+                `
+                INSERT INTO users
+                (
+                    user_id,
+                    display_name,
+                    account_name,
+                    role,
+                    unit,
+                    rank,
+                    vehicle,
+                    vehicle_type,
+                    icon,
+                    phone,
+                    status,
+                    status_next,
+                    health,
+                    destination,
+                    updated_at
+                )
+
+                VALUES
+                (
+                    $1,$2,$3,$4,$5,$6,$7,
+                    $8,$9,$10,$11,$12,$13,$14,$15
+                )
+
+                ON CONFLICT(user_id)
+
+                DO UPDATE SET
+
+                    display_name=$2,
+                    account_name=$3,
+                    role=$4,
+                    unit=$5,
+                    rank=$6,
+                    vehicle=$7,
+                    vehicle_type=$8,
+                    icon=$9,
+                    phone=$10,
+                    status=$11,
+                    status_next=$12,
+                    health=$13,
+                    destination=$14,
+                    updated_at=$15
+                `,
+
+                [
+
+                    user.user_id,
+
+                    user.display_name,
+
+                    user.account_name,
+
+                    user.role,
+
+                    user.unit,
+
+                    user.rank,
+
+                    user.vehicle,
+
+                    user.vehicle_type,
+
+                    user.icon,
+
+                    user.phone,
+
+                    user.status,
+
+                    user.status_next,
+
+                    user.health,
+
+                    user.destination,
+
+                    now
+
+                ]
+
+            );
+
+
+            //================================================
+            // current_users
+            //================================================
+
+            await pool.query(
+
+                `
+                INSERT INTO current_users
+                (
+                    user_id,
+                    name,
+                    lat,
+                    lon,
+                    utmzone,
+                    utme,
+                    utmn,
+                    water,
+                    fuel,
+                    destination,
+                    icontype,
+                    online,
+                    lastupdate,
+                    device_id
+                )
+
+                VALUES
+                (
+                    $1,$2,$3,$4,$5,$6,$7,
+                    $8,$9,$10,$11,$12,$13,$14
+                )
+
+                ON CONFLICT(user_id)
+
+                DO UPDATE SET
+
+                    name=$2,
+                    lat=$3,
+                    lon=$4,
+                    utmzone=$5,
+                    utme=$6,
+                    utmn=$7,
+                    water=$8,
+                    fuel=$9,
+                    destination=$10,
+                    icontype=$11,
+                    online=$12,
+                    lastupdate=$13,
+                    device_id=$14
+                `,
+
+                [
+
+                    user.user_id,
+
+                    user.display_name,
+
+                    user.lat,
+
+                    user.lon,
+
+                    user.utmZone,
+
+                    user.utmE,
+
+                    user.utmN,
+
+                    user.water,
+
+                    user.fuel,
+
+                    user.destination,
+
+                    user.icon,
+
+                    1,
+
+                    now,
+
+                    user.user_id
+
+                ]
+
+            );
+
+
+            console.log(
+                "ユーザー登録:",
+                user.user_id,
+                user.display_name
+            );
+
+
+            //================================================
+            // 全端末へ配信
+            //================================================
+
+            io.emit(
+                "locations",
+                users
+            );
+
+        }
+        catch (err) {
+
+            console.error(
+                "ユーザー登録エラー",
+                err
+            );
+
+        }
+
+    }
+);
 
 
         //====================================================
