@@ -186,6 +186,36 @@ input, select {
 .userRow > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .deleteButton { border: none; background: transparent; font-size: 18px; }
 
+.confirmOverlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+}
+.confirmOverlay.active { display: flex; }
+.confirmBox {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    width: 80%;
+    max-width: 320px;
+    text-align: center;
+}
+.confirmMessage { font-size: 15px; margin-bottom: 16px; white-space: pre-wrap; }
+.confirmButtons { display: flex; gap: 10px; }
+.confirmButtons button {
+    flex: 1;
+    border: none;
+    border-radius: 5px;
+    padding: 10px;
+    font-size: 14px;
+}
+.confirmBtnCancel { background: #e0e0e0; }
+.confirmBtnOk { background: #d32f2f; color: white; }
+
 .chronoInputRow { display: flex; gap: 5px; }
 .chronoInputRow input { flex: 1; }
 .chronoInputRow button {
@@ -389,6 +419,16 @@ input, select {
         <div><a href="/manual.html">📖 マニュアル</a></div>
     </div>
 
+</div>
+
+<div id="confirmOverlay" class="confirmOverlay">
+    <div class="confirmBox">
+        <div id="confirmMessage" class="confirmMessage"></div>
+        <div class="confirmButtons">
+            <button class="confirmBtnCancel" onclick="closeConfirm(false)">キャンセル</button>
+            <button class="confirmBtnOk" onclick="closeConfirm(true)">OK</button>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -887,7 +927,7 @@ function updateRegisterStatus(name){
 ================================================== */
 
 async function logoutUser(){
-    if(!confirm("ログアウトしますか？")){
+    if(!(await showConfirm("ログアウトしますか？"))){
         return;
     }
 
@@ -1407,6 +1447,35 @@ function escapeHtml(value){
 }
 
 /* ==================================================
+   確認ダイアログ（window.confirmはPWA/ホーム画面追加時に
+   動作しない端末があるため自前実装）
+================================================== */
+
+let confirmResolve = null;
+
+function showConfirm(message){
+    return new Promise(resolve => {
+        confirmResolve = resolve;
+
+        const overlay = document.getElementById("confirmOverlay");
+        const messageElement = document.getElementById("confirmMessage");
+
+        if(messageElement){ messageElement.textContent = message; }
+        if(overlay){ overlay.classList.add("active"); }
+    });
+}
+
+function closeConfirm(result){
+    const overlay = document.getElementById("confirmOverlay");
+    if(overlay){ overlay.classList.remove("active"); }
+
+    if(confirmResolve){
+        confirmResolve(result);
+        confirmResolve = null;
+    }
+}
+
+/* ==================================================
    ユーザーへ移動
 ================================================== */
 
@@ -1428,8 +1497,8 @@ function focusUserById(userId){
    ユーザー削除
 ================================================== */
 
-function deleteUserById(userId, displayName){
-    if(!confirm(displayName + " を削除しますか？")){
+async function deleteUserById(userId, displayName){
+    if(!(await showConfirm(displayName + " を削除しますか？"))){
         return;
     }
     socket.emit("deleteUser", userId);
@@ -1557,13 +1626,13 @@ function addPoint(){
    地点削除
 ================================================== */
 
-function deletePoint(){
+async function deletePoint(){
     const name = selectedPointName || document.getElementById("pointName").value.trim();
     if(name === ""){
         alert("削除する地点を選択してください");
         return;
     }
-    if(!confirm(name + " を削除しますか？")){
+    if(!(await showConfirm(name + " を削除しますか？"))){
         return;
     }
 
