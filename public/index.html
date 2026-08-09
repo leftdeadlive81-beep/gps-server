@@ -1414,9 +1414,14 @@ function focusUserById(userId){
     const marker = markers[userId];
     if(!marker){ return; }
 
-    const pos = marker.getLatLng();
-    map.setView([pos.lat, pos.lng], 17, { animate: true });
-    marker.openPopup();
+    const mapButton = document.querySelector('.tabButton[onclick*="mapTab"]');
+    showTab("mapTab", mapButton);
+
+    setTimeout(() => {
+        const pos = marker.getLatLng();
+        map.setView([pos.lat, pos.lng], 17, { animate: true });
+        marker.openPopup();
+    }, 150);
 }
 
 /* ==================================================
