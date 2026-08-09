@@ -3121,7 +3121,16 @@ function updateRegisterStatus(
 GPS開始
 ================================================== */
 
+/* ==================================================
+   GPS開始
+================================================== */
+
 async function startGPS(){
+
+    console.log(
+        "========== GPS開始 =========="
+    );
+
 
     if(!currentAuthUser){
 
@@ -3134,31 +3143,41 @@ async function startGPS(){
     }
 
 
+    console.log(
+        "currentAuthUser:",
+        currentAuthUser
+    );
+
+
     /*
-       ★ user_idを確認
+       user_idを取得
     */
 
-    let userId =
-        socketUserId;
+    if(!socketUserId){
 
-
-    if(!userId){
-
-        userId =
-            await resolveSocketUserId();
+        socketUserId =
+            localStorage.getItem(
+                "puttan_user_id"
+            );
 
     }
 
 
+    console.log(
+        "GPS開始時 user_id:",
+        socketUserId
+    );
+
+
     /*
-       ★ user_idが無ければGPS開始しない
+       user_idが無い
     */
 
-    if(!userId){
+    if(!socketUserId){
 
         alert(
-            "ユーザーIDを取得できません。\n" +
-            "ユーザー登録画面でuser_idを入力してください。"
+            "ユーザーIDが登録されていません。\n" +
+            "ユーザー登録画面でuser_idを登録してください。"
         );
 
         return;
@@ -3166,21 +3185,29 @@ async function startGPS(){
     }
 
 
-    socketUserId =
-        userId;
-
-
     /*
-       ★ Socketユーザー登録
+       Socketユーザー登録
     */
 
     if(!registered){
 
-        const result =
+        console.log(
+            "Socketユーザー登録開始:",
+            socketUserId
+        );
+
+
+        const success =
             await registerSocketUser();
 
 
-        if(!result){
+        console.log(
+            "Socketユーザー登録結果:",
+            success
+        );
+
+
+        if(!success){
 
             alert(
                 "Socketユーザー登録に失敗しました"
@@ -3193,13 +3220,16 @@ async function startGPS(){
     }
 
 
-    /*
-       ★ GPS本体開始
-    */
+    console.log(
+        "GPS本体開始:",
+        socketUserId
+    );
+
 
     startGPSCore();
 
 }
+
 
 
 /* ==================================================
