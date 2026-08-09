@@ -1082,6 +1082,43 @@ osm.addTo(map);
 
 let trafficRegulationLayer = L.layerGroup();
 
+/* ==================================================
+   雨雲レーダー（RainViewer）
+================================================== */
+
+const rainRadarLayer = L.layerGroup();
+let rainRadarTileLayer = null;
+
+async function updateRainRadarLayer(){
+    try{
+        const response = await fetch("https://api.rainviewer.com/public/weather-maps.json");
+        const data = await response.json();
+
+        const frames = data && data.radar && data.radar.past;
+        if(!frames || frames.length === 0){ return; }
+
+        const latest = frames[frames.length - 1];
+        const url = `${data.host}${latest.path}/256/{z}/{x}/{y}/2/1_1.png`;
+
+        if(rainRadarTileLayer){
+            rainRadarLayer.removeLayer(rainRadarTileLayer);
+        }
+
+        rainRadarTileLayer = L.tileLayer(url, {
+            opacity: 0.6,
+            attribution: "Weather data &copy; <a href=\"https://www.rainviewer.com/\">RainViewer</a>"
+        });
+
+        rainRadarLayer.addLayer(rainRadarTileLayer);
+    }
+    catch(error){
+        console.error("雨雲レーダー取得エラー:", error);
+    }
+}
+
+updateRainRadarLayer();
+setInterval(updateRainRadarLayer, 5 * 60 * 1000);
+
 L.control.layers(
     {
         "🗺 標準地図": osm,
@@ -1091,7 +1128,8 @@ L.control.layers(
         "🚒 防災淡色地図": gsiPale
     },
     {
-        "🚧 交通規制": trafficRegulationLayer
+        "🚧 交通規制": trafficRegulationLayer,
+        "🌧 雨雲レーダー": rainRadarLayer
     }
 ).addTo(map);
 
