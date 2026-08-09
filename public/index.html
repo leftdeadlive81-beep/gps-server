@@ -1547,9 +1547,27 @@ const supabaseClient =
    Socket.IO
 ================================================== */
 
-const socket =
-    io();
+const socket = io({
 
+    transports: [
+        "polling",
+        "websocket"
+    ],
+
+    upgrade: true,
+
+    reconnection: true,
+
+    reconnectionAttempts:
+        Infinity,
+
+    reconnectionDelay:
+        1000,
+
+    reconnectionDelayMax:
+        5000
+
+});
 
 /* ==================================================
    状態
@@ -2481,65 +2499,148 @@ async function getCurrentLoginId(){
 }
 
 
-/* ==================================================
-   usersテーブルから自分のuser_idを取得
-================================================== */
+
+//==================================================
+// Socket用 user_id取得
+//==================================================
 
 async function resolveSocketUserId(){
 
-    /*
-       まず既存のuser_idをlocalStorageから確認
-    */
+    try{
 
-    const localUserId =
-        localStorage.getItem(
-            "puttan_user_id"
+        //================================================
+        // ① 現在ログインしている account_name を取得
+        //================================================
+
+        const loginId =
+            await getCurrentLoginId();
+
+
+        if(!loginId){
+
+            console.warn(
+                "ログイン中のaccount_nameを取得できません"
+            );
+
+            return null;
+
+        }
+
+
+        const accountName =
+            String(
+                loginId
+            )
+            .trim();
+
+
+        if(!accountName){
+
+            console.warn(
+                "account_nameが空です"
+            );
+
+            return null;
+
+        }
+
+
+        console.log(
+            "users検索 account_name:",
+            accountName
         );
 
 
-    if(localUserId){
+        //================================================
+        // ② usersテーブルからuser_idを取得
+        //================================================
 
-        return localUserId;
+        const {
+            data,
+            error
+        } =
+            await supabaseClient
+                .from("users")
+                .select(
+                    "user_id,display_name,account_name"
+                )
+                .eq(
+                    "account_name",
+                    accountName
+                )
+                .maybeSingle();
+
+
+        //================================================
+        // ③ DBエラー
+        //================================================
+
+        if(error){
+
+            console.error(
+                "users検索エラー:",
+                error
+            );
+
+            return null;
+
+        }
+
+
+        //================================================
+        // ④ ユーザーが存在しない
+        //================================================
+
+        if(
+            !data ||
+            !data.user_id
+        ){
+
+            console.warn(
+                "usersにaccount_nameが見つかりません:",
+                accountName
+            );
+
+            return null;
+
+        }
+
+
+        //================================================
+        // ⑤ user_id確定
+        //================================================
+
+        const userId =
+            String(
+                data.user_id
+            ).trim();
+
+
+        console.log(
+            "Socket user_id取得:",
+            accountName,
+            "→",
+            userId
+        );
+
+
+        //================================================
+        // ⑥ ローカル保存
+        //================================================
+
+        localStorage.setItem(
+            "puttan_user_id",
+            userId
+        );
+
+
+        return userId;
 
     }
-
-
-    /*
-       account_name = profiles.login_id
-       として既存usersを検索
-    */
-
-    const loginId =
-        await getCurrentLoginId();
-
-
-    if(!loginId){
-
-        return null;
-
-    }
-
-
-    const {
-        data,
-        error
-    } =
-        await supabaseClient
-            .from("users")
-            .select(
-                "user_id,display_name,account_name"
-            )
-            .eq(
-                "account_name",
-                loginId
-            )
-            .maybeSingle();
-
-
-    if(error){
+    catch(error){
 
         console.error(
-            "users検索エラー:",
+            "user_id取得エラー:",
             error
         );
 
@@ -2547,27 +2648,7 @@ async function resolveSocketUserId(){
 
     }
 
-
-    if(
-        data &&
-        data.user_id
-    ){
-
-        localStorage.setItem(
-            "puttan_user_id",
-            data.user_id
-        );
-
-
-        return data.user_id;
-
-    }
-
-
-    return null;
-
 }
-
 
 /* ==================================================
    ユーザー情報保存
