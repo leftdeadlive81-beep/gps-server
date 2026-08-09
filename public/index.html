@@ -854,6 +854,7 @@ select {
 
 </div>
 
+
 <!-- 新規登録 -->
 
 <div
@@ -862,53 +863,73 @@ select {
     style="display:none;"
 >
 
-<h2>
-    災害情報共有システム【試作ver0.2】
-</h2>
+    <h2>📍 ぷったん</h2>
 
-<h3>
-    👤 新規アカウント登録
-</h3>
+    <h3>👤 新規アカウント登録</h3>
 
-<input
-    type="text"
-    id="registerUsername"
-    placeholder="任意のログインID(英数字)"
-    autocomplete="username"
->
 
-<input
-    type="password"
-    id="registerPassword"
-    placeholder="パスワード(6文字以上)"
-    autocomplete="new-password"
->
+    <!-- ログインID -->
+    <input
+        type="text"
+        id="registerUsername"
+        placeholder="ログインID（英数字）"
+        autocomplete="username"
+    >
 
-<input
-    type="password"
-    id="registerPassword2"
-    placeholder="パスワード（確認）"
-    autocomplete="new-password"
->
 
-<button
-    onclick="registerAuthUser()"
->
-    👤 アカウント登録
-</button>
+    <!-- 表示名 -->
+    <input
+        type="text"
+        id="registerDisplayName"
+        placeholder="表示名（例：第1小隊 山田）"
+        autocomplete="name"
+    >
 
-<button
-    onclick="showLogin()"
->
-    🔐 ログイン画面へ戻る
-</button>
 
-<div
-    id="registerMessage"
-    class="authMessage"
-></div>
+    <!-- パスワード -->
+    <input
+        type="password"
+        id="registerPassword"
+        placeholder="パスワード（6文字以上）"
+        autocomplete="new-password"
+    >
+
+
+    <!-- パスワード確認 -->
+    <input
+        type="password"
+        id="registerPassword2"
+        placeholder="パスワード（確認）"
+        autocomplete="new-password"
+    >
+
+
+    <button
+        onclick="registerAuthUser()"
+    >
+
+        👤 アカウント登録
+
+    </button>
+
+
+    <button
+        onclick="showLogin()"
+    >
+
+        🔐 ログイン画面へ戻る
+
+    </button>
+
+
+    <div
+        id="registerMessage"
+        class="authMessage"
+    ></div>
 
 </div>
+
+
 
 <!-- ==================================================
      画面最下部 説明カード
@@ -1721,6 +1742,33 @@ async function registerAuthUser(){
         .trim();
 
 
+        const displayName =
+    document.getElementById(
+        "registerDisplayName"
+    )
+    .value
+    .trim();
+
+    if(displayName === ""){
+
+    message.textContent =
+        "表示名を入力してください";
+
+    return;
+
+}
+
+
+if(displayName.length > 50){
+
+    message.textContent =
+        "表示名は50文字以内にしてください";
+
+    return;
+
+}
+
+
     const password =
         document.getElementById(
             "registerPassword"
@@ -1886,8 +1934,8 @@ async function registerAuthUser(){
                         login_id:
                             loginId,
 
-                        display_name:
-                            loginId,
+                       display_name:
+    displayName,
 
                         icon_type:
                             "1",
