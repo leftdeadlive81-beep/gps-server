@@ -3210,7 +3210,21 @@ async function registerSocketUser(){
    localStorage に保存したものを使用する。
 */
 
+/* ==================================================
+   Socket用 user_id 取得
+   Version 2.3
+
+   ・まずlocalStorageを確認
+   ・なければログイン中のaccount_nameから
+     登録済みusersのuser_idを取得
+   ・user_idを新規作成する処理はしない
+================================================== */
+
 async function resolveSocketUserId(){
+
+    /* ==============================================
+       ① localStorageから確認
+    ============================================== */
 
     const localUserId =
         localStorage.getItem(
@@ -3223,20 +3237,130 @@ async function resolveSocketUserId(){
         socketUserId =
             localUserId;
 
+        console.log(
+            "Socket user_id:",
+            localUserId
+        );
+
         return localUserId;
 
     }
 
 
+    /* ==============================================
+       ② ログイン情報を確認
+    ============================================== */
+
+    const loginId =
+        await getCurrentLoginId();
+
+
+    if(!loginId){
+
+        console.warn(
+            "ログイン中のaccount_nameを取得できません"
+        );
+
+        return null;
+
+    }
+
+
+    console.log(
+        "登録済みuser_id検索 account_name:",
+        loginId
+    );
+
+
+    /* ==============================================
+       ③ usersテーブルから既存user_idを取得
+    ============================================== */
+
+    const {
+        data,
+        error
+    } =
+        await supabaseClient
+            .from("users")
+            .select(
+                "user_id,display_name,account_name"
+            )
+            .eq(
+                "account_name",
+                loginId
+            )
+            .maybeSingle();
+
+
+    if(error){
+
+        console.error(
+            "users検索エラー:",
+            error
+        );
+
+        return null;
+
+    }
+
+
+    /* ==============================================
+       ④ 登録済みuser_idが見つかった
+    ============================================== */
+
+    if(
+        data &&
+        data.user_id
+    ){
+
+        socketUserId =
+            data.user_id;
+
+
+        localStorage.setItem(
+            "puttan_user_id",
+            data.user_id
+        );
+
+
+        /*
+           表示名も復元
+        */
+
+        if(data.display_name){
+
+            localStorage.setItem(
+                "name",
+                data.display_name
+            );
+
+        }
+
+
+        console.log(
+            "登録済みuser_id取得:",
+            data.user_id
+        );
+
+
+        return data.user_id;
+
+    }
+
+
+    /* ==============================================
+       ⑤ usersに登録されていない
+    ============================================== */
+
     console.warn(
-        "保存されているuser_idがありません"
+        "このアカウントにはユーザー登録がありません:",
+        loginId
     );
 
 
     return null;
 
 }
-
 
 
 /* ==================================================
@@ -3718,7 +3842,16 @@ socket.on(
    GPS開始
 ================================================== */
 
-function startGPS(){
+/* ==================================================
+   GPS開始
+   Version 2.3
+================================================== */
+
+async function startGPS(){
+
+    /* ==============================================
+       ログイン確認
+    ============================================== */
 
     if(!currentAuthUser){
 
@@ -3731,33 +3864,394 @@ function startGPS(){
     }
 
 
-    if(!socketUserId){
+    /* ==============================================
+       user_id取得
+    ============================================== */
 
-        resolveSocketUserId()
-            .then(
-                userId => {
+    try{
 
-                    if(!userId){
+        const userId =
+            await resolveSocketUserId();
 
-                        alert(
-                            "ユーザーIDを取得できません"
+
+        if(!userId){
+
+            alert(
+                "ユーザーIDを取得できません。\n\n" +
+                "ユーザー登録画面でユーザーIDを登録してください。"
+            );
+
+            return;
+
+        }
+
+
+        socketUserId =
+            userId;
+
+
+        console.log(
+            "GPS開始 user_id:",
+            socketUserId
+        );
+
+
+        /* ==========================================
+           Socketユーザー登録
+        ========================================== */
+
+        if(!registered){
+
+            await registerSocketUser();
+
+        }
+
+
+        /* ==========================================
+           登録確認
+        ========================================== */
+
+        if(!registered){
+
+            alert(
+                "Socketユーザー登録に失敗しました"
+            );
+
+            return;
+
+        }
+
+
+        /* ==========================================
+           GPS本体開始
+        ========================================== */
+
+        startGPSCore();
+
+    }
+    catch(error){
+
+        console.error(
+            "GPS開始エラー:",
+            error
+        );
+
+
+        alert(
+            "GPSを開始できませんでした"
+        );
+
+    }
+
+}
+
+
+/* ==================================================
+   GPS本体開始
+================================================== */
+
+function startGPSCore(){
+
+    localStorage.setItem(
+        "gpsRunning",
+        "true"
+    );
+
+
+    /*
+       すでにGPS監視中なら何もしない
+    */
+
+    if(
+        watchID !== null
+    ){
+
+        return;
+
+    }
+
+
+    /* ==============================================
+       定期GPS送信
+    ============================================== */
+
+    gpsTimer =
+        setInterval(
+            ()=>{
+
+                navigator.geolocation
+                    .getCurrentPosition(
+
+                        pos => {
+
+                            sendLocation(
+                                pos.coords.latitude,
+                                pos.coords.longitude
+                            );
+
+                        },
+
+                        err => {
+
+                            console.log(
+                                "GPSタイマーエラー",
+                                err
+                            );
+
+                        },
+
+                        {
+
+                            enableHighAccuracy:
+                                true,
+
+                            timeout:
+                                10000,
+
+                            maximumAge:
+                                0
+
+                        }
+
+                    );
+
+            },
+            SEND_INTERVAL
+        );
+
+
+    /* ==============================================
+       GPS監視
+    ============================================== */
+
+    watchID =
+        navigator.geolocation
+            .watchPosition(
+
+                pos => {
+
+                    const lat =
+                        pos.coords.latitude;
+
+
+                    const lon =
+                        pos.coords.longitude;
+
+
+                    /* ==================================
+                       初回送信
+                    ================================== */
+
+                    if(
+                        lastLat === 0
+                    ){
+
+                        sendLocation(
+                            lat,
+                            lon
                         );
+
+
+                        lastLat =
+                            lat;
+
+                        lastLon =
+                            lon;
+
+                        lastSendTime =
+                            Date.now();
 
                         return;
 
                     }
 
 
-                    socketUserId =
-                        userId;
+                    /* ==================================
+                       移動距離
+                    ================================== */
+
+                    const distance =
+                        getDistance(
+                            lastLat,
+                            lastLon,
+                            lat,
+                            lon
+                        );
 
 
-                    registerSocketUser();
+                    const now =
+                        Date.now();
 
-                    startGPSCore();
+
+                    /* ==================================
+                       移動距離または時間で送信
+                    ================================== */
+
+                    if(
+                        distance >=
+                            MOVE_DISTANCE
+                        ||
+                        now -
+                        lastSendTime >=
+                            SEND_INTERVAL
+                    ){
+
+                        sendLocation(
+                            lat,
+                            lon
+                        );
+
+
+                        lastLat =
+                            lat;
+
+                        lastLon =
+                            lon;
+
+                        lastSendTime =
+                            now;
+
+                    }
+
+                },
+
+
+                err => {
+
+                    console.log(
+                        "GPSエラー",
+                        err
+                    );
+
+
+                    const status =
+                        document.getElementById(
+                            "gpsStatus"
+                        );
+
+
+                    if(status){
+
+                        status.innerHTML =
+                            "🔴 GPSエラー";
+
+                    }
+
+                },
+
+
+                {
+
+                    enableHighAccuracy:
+                        true,
+
+                    timeout:
+                        10000,
+
+                    maximumAge:
+                        0
 
                 }
+
             );
+
+
+    /* ==============================================
+       GPS状態表示
+    ============================================== */
+
+    const status =
+        document.getElementById(
+            "gpsStatus"
+        );
+
+
+    if(status){
+
+        status.innerHTML =
+            "🟢 GPS稼働中";
+
+    }
+
+}
+
+
+/* ==================================================
+   GPS停止
+================================================== */
+
+function stopGPS(){
+
+    if(
+        watchID !== null
+    ){
+
+        navigator.geolocation
+            .clearWatch(
+                watchID
+            );
+
+        watchID =
+            null;
+
+    }
+
+
+    if(
+        gpsTimer !== null
+    ){
+
+        clearInterval(
+            gpsTimer
+        );
+
+        gpsTimer =
+            null;
+
+    }
+
+
+    lastLat =
+        0;
+
+    lastLon =
+        0;
+
+    lastSendTime =
+        0;
+
+
+    localStorage.removeItem(
+        "gpsRunning"
+    );
+
+
+    const status =
+        document.getElementById(
+            "gpsStatus"
+        );
+
+
+    if(status){
+
+        status.innerHTML =
+            "🔴 GPS停止中";
+
+    }
+
+}
+
+
+/* ==================================================
+   GPS送信
+================================================== */
+
+function sendLocation(
+    lat,
+    lon
+){
+
+    if(!currentAuthUser){
 
         return;
 
@@ -3766,12 +4260,454 @@ function startGPS(){
 
     if(!registered){
 
-        registerSocketUser();
+        console.warn(
+            "GPS送信停止: Socket未登録"
+        );
+
+        return;
 
     }
 
 
-    startGPSCore();
+    if(!socketUserId){
+
+        console.warn(
+            "GPS送信停止: user_idなし"
+        );
+
+        return;
+
+    }
+
+
+    if(
+        !Number.isFinite(
+            Number(lat)
+        )
+        ||
+        !Number.isFinite(
+            Number(lon)
+        )
+    ){
+
+        return;
+
+    }
+
+
+    lat =
+        Number(lat);
+
+    lon =
+        Number(lon);
+
+
+    /* ==============================================
+       UTM
+    ============================================== */
+
+    const utm =
+        proj4(
+
+            "EPSG:4326",
+
+            "+proj=utm +zone=52 +south +datum=WGS84",
+
+            [
+                lon,
+                lat
+            ]
+
+        );
+
+
+    const utmE =
+        Math.round(
+            utm[0]
+        );
+
+
+    const utmN =
+        Math.round(
+            utm[1]
+        );
+
+
+    /* ==============================================
+       ローカル保存
+    ============================================== */
+
+    [
+        "name",
+        "water",
+        "fuel",
+        "destination",
+        "iconType"
+
+    ]
+    .forEach(
+        key => {
+
+            const element =
+                document.getElementById(
+                    key
+                );
+
+
+            if(element){
+
+                localStorage.setItem(
+                    key,
+                    element.value
+                );
+
+            }
+
+        }
+    );
+
+
+    /* ==============================================
+       GPS状態
+    ============================================== */
+
+    const gpsStatus =
+        document.getElementById(
+            "gpsStatus"
+        );
+
+
+    if(gpsStatus){
+
+        gpsStatus.innerHTML =
+            "🟢 GPS稼働中";
+
+    }
+
+
+    const lastSend =
+        document.getElementById(
+            "lastSend"
+        );
+
+
+    if(lastSend){
+
+        lastSend.innerHTML =
+            "最終送信："
+            +
+            new Date()
+                .toLocaleTimeString();
+
+    }
+
+
+    /* ==============================================
+       ユーザー情報
+    ============================================== */
+
+    const iconType =
+        normalizeIconType(
+            document.getElementById(
+                "iconType"
+            ).value
+        );
+
+
+    const destination =
+        document.getElementById(
+            "destination"
+        ).value
+        .trim();
+
+
+    /* ==============================================
+       Socket送信
+    ============================================== */
+
+    socket.emit(
+        "location",
+        {
+
+            /*
+               ★★★★★
+               user_idを必ず送信
+               ★★★★★
+            */
+
+            user_id:
+                socketUserId,
+
+            lat:
+                lat,
+
+            lon:
+                lon,
+
+            utmZone:
+                "52S",
+
+            utmE:
+                utmE,
+
+            utmN:
+                utmN,
+
+            water:
+                Number(
+                    document.getElementById(
+                        "water"
+                    ).value
+                ) || 0,
+
+            fuel:
+                Number(
+                    document.getElementById(
+                        "fuel"
+                    ).value
+                ) || 0,
+
+            destination:
+                destination,
+
+            iconType:
+                iconType,
+
+            device_id:
+                getDeviceId()
+
+        }
+    );
+
+
+    console.log(
+        "GPS送信:",
+        socketUserId,
+        lat,
+        lon
+    );
+
+}
+
+
+/* ==================================================
+   端末ID
+================================================== */
+
+function getDeviceId(){
+
+    let deviceId =
+        localStorage.getItem(
+            "puttan_device_id"
+        );
+
+
+    if(!deviceId){
+
+        deviceId =
+            "web-" +
+            crypto.randomUUID();
+
+
+        localStorage.setItem(
+            "puttan_device_id",
+            deviceId
+        );
+
+    }
+
+
+    return deviceId;
+
+}
+
+
+/* ==================================================
+   現在地報告
+================================================== */
+
+async function updateStatus(){
+
+    if(!currentAuthUser){
+
+        alert(
+            "先にログインしてください"
+        );
+
+        return;
+
+    }
+
+
+    try{
+
+        /*
+           user_idを確定
+        */
+
+        const userId =
+            await resolveSocketUserId();
+
+
+        if(!userId){
+
+            alert(
+                "ユーザーIDを取得できません。\n" +
+                "先にユーザー登録を行ってください。"
+            );
+
+            return;
+
+        }
+
+
+        socketUserId =
+            userId;
+
+
+        /*
+           Socket登録
+        */
+
+        if(!registered){
+
+            await registerSocketUser();
+
+        }
+
+
+        /*
+           現在地取得
+        */
+
+        getCurrentPositionOnce();
+
+    }
+    catch(error){
+
+        console.error(
+            "現在地報告エラー:",
+            error
+        );
+
+    }
+
+}
+
+
+/* ==================================================
+   現在地1回取得
+================================================== */
+
+function getCurrentPositionOnce(){
+
+    navigator.geolocation
+        .getCurrentPosition(
+
+            pos => {
+
+                sendLocation(
+                    pos.coords.latitude,
+                    pos.coords.longitude
+                );
+
+            },
+
+            err => {
+
+                console.error(
+                    "現在地取得エラー:",
+                    err
+                );
+
+
+                alert(
+                    "現在地を取得できませんでした"
+                );
+
+            },
+
+            {
+
+                enableHighAccuracy:
+                    true,
+
+                timeout:
+                    10000,
+
+                maximumAge:
+                    0
+
+            }
+
+        );
+
+}
+
+
+/* ==================================================
+   距離計算
+================================================== */
+
+function getDistance(
+    lat1,
+    lon1,
+    lat2,
+    lon2
+){
+
+    const R =
+        6371000;
+
+
+    const dLat =
+        (
+            lat2 -
+            lat1
+        )
+        *
+        Math.PI /
+        180;
+
+
+    const dLon =
+        (
+            lon2 -
+            lon1
+        )
+        *
+        Math.PI /
+        180;
+
+
+    const a =
+        Math.sin(
+            dLat / 2
+        ) ** 2
+        +
+        Math.cos(
+            lat1 *
+            Math.PI /
+            180
+        )
+        *
+        Math.cos(
+            lat2 *
+            Math.PI /
+            180
+        )
+        *
+        Math.sin(
+            dLon / 2
+        ) ** 2;
+
+
+    return R *
+        2 *
+        Math.atan2(
+            Math.sqrt(a),
+            Math.sqrt(1-a)
+        );
 
 }
 
