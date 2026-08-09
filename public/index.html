@@ -678,133 +678,90 @@ select {
 }
 
 
-/* ==================================================
-認証画面
-================================================== */
+/* ==========================================
+   認証画面
+========================================== */
 
 #authScreen {
-
-min-height: 100vh;
-
-display: flex;
-
-flex-direction: column;
-
-align-items: center;
-
-padding: 20px 10px 10px;
-
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 20px 12px 12px;
 }
 
-/* ログイン・登録カード */
+
+/* ==========================================
+   ログインカード
+========================================== */
 
 .authBox {
-
-width: min(92%, 520px);
-
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto 8px;
+    padding: 20px;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.15);
 }
 
-/* 説明カード */
+
+/* ==========================================
+   説明カード
+========================================== */
 
 .authInfoCard {
-
-width: min(92%, 520px);
-
-margin-top: auto;
-
-margin-bottom: 10px;
-
-padding: 14px 16px;
-
-background: #ffffff;
-
-border: 1px solid #d8d8d8;
-
-border-radius: 12px;
-
-box-shadow:
-    0 2px 8px
-    rgba(0,0,0,0.10);
-
-}
-
-.authInfoTitle {
-
-font-size: 16px;
-
-font-weight: bold;
-
-color: #333;
-
-padding-bottom: 7px;
-
-margin-bottom: 8px;
-
-border-bottom: 1px solid #e5e5e5;
-
-}
-
-.authInfoText {
-
-font-size: 13px;
-
-line-height: 1.6;
-
-color: #555;
-
-}
-
-/* スマホ */
-
-@media (
-max-width: 600px
-) {
-
-#authScreen {
-
-    min-height: 100vh;
-
-    padding:
-        15px
-        8px
-        8px;
-
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: #f5f7fa;
+    border: 1px solid #d9dee5;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.08);
+    font-size: 13px;
+    line-height: 1.6;
+    color: #333;
 }
 
 
-.authInfoCard {
+/* 説明カード見出し */
 
-    width: 94%;
-
-    margin-top: auto;
-
-    margin-bottom: 5px;
-
-    padding:
-        12px
-        14px;
-
+.authInfoCard h3 {
+    margin: 0 0 8px;
+    font-size: 16px;
 }
 
 
-.authInfoTitle {
+/* 説明カード本文 */
 
-    font-size: 15px;
-
+.authInfoCard p {
+    margin: 4px 0;
 }
 
 
-.authInfoText {
+/* ==========================================
+   スマホ用
+========================================== */
 
-    font-size: 12px;
+@media (max-width: 600px) {
 
-    line-height: 1.5;
+    #authScreen {
+        padding: 10px 10px 12px;
+    }
+
+    .authBox {
+        padding: 16px;
+        margin-bottom: 6px;
+    }
+
+    .authInfoCard {
+        padding: 12px 14px;
+        font-size: 12px;
+    }
 
 }
-
-}
-
-
 
 
 </style>
