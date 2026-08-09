@@ -5,10 +5,8 @@
 
 <meta charset="UTF-8">
 
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
->
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0">
 
 <title>現在位置自動共有君 Version 2.3</title>
 
@@ -17,10 +15,670 @@
      Leaflet
 ================================================== -->
 
-<link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-/>
+<link rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+
+<!-- ==================================================
+     基本CSS
+================================================== -->
+
+<style>
+
+* {
+    box-sizing: border-box;
+}
+
+
+html,
+body {
+
+    margin: 0;
+    padding: 0;
+
+    width: 100%;
+    height: 100%;
+
+    font-family:
+        "Yu Gothic",
+        "Meiryo",
+        sans-serif;
+
+    background: #f2f4f7;
+
+}
+
+
+button,
+input,
+select {
+
+    font-family: inherit;
+
+}
+
+
+button {
+
+    cursor: pointer;
+
+}
+
+
+/* ==================================================
+   認証画面
+================================================== */
+
+#authScreen {
+
+    position: fixed;
+
+    inset: 0;
+
+    display: none;
+
+    justify-content: center;
+
+    align-items: center;
+
+    background: #eef1f5;
+
+    z-index: 9999;
+
+}
+
+
+.authBox {
+
+    width: min(420px, 92vw);
+
+    background: white;
+
+    padding: 25px;
+
+    border-radius: 12px;
+
+    box-shadow:
+        0 4px 20px rgba(0,0,0,.15);
+
+}
+
+
+.authBox h2 {
+
+    margin-top: 0;
+
+    text-align: center;
+
+}
+
+
+.authBox h3 {
+
+    text-align: center;
+
+}
+
+
+.authBox input {
+
+    width: 100%;
+
+    padding: 12px;
+
+    margin-bottom: 10px;
+
+    border: 1px solid #bbb;
+
+    border-radius: 6px;
+
+    font-size: 16px;
+
+}
+
+
+.authBox button {
+
+    width: 100%;
+
+    padding: 12px;
+
+    margin-top: 8px;
+
+    border: 0;
+
+    border-radius: 6px;
+
+    background: #1976d2;
+
+    color: white;
+
+    font-size: 16px;
+
+}
+
+
+.authMessage {
+
+    margin-top: 15px;
+
+    min-height: 24px;
+
+    text-align: center;
+
+    font-weight: bold;
+
+}
+
+
+/* ==================================================
+   アプリ画面
+================================================== */
+
+#appScreen {
+
+    display: none;
+
+    width: 100%;
+
+    min-height: 100vh;
+
+}
+
+
+/* ==================================================
+   タブ
+================================================== */
+
+.tabBar {
+
+    display: grid;
+
+    grid-template-columns:
+        repeat(4, 1fr);
+
+    gap: 2px;
+
+    background: #263238;
+
+    position: sticky;
+
+    top: 0;
+
+    z-index: 1000;
+
+}
+
+
+.tabButton {
+
+    border: none;
+
+    padding: 9px 4px;
+
+    background: #455a64;
+
+    color: white;
+
+    font-size: 13px;
+
+}
+
+
+.tabButton.active {
+
+    background: #1976d2;
+
+    font-weight: bold;
+
+}
+
+
+.tabIcon {
+
+    display: block;
+
+    font-size: 20px;
+
+}
+
+
+.tabText {
+
+    display: block;
+
+}
+
+
+/* ==================================================
+   タブ内容
+================================================== */
+
+.tabContent {
+
+    display: none;
+
+    padding: 8px;
+
+}
+
+
+.tabContent.active {
+
+    display: block;
+
+}
+
+
+/* ==================================================
+   カード
+================================================== */
+
+.card {
+
+    background: white;
+
+    border-radius: 8px;
+
+    padding: 10px;
+
+    margin-bottom: 8px;
+
+    box-shadow:
+        0 1px 4px rgba(0,0,0,.12);
+
+}
+
+
+.settingsCard {
+
+    margin-bottom: 10px;
+
+}
+
+
+.sectionTitle {
+
+    font-weight: bold;
+
+    font-size: 17px;
+
+    margin-bottom: 8px;
+
+}
+
+
+/* ==================================================
+   入力
+================================================== */
+
+.inputRow {
+
+    display: flex;
+
+    gap: 6px;
+
+    margin-bottom: 7px;
+
+}
+
+
+.inputRow > * {
+
+    flex: 1;
+
+}
+
+
+input,
+select {
+
+    width: 100%;
+
+    padding: 9px;
+
+    border: 1px solid #aaa;
+
+    border-radius: 5px;
+
+    font-size: 15px;
+
+}
+
+
+.settingsButton {
+
+    width: 100%;
+
+    padding: 10px;
+
+    border: none;
+
+    border-radius: 6px;
+
+    background: #1976d2;
+
+    color: white;
+
+    font-size: 15px;
+
+    margin-top: 7px;
+
+}
+
+
+/* ==================================================
+   地図
+================================================== */
+
+#map {
+
+    width: 100%;
+
+    height: calc(100vh - 150px);
+
+    min-height: 400px;
+
+    border-radius: 6px;
+
+    overflow: hidden;
+
+}
+
+
+/* ==================================================
+   GPS
+================================================== */
+
+.gpsButtonRow {
+
+    display: flex;
+
+    gap: 6px;
+
+    margin-top: 7px;
+
+}
+
+
+.gpsButton,
+.reportButton {
+
+    flex: 1;
+
+    padding: 10px;
+
+    border: none;
+
+    border-radius: 6px;
+
+    color: white;
+
+    font-size: 14px;
+
+}
+
+
+.gpsButton {
+
+    background: #388e3c;
+
+}
+
+
+.reportButton {
+
+    background: #1976d2;
+
+}
+
+
+#gpsStatus,
+#lastSend {
+
+    text-align: center;
+
+    padding: 4px;
+
+    font-size: 13px;
+
+}
+
+
+/* ==================================================
+   隊員一覧
+================================================== */
+
+.userHeader,
+.userRow {
+
+    display: grid;
+
+    grid-template-columns:
+        48px
+        minmax(80px, 1fr)
+        50px
+        55px
+        65px
+        42px;
+
+    align-items: center;
+
+    gap: 3px;
+
+}
+
+
+.userHeader {
+
+    background: #455a64;
+
+    color: white;
+
+    padding: 6px 3px;
+
+    font-size: 12px;
+
+    text-align: center;
+
+}
+
+
+.userRow {
+
+    min-height: 42px;
+
+    border-bottom: 1px solid #ddd;
+
+    background: white;
+
+    font-size: 13px;
+
+    text-align: center;
+
+}
+
+
+.userRow > div {
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    white-space: nowrap;
+
+}
+
+
+.deleteButton {
+
+    border: none;
+
+    background: transparent;
+
+    font-size: 18px;
+
+}
+
+
+/* ==================================================
+   クロノロジー
+================================================== */
+
+.chronoInputRow {
+
+    display: flex;
+
+    gap: 5px;
+
+}
+
+
+.chronoInputRow input {
+
+    flex: 1;
+
+}
+
+
+.chronoInputRow button {
+
+    width: 65px;
+
+    border: none;
+
+    border-radius: 5px;
+
+    background: #1976d2;
+
+    color: white;
+
+}
+
+
+.timelineItem {
+
+    border-bottom: 1px solid #ddd;
+
+    padding: 8px 3px;
+
+}
+
+
+.timelineTime {
+
+    font-size: 11px;
+
+    color: #666;
+
+}
+
+
+.timelineMessage {
+
+    font-size: 14px;
+
+    margin-top: 3px;
+
+}
+
+
+/* ==================================================
+   地点
+================================================== */
+
+.pointButtonRow {
+
+    display: flex;
+
+    gap: 6px;
+
+    margin-top: 7px;
+
+}
+
+
+.pointButtonRow button {
+
+    flex: 1;
+
+    padding: 9px;
+
+    border: none;
+
+    border-radius: 5px;
+
+    background: #1976d2;
+
+    color: white;
+
+}
+
+
+.pointButtonRow button:last-child {
+
+    background: #c62828;
+
+}
+
+
+.pointInfo {
+
+    margin-top: 10px;
+
+    line-height: 1.7;
+
+    font-size: 14px;
+
+}
+
+
+/* ==================================================
+   地図ラベル
+================================================== */
+
+.pointLabel {
+
+    background: rgba(255,255,255,.9);
+
+    border: 1px solid #555;
+
+    color: #111;
+
+    font-weight: bold;
+
+    padding: 2px 5px;
+
+    border-radius: 3px;
+
+}
+
+
+/* ==================================================
+   フッター
+================================================== */
+
+.footer {
+
+    text-align: center;
+
+    padding: 15px;
+
+    font-size: 12px;
+
+    color: #666;
+
+}
+
+
+.footer a {
+
+    color: #1976d2;
+
+}
+
+
+</style>
 
 
 <!-- ==================================================
@@ -38,658 +696,18 @@
 
 
 <!-- ==================================================
-     Proj4
+     Leaflet
 ================================================== -->
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 
-<style>
+<!-- ==================================================
+     proj4
+================================================== -->
 
-/* ==================================================
-   基本
-================================================== */
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
 
-*{
-    box-sizing:border-box;
-}
-
-html,
-body{
-
-    margin:0;
-    padding:0;
-
-    width:100%;
-    height:100%;
-
-    font-family:
-        Arial,
-        "Noto Sans JP",
-        sans-serif;
-
-    background:#f2f2f2;
-
-}
-
-
-/* ==================================================
-   Auth画面
-================================================== */
-
-#authScreen{
-
-    position:fixed;
-
-    top:0;
-    left:0;
-
-    width:100%;
-    height:100%;
-
-    display:flex;
-
-    justify-content:center;
-    align-items:center;
-
-    background:#eef2f5;
-
-    z-index:99999;
-
-}
-
-
-.authBox{
-
-    width:min(420px,92vw);
-
-    background:white;
-
-    padding:25px;
-
-    border-radius:12px;
-
-    box-shadow:
-        0 4px 20px
-        rgba(0,0,0,.15);
-
-}
-
-
-.authBox h2{
-
-    text-align:center;
-
-    margin-top:0;
-
-}
-
-
-.authBox h3{
-
-    text-align:center;
-
-}
-
-
-.authBox input{
-
-    width:100%;
-
-    padding:13px;
-
-    margin:
-        6px 0;
-
-    font-size:16px;
-
-    border:
-        1px solid #bbb;
-
-    border-radius:6px;
-
-}
-
-
-.authBox button{
-
-    width:100%;
-
-    padding:13px;
-
-    margin-top:8px;
-
-    font-size:16px;
-
-    cursor:pointer;
-
-}
-
-
-.authMessage{
-
-    margin-top:12px;
-
-    min-height:25px;
-
-    text-align:center;
-
-}
-
-
-/* ==================================================
-   アプリ
-================================================== */
-
-#appScreen{
-
-    display:none;
-
-    width:100%;
-    min-height:100vh;
-
-}
-
-
-/* ==================================================
-   タブ
-================================================== */
-
-.tabButtons{
-
-    display:grid;
-
-    grid-template-columns:
-        repeat(4,1fr);
-
-    background:#222;
-
-}
-
-
-.tabButton{
-
-    border:none;
-
-    background:#333;
-
-    color:white;
-
-    padding:10px 4px;
-
-    cursor:pointer;
-
-}
-
-
-.tabButton.active{
-
-    background:#1976d2;
-
-}
-
-
-.tabIcon{
-
-    display:block;
-
-    font-size:20px;
-
-}
-
-
-.tabText{
-
-    font-size:12px;
-
-}
-
-
-/* ==================================================
-   タブ内容
-================================================== */
-
-.tabContent{
-
-    display:none;
-
-    padding:8px;
-
-}
-
-
-.tabContent.active{
-
-    display:block;
-
-}
-
-
-/* ==================================================
-   地図
-================================================== */
-
-#map{
-
-    width:100%;
-
-    height:
-        calc(100vh - 145px);
-
-    min-height:400px;
-
-}
-
-
-.gpsButtonRow{
-
-    display:flex;
-
-    gap:6px;
-
-    margin-top:6px;
-
-}
-
-
-.gpsButton,
-.reportButton{
-
-    flex:1;
-
-    padding:12px;
-
-    border:none;
-
-    border-radius:6px;
-
-    color:white;
-
-    font-size:15px;
-
-    cursor:pointer;
-
-}
-
-
-.gpsButton{
-
-    background:#1976d2;
-
-}
-
-
-.reportButton{
-
-    background:#388e3c;
-
-}
-
-
-#gpsStatus{
-
-    margin-top:6px;
-
-    font-weight:bold;
-
-}
-
-
-#lastSend{
-
-    font-size:12px;
-
-    color:#555;
-
-}
-
-
-/* ==================================================
-   セクション
-================================================== */
-
-.sectionTitle{
-
-    font-weight:bold;
-
-    font-size:18px;
-
-    margin:
-        5px 0 10px 0;
-
-}
-
-
-/* ==================================================
-   隊員一覧
-================================================== */
-
-.userHeader,
-.userRow{
-
-    display:grid;
-
-    grid-template-columns:
-        55px
-        minmax(100px,1fr)
-        55px
-        65px
-        70px
-        45px;
-
-    align-items:center;
-
-}
-
-
-.userHeader{
-
-    background:#ddd;
-
-    font-weight:bold;
-
-    padding:8px 3px;
-
-}
-
-
-.userRow{
-
-    background:white;
-
-    border-bottom:
-        1px solid #ddd;
-
-    min-height:44px;
-
-}
-
-
-.userRow > div{
-
-    text-align:center;
-
-    overflow:hidden;
-
-    text-overflow:ellipsis;
-
-    white-space:nowrap;
-
-    cursor:pointer;
-
-}
-
-
-.deleteButton{
-
-    border:none;
-
-    background:none;
-
-    font-size:18px;
-
-    cursor:pointer;
-
-}
-
-
-/* ==================================================
-   報連相
-================================================== */
-
-.chronoInputRow{
-
-    display:flex;
-
-    gap:5px;
-
-}
-
-
-.chronoInputRow input{
-
-    flex:1;
-
-    padding:10px;
-
-}
-
-
-.chronoInputRow button{
-
-    width:70px;
-
-}
-
-
-.timelineItem{
-
-    background:white;
-
-    margin-top:7px;
-
-    padding:8px;
-
-    border-radius:5px;
-
-    border-left:
-        4px solid #1976d2;
-
-}
-
-
-.timelineTime{
-
-    font-size:12px;
-
-    color:#666;
-
-}
-
-
-.timelineMessage{
-
-    margin-top:3px;
-
-}
-
-
-/* ==================================================
-   設定
-================================================== */
-
-.card{
-
-    background:white;
-
-    padding:12px;
-
-    margin-bottom:10px;
-
-    border-radius:8px;
-
-}
-
-
-.inputRow{
-
-    display:flex;
-
-    gap:6px;
-
-    margin-bottom:7px;
-
-}
-
-
-.inputRow > *{
-
-    flex:1;
-
-}
-
-
-.settingsCard input,
-.settingsCard select{
-
-    width:100%;
-
-    padding:10px;
-
-    margin-bottom:7px;
-
-    font-size:15px;
-
-}
-
-
-.settingsButton{
-
-    width:100%;
-
-    padding:11px;
-
-    border:none;
-
-    background:#1976d2;
-
-    color:white;
-
-    border-radius:5px;
-
-    font-size:15px;
-
-    cursor:pointer;
-
-}
-
-
-#registerStatus{
-
-    margin-top:8px;
-
-    font-weight:bold;
-
-}
-
-
-.pointButtonRow{
-
-    display:flex;
-
-    gap:6px;
-
-}
-
-
-.pointButtonRow button{
-
-    flex:1;
-
-    padding:10px;
-
-}
-
-
-.pointInfo{
-
-    margin-top:10px;
-
-    background:#f5f5f5;
-
-    padding:10px;
-
-}
-
-
-/* ==================================================
-   フッター
-================================================== */
-
-.footer{
-
-    text-align:center;
-
-    padding:12px;
-
-    font-size:12px;
-
-    color:#666;
-
-}
-
-
-.footer a{
-
-    color:#1976d2;
-
-}
-
-
-/* ==================================================
-   地図ラベル
-================================================== */
-
-.pointLabel{
-
-    background:white;
-
-    border:
-        1px solid #555;
-
-    border-radius:4px;
-
-    padding:2px 5px;
-
-    font-weight:bold;
-
-}
-
-
-/* ==================================================
-   交通規制
-================================================== */
-
-.trafficIcon{
-
-    font-size:25px;
-
-    text-align:center;
-
-}
-
-
-/* ==================================================
-   スマホ
-================================================== */
-
-@media(max-width:600px){
-
-    .userHeader,
-    .userRow{
-
-        grid-template-columns:
-            45px
-            minmax(80px,1fr)
-            45px
-            55px
-            60px
-            40px;
-
-        font-size:13px;
-
-    }
-
-    #map{
-
-        height:
-            calc(100vh - 150px);
-
-    }
-
-}
-
-</style>
 
 </head>
 
@@ -698,7 +716,7 @@ body{
 
 
 <!-- ==================================================
-     Auth画面
+     認証画面
 ================================================== -->
 
 <div id="authScreen">
@@ -823,446 +841,454 @@ body{
 </div>
 
 
-
 <!-- ==================================================
      アプリ画面
 ================================================== -->
 
-<div
-    id="appScreen"
->
+<div id="appScreen">
 
 
-<!-- ==================================================
-     タブ
-================================================== -->
+    <!-- ==================================================
+         タブ
+    ================================================== -->
 
-<div class="tabButtons">
+    <div class="tabBar">
 
-
-    <button
-        class="tabButton active"
-        onclick="showTab('mapTab',this)"
-    >
-
-        <span class="tabIcon">🗺️</span>
-        <span class="tabText">地図</span>
-
-    </button>
-
-
-    <button
-        class="tabButton"
-        onclick="showTab('usersTab',this)"
-    >
-
-        <span class="tabIcon">👥</span>
-        <span class="tabText">隊員一覧</span>
-
-    </button>
-
-
-    <button
-        class="tabButton"
-        onclick="showTab('chronoTab',this)"
-    >
-
-        <span class="tabIcon">📋</span>
-        <span class="tabText">報連相</span>
-
-    </button>
-
-
-    <button
-        class="tabButton"
-        onclick="showTab('settingsTab',this)"
-    >
-
-        <span class="tabIcon">⚙️</span>
-        <span class="tabText">登録</span>
-
-    </button>
-
-</div>
-
-
-
-<!-- ==================================================
-     地図
-================================================== -->
-
-<div
-    id="mapTab"
-    class="tabContent active"
->
-
-    <div id="map"></div>
-
-
-    <div class="gpsButtonRow">
 
         <button
-            class="gpsButton"
-            onclick="startGPS()"
+            class="tabButton active"
+            onclick="showTab('mapTab',this)"
         >
 
-            📡 GPS開始
+            <span class="tabIcon">🗺️</span>
+            <span class="tabText">地図</span>
 
         </button>
 
 
         <button
-            class="reportButton"
-            onclick="updateStatus()"
+            class="tabButton"
+            onclick="showTab('usersTab',this)"
         >
 
-            🔄 現在地報告
+            <span class="tabIcon">👥</span>
+            <span class="tabText">隊員一覧</span>
 
         </button>
-
-    </div>
-
-
-    <div id="gpsStatus">
-
-        🔴 GPS停止中
-
-    </div>
-
-
-    <div id="lastSend">
-
-        最終送信：-
-
-    </div>
-
-</div>
-
-
-
-<!-- ==================================================
-     隊員一覧
-================================================== -->
-
-<div
-    id="usersTab"
-    class="tabContent"
->
-
-    <div class="sectionTitle">
-
-        👥 接続ユーザー
-
-    </div>
-
-
-    <div class="userHeader">
-
-        <div>状態</div>
-        <div>名前</div>
-        <div>💧水</div>
-        <div>⛽燃料</div>
-        <div>最終</div>
-        <div>操作</div>
-
-    </div>
-
-
-    <div id="users"></div>
-
-</div>
-
-
-
-<!-- ==================================================
-     報連相
-================================================== -->
-
-<div
-    id="chronoTab"
-    class="tabContent"
->
-
-    <div class="sectionTitle">
-
-        📋 報連相
-
-    </div>
-
-
-    <div class="chronoInputRow">
-
-        <input
-            id="chronoMessage"
-            placeholder="活動内容を入力"
-        >
 
 
         <button
-            id="chronoSendButton"
-            onclick="sendChronology()"
+            class="tabButton"
+            onclick="showTab('chronoTab',this)"
         >
 
-            送信
+            <span class="tabIcon">📋</span>
+            <span class="tabText">報連相</span>
 
         </button>
+
+
+        <button
+            class="tabButton"
+            onclick="showTab('settingsTab',this)"
+        >
+
+            <span class="tabIcon">⚙️</span>
+            <span class="tabText">登録</span>
+
+        </button>
+
 
     </div>
 
 
-    <div id="timeline"></div>
+    <!-- ==================================================
+         地図タブ
+    ================================================== -->
 
-</div>
+    <div
+        id="mapTab"
+        class="tabContent active"
+    >
 
-
-
-<!-- ==================================================
-     登録
-================================================== -->
-
-<div
-    id="settingsTab"
-    class="tabContent"
->
+        <div id="map"></div>
 
 
-    <!-- 使用者情報 -->
+        <div class="gpsButtonRow">
 
-    <div class="card settingsCard">
+            <button
+                class="gpsButton"
+                onclick="startGPS()"
+            >
 
-        <div class="sectionTitle">
+                📡 GPS開始
 
-            👤 使用者情報
+            </button>
+
+
+            <button
+                class="reportButton"
+                onclick="updateStatus()"
+            >
+
+                🔄 現在地報告
+
+            </button>
 
         </div>
 
 
-        <div class="inputRow">
+        <div id="gpsStatus">
+
+            🔴 GPS停止中
+
+        </div>
+
+
+        <div id="lastSend">
+
+            最終送信：-
+
+        </div>
+
+    </div>
+
+
+    <!-- ==================================================
+         隊員一覧
+    ================================================== -->
+
+    <div
+        id="usersTab"
+        class="tabContent"
+    >
+
+        <div class="card">
+
+            <div class="sectionTitle">
+
+                👥 接続ユーザー
+
+            </div>
+
+
+            <div class="userHeader">
+
+                <div>状態</div>
+                <div>名前</div>
+                <div>💧水</div>
+                <div>⛽燃料</div>
+                <div>最終</div>
+                <div>操作</div>
+
+            </div>
+
+
+            <div id="users"></div>
+
+        </div>
+
+    </div>
+
+
+    <!-- ==================================================
+         クロノロジー
+    ================================================== -->
+
+    <div
+        id="chronoTab"
+        class="tabContent"
+    >
+
+        <div class="card">
+
+            <div class="sectionTitle">
+
+                📋 報連相
+
+            </div>
+
+
+            <div class="chronoInputRow">
+
+                <input
+                    id="chronoMessage"
+                    placeholder="活動内容を入力"
+                >
+
+
+                <button
+                    id="chronoSendButton"
+                    onclick="sendChronology()"
+                >
+
+                    送信
+
+                </button>
+
+            </div>
+
+
+            <div id="timeline"></div>
+
+        </div>
+
+    </div>
+
+
+    <!-- ==================================================
+         設定
+    ================================================== -->
+
+    <div
+        id="settingsTab"
+        class="tabContent"
+    >
+
+
+        <!-- 使用者情報 -->
+
+        <div class="card settingsCard">
+
+            <div class="sectionTitle">
+
+                👤 使用者情報
+
+            </div>
+
+
+            <div class="inputRow">
+
+                <input
+                    id="name"
+                    value="隊員A"
+                    placeholder="名前"
+                >
+
+
+                <select id="iconType">
+
+                    <option value="1">
+                        👤 隊員
+                    </option>
+
+                    <option value="2">
+                        🚙 小型
+                    </option>
+
+                    <option value="3">
+                        🚚 中型
+                    </option>
+
+                    <option value="4">
+                        🚛 大型
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="inputRow">
+
+                <input
+                    id="water"
+                    type="number"
+                    value="100"
+                    placeholder="💧水量"
+                >
+
+
+                <input
+                    id="fuel"
+                    type="number"
+                    value="100"
+                    placeholder="⛽燃料"
+                >
+
+            </div>
+
 
             <input
-                id="name"
-                value="隊員A"
-                placeholder="名前"
+                id="destination"
+                placeholder="📍次の目的地"
             >
 
 
-            <select id="iconType">
+            <button
+                class="settingsButton"
+                onclick="registerUser()"
+            >
 
-                <option value="1">
-                    👤 隊員
+                👤 ユーザー情報を保存
+
+            </button>
+
+
+            <div id="registerStatus">
+
+                未登録
+
+            </div>
+
+        </div>
+
+
+        <!-- 地点登録 -->
+
+        <div class="card settingsCard">
+
+            <div class="sectionTitle">
+
+                📍 地点登録
+
+            </div>
+
+
+            <input
+                id="pointName"
+                placeholder="地点名（例：CP1、給水所）"
+            >
+
+
+            <select id="pointType">
+
+                <option value="CP">
+                    🏳 指揮所(CP)
                 </option>
 
-                <option value="2">
-                    🚙 小型
+                <option value="water">
+                    💧給水所
                 </option>
 
-                <option value="3">
-                    🚚 中型
+                <option value="supply">
+                    📦補給地点
                 </option>
 
-                <option value="4">
-                    🚛 大型
+                <option value="point">
+                    📍その他
                 </option>
 
             </select>
 
+
+            <div class="pointButtonRow">
+
+                <button
+                    onclick="addPoint()"
+                >
+
+                    📍登録
+
+                </button>
+
+
+                <button
+                    onclick="deletePoint()"
+                >
+
+                    🗑削除
+
+                </button>
+
+            </div>
+
+
+            <div class="pointInfo">
+
+                <div>
+                    📍 緯度：
+                    <span id="pointLat">-</span>
+                </div>
+
+
+                <div>
+                    📍 経度：
+                    <span id="pointLon">-</span>
+                </div>
+
+
+                <hr>
+
+
+                <div>
+                    🧭 UTM：
+                    <span id="pointUtmZone">-</span>
+                </div>
+
+
+                <div>
+                    E：
+                    <span id="pointUtmE">-</span>
+                </div>
+
+
+                <div>
+                    N：
+                    <span id="pointUtmN">-</span>
+                </div>
+
+            </div>
+
         </div>
 
 
-        <div class="inputRow">
+        <!-- アカウント -->
 
-            <input
-                id="water"
-                type="number"
-                value="100"
-                placeholder="💧水量"
-            >
+        <div class="card settingsCard">
 
+            <div class="sectionTitle">
 
-            <input
-                id="fuel"
-                type="number"
-                value="100"
-                placeholder="⛽燃料"
-            >
+                🔐 アカウント
 
-        </div>
-
-
-        <input
-            id="destination"
-            placeholder="📍次の目的地"
-        >
-
-
-        <button
-            class="settingsButton"
-            onclick="registerUser()"
-        >
-
-            👤 ユーザー情報を保存
-
-        </button>
-
-
-        <div id="registerStatus">
-
-            未登録
-
-        </div>
-
-    </div>
-
-
-
-    <!-- 地点登録 -->
-
-    <div class="card settingsCard">
-
-        <div class="sectionTitle">
-
-            📍 地点登録
-
-        </div>
-
-
-        <input
-            id="pointName"
-            placeholder="地点名（例：CP1、給水所）"
-        >
-
-
-        <select id="pointType">
-
-            <option value="CP">
-                🏳 指揮所(CP)
-            </option>
-
-            <option value="water">
-                💧給水所
-            </option>
-
-            <option value="supply">
-                📦補給地点
-            </option>
-
-            <option value="point">
-                📍その他
-            </option>
-
-        </select>
-
-
-        <div class="pointButtonRow">
-
-            <button
-                onclick="addPoint()"
-            >
-                📍登録
-            </button>
+            </div>
 
 
             <button
-                onclick="deletePoint()"
+                class="settingsButton"
+                onclick="logoutUser()"
             >
-                🗑削除
+
+                🚪 ログアウト
+
             </button>
 
         </div>
 
 
-        <div class="pointInfo">
-
-            <div>
-                📍 緯度：
-                <span id="pointLat">-</span>
-            </div>
-
-
-            <div>
-                📍 経度：
-                <span id="pointLon">-</span>
-            </div>
-
-
-            <hr>
-
-
-            <div>
-                🧭 UTM：
-                <span id="pointUtmZone">-</span>
-            </div>
-
-
-            <div>
-                E：
-                <span id="pointUtmE">-</span>
-            </div>
-
-
-            <div>
-                N：
-                <span id="pointUtmN">-</span>
-            </div>
-
-        </div>
-
     </div>
 
 
+    <!-- ==================================================
+         フッター
+    ================================================== -->
 
-    <!-- アカウント -->
+    <div class="footer">
 
-    <div class="card settingsCard">
-
-        <div class="sectionTitle">
-
-            🔐 アカウント
-
+        <div>
+            現在位置自動共有君 Version 2.3
         </div>
 
 
-        <button
-            class="settingsButton"
-            onclick="logoutUser()"
-        >
+        <div>
 
-            🚪 ログアウト
+            <a href="/manual.html">
+                📖 マニュアル
+            </a>
 
-        </button>
+        </div>
 
     </div>
 
 </div>
-
 
 
 <!-- ==================================================
-     フッター
+     JavaScript
 ================================================== -->
 
-<div class="footer">
-
-    <div>
-        現在位置自動共有君 Version 2.3
-    </div>
-
-
-    <div>
-
-        <a href="/manual.html">
-            📖 マニュアル
-        </a>
-
-    </div>
-
-</div>
-
-</div>
-
-
-
 <script>
+
 
 /* ==================================================
    Supabase設定
@@ -1446,6 +1472,7 @@ function showApp(){
 
     setTimeout(
         ()=>{
+
             if(
                 typeof map !== "undefined"
             ){
@@ -1453,6 +1480,7 @@ function showApp(){
                 map.invalidateSize();
 
             }
+
         },
         300
     );
@@ -1473,27 +1501,21 @@ function validateLoginId(loginId){
     }
 
 
-    if(
-        loginId.length < 2
-    ){
+    if(loginId.length < 2){
 
         return "ログインIDは2文字以上にしてください";
 
     }
 
 
-    if(
-        loginId.length > 50
-    ){
+    if(loginId.length > 50){
 
         return "ログインIDは50文字以内にしてください";
 
     }
 
 
-    if(
-        /[\s@]/.test(loginId)
-    ){
+    if(/[\s@]/.test(loginId)){
 
         return "ログインIDに空白や@は使用できません";
 
@@ -1522,15 +1544,13 @@ async function registerAuthUser(){
     const password =
         document.getElementById(
             "registerPassword"
-        )
-        .value;
+        ).value;
 
 
     const password2 =
         document.getElementById(
             "registerPassword2"
-        )
-        .value;
+        ).value;
 
 
     const message =
@@ -1586,8 +1606,8 @@ async function registerAuthUser(){
         ------------------------------------------ */
 
         const {
-            data:existing,
-            error:checkError
+            data: existing,
+            error: checkError
         } =
             await supabaseClient
                 .from("profiles")
@@ -1667,12 +1687,12 @@ async function registerAuthUser(){
         /* ------------------------------------------
            profiles登録
 
-           ★ id は使わない
-           ★ user_id を使用
+           idは使用しない
+           user_idを使用
         ------------------------------------------ */
 
         const {
-            error:profileError
+            error: profileError
         } =
             await supabaseClient
                 .from("profiles")
@@ -1729,13 +1749,8 @@ async function registerAuthUser(){
             "🟢 アカウント登録成功";
 
 
-        /*
-         * Confirm email OFFの場合、
-         * そのままsessionが取得できる。
-         */
-
         const {
-            data:sessionData
+            data: sessionData
         } =
             await supabaseClient.auth.getSession();
 
@@ -1764,6 +1779,7 @@ async function registerAuthUser(){
 
             showLogin();
 
+
             document.getElementById(
                 "loginUsername"
             ).value =
@@ -1784,8 +1800,7 @@ async function registerAuthUser(){
             "登録に失敗しました："
             +
             (
-                error.message
-                ||
+                error.message ||
                 error
             );
 
@@ -1811,8 +1826,7 @@ async function loginUser(){
     const password =
         document.getElementById(
             "loginPassword"
-        )
-        .value;
+        ).value;
 
 
     const message =
@@ -1898,10 +1912,6 @@ async function loginUser(){
             data.user;
 
 
-        /* ------------------------------------------
-           プロフィール取得
-        ------------------------------------------ */
-
         const profile =
             await loadProfile(
                 currentAuthUser
@@ -1932,8 +1942,7 @@ async function loginUser(){
             "ログインに失敗しました："
             +
             (
-                error.message
-                ||
+                error.message ||
                 error
             );
 
@@ -2021,9 +2030,7 @@ async function loadProfile(user){
     }
 
 
-    if(
-        iconElement
-    ){
+    if(iconElement){
 
         iconElement.value =
             normalizeIconType(
@@ -2046,10 +2053,6 @@ async function loadProfile(user){
         )
     );
 
-
-    /* ------------------------------------------
-       Socket側ユーザー登録
-    ------------------------------------------ */
 
     registerSocketUser();
 
@@ -2143,7 +2146,7 @@ function registerSocketUser(){
         status.innerHTML =
             "🟢 登録済み : "
             +
-            name;
+            escapeHtml(name);
 
     }
 
@@ -2167,16 +2170,12 @@ async function logoutUser(){
     }
 
 
-    /* GPS停止 */
-
     stopGPS();
 
 
     registered =
         false;
 
-
-    /* Socket側の登録解除 */
 
     const nameElement =
         document.getElementById(
@@ -2216,13 +2215,7 @@ async function logoutUser(){
             null;
 
 
-        localStorage.removeItem(
-            "gpsRunning"
-        );
-
-
         showAuth();
-
 
         showLogin();
 
@@ -2237,7 +2230,6 @@ async function logoutUser(){
             "loginPassword"
         ).value =
             "";
-
 
     }
     catch(error){
@@ -2302,12 +2294,6 @@ window.addEventListener(
                 data.session.user
             ){
 
-                console.log(
-                    "ログイン済み:",
-                    data.session.user.id
-                );
-
-
                 currentAuthUser =
                     data.session.user;
 
@@ -2324,11 +2310,6 @@ window.addEventListener(
 
                 }
                 else{
-
-                    /*
-                     * Authは存在するがprofileが
-                     * 無い場合
-                     */
 
                     await supabaseClient
                         .auth
@@ -2535,18 +2516,14 @@ function normalizeIconType(type){
         );
 
 
-    if(
-        type === "person"
-    ){
+    if(type === "person"){
 
         return "1";
 
     }
 
 
-    if(
-        type === "vehicle"
-    ){
+    if(type === "vehicle"){
 
         return "2";
 
@@ -2676,12 +2653,9 @@ async function registerUser(){
 
     try{
 
-        /* ------------------------------------------
-           profiles更新
+        const loginId =
+            await getCurrentLoginId();
 
-           ★ user_idを使用
-           ★ idは使用しない
-        ------------------------------------------ */
 
         const {
             error
@@ -2696,9 +2670,7 @@ async function registerUser(){
                             currentAuthUser.id,
 
                         login_id:
-                            (
-                                await getCurrentLoginId()
-                            ),
+                            loginId,
 
                         display_name:
                             name,
@@ -2764,12 +2736,20 @@ async function registerUser(){
         registerSocketUser();
 
 
-        document.getElementById(
-            "registerStatus"
-        ).innerHTML =
-            "🟢 登録済み : "
-            +
-            name;
+        const status =
+            document.getElementById(
+                "registerStatus"
+            );
+
+
+        if(status){
+
+            status.innerHTML =
+                "🟢 登録済み : "
+                +
+                escapeHtml(name);
+
+        }
 
 
         alert(
@@ -2866,8 +2846,10 @@ const osm =
     L.tileLayer(
         "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
         {
+
             attribution:
-                "OpenStreetMap"
+                "&copy; OpenStreetMap contributors"
+
         }
     );
 
@@ -2876,8 +2858,10 @@ const satellite =
     L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         {
+
             attribution:
-                "Esri"
+                "Tiles &copy; Esri"
+
         }
     );
 
@@ -2886,8 +2870,10 @@ const terrain =
     L.tileLayer(
         "https://tile.opentopomap.org/{z}/{x}/{y}.png",
         {
+
             attribution:
                 "OpenTopoMap"
+
         }
     );
 
@@ -2896,8 +2882,10 @@ const gsi =
     L.tileLayer(
         "https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png",
         {
+
             attribution:
                 "国土地理院"
+
         }
     );
 
@@ -2906,8 +2894,10 @@ const gsiPale =
     L.tileLayer(
         "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",
         {
+
             attribution:
                 "国土地理院 淡色地図"
+
         }
     );
 
@@ -2994,8 +2984,12 @@ socket.on(
                 const marker =
                     L.marker(
                         [
-                            regulation.lat,
-                            regulation.lon
+                            Number(
+                                regulation.lat
+                            ),
+                            Number(
+                                regulation.lon
+                            )
                         ],
                         {
 
@@ -3033,47 +3027,37 @@ socket.on(
                     <hr>
 
                     路線：
-                    ${
-                        regulation.route
-                        ||
-                        "-"
-                    }
+                    ${escapeHtml(
+                        regulation.route || "-"
+                    )}
 
                     <br>
 
                     規制：
-                    ${
-                        regulation.type
-                        ||
-                        "-"
-                    }
+                    ${escapeHtml(
+                        regulation.type || "-"
+                    )}
 
                     <br>
 
                     原因：
-                    ${
-                        regulation.reason
-                        ||
-                        "-"
-                    }
+                    ${escapeHtml(
+                        regulation.reason || "-"
+                    )}
 
                     <br>
 
                     区間：
-                    ${
-                        regulation.section
-                        ||
-                        "-"
-                    }
+                    ${escapeHtml(
+                        regulation.section || "-"
+                    )}
 
                     <br>
 
                     開始：
-                    ${
-                        regulation.start
-                        ||
-                        "-"
-                    }
+                    ${escapeHtml(
+                        regulation.start || "-"
+                    )}
 
                 `);
 
@@ -3318,6 +3302,16 @@ function stopGPS(){
     }
 
 
+    lastLat =
+        0;
+
+    lastLon =
+        0;
+
+    lastSendTime =
+        0;
+
+
     localStorage.removeItem(
         "gpsRunning"
     );
@@ -3547,9 +3541,28 @@ function updateStatus(){
 
             err=>{
 
+                console.error(
+                    "現在地取得エラー:",
+                    err
+                );
+
+
                 alert(
                     "現在地を取得できませんでした"
                 );
+
+            },
+
+            {
+
+                enableHighAccuracy:
+                    true,
+
+                timeout:
+                    10000,
+
+                maximumAge:
+                    0
 
             }
 
@@ -3634,7 +3647,11 @@ socket.on(
     data=>{
 
         chronology =
-            data;
+            Array.isArray(data)
+            ?
+            data
+            :
+            [];
 
         renderChronology();
 
@@ -3719,21 +3736,17 @@ function renderChronology(){
 
                     <div class="timelineTime">
 
-                        ${
-                            item.time
-                            ||
-                            ""
-                        }
+                        ${escapeHtml(
+                            item.time || ""
+                        )}
 
                     </div>
 
                     <div class="timelineMessage">
 
-                        ${
-                            item.message
-                            ||
-                            ""
-                        }
+                        ${escapeHtml(
+                            item.message || ""
+                        )}
 
                     </div>
 
@@ -3856,6 +3869,10 @@ socket.on(
     "locations",
     users=>{
 
+        users =
+            users || {};
+
+
         let html =
             "";
 
@@ -3902,8 +3919,8 @@ socket.on(
 
 
                 if(
-                    lat === null ||
-                    lon === null
+                    lat == null ||
+                    lon == null
                 ){
 
                     lat =
@@ -3913,6 +3930,14 @@ socket.on(
                         130.707;
 
                 }
+
+
+                lat =
+                    Number(lat);
+
+
+                lon =
+                    Number(lon);
 
 
                 const icon =
@@ -3949,13 +3974,20 @@ socket.on(
                                 lon
                             ],
                             {
+
                                 icon:
                                     icon
+
                             }
                         )
-                        .addTo(map)
+                        .addTo(map);
+
+
+                    markers[name]
                         .bindTooltip(
-                            user.name,
+                            escapeHtml(
+                                user.name
+                            ),
                             {
 
                                 permanent:
@@ -3983,11 +4015,9 @@ socket.on(
                     .bindPopup(`
 
                         <b>
-                            ${
-                                user.name
-                                ||
-                                ""
-                            }
+                            ${escapeHtml(
+                                user.name || ""
+                            )}
                         </b>
 
                         <br>
@@ -4005,8 +4035,7 @@ socket.on(
 
                         💧水量：
                         ${
-                            user.water
-                            ??
+                            user.water ??
                             0
                         }
 
@@ -4014,26 +4043,23 @@ socket.on(
 
                         ⛽燃料：
                         ${
-                            user.fuel
-                            ??
+                            user.fuel ??
                             0
                         }
 
                         <br>
 
                         📍目的地：
-                        ${
-                            user.destination
-                            ||
+                        ${escapeHtml(
+                            user.destination ||
                             "-"
-                        }
+                        )}
 
                         <br><br>
 
                         UTM：
                         ${
-                            user.utmZone
-                            ||
+                            user.utmZone ||
                             "52S"
                         }
 
@@ -4041,8 +4067,7 @@ socket.on(
 
                         E：
                         ${
-                            user.utmE
-                            ??
+                            user.utmE ??
                             ""
                         }
 
@@ -4050,8 +4075,7 @@ socket.on(
 
                         N：
                         ${
-                            user.utmN
-                            ??
+                            user.utmN ??
                             ""
                         }
 
@@ -4063,13 +4087,18 @@ socket.on(
                             ?
                             new Date(
                                 user.lastUpdate
-                            )
-                            .toLocaleString()
+                            ).toLocaleString()
                             :
                             "-"
                         }
 
                     `);
+
+
+                const safeName =
+                    escapeHtml(
+                        user.name || name
+                    );
 
 
                 html += `
@@ -4079,7 +4108,7 @@ socket.on(
                         <div
                             onclick="
                                 focusUser(
-                                    '${escapeHtml(user.name)}'
+                                    '${safeName}'
                                 )
                             "
                         >
@@ -4098,16 +4127,12 @@ socket.on(
                         <div
                             onclick="
                                 focusUser(
-                                    '${escapeHtml(user.name)}'
+                                    '${safeName}'
                                 )
                             "
                         >
 
-                            ${
-                                escapeHtml(
-                                    user.name
-                                )
-                            }
+                            ${safeName}
 
                         </div>
 
@@ -4115,14 +4140,13 @@ socket.on(
                         <div
                             onclick="
                                 focusUser(
-                                    '${escapeHtml(user.name)}'
+                                    '${safeName}'
                                 )
                             "
                         >
 
                             ${
-                                user.water
-                                ??
+                                user.water ??
                                 0
                             }
 
@@ -4132,14 +4156,13 @@ socket.on(
                         <div
                             onclick="
                                 focusUser(
-                                    '${escapeHtml(user.name)}'
+                                    '${safeName}'
                                 )
                             "
                         >
 
                             ${
-                                user.fuel
-                                ??
+                                user.fuel ??
                                 0
                             }
 
@@ -4149,7 +4172,7 @@ socket.on(
                         <div
                             onclick="
                                 focusUser(
-                                    '${escapeHtml(user.name)}'
+                                    '${safeName}'
                                 )
                             "
                         >
@@ -4170,7 +4193,7 @@ socket.on(
                                 onclick="
                                     event.stopPropagation();
                                     deleteUser(
-                                        '${escapeHtml(user.name)}'
+                                        '${safeName}'
                                     )
                                 "
                             >
@@ -4189,10 +4212,18 @@ socket.on(
         );
 
 
-        document.getElementById(
-            "users"
-        ).innerHTML =
-            html;
+        const usersElement =
+            document.getElementById(
+                "users"
+            );
+
+
+        if(usersElement){
+
+            usersElement.innerHTML =
+                html;
+
+        }
 
     }
 );
@@ -4237,7 +4268,49 @@ function escapeHtml(value){
 
 function focusUser(name){
 
-    if(!markers[name]){
+    /*
+       一覧側ではHTMLエスケープ済み文字列が
+       渡ってくる可能性があるため、
+       マーカー検索は実データ名を優先する。
+    */
+
+    let marker =
+        markers[name];
+
+
+    if(!marker){
+
+        const decoded =
+            name
+                .replace(
+                    /&#039;/g,
+                    "'"
+                )
+                .replace(
+                    /&quot;/g,
+                    '"'
+                )
+                .replace(
+                    /&gt;/g,
+                    ">"
+                )
+                .replace(
+                    /&lt;/g,
+                    "<"
+                )
+                .replace(
+                    /&amp;/g,
+                    "&"
+                );
+
+
+        marker =
+            markers[decoded];
+
+    }
+
+
+    if(!marker){
 
         return;
 
@@ -4245,8 +4318,7 @@ function focusUser(name){
 
 
     const pos =
-        markers[name]
-            .getLatLng();
+        marker.getLatLng();
 
 
     map.setView(
@@ -4256,14 +4328,15 @@ function focusUser(name){
         ],
         17,
         {
+
             animate:
                 true
+
         }
     );
 
 
-    markers[name]
-        .openPopup();
+    marker.openPopup();
 
 }
 
@@ -4418,18 +4491,38 @@ map.on(
             e.latlng.lng;
 
 
-        document.getElementById(
-            "pointLat"
-        ).textContent =
-            selectedPointLat
-                .toFixed(6);
+        selectedPointName =
+            null;
 
 
-        document.getElementById(
-            "pointLon"
-        ).textContent =
-            selectedPointLon
-                .toFixed(6);
+        const latElement =
+            document.getElementById(
+                "pointLat"
+            );
+
+
+        const lonElement =
+            document.getElementById(
+                "pointLon"
+            );
+
+
+        if(latElement){
+
+            latElement.textContent =
+                selectedPointLat
+                    .toFixed(6);
+
+        }
+
+
+        if(lonElement){
+
+            lonElement.textContent =
+                selectedPointLon
+                    .toFixed(6);
+
+        }
 
 
         const utm =
@@ -4616,6 +4709,10 @@ socket.on(
     "points",
     points=>{
 
+        points =
+            points || {};
+
+
         Object.keys(
             pointMarkers
         )
@@ -4663,8 +4760,8 @@ socket.on(
                 pointMarkers[name] =
                     L.marker(
                         [
-                            p.lat,
-                            p.lon
+                            Number(p.lat),
+                            Number(p.lon)
                         ],
                         {
 
@@ -4701,7 +4798,7 @@ socket.on(
 
                 pointMarkers[name]
                     .bindTooltip(
-                        name,
+                        escapeHtml(name),
                         {
 
                             permanent:
@@ -4739,29 +4836,29 @@ socket.on(
 
 
                             selectedPointLat =
-                                p.lat;
+                                Number(
+                                    p.lat
+                                );
 
 
                             selectedPointLon =
-                                p.lon;
+                                Number(
+                                    p.lon
+                                );
 
 
                             document.getElementById(
                                 "pointLat"
                             ).textContent =
-                                Number(
-                                    p.lat
-                                )
-                                .toFixed(6);
+                                selectedPointLat
+                                    .toFixed(6);
 
 
                             document.getElementById(
                                 "pointLon"
                             ).textContent =
-                                Number(
-                                    p.lon
-                                )
-                                .toFixed(6);
+                                selectedPointLon
+                                    .toFixed(6);
 
 
                             const utm =
@@ -4772,8 +4869,8 @@ socket.on(
                                     "+proj=utm +zone=52 +south +datum=WGS84",
 
                                     [
-                                        p.lon,
-                                        p.lat
+                                        selectedPointLon,
+                                        selectedPointLat
                                     ]
 
                                 );
@@ -4838,10 +4935,71 @@ socket.on(
 
 
 /* ==================================================
+   Enterキー
+================================================== */
+
+document.addEventListener(
+    "keydown",
+    event=>{
+
+        if(
+            event.key !== "Enter"
+        ){
+
+            return;
+
+        }
+
+
+        if(
+            document.activeElement &&
+            document.activeElement.id ===
+                "chronoMessage"
+        ){
+
+            sendChronology();
+
+        }
+
+    }
+);
+
+
+/* ==================================================
    初期ローカル情報
 ================================================== */
 
 restoreLocalUser();
+
+
+/* ==================================================
+   GPS自動再開
+================================================== */
+
+window.addEventListener(
+    "load",
+    ()=>{
+
+        setTimeout(
+            ()=>{
+
+                if(
+                    localStorage.getItem(
+                        "gpsRunning"
+                    ) === "true" &&
+                    currentAuthUser
+                ){
+
+                    startGPS();
+
+                }
+
+            },
+            1500
+        );
+
+    }
+);
 
 
 </script>
