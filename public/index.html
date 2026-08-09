@@ -2500,133 +2500,65 @@ async function getCurrentLoginId(){
 
 
 
-//==================================================
-// Socket用 user_id取得
-//==================================================
+/* ==================================================
+   Socket用ユーザーID取得
+   Version 2.3
+   ★ account_nameから検索しない
+   ★ 登録画面で入力したuser_idを使用
+================================================== */
 
 async function resolveSocketUserId(){
 
-    try{
+    /*
+       ① メモリ上のuser_id
+    */
 
-        //================================================
-        // ① 現在ログインしている account_name を取得
-        //================================================
+    if(socketUserId){
 
-        const loginId =
-            await getCurrentLoginId();
+        return socketUserId;
 
-
-        if(!loginId){
-
-            console.warn(
-                "ログイン中のaccount_nameを取得できません"
-            );
-
-            return null;
-
-        }
+    }
 
 
-        const accountName =
-            String(
-                loginId
-            )
-            .trim();
+    /*
+       ② localStorage
+    */
 
-
-        if(!accountName){
-
-            console.warn(
-                "account_nameが空です"
-            );
-
-            return null;
-
-        }
-
-
-        console.log(
-            "users検索 account_name:",
-            accountName
+    const localUserId =
+        localStorage.getItem(
+            "puttan_user_id"
         );
 
 
-        //================================================
-        // ② usersテーブルからuser_idを取得
-        //================================================
+    if(localUserId){
 
-        const {
-            data,
-            error
-        } =
-            await supabaseClient
-                .from("users")
-                .select(
-                    "user_id,display_name,account_name"
-                )
-                .eq(
-                    "account_name",
-                    accountName
-                )
-                .maybeSingle();
+        socketUserId =
+            localUserId;
+
+        return localUserId;
+
+    }
 
 
-        //================================================
-        // ③ DBエラー
-        //================================================
+    /*
+       ③ 登録画面のuser_id
+       ★ id="userId" の入力欄を使用
+    */
 
-        if(error){
-
-            console.error(
-                "users検索エラー:",
-                error
-            );
-
-            return null;
-
-        }
+    const userIdElement =
+        document.getElementById(
+            "userId"
+        );
 
 
-        //================================================
-        // ④ ユーザーが存在しない
-        //================================================
-
-        if(
-            !data ||
-            !data.user_id
-        ){
-
-            console.warn(
-                "usersにaccount_nameが見つかりません:",
-                accountName
-            );
-
-            return null;
-
-        }
-
-
-        //================================================
-        // ⑤ user_id確定
-        //================================================
+    if(
+        userIdElement &&
+        userIdElement.value.trim()
+    ){
 
         const userId =
-            String(
-                data.user_id
-            ).trim();
+            userIdElement.value.trim();
 
-
-        console.log(
-            "Socket user_id取得:",
-            accountName,
-            "→",
-            userId
-        );
-
-
-        //================================================
-        // ⑥ ローカル保存
-        //================================================
 
         localStorage.setItem(
             "puttan_user_id",
@@ -2634,30 +2566,22 @@ async function resolveSocketUserId(){
         );
 
 
+        socketUserId =
+            userId;
+
+
         return userId;
 
     }
-    catch(error){
 
-        console.error(
-            "user_id取得エラー:",
-            error
-        );
 
-        return null;
-
-    }
+    return null;
 
 }
 
-/* ==================================================
-   ユーザー情報保存
-================================================== */
 
 /* ==================================================
-   ユーザー情報保存
-   Version 2.3
-   user_id 自由入力方式
+ユーザー情報保存
 ================================================== */
 
 async function registerUser(){
@@ -2673,16 +2597,29 @@ async function registerUser(){
     }
 
 
-    /* ==============================================
-       ユーザーID
-    ============================================== */
+    /*
+       ★ user_id取得
+    */
 
-    const userId =
+    const userIdElement =
         document.getElementById(
             "userId"
-        )
-        .value
-        .trim();
+        );
+
+
+    if(!userIdElement){
+
+        alert(
+            "user_id入力欄が見つかりません"
+        );
+
+        return;
+
+    }
+
+
+    const userId =
+        userIdElement.value.trim();
 
 
     if(!userId){
@@ -2691,14 +2628,16 @@ async function registerUser(){
             "ユーザーIDを入力してください"
         );
 
+        userIdElement.focus();
+
         return;
 
     }
 
 
-    /* ==============================================
+    /*
        表示名
-    ============================================== */
+    */
 
     const name =
         document.getElementById(
@@ -2719,9 +2658,9 @@ async function registerUser(){
     }
 
 
-    /* ==============================================
+    /*
        アイコン
-    ============================================== */
+    */
 
     const iconType =
         normalizeIconType(
@@ -2731,9 +2670,9 @@ async function registerUser(){
         );
 
 
-    /* ==============================================
+    /*
        水
-    ============================================== */
+    */
 
     const water =
         Number(
@@ -2743,9 +2682,9 @@ async function registerUser(){
         ) || 0;
 
 
-    /* ==============================================
+    /*
        燃料
-    ============================================== */
+    */
 
     const fuel =
         Number(
@@ -2755,180 +2694,27 @@ async function registerUser(){
         ) || 0;
 
 
-    /* ==============================================
+    /*
        目的地
-    ============================================== */
+    */
 
     const destination =
         document.getElementById(
             "destination"
-        ).value
+        )
+        .value
         .trim();
 
 
     try{
 
-        /* ==========================================
-           ログイン中のアカウント名
-        ========================================== */
-
-        const accountName =
-            await getCurrentLoginId();
-
-
-        if(!accountName){
-
-            alert(
-                "アカウント名を取得できませんでした"
-            );
-
-            return;
-
-        }
-
-
-        /* ==========================================
-           user_id 重複チェック
-        ========================================== */
-
-        const {
-            data: existingUser,
-            error: checkError
-        } =
-            await supabaseClient
-                .from("users")
-                .select(
-                    "user_id"
-                )
-                .eq(
-                    "user_id",
-                    userId
-                )
-                .maybeSingle();
-
-
-        if(checkError){
-
-            console.error(
-                "user_id確認エラー:",
-                checkError
-            );
-
-            alert(
-                "ユーザーIDの確認に失敗しました"
-            );
-
-            return;
-
-        }
-
-
-        if(existingUser){
-
-            alert(
-                "このユーザーIDは既に使用されています。\n" +
-                "別のユーザーIDを入力してください。"
-            );
-
-            return;
-
-        }
-
-
-        /* ==========================================
-           usersテーブルへ登録
-        ========================================== */
-
-        const now =
-            Date.now();
-
-
-        const {
-            error: insertError
-        } =
-            await supabaseClient
-                .from("users")
-                .insert({
-
-                    user_id:
-                        userId,
-
-                    display_name:
-                        name,
-
-                    account_name:
-                        accountName,
-
-                    role:
-                        "user",
-
-                    unit:
-                        "",
-
-                    rank:
-                        "",
-
-                    vehicle:
-                        "",
-
-                    vehicle_type:
-                        "",
-
-                    icon:
-                        iconType,
-
-                    phone:
-                        "",
-
-                    status:
-                        "",
-
-                    status_next:
-                        "",
-
-                    health:
-                        "",
-
-                    destination:
-                        destination,
-
-                    created_at:
-                        now,
-
-                    updated_at:
-                        now
-
-                });
-
-
-        if(insertError){
-
-            console.error(
-                "users登録エラー:",
-                insertError
-            );
-
-            alert(
-                "ユーザー登録に失敗しました。\n" +
-                insertError.message
-            );
-
-            return;
-
-        }
-
-
-        /* ==========================================
-           Socket用ユーザーID
-        ========================================== */
+        /*
+           ★ user_idを確定
+        */
 
         socketUserId =
             userId;
 
-
-        /* ==========================================
-           ローカル保存
-        ========================================== */
 
         localStorage.setItem(
             "puttan_user_id",
@@ -2966,46 +2752,11 @@ async function registerUser(){
         );
 
 
-        /* ==========================================
-           Socket登録
-        ========================================== */
+        /*
+           ★ Socketへ登録
+        */
 
         await registerSocketUser();
-
-
-        /* ==========================================
-           登録状態表示
-        ========================================== */
-
-        const status =
-            document.getElementById(
-                "registerStatus"
-            );
-
-
-        if(status){
-
-            status.innerHTML =
-                "🟢 登録済み : "
-                +
-                escapeHtml(
-                    name
-                )
-                +
-                " ["
-                +
-                escapeHtml(
-                    userId
-                )
-                +
-                "]";
-
-        }
-
-
-        alert(
-            "ユーザー登録が完了しました"
-        );
 
 
     }
@@ -3027,10 +2778,737 @@ async function registerUser(){
 
 
 /* ==================================================
-   Socket側ユーザー登録
+Socket側ユーザー登録
 ================================================== */
 
-async function registerSocketUser(){
+function registerSocketUser(){
+
+    return new Promise(
+        async (resolve, reject)=>{
+
+            if(!currentAuthUser){
+
+                resolve(false);
+
+                return;
+
+            }
+
+
+            /*
+               user_id確認
+            */
+
+            if(!socketUserId){
+
+                const userId =
+                    await resolveSocketUserId();
+
+
+                if(!userId){
+
+                    alert(
+                        "ユーザーIDがありません"
+                    );
+
+                    resolve(false);
+
+                    return;
+
+                }
+
+            }
+
+
+            /*
+               表示名
+            */
+
+            const nameElement =
+                document.getElementById(
+                    "name"
+                );
+
+
+            const name =
+                nameElement
+                ?
+                nameElement.value.trim()
+                :
+                "";
+
+
+            if(!name){
+
+                resolve(false);
+
+                return;
+
+            }
+
+
+            /*
+               アイコン
+            */
+
+            const iconType =
+                normalizeIconType(
+                    document.getElementById(
+                        "iconType"
+                    ).value
+                );
+
+
+            /*
+               水
+            */
+
+            const water =
+                Number(
+                    document.getElementById(
+                        "water"
+                    ).value
+                ) || 0;
+
+
+            /*
+               燃料
+            */
+
+            const fuel =
+                Number(
+                    document.getElementById(
+                        "fuel"
+                    ).value
+                ) || 0;
+
+
+            /*
+               目的地
+            */
+
+            const destination =
+                document.getElementById(
+                    "destination"
+                )
+                .value
+                .trim();
+
+
+            /*
+               ★ user_idを保存
+            */
+
+            localStorage.setItem(
+                "puttan_user_id",
+                socketUserId
+            );
+
+
+            /*
+               ★ Socket登録完了待ち
+            */
+
+            const timeout =
+                setTimeout(
+                    ()=>{
+
+                        socket.off(
+                            "registerUserSuccess",
+                            successHandler
+                        );
+
+
+                        socket.off(
+                            "registerUserError",
+                            errorHandler
+                        );
+
+
+                        console.warn(
+                            "Socketユーザー登録確認タイムアウト"
+                        );
+
+
+                        /*
+                           サーバーが確認イベントを
+                           実装していない場合でも、
+                           user_id自体が存在すれば
+                           仮登録状態として扱う
+                        */
+
+                        registered =
+                            true;
+
+
+                        updateRegisterStatus(
+                            name
+                        );
+
+
+                        resolve(true);
+
+                    },
+                    5000
+                );
+
+
+            function successHandler(data){
+
+                clearTimeout(
+                    timeout
+                );
+
+
+                socket.off(
+                    "registerUserSuccess",
+                    successHandler
+                );
+
+
+                socket.off(
+                    "registerUserError",
+                    errorHandler
+                );
+
+
+                registered =
+                    true;
+
+
+                updateRegisterStatus(
+                    name
+                );
+
+
+                console.log(
+                    "Socketユーザー登録成功:",
+                    socketUserId
+                );
+
+
+                resolve(true);
+
+            }
+
+
+            function errorHandler(error){
+
+                clearTimeout(
+                    timeout
+                );
+
+
+                socket.off(
+                    "registerUserSuccess",
+                    successHandler
+                );
+
+
+                socket.off(
+                    "registerUserError",
+                    errorHandler
+                );
+
+
+                registered =
+                    false;
+
+
+                console.error(
+                    "Socketユーザー登録エラー:",
+                    error
+                );
+
+
+                alert(
+                    "ユーザー登録に失敗しました"
+                );
+
+
+                reject(
+                    error
+                );
+
+            }
+
+
+            socket.once(
+                "registerUserSuccess",
+                successHandler
+            );
+
+
+            socket.once(
+                "registerUserError",
+                errorHandler
+            );
+
+
+            /*
+               ★ サーバーへ送信
+            */
+
+            socket.emit(
+                "registerUser",
+                {
+
+                    user_id:
+                        socketUserId,
+
+                    display_name:
+                        name,
+
+                    account_name:
+                        await getCurrentLoginId(),
+
+                    icon:
+                        iconType,
+
+                    water:
+                        water,
+
+                    fuel:
+                        fuel,
+
+                    destination:
+                        destination
+
+                }
+            );
+
+
+            console.log(
+                "Socketユーザー登録送信:",
+                socketUserId
+            );
+
+        }
+    );
+
+}
+
+
+/* ==================================================
+登録状態表示
+================================================== */
+
+function updateRegisterStatus(
+    name
+){
+
+    const status =
+        document.getElementById(
+            "registerStatus"
+        );
+
+
+    if(status){
+
+        status.innerHTML =
+            "🟢 登録済み : "
+            +
+            escapeHtml(
+                name
+            );
+
+    }
+
+}
+
+
+/* ==================================================
+GPS開始
+================================================== */
+
+async function startGPS(){
+
+    if(!currentAuthUser){
+
+        alert(
+            "先にログインしてください"
+        );
+
+        return;
+
+    }
+
+
+    /*
+       ★ user_idを確認
+    */
+
+    let userId =
+        socketUserId;
+
+
+    if(!userId){
+
+        userId =
+            await resolveSocketUserId();
+
+    }
+
+
+    /*
+       ★ user_idが無ければGPS開始しない
+    */
+
+    if(!userId){
+
+        alert(
+            "ユーザーIDを取得できません。\n" +
+            "ユーザー登録画面でuser_idを入力してください。"
+        );
+
+        return;
+
+    }
+
+
+    socketUserId =
+        userId;
+
+
+    /*
+       ★ Socketユーザー登録
+    */
+
+    if(!registered){
+
+        const result =
+            await registerSocketUser();
+
+
+        if(!result){
+
+            alert(
+                "Socketユーザー登録に失敗しました"
+            );
+
+            return;
+
+        }
+
+    }
+
+
+    /*
+       ★ GPS本体開始
+    */
+
+    startGPSCore();
+
+}
+
+
+/* ==================================================
+GPS本体開始
+================================================== */
+
+function startGPSCore(){
+
+    localStorage.setItem(
+        "gpsRunning",
+        "true"
+    );
+
+
+    /*
+       すでに開始済み
+    */
+
+    if(
+        watchID !== null
+    ){
+
+        return;
+
+    }
+
+
+    /*
+       定期送信
+    */
+
+    gpsTimer =
+        setInterval(
+            ()=>{
+
+                navigator.geolocation
+                    .getCurrentPosition(
+
+                        pos => {
+
+                            sendLocation(
+                                pos.coords.latitude,
+                                pos.coords.longitude
+                            );
+
+                        },
+
+                        err => {
+
+                            console.log(
+                                "GPSタイマーエラー",
+                                err
+                            );
+
+                        },
+
+                        {
+
+                            enableHighAccuracy:
+                                true,
+
+                            timeout:
+                                10000,
+
+                            maximumAge:
+                                0
+
+                        }
+
+                    );
+
+            },
+
+            SEND_INTERVAL
+
+        );
+
+
+    /*
+       GPS監視
+    */
+
+    watchID =
+        navigator.geolocation
+            .watchPosition(
+
+                pos => {
+
+                    const lat =
+                        pos.coords.latitude;
+
+
+                    const lon =
+                        pos.coords.longitude;
+
+
+                    /*
+                       初回送信
+                    */
+
+                    if(
+                        lastLat === 0
+                    ){
+
+                        sendLocation(
+                            lat,
+                            lon
+                        );
+
+
+                        lastLat =
+                            lat;
+
+                        lastLon =
+                            lon;
+
+                        lastSendTime =
+                            Date.now();
+
+                        return;
+
+                    }
+
+
+                    /*
+                       移動距離
+                    */
+
+                    const distance =
+                        getDistance(
+                            lastLat,
+                            lastLon,
+                            lat,
+                            lon
+                        );
+
+
+                    const now =
+                        Date.now();
+
+
+                    /*
+                       一定距離または一定時間
+                    */
+
+                    if(
+                        distance >=
+                            MOVE_DISTANCE
+                        ||
+                        now -
+                        lastSendTime >=
+                            SEND_INTERVAL
+                    ){
+
+                        sendLocation(
+                            lat,
+                            lon
+                        );
+
+
+                        lastLat =
+                            lat;
+
+                        lastLon =
+                            lon;
+
+                        lastSendTime =
+                            now;
+
+                    }
+
+                },
+
+
+                err => {
+
+                    console.log(
+                        "GPSエラー",
+                        err
+                    );
+
+
+                    const status =
+                        document.getElementById(
+                            "gpsStatus"
+                        );
+
+
+                    if(status){
+
+                        status.innerHTML =
+                            "🔴 GPSエラー";
+
+                    }
+
+                },
+
+                {
+
+                    enableHighAccuracy:
+                        true,
+
+                    timeout:
+                        10000,
+
+                    maximumAge:
+                        0
+
+                }
+
+            );
+
+
+    const status =
+        document.getElementById(
+            "gpsStatus"
+        );
+
+
+    if(status){
+
+        status.innerHTML =
+            "🟢 GPS稼働中";
+
+    }
+
+
+    console.log(
+        "GPS開始 user_id:",
+        socketUserId
+    );
+
+}
+
+
+/* ==================================================
+GPS停止
+================================================== */
+
+function stopGPS(){
+
+    if(
+        watchID !== null
+    ){
+
+        navigator.geolocation
+            .clearWatch(
+                watchID
+            );
+
+        watchID =
+            null;
+
+    }
+
+
+    if(
+        gpsTimer !== null
+    ){
+
+        clearInterval(
+            gpsTimer
+        );
+
+        gpsTimer =
+            null;
+
+    }
+
+
+    lastLat =
+        0;
+
+    lastLon =
+        0;
+
+    lastSendTime =
+        0;
+
+
+    localStorage.removeItem(
+        "gpsRunning"
+    );
+
+
+    const status =
+        document.getElementById(
+            "gpsStatus"
+        );
+
+
+    if(status){
+
+        status.innerHTML =
+            "🔴 GPS停止中";
+
+    }
+
+}
+
+
+/* ==================================================
+GPS送信
+================================================== */
+
+function sendLocation(
+    lat,
+    lon
+){
 
     if(!currentAuthUser){
 
@@ -3039,30 +3517,92 @@ async function registerSocketUser(){
     }
 
 
-    /* ==============================================
-       user_id がなければ localStorage から取得
-    ============================================== */
-
-    if(!socketUserId){
-
-        socketUserId =
-            localStorage.getItem(
-                "puttan_user_id"
-            );
-
-    }
-
+    /*
+       ★ GPS送信前にuser_id確認
+    */
 
     if(!socketUserId){
 
         console.warn(
-            "SocketユーザーIDがありません"
+            "GPS送信中止: user_idがありません"
         );
 
         return;
 
     }
 
+
+    if(!registered){
+
+        console.warn(
+            "GPS送信中止: Socket未登録"
+        );
+
+        return;
+
+    }
+
+
+    /*
+       座標チェック
+    */
+
+    if(
+        !Number.isFinite(
+            Number(lat)
+        )
+        ||
+        !Number.isFinite(
+            Number(lon)
+        )
+    ){
+
+        return;
+
+    }
+
+
+    lat =
+        Number(lat);
+
+    lon =
+        Number(lon);
+
+
+    /* ==================================================
+       UTM
+    ================================================== */
+
+    const utm =
+        proj4(
+
+            "EPSG:4326",
+
+            "+proj=utm +zone=52 +south +datum=WGS84",
+
+            [
+                lon,
+                lat
+            ]
+
+        );
+
+
+    const utmE =
+        Math.round(
+            utm[0]
+        );
+
+
+    const utmN =
+        Math.round(
+            utm[1]
+        );
+
+
+    /* ==================================================
+       入力値
+    ================================================== */
 
     const name =
         document.getElementById(
@@ -3070,36 +3610,6 @@ async function registerSocketUser(){
         )
         .value
         .trim();
-
-
-    if(!name){
-
-        return;
-
-    }
-
-
-    const iconType =
-        normalizeIconType(
-            document.getElementById(
-                "iconType"
-            ).value
-        );
-
-
-    const accountName =
-        await getCurrentLoginId();
-
-
-    if(!accountName){
-
-        console.warn(
-            "アカウント名が取得できません"
-        );
-
-        return;
-
-    }
 
 
     const water =
@@ -3121,260 +3631,209 @@ async function registerSocketUser(){
     const destination =
         document.getElementById(
             "destination"
-        ).value
+        )
+        .value
         .trim();
 
 
-    /* ==============================================
-       Socket送信
-    ============================================== */
+    const iconType =
+        normalizeIconType(
+            document.getElementById(
+                "iconType"
+            ).value
+        );
 
-    socket.emit(
-        "registerUser",
-        {
 
-            user_id:
-                socketUserId,
+    /*
+       ★ localStorage
+    */
 
-            display_name:
-                name,
-
-            account_name:
-                accountName,
-
-            icon:
-                iconType,
-
-            water:
-                water,
-
-            fuel:
-                fuel,
-
-            destination:
-                destination
-
-        }
+    localStorage.setItem(
+        "puttan_user_id",
+        socketUserId
     );
 
 
-    registered =
-        true;
+    localStorage.setItem(
+        "name",
+        name
+    );
 
 
-    const status =
+    localStorage.setItem(
+        "water",
+        water
+    );
+
+
+    localStorage.setItem(
+        "fuel",
+        fuel
+    );
+
+
+    localStorage.setItem(
+        "destination",
+        destination
+    );
+
+
+    localStorage.setItem(
+        "iconType",
+        iconType
+    );
+
+
+    /*
+       GPS表示
+    */
+
+    const gpsStatus =
         document.getElementById(
-            "registerStatus"
+            "gpsStatus"
         );
 
 
-    if(status){
+    if(gpsStatus){
 
-        status.innerHTML =
-            "🟢 登録済み : "
-            +
-            escapeHtml(
-                name
-            )
-            +
-            " ["
-            +
-            escapeHtml(
-                socketUserId
-            )
-            +
-            "]";
-
-    }
-
-}
-
-
-/* ==================================================
-   user_id 解決
-   Version 2.3
-================================================== */
-
-/*
-   以前の
-
-   account_name
-        ↓
-   users検索
-        ↓
-   user_id取得
-
-   方式は廃止。
-
-   user_id は登録画面から直接入力し、
-   localStorage に保存したものを使用する。
-*/
-
-/* ==================================================
-   Socket用 user_id 取得
-   Version 2.3
-
-   ・まずlocalStorageを確認
-   ・なければログイン中のaccount_nameから
-     登録済みusersのuser_idを取得
-   ・user_idを新規作成する処理はしない
-================================================== */
-
-async function resolveSocketUserId(){
-
-    /* ==============================================
-       ① localStorageから確認
-    ============================================== */
-
-    const localUserId =
-        localStorage.getItem(
-            "puttan_user_id"
-        );
-
-
-    if(localUserId){
-
-        socketUserId =
-            localUserId;
-
-        console.log(
-            "Socket user_id:",
-            localUserId
-        );
-
-        return localUserId;
+        gpsStatus.innerHTML =
+            "🟢 GPS稼働中";
 
     }
 
 
-    /* ==============================================
-       ② ログイン情報を確認
-    ============================================== */
-
-    const loginId =
-        await getCurrentLoginId();
-
-
-    if(!loginId){
-
-        console.warn(
-            "ログイン中のaccount_nameを取得できません"
+    const lastSend =
+        document.getElementById(
+            "lastSend"
         );
 
-        return null;
+
+    if(lastSend){
+
+        lastSend.innerHTML =
+            "最終送信："
+            +
+            new Date()
+                .toLocaleTimeString();
 
     }
+
+
+    /*
+       ★ location送信
+    */
+
+    const locationData = {
+
+        /*
+           ★ user_idを必ず送信
+        */
+
+        user_id:
+            socketUserId,
+
+        display_name:
+            name,
+
+        lat:
+            lat,
+
+        lon:
+            lon,
+
+        utmZone:
+            "52S",
+
+        utmE:
+            utmE,
+
+        utmN:
+            utmN,
+
+        water:
+            water,
+
+        fuel:
+            fuel,
+
+        destination:
+            destination,
+
+        iconType:
+            iconType,
+
+        device_id:
+            getDeviceId()
+
+    };
 
 
     console.log(
-        "登録済みuser_id検索 account_name:",
-        loginId
+        "GPS送信:",
+        locationData
     );
 
 
-    /* ==============================================
-       ③ usersテーブルから既存user_idを取得
-    ============================================== */
-
-    const {
-        data,
-        error
-    } =
-        await supabaseClient
-            .from("users")
-            .select(
-                "user_id,display_name,account_name"
-            )
-            .eq(
-                "account_name",
-                loginId
-            )
-            .maybeSingle();
-
-
-    if(error){
-
-        console.error(
-            "users検索エラー:",
-            error
-        );
-
-        return null;
-
-    }
-
-
-    /* ==============================================
-       ④ 登録済みuser_idが見つかった
-    ============================================== */
-
-    if(
-        data &&
-        data.user_id
-    ){
-
-        socketUserId =
-            data.user_id;
-
-
-        localStorage.setItem(
-            "puttan_user_id",
-            data.user_id
-        );
-
-
-        /*
-           表示名も復元
-        */
-
-        if(data.display_name){
-
-            localStorage.setItem(
-                "name",
-                data.display_name
-            );
-
-        }
-
-
-        console.log(
-            "登録済みuser_id取得:",
-            data.user_id
-        );
-
-
-        return data.user_id;
-
-    }
-
-
-    /* ==============================================
-       ⑤ usersに登録されていない
-    ============================================== */
-
-    console.warn(
-        "このアカウントにはユーザー登録がありません:",
-        loginId
+    socket.emit(
+        "location",
+        locationData
     );
-
-
-    return null;
 
 }
 
 
 /* ==================================================
-   Socket側ユーザー登録
+端末ID
 ================================================== */
 
-async function registerSocketUser(){
+function getDeviceId(){
+
+    let deviceId =
+        localStorage.getItem(
+            "puttan_device_id"
+        );
+
+
+    if(!deviceId){
+
+        deviceId =
+            "web-" +
+            crypto.randomUUID();
+
+
+        localStorage.setItem(
+            "puttan_device_id",
+            deviceId
+        );
+
+    }
+
+
+    return deviceId;
+
+}
+
+
+/* ==================================================
+現在地報告
+================================================== */
+
+async function updateStatus(){
 
     if(!currentAuthUser){
+
+        alert(
+            "先にログインしてください"
+        );
 
         return;
 
     }
 
+
+    /*
+       user_id確認
+    */
 
     if(!socketUserId){
 
@@ -3386,8 +3845,9 @@ async function registerSocketUser(){
 
     if(!socketUserId){
 
-        console.warn(
-            "SocketユーザーIDがありません"
+        alert(
+            "ユーザーIDがありません。\n" +
+            "ユーザー登録を行ってください。"
         );
 
         return;
@@ -3395,87 +3855,583 @@ async function registerSocketUser(){
     }
 
 
-    const name =
-        document.getElementById(
-            "name"
+    /*
+       Socket登録
+    */
+
+    if(!registered){
+
+        const result =
+            await registerSocketUser();
+
+
+        if(!result){
+
+            return;
+
+        }
+
+    }
+
+
+    getCurrentPositionOnce();
+
+}
+
+
+/* ==================================================
+現在地1回取得
+================================================== */
+
+function getCurrentPositionOnce(){
+
+    navigator.geolocation
+        .getCurrentPosition(
+
+            pos => {
+
+                sendLocation(
+                    pos.coords.latitude,
+                    pos.coords.longitude
+                );
+
+            },
+
+            err => {
+
+                console.error(
+                    "現在地取得エラー:",
+                    err
+                );
+
+
+                alert(
+                    "現在地を取得できませんでした"
+                );
+
+            },
+
+            {
+
+                enableHighAccuracy:
+                    true,
+
+                timeout:
+                    10000,
+
+                maximumAge:
+                    0
+
+            }
+
+        );
+
+}
+
+
+/* ==================================================
+距離計算
+================================================== */
+
+function getDistance(
+    lat1,
+    lon1,
+    lat2,
+    lon2
+){
+
+    const R =
+        6371000;
+
+
+    const dLat =
+        (
+            lat2 -
+            lat1
         )
-        .value
-        .trim();
+        *
+        Math.PI /
+        180;
 
 
-    if(!name){
+    const dLon =
+        (
+            lon2 -
+            lon1
+        )
+        *
+        Math.PI /
+        180;
 
-        return;
 
-    }
+    const a =
+        Math.sin(
+            dLat / 2
+        ) ** 2
+        +
+        Math.cos(
+            lat1 *
+            Math.PI /
+            180
+        )
+        *
+        Math.cos(
+            lat2 *
+            Math.PI /
+            180
+        )
+        *
+        Math.sin(
+            dLon / 2
+        ) ** 2;
 
 
-    const iconType =
-        normalizeIconType(
-            document.getElementById(
-                "iconType"
-            ).value
+    return R *
+        2 *
+        Math.atan2(
+            Math.sqrt(a),
+            Math.sqrt(1-a)
+        );
+
+}
+
+
+/* ==================================================
+locations受信
+================================================== */
+
+socket.on(
+    "locations",
+    data => {
+
+        if(
+            !data ||
+            typeof data !== "object"
+        ){
+
+            return;
+
+        }
+
+
+        /*
+           存在しなくなったユーザーの
+           マーカーを削除
+        */
+
+        Object.keys(
+            markers
+        )
+        .forEach(
+            userId => {
+
+                if(
+                    !data[userId]
+                ){
+
+                    if(
+                        markers[userId]
+                    ){
+
+                        map.removeLayer(
+                            markers[userId]
+                        );
+
+                    }
+
+
+                    delete markers[userId];
+
+                }
+
+            }
         );
 
 
-    socket.emit(
-        "registerUser",
-        {
+        /*
+           現在のユーザーを処理
+        */
 
-            user_id:
-                socketUserId,
+        Object.keys(
+            data
+        )
+        .forEach(
+            userId => {
 
-            display_name:
-                name,
+                const user =
+                    data[userId];
 
-            account_name:
-                await getCurrentLoginId(),
 
-            icon:
-                iconType,
+                if(!user){
 
-            water:
-                Number(
-                    document.getElementById(
-                        "water"
-                    ).value
-                ) || 0,
+                    return;
 
-            fuel:
-                Number(
-                    document.getElementById(
-                        "fuel"
-                    ).value
-                ) || 0,
+                }
 
-            destination:
-                document.getElementById(
-                    "destination"
-                ).value
-                .trim()
+
+                /*
+                   GPSが無い場合は
+                   マーカーを作らない
+                */
+
+                if(
+                    user.lat == null ||
+                    user.lon == null
+                ){
+
+                    return;
+
+                }
+
+
+                const lat =
+                    Number(
+                        user.lat
+                    );
+
+
+                const lon =
+                    Number(
+                        user.lon
+                    );
+
+
+                if(
+                    !Number.isFinite(lat) ||
+                    !Number.isFinite(lon)
+                ){
+
+                    return;
+
+                }
+
+
+                /*
+                   ★ user_idを優先
+                */
+
+                const displayName =
+                    user.display_name ||
+                    user.name ||
+                    userId;
+
+
+                /*
+                   ★ マーカー作成
+                */
+
+                if(
+                    markers[userId]
+                ){
+
+                    markers[userId]
+                        .setLatLng(
+                            [
+                                lat,
+                                lon
+                            ]
+                        );
+
+                }
+                else{
+
+                    markers[userId] =
+                        L.marker(
+                            [
+                                lat,
+                                lon
+                            ],
+                            {
+
+                                icon:
+                                    createIcon(
+                                        user.icon ||
+                                        user.iconType ||
+                                        "1"
+                                    )
+
+                            }
+                        )
+                        .addTo(map);
+
+                }
+
+
+                /*
+                   アイコン更新
+                */
+
+                markers[userId]
+                    .setIcon(
+                        createIcon(
+                            user.icon ||
+                            user.iconType ||
+                            "1"
+                        )
+                    );
+
+
+                /*
+                   ポップアップ
+                */
+
+                markers[userId]
+                    .bindPopup(`
+
+                        <b>
+                            ${escapeHtml(
+                                displayName
+                            )}
+                        </b>
+
+                        <hr>
+
+                        ユーザーID：
+                        ${escapeHtml(
+                            userId
+                        )}
+
+                        <br>
+
+                        状態：
+                        ${
+                            user.online
+                            ?
+                            "🟢 ONLINE"
+                            :
+                            "🔴 OFFLINE"
+                        }
+
+                        <br>
+
+                        緯度：
+                        ${lat.toFixed(6)}
+
+                        <br>
+
+                        経度：
+                        ${lon.toFixed(6)}
+
+                        <br>
+
+                        UTM：
+                        ${escapeHtml(
+                            user.utmZone ||
+                            "52S"
+                        )}
+
+                        <br>
+
+                        E：
+                        ${
+                            user.utmE ??
+                            "-"
+                        }
+
+                        <br>
+
+                        N：
+                        ${
+                            user.utmN ??
+                            "-"
+                        }
+
+                        <br>
+
+                        💧水：
+                        ${
+                            user.water ??
+                            0
+                        }
+
+                        <br>
+
+                        ⛽燃料：
+                        ${
+                            user.fuel ??
+                            0
+                        }
+
+                        <br>
+
+                        📍目的地：
+                        ${escapeHtml(
+                            user.destination ||
+                            "-"
+                        )}
+
+                        <br>
+
+                        最終更新：
+                        ${
+                            timeAgo(
+                                user.lastUpdate
+                            )
+                        }
+
+                    `);
+
+            }
+        );
+
+
+        /*
+           隊員一覧
+        */
+
+        renderUsers(
+            data
+        );
+
+    }
+);
+
+
+/* ==================================================
+隊員一覧
+================================================== */
+
+function renderUsers(
+    data
+){
+
+    let html =
+        "";
+
+
+    Object.keys(
+        data
+    )
+    .forEach(
+        userId => {
+
+            const user =
+                data[userId];
+
+
+            if(!user){
+
+                return;
+
+            }
+
+
+            const safeUserId =
+                escapeHtml(
+                    userId
+                );
+
+
+            const safeName =
+                escapeHtml(
+                    user.display_name ||
+                    user.name ||
+                    userId
+                );
+
+
+            html += `
+
+                <div class="userRow">
+
+                    <div
+                        onclick="
+                            focusUserById(
+                                '${safeUserId}'
+                            )
+                        "
+                    >
+
+                        ${
+                            user.online
+                            ?
+                            "🟢ON"
+                            :
+                            "🔴OFF"
+                        }
+
+                    </div>
+
+
+                    <div
+                        onclick="
+                            focusUserById(
+                                '${safeUserId}'
+                            )
+                        "
+                    >
+
+                        ${safeName}
+
+                    </div>
+
+
+                    <div
+                        onclick="
+                            focusUserById(
+                                '${safeUserId}'
+                            )
+                        "
+                    >
+
+                        ${
+                            user.water ??
+                            0
+                        }
+
+                    </div>
+
+
+                    <div
+                        onclick="
+                            focusUserById(
+                                '${safeUserId}'
+                            )
+                        "
+                    >
+
+                        ${
+                            user.fuel ??
+                            0
+                        }
+
+                    </div>
+
+
+                    <div
+                        onclick="
+                            focusUserById(
+                                '${safeUserId}'
+                            )
+                        "
+                    >
+
+                        ${
+                            timeAgo(
+                                user.lastUpdate
+                            )
+                        }
+
+                    </div>
+
+                </div>
+
+            `;
 
         }
     );
 
 
-    registered =
-        true;
-
-
-    const status =
+    const container =
         document.getElementById(
-            "registerStatus"
+            "userList"
         );
 
 
-    if(status){
+    if(container){
 
-        status.innerHTML =
-            "🟢 登録済み : "
-            +
-            escapeHtml(
-                name
-            );
+        container.innerHTML =
+            html;
 
     }
 
@@ -3483,7 +4439,7 @@ async function registerSocketUser(){
 
 
 /* ==================================================
-   ログアウト
+ログアウト
 ================================================== */
 
 async function logoutUser(){
@@ -3507,7 +4463,7 @@ async function logoutUser(){
 
 
     /*
-       サーバー側にはuser_idを送る
+       Socket側ユーザー削除
     */
 
     if(socketUserId){
@@ -3525,7 +4481,9 @@ async function logoutUser(){
         const {
             error
         } =
-            await supabaseClient.auth.signOut();
+            await supabaseClient
+                .auth
+                .signOut();
 
 
         if(error){
@@ -3538,12 +4496,19 @@ async function logoutUser(){
         currentAuthUser =
             null;
 
+
         currentProfile =
             null;
+
 
         socketUserId =
             null;
 
+
+        /*
+           ★ user_idを端末から削除
+           ※再ログイン後に登録画面から入力
+        */
 
         localStorage.removeItem(
             "puttan_user_id"
@@ -3552,18 +4517,36 @@ async function logoutUser(){
 
         showAuth();
 
+
         showLogin();
 
 
-        document.getElementById(
-            "loginUsername"
-        ).value =
-            "";
+        const username =
+            document.getElementById(
+                "loginUsername"
+            );
 
-        document.getElementById(
-            "loginPassword"
-        ).value =
-            "";
+
+        const password =
+            document.getElementById(
+                "loginPassword"
+            );
+
+
+        if(username){
+
+            username.value =
+                "";
+
+        }
+
+
+        if(password){
+
+            password.value =
+                "";
+
+        }
 
     }
     catch(error){
@@ -3583,6 +4566,10 @@ async function logoutUser(){
     }
 
 }
+
+
+
+
 
 
 /* ==================================================
