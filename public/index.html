@@ -1379,6 +1379,13 @@ socket.on("locations", data => {
 
         markers[userId].setIcon(createIcon(user.icon || user.iconType || "1"));
 
+        markers[userId].bindTooltip(escapeHtml(displayName), {
+            permanent: true,
+            direction: "top",
+            offset: [0, -30],
+            className: "pointLabel"
+        });
+
         markers[userId].bindPopup(`
             <b>${escapeHtml(displayName)}</b>
             <hr>
