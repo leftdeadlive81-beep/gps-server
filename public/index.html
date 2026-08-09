@@ -677,6 +677,70 @@ select {
 
 }
 
+/* ==================================================
+認証画面 説明カード
+================================================== */
+
+.authInfoCard {
+
+width: min(92%, 520px);
+
+margin: 18px auto 25px;
+
+padding: 18px 20px;
+
+background: #ffffff;
+
+border: 1px solid #d8d8d8;
+
+border-radius: 12px;
+
+box-shadow:
+    0 3px 10px
+    rgba(0,0,0,0.10);
+
+
+}
+
+.authInfoTitle {
+
+
+font-size: 18px;
+
+font-weight: bold;
+
+color: #333;
+
+padding-bottom: 10px;
+
+margin-bottom: 12px;
+
+border-bottom: 1px solid #e5e5e5;
+
+
+}
+
+.authInfoText {
+
+
+font-size: 14px;
+
+line-height: 1.8;
+
+color: #555;
+
+
+}
+
+.authInfoText strong {
+
+
+color: #c0392b;
+
+
+}
+
+
 
 </style>
 
@@ -714,131 +778,192 @@ select {
 
 <body>
 
-
 <!-- ==================================================
      認証画面
 ================================================== -->
 
 <div id="authScreen">
 
+```
+<!-- ログイン -->
+<div
+    id="loginBox"
+    class="authBox"
+>
 
-    <!-- ログイン -->
+    <h2>
+        災害情報共有システム【試作ver0.2】
+    </h2>
 
-    <div
-        id="loginBox"
-        class="authBox"
+    <h3>
+        🔐 ログイン
+    </h3>
+
+
+    <input
+        type="text"
+        id="loginUsername"
+        placeholder="任意のログインID(英数字)"
+        autocomplete="username"
     >
 
-        <h2>災害情報共有システム【試作ver0.2】</h2>
 
-        <h3>🔐 ログイン</h3>
-
-
-        <input
-            type="text"
-            id="loginUsername"
-            placeholder="任意のログインID(英数字)"
-            autocomplete="username"
-        >
+    <input
+        type="password"
+        id="loginPassword"
+        placeholder="パスワード(6文字以上)"
+        autocomplete="current-password"
+    >
 
 
-        <input
-            type="password"
-            id="loginPassword"
-            placeholder="パスワード(6文字以上)"
-            autocomplete="current-password"
-        >
+    <button
+        onclick="loginUser()"
+    >
+
+        🔐 ログイン
+
+    </button>
 
 
-        <button
-            onclick="loginUser()"
-        >
+    <button
+        onclick="showRegister()"
+    >
 
-            🔐 ログイン
+        👤 新規アカウント登録
 
-        </button>
-
-
-        <button
-            onclick="showRegister()"
-        >
-
-            👤 新規アカウント登録
-
-        </button>
+    </button>
 
 
-        <div
-            id="loginMessage"
-            class="authMessage"
-        ></div>
+    <div
+        id="loginMessage"
+        class="authMessage"
+    ></div>
+
+</div>
+
+
+<!-- ==================================================
+     ログイン画面 説明カード
+================================================== -->
+
+<div
+    id="loginInfoCard"
+    class="authInfoCard"
+>
+
+    <div class="authInfoTitle">
+
+        📖 システムについて
 
     </div>
 
 
-    <!-- 新規登録 -->
+    <div class="authInfoText">
 
-    <div
-        id="registerBox"
-        class="authBox"
-        style="display:none;"
-    >
+        本システムは、活動中の隊員の現在位置や
+        情報を共有するための試作システムです。
 
-        <h2>📍 ぷったん</h2>
+        <br><br>
 
-        <h3>👤 新規アカウント登録</h3>
+        🗺️ 地図上で隊員の現在位置を確認できます。
 
+        <br>
 
-        <input
-            type="text"
-            id="registerUsername"
-            placeholder="任意のログインID"
-            autocomplete="username"
-        >
+        📡 GPSを利用して現在位置を共有できます。
 
+        <br>
 
-        <input
-            type="password"
-            id="registerPassword"
-            placeholder="パスワード"
-            autocomplete="new-password"
-        >
+        👥 接続している隊員の状況を確認できます。
 
+        <br>
 
-        <input
-            type="password"
-            id="registerPassword2"
-            placeholder="パスワード（確認）"
-            autocomplete="new-password"
-        >
+        📍 指揮所・給水所などの地点を登録できます。
 
+        <br>
 
-        <button
-            onclick="registerAuthUser()"
-        >
+        📋 報連相（クロノロジー）を共有できます。
 
-            👤 アカウント登録
+        <br><br>
 
-        </button>
-
-
-        <button
-            onclick="showLogin()"
-        >
-
-            🔐 ログイン画面へ戻る
-
-        </button>
-
-
-        <div
-            id="registerMessage"
-            class="authMessage"
-        ></div>
+        <strong>
+            ※ 本システムは現在試作版です。
+        </strong>
 
     </div>
 
 </div>
+
+
+<!-- ==================================================
+     新規登録
+================================================== -->
+
+<div
+    id="registerBox"
+    class="authBox"
+    style="display:none;"
+>
+
+    <h2>
+        災害情報共有システム【試作ver0.2】
+    </h2>
+
+    <h3>
+        👤 新規アカウント登録
+    </h3>
+
+
+    <input
+        type="text"
+        id="registerUsername"
+        placeholder="任意のログインID(英数字)"
+        autocomplete="username"
+    >
+
+
+    <input
+        type="password"
+        id="registerPassword"
+        placeholder="パスワード(6文字以上)"
+        autocomplete="new-password"
+    >
+
+
+    <input
+        type="password"
+        id="registerPassword2"
+        placeholder="パスワード（確認）"
+        autocomplete="new-password"
+    >
+
+
+    <button
+        onclick="registerAuthUser()"
+    >
+
+        👤 アカウント登録
+
+    </button>
+
+
+    <button
+        onclick="showLogin()"
+    >
+
+        🔐 ログイン画面へ戻る
+
+    </button>
+
+
+    <div
+        id="registerMessage"
+        class="authMessage"
+    ></div>
+
+</div>
+
+</div>
+
 
 
 <!-- ==================================================
