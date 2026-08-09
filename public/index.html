@@ -530,21 +530,6 @@ function showApp(){
 }
 
 /* ==================================================
-   ログイン後の初期タブ
-   ・隊員登録が済んでいない（ログオフで削除された
-     直後を含む）場合は登録タブを表示する
-================================================== */
-
-function showAppAfterAuth(){
-    showApp();
-
-    if(localStorage.getItem("puttan_registered_done") !== "true"){
-        const settingsButton = document.querySelector('.tabButton[onclick*="settingsTab"]');
-        showTab("settingsTab", settingsButton);
-    }
-}
-
-/* ==================================================
    ログインIDチェック
 ================================================== */
 
@@ -641,7 +626,7 @@ async function registerAuthUser(){
         if(sessionData && sessionData.session){
             currentAuthUser = sessionData.session.user;
             await loadProfile(currentAuthUser);
-            showAppAfterAuth();
+            showApp();
         }
         else{
             message.textContent = "登録しました。ログインしてください。";
@@ -700,7 +685,7 @@ window.loginUser = async function loginUser(){
         }
 
         message.textContent = "";
-        showAppAfterAuth();
+        showApp();
     }
     catch(error){
         console.error("ログインエラー:", error);
@@ -1879,7 +1864,7 @@ window.addEventListener("load", async () => {
             if(profile){
                 socketUserId = await resolveSocketUserId();
 
-                showAppAfterAuth();
+                showApp();
 
                 if(socketUserId && localStorage.getItem("puttan_registered_done") === "true"){
                     registerSocketUser();
