@@ -677,17 +677,44 @@ select {
 
 }
 
+
 /* ==================================================
-認証画面 説明カード
+認証画面
 ================================================== */
+
+#authScreen {
+
+min-height: 100vh;
+
+display: flex;
+
+flex-direction: column;
+
+align-items: center;
+
+padding: 20px 10px 10px;
+
+}
+
+/* ログイン・登録カード */
+
+.authBox {
+
+width: min(92%, 520px);
+
+}
+
+/* 説明カード */
 
 .authInfoCard {
 
 width: min(92%, 520px);
 
-margin: 18px auto 25px;
+margin-top: auto;
 
-padding: 18px 20px;
+margin-bottom: 10px;
+
+padding: 14px 16px;
 
 background: #ffffff;
 
@@ -696,49 +723,87 @@ border: 1px solid #d8d8d8;
 border-radius: 12px;
 
 box-shadow:
-    0 3px 10px
+    0 2px 8px
     rgba(0,0,0,0.10);
-
 
 }
 
 .authInfoTitle {
 
-
-font-size: 18px;
+font-size: 16px;
 
 font-weight: bold;
 
 color: #333;
 
-padding-bottom: 10px;
+padding-bottom: 7px;
 
-margin-bottom: 12px;
+margin-bottom: 8px;
 
 border-bottom: 1px solid #e5e5e5;
-
 
 }
 
 .authInfoText {
 
+font-size: 13px;
 
-font-size: 14px;
-
-line-height: 1.8;
+line-height: 1.6;
 
 color: #555;
 
+}
+
+/* スマホ */
+
+@media (
+max-width: 600px
+) {
+
+#authScreen {
+
+    min-height: 100vh;
+
+    padding:
+        15px
+        8px
+        8px;
 
 }
 
-.authInfoText strong {
 
+.authInfoCard {
 
-color: #c0392b;
+    width: 94%;
 
+    margin-top: auto;
+
+    margin-bottom: 5px;
+
+    padding:
+        12px
+        14px;
 
 }
+
+
+.authInfoTitle {
+
+    font-size: 15px;
+
+}
+
+
+.authInfoText {
+
+    font-size: 12px;
+
+    line-height: 1.5;
+
+}
+
+}
+
 
 
 
@@ -786,64 +851,115 @@ color: #c0392b;
 
 ```
 <!-- ログイン -->
+
 <div
     id="loginBox"
     class="authBox"
 >
 
-    <h2>
-        災害情報共有システム【試作ver0.2】
-    </h2>
+```
+<h2>
+    災害情報共有システム【試作ver0.2】
+</h2>
 
-    <h3>
-        🔐 ログイン
-    </h3>
+<h3>
+    🔐 ログイン
+</h3>
 
+<input
+    type="text"
+    id="loginUsername"
+    placeholder="任意のログインID(英数字)"
+    autocomplete="username"
+>
 
-    <input
-        type="text"
-        id="loginUsername"
-        placeholder="任意のログインID(英数字)"
-        autocomplete="username"
-    >
+<input
+    type="password"
+    id="loginPassword"
+    placeholder="パスワード(6文字以上)"
+    autocomplete="current-password"
+>
 
+<button
+    onclick="loginUser()"
+>
+    🔐 ログイン
+</button>
 
-    <input
-        type="password"
-        id="loginPassword"
-        placeholder="パスワード(6文字以上)"
-        autocomplete="current-password"
-    >
+<button
+    onclick="showRegister()"
+>
+    👤 新規アカウント登録
+</button>
 
-
-    <button
-        onclick="loginUser()"
-    >
-
-        🔐 ログイン
-
-    </button>
-
-
-    <button
-        onclick="showRegister()"
-    >
-
-        👤 新規アカウント登録
-
-    </button>
-
-
-    <div
-        id="loginMessage"
-        class="authMessage"
-    ></div>
+<div
+    id="loginMessage"
+    class="authMessage"
+></div>
+```
 
 </div>
 
+<!-- 新規登録 -->
+
+<div
+    id="registerBox"
+    class="authBox"
+    style="display:none;"
+>
+
+```
+<h2>
+    災害情報共有システム【試作ver0.2】
+</h2>
+
+<h3>
+    👤 新規アカウント登録
+</h3>
+
+<input
+    type="text"
+    id="registerUsername"
+    placeholder="任意のログインID(英数字)"
+    autocomplete="username"
+>
+
+<input
+    type="password"
+    id="registerPassword"
+    placeholder="パスワード(6文字以上)"
+    autocomplete="new-password"
+>
+
+<input
+    type="password"
+    id="registerPassword2"
+    placeholder="パスワード（確認）"
+    autocomplete="new-password"
+>
+
+<button
+    onclick="registerAuthUser()"
+>
+    👤 アカウント登録
+</button>
+
+<button
+    onclick="showLogin()"
+>
+    🔐 ログイン画面へ戻る
+</button>
+
+<div
+    id="registerMessage"
+    class="authMessage"
+></div>
+```
+
+</div>
 
 <!-- ==================================================
-     ログイン画面 説明カード
+     画面最下部 説明カード
 ================================================== -->
 
 <div
@@ -851,47 +967,36 @@ color: #c0392b;
     class="authInfoCard"
 >
 
-    <div class="authInfoTitle">
+```
+<div class="authInfoTitle">
+    📖 システムについて
+</div>
 
-        📖 システムについて
+<div class="authInfoText">
 
-    </div>
+    災害時などの活動において、
+    隊員の現在位置や情報を共有するための
+    情報共有システムです。
 
+    <br>
 
-    <div class="authInfoText">
+    🗺️ 地図　📡 GPS　👥 隊員情報
 
-        本システムは、活動中の隊員の現在位置や
-        情報を共有するための試作システムです。
+    <br>
 
-        <br><br>
+    📍 地点登録　📋 報連相
 
-        🗺️ 地図上で隊員の現在位置を確認できます。
+    <br><br>
 
-        <br>
-
-        📡 GPSを利用して現在位置を共有できます。
-
-        <br>
-
-        👥 接続している隊員の状況を確認できます。
-
-        <br>
-
-        📍 指揮所・給水所などの地点を登録できます。
-
-        <br>
-
-        📋 報連相（クロノロジー）を共有できます。
-
-        <br><br>
-
-        <strong>
-            ※ 本システムは現在試作版です。
-        </strong>
-
-    </div>
+    <strong>
+        ※ 本システムは試作版です。
+    </strong>
 
 </div>
+```
+
+</div>
+
 
 
 <!-- ==================================================
