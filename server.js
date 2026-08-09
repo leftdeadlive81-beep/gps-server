@@ -1156,7 +1156,7 @@ io.on("connection", socket => {
                     user.fuel,
                     user.destination,
                     user.icon,
-                    true,
+                    1,
                     now,
                     user.user_id
                 ]
