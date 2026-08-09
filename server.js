@@ -2513,27 +2513,46 @@ io.on(
 // ユーザー登録
 //====================================================
 
+//====================================================
+// ユーザー登録
+//====================================================
+
 socket.on(
     "registerUser",
     async data => {
 
         try {
 
-            const now =
-                Date.now();
+            console.log(
+                "================================"
+            );
+
+            console.log(
+                "ユーザー登録要求:",
+                data
+            );
 
 
             //================================================
-            // user_id 必須
+            // データ確認
             //================================================
 
             if (
                 !data ||
-                !data.user_id
+                typeof data !== "object"
             ) {
 
                 console.log(
-                    "ユーザー登録拒否: user_idなし"
+                    "ユーザー登録拒否: dataなし"
+                );
+
+                socket.emit(
+                    "registerUserResult",
+                    {
+                        success: false,
+                        message:
+                            "登録データがありません"
+                    }
                 );
 
                 return;
@@ -2541,203 +2560,282 @@ socket.on(
             }
 
 
+            //================================================
+            // user_id
+            //================================================
+
             const userId =
                 String(
-                    data.user_id
+                    data.user_id ||
+                    ""
                 ).trim();
 
 
+            if (
+                userId === ""
+            ) {
+
+                console.log(
+                    "ユーザー登録拒否: user_idなし"
+                );
+
+                socket.emit(
+                    "registerUserResult",
+                    {
+                        success: false,
+                        message:
+                            "ユーザーIDを入力してください"
+                    }
+                );
+
+                return;
+
+            }
+
+
             //================================================
-            // 既存ユーザー
+            // 表示名
+            //================================================
+
+            const displayName =
+                String(
+                    data.display_name ||
+                    ""
+                ).trim();
+
+
+            if (
+                displayName === ""
+            ) {
+
+                console.log(
+                    "ユーザー登録拒否: display_nameなし"
+                );
+
+                socket.emit(
+                    "registerUserResult",
+                    {
+                        success: false,
+                        message:
+                            "表示名を入力してください"
+                    }
+                );
+
+                return;
+
+            }
+
+
+            //================================================
+            // account_name
+            //================================================
+
+            const accountName =
+                String(
+                    data.account_name ||
+                    ""
+                ).trim();
+
+
+            if (
+                accountName === ""
+            ) {
+
+                console.log(
+                    "ユーザー登録拒否: account_nameなし"
+                );
+
+                socket.emit(
+                    "registerUserResult",
+                    {
+                        success: false,
+                        message:
+                            "アカウント名を入力してください"
+                    }
+                );
+
+                return;
+
+            }
+
+
+            //================================================
+            // 現在時刻
+            //================================================
+
+            const now =
+                Date.now();
+
+
+            //================================================
+            // 既存ユーザー確認
             //================================================
 
             const oldUser =
-                users[
-                    userId
-                ];
+                users[userId];
 
 
             //================================================
-            // ユーザー情報
+            // account_name重複確認
+            //================================================
+
+            const existingAccount =
+                Object.values(
+                    users
+                )
+                .find(
+                    user =>
+                        user.account_name ===
+                            accountName &&
+                        user.user_id !==
+                            userId
+                );
+
+
+            if (
+                existingAccount
+            ) {
+
+                console.log(
+                    "ユーザー登録拒否: account_name重複",
+                    accountName
+                );
+
+                socket.emit(
+                    "registerUserResult",
+                    {
+                        success: false,
+                        message:
+                            "このアカウント名は既に使用されています"
+                    }
+                );
+
+                return;
+
+            }
+
+
+            //================================================
+            // ユーザーオブジェクト作成
             //================================================
 
             const user = {
 
                 //============================================
-                // ユーザー基本情報
+                // 基本情報
                 //============================================
 
                 user_id:
                     userId,
 
                 display_name:
-                    data.display_name ||
-                    (
-                        oldUser
-                            ?
-                            oldUser.display_name
-                            :
-                            ""
-                    ),
+                    displayName,
 
                 account_name:
-                    data.account_name ||
-                    (
-                        oldUser
-                            ?
-                            oldUser.account_name
-                            :
-                            ""
-                    ),
+                    accountName,
 
                 role:
-                    data.role ||
-                    (
-                        oldUser
-                            ?
-                            oldUser.role
-                            :
-                            "user"
+                    String(
+                        data.role ||
+                        oldUser?.role ||
+                        "user"
                     ),
 
                 unit:
-                    data.unit ||
-                    (
-                        oldUser
-                            ?
-                            oldUser.unit
-                            :
-                            ""
+                    String(
+                        data.unit ||
+                        oldUser?.unit ||
+                        ""
                     ),
 
                 rank:
-                    data.rank ||
-                    (
-                        oldUser
-                            ?
-                            oldUser.rank
-                            :
-                            ""
+                    String(
+                        data.rank ||
+                        oldUser?.rank ||
+                        ""
                     ),
 
                 vehicle:
-                    data.vehicle ||
-                    (
-                        oldUser
-                            ?
-                            oldUser.vehicle
-                            :
-                            ""
+                    String(
+                        data.vehicle ||
+                        oldUser?.vehicle ||
+                        ""
                     ),
 
                 vehicle_type:
-                    data.vehicle_type ||
-                    (
-                        oldUser
-                            ?
-                            oldUser.vehicle_type
-                            :
-                            ""
+                    String(
+                        data.vehicle_type ||
+                        oldUser?.vehicle_type ||
+                        ""
                     ),
 
                 icon:
-                    data.icon ||
-                    (
-                        oldUser
-                            ?
-                            oldUser.icon
-                            :
-                            "1"
+                    String(
+                        data.icon ||
+                        oldUser?.icon ||
+                        "1"
                     ),
 
                 phone:
-                    data.phone ||
-                    (
-                        oldUser
-                            ?
-                            oldUser.phone
-                            :
-                            ""
+                    String(
+                        data.phone ||
+                        oldUser?.phone ||
+                        ""
                     ),
 
                 status:
-                    data.status ||
-                    (
-                        oldUser
-                            ?
-                            oldUser.status
-                            :
-                            ""
+                    String(
+                        data.status ||
+                        oldUser?.status ||
+                        ""
                     ),
 
                 status_next:
-                    data.status_next ||
-                    (
-                        oldUser
-                            ?
-                            oldUser.status_next
-                            :
-                            ""
+                    String(
+                        data.status_next ||
+                        oldUser?.status_next ||
+                        ""
                     ),
 
                 health:
-                    data.health ||
-                    (
-                        oldUser
-                            ?
-                            oldUser.health
-                            :
-                            ""
+                    String(
+                        data.health ||
+                        oldUser?.health ||
+                        ""
                     ),
 
                 destination:
-                    data.destination ||
-                    (
-                        oldUser
-                            ?
-                            oldUser.destination
-                            :
-                            ""
+                    String(
+                        data.destination ||
+                        oldUser?.destination ||
+                        ""
                     ),
 
+
                 //============================================
-                // 現在位置
+                // GPS
                 //============================================
 
                 lat:
-                    oldUser
-                        ?
-                        oldUser.lat
-                        :
-                        null,
+                    oldUser?.lat ??
+                    null,
 
                 lon:
-                    oldUser
-                        ?
-                        oldUser.lon
-                        :
-                        null,
+                    oldUser?.lon ??
+                    null,
 
                 utmZone:
-                    oldUser
-                        ?
-                        oldUser.utmZone
-                        :
-                        "52S",
+                    oldUser?.utmZone ||
+                    "52S",
 
                 utmE:
-                    oldUser
-                        ?
-                        oldUser.utmE
-                        :
-                        null,
+                    oldUser?.utmE ??
+                    null,
 
                 utmN:
-                    oldUser
-                        ?
-                        oldUser.utmN
-                        :
-                        null,
+                    oldUser?.utmN ??
+                    null,
+
 
                 //============================================
                 // 状態
@@ -2745,19 +2843,15 @@ socket.on(
 
                 movement:
                     data.movement ||
-                    (
-                        oldUser
-                            ?
-                            oldUser.movement
-                            :
-                            ""
-                    ),
+                    oldUser?.movement ||
+                    "",
 
                 online:
                     true,
 
                 lastUpdate:
                     now,
+
 
                 //============================================
                 // 物資
@@ -2766,30 +2860,18 @@ socket.on(
                 water:
                     Number(
                         data.water
-                    ) ||
-                    0,
+                    ) || 0,
 
                 fuel:
                     Number(
                         data.fuel
-                    ) ||
-                    0
+                    ) || 0
 
             };
 
 
             //================================================
-            // メモリ更新
-            //================================================
-
-            users[
-                userId
-            ] =
-                user;
-
-
-            //================================================
-            // users テーブル
+            // DB users テーブル保存
             //================================================
 
             await pool.query(
@@ -2811,33 +2893,75 @@ socket.on(
                     status_next,
                     health,
                     destination,
+                    created_at,
                     updated_at
                 )
 
                 VALUES
                 (
-                    $1,$2,$3,$4,$5,$6,$7,
-                    $8,$9,$10,$11,$12,$13,$14,$15
+                    $1,
+                    $2,
+                    $3,
+                    $4,
+                    $5,
+                    $6,
+                    $7,
+                    $8,
+                    $9,
+                    $10,
+                    $11,
+                    $12,
+                    $13,
+                    $14,
+                    $15,
+                    $16
                 )
 
                 ON CONFLICT(user_id)
 
                 DO UPDATE SET
 
-                    display_name=$2,
-                    account_name=$3,
-                    role=$4,
-                    unit=$5,
-                    rank=$6,
-                    vehicle=$7,
-                    vehicle_type=$8,
-                    icon=$9,
-                    phone=$10,
-                    status=$11,
-                    status_next=$12,
-                    health=$13,
-                    destination=$14,
-                    updated_at=$15
+                    display_name =
+                        EXCLUDED.display_name,
+
+                    account_name =
+                        EXCLUDED.account_name,
+
+                    role =
+                        EXCLUDED.role,
+
+                    unit =
+                        EXCLUDED.unit,
+
+                    rank =
+                        EXCLUDED.rank,
+
+                    vehicle =
+                        EXCLUDED.vehicle,
+
+                    vehicle_type =
+                        EXCLUDED.vehicle_type,
+
+                    icon =
+                        EXCLUDED.icon,
+
+                    phone =
+                        EXCLUDED.phone,
+
+                    status =
+                        EXCLUDED.status,
+
+                    status_next =
+                        EXCLUDED.status_next,
+
+                    health =
+                        EXCLUDED.health,
+
+                    destination =
+                        EXCLUDED.destination,
+
+                    updated_at =
+                        EXCLUDED.updated_at
                 `,
 
                 [
@@ -2870,11 +2994,37 @@ socket.on(
 
                     user.destination,
 
+                    // ★重要
+                    // 新規登録時のcreated_at
+                    // 既存更新時も現在値を入れる
+                    oldUser?.created_at ??
+                    now,
+
+                    // ★重要
+                    // 常に更新
                     now
 
                 ]
 
             );
+
+
+            //================================================
+            // メモリへ保存
+            //================================================
+
+            users[userId] = {
+
+                ...user,
+
+                created_at:
+                    oldUser?.created_at ??
+                    now,
+
+                updated_at:
+                    now
+
+            };
 
 
             //================================================
@@ -2904,27 +3054,43 @@ socket.on(
 
                 VALUES
                 (
-                    $1,$2,$3,$4,$5,$6,$7,
-                    $8,$9,$10,$11,$12,$13,$14
+                    $1,
+                    $2,
+                    $3,
+                    $4,
+                    $5,
+                    $6,
+                    $7,
+                    $8,
+                    $9,
+                    $10,
+                    $11,
+                    $12,
+                    $13,
+                    $14
                 )
 
                 ON CONFLICT(user_id)
 
                 DO UPDATE SET
 
-                    name=$2,
-                    lat=$3,
-                    lon=$4,
-                    utmzone=$5,
-                    utme=$6,
-                    utmn=$7,
-                    water=$8,
-                    fuel=$9,
-                    destination=$10,
-                    icontype=$11,
-                    online=$12,
-                    lastupdate=$13,
-                    device_id=$14
+                    name =
+                        EXCLUDED.name,
+
+                    destination =
+                        EXCLUDED.destination,
+
+                    icontype =
+                        EXCLUDED.icontype,
+
+                    online =
+                        EXCLUDED.online,
+
+                    lastupdate =
+                        EXCLUDED.lastupdate,
+
+                    device_id =
+                        EXCLUDED.device_id
                 `,
 
                 [
@@ -2951,7 +3117,7 @@ socket.on(
 
                     user.icon,
 
-                    1,
+                    true,
 
                     now,
 
@@ -2962,10 +3128,35 @@ socket.on(
             );
 
 
+            //================================================
+            // 成功ログ
+            //================================================
+
             console.log(
-                "ユーザー登録:",
-                user.user_id,
+                "================================"
+            );
+
+            console.log(
+                "ユーザー登録成功"
+            );
+
+            console.log(
+                "user_id:",
+                user.user_id
+            );
+
+            console.log(
+                "display_name:",
                 user.display_name
+            );
+
+            console.log(
+                "account_name:",
+                user.account_name
+            );
+
+            console.log(
+                "================================"
             );
 
 
@@ -2978,12 +3169,66 @@ socket.on(
                 users
             );
 
+
+            //================================================
+            // 登録元へ成功通知
+            //================================================
+
+            socket.emit(
+                "registerUserResult",
+                {
+
+                    success:
+                        true,
+
+                    user_id:
+                        user.user_id,
+
+                    display_name:
+                        user.display_name,
+
+                    account_name:
+                        user.account_name
+
+                }
+            );
+
         }
         catch (err) {
 
             console.error(
-                "ユーザー登録エラー",
+                "================================"
+            );
+
+            console.error(
+                "ユーザー登録エラー"
+            );
+
+            console.error(
                 err
+            );
+
+            console.error(
+                "================================"
+            );
+
+
+            //================================================
+            // 登録元へエラー通知
+            //================================================
+
+            socket.emit(
+                "registerUserResult",
+                {
+
+                    success:
+                        false,
+
+                    message:
+                        err.message ||
+                        "ユーザー登録に失敗しました"
+
+                }
             );
 
         }
