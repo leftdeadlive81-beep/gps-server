@@ -1025,6 +1025,12 @@ L.control.layers(
     }
 ).addTo(map);
 
+L.control.scale({
+    metric: true,
+    imperial: false,
+    position: "bottomleft"
+}).addTo(map);
+
 /* ==================================================
    交通規制受信
 ================================================== */
