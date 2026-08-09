@@ -528,6 +528,21 @@ function showApp(){
 }
 
 /* ==================================================
+   ログイン後の初期タブ
+   ・隊員登録が済んでいない（ログオフで削除された
+     直後を含む）場合は登録タブを表示する
+================================================== */
+
+function showAppAfterAuth(){
+    showApp();
+
+    if(localStorage.getItem("puttan_registered_done") !== "true"){
+        const settingsButton = document.querySelector('.tabButton[onclick*="settingsTab"]');
+        showTab("settingsTab", settingsButton);
+    }
+}
+
+/* ==================================================
    ログインIDチェック
 ================================================== */
 
@@ -624,7 +639,7 @@ async function registerAuthUser(){
         if(sessionData && sessionData.session){
             currentAuthUser = sessionData.session.user;
             await loadProfile(currentAuthUser);
-            showApp();
+            showAppAfterAuth();
         }
         else{
             message.textContent = "登録しました。ログインしてください。";
@@ -683,7 +698,7 @@ window.loginUser = async function loginUser(){
         }
 
         message.textContent = "";
-        showApp();
+        showAppAfterAuth();
     }
     catch(error){
         console.error("ログインエラー:", error);
@@ -873,6 +888,7 @@ function registerSocketUser(){
             socket.off("registerUserResult", resultHandler);
             console.warn("Socketユーザー登録確認タイムアウト");
             registered = true;
+            localStorage.setItem("puttan_registered_done", "true");
             updateRegisterStatus(name);
             resolve(true);
         }, 5000);
@@ -883,6 +899,7 @@ function registerSocketUser(){
 
             if(result && result.success){
                 registered = true;
+                localStorage.setItem("puttan_registered_done", "true");
                 updateRegisterStatus(name);
                 console.log("Socketユーザー登録成功:", socketUserId);
                 resolve(true);
@@ -947,6 +964,7 @@ async function logoutUser(){
         socketUserId = null;
 
         localStorage.removeItem("puttan_user_id");
+        localStorage.removeItem("puttan_registered_done");
 
         showAuth();
         showLogin();
@@ -1845,7 +1863,7 @@ window.addEventListener("load", async () => {
             if(profile){
                 socketUserId = await resolveSocketUserId();
 
-                showApp();
+                showAppAfterAuth();
 
                 if(socketUserId){
                     registerSocketUser();
@@ -1878,8 +1896,10 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
         currentProfile = null;
         socketUserId = null;
         registered = false;
+        localStorage.removeItem("puttan_registered_done");
         stopGPS();
         showAuth();
+        showLogin();
     }
 });
 
