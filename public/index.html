@@ -265,6 +265,15 @@ input, select {
     color: #111;
     white-space: nowrap;
     box-shadow: 0 1px 4px rgba(0,0,0,.3);
+    text-align: center;
+}
+#placeNameText {
+    font-family: "Yu Gothic", "Meiryo", sans-serif;
+    font-weight: bold;
+    font-size: 13px;
+    margin-bottom: 3px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid #ccc;
 }
 
 .leaflet-control-scale-line {
@@ -1041,15 +1050,17 @@ L.control.scale({
 }).addTo(map);
 
 /* ==================================================
-   画面中心のUTM座標を常時表示
+   画面中心のUTM座標・地名を常時表示
 ================================================== */
 
 const utmCenterControl = L.control({ position: "bottomright" });
 
 utmCenterControl.onAdd = function(){
     const div = L.DomUtil.create("div", "utmCenterBox");
-    div.id = "utmCenterBox";
-    div.innerHTML = "UTM 52S<br>E: -　N: -";
+    div.innerHTML = `
+        <div id="placeNameText">取得中...</div>
+        <div id="utmCenterText">UTM 52S<br>E: -　N: -</div>
+    `;
     L.DomEvent.disableClickPropagation(div);
     return div;
 };
@@ -1065,14 +1076,59 @@ function updateUtmCenterDisplay(){
         [center.lng, center.lat]
     );
 
-    const box = document.getElementById("utmCenterBox");
-    if(box){
-        box.innerHTML = `UTM 52S<br>E: ${Math.round(utm[0])}　N: ${Math.round(utm[1])}`;
+    const utmText = document.getElementById("utmCenterText");
+    if(utmText){
+        utmText.innerHTML = `UTM 52S<br>E: ${Math.round(utm[0])}　N: ${Math.round(utm[1])}`;
+    }
+}
+
+const placeNameCache = {};
+let placeNameTimer = null;
+
+function schedulePlaceNameUpdate(){
+    if(placeNameTimer){ clearTimeout(placeNameTimer); }
+    placeNameTimer = setTimeout(updatePlaceName, 700);
+}
+
+async function updatePlaceName(){
+    const center = map.getCenter();
+    const key = center.lat.toFixed(3) + "," + center.lng.toFixed(3);
+
+    const placeNameElement = document.getElementById("placeNameText");
+    if(!placeNameElement){ return; }
+
+    if(placeNameCache[key]){
+        placeNameElement.textContent = placeNameCache[key];
+        return;
+    }
+
+    placeNameElement.textContent = "取得中...";
+
+    try{
+        const response = await fetch(
+            `/api/reverse-geocode?lat=${center.lat}&lon=${center.lng}`
+        );
+        const data = await response.json();
+
+        const name = data.name || "地名不明";
+        placeNameCache[key] = name;
+
+        const latestCenter = map.getCenter();
+        const latestKey = latestCenter.lat.toFixed(3) + "," + latestCenter.lng.toFixed(3);
+        if(latestKey === key){
+            placeNameElement.textContent = name;
+        }
+    }
+    catch(error){
+        console.error("地名取得エラー:", error);
+        placeNameElement.textContent = "地名取得失敗";
     }
 }
 
 map.on("move", updateUtmCenterDisplay);
+map.on("moveend", schedulePlaceNameUpdate);
 updateUtmCenterDisplay();
+updatePlaceName();
 
 /* ==================================================
    交通規制受信

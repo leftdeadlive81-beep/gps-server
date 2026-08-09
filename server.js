@@ -47,6 +47,55 @@ const io = new Server(server, {
 app.use(express.static("public"));
 
 //============================================================
+// 逆ジオコーディング（地図中央の地名取得）
+// ・Nominatim (OpenStreetMap) を利用規約に沿ってサーバー経由で中継
+//============================================================
+
+app.get("/api/reverse-geocode", async (req, res) => {
+    const lat = Number(req.query.lat);
+    const lon = Number(req.query.lon);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        res.status(400).json({ error: "invalid lat/lon" });
+        return;
+    }
+
+    try {
+        const url =
+            "https://nominatim.openstreetmap.org/reverse" +
+            "?format=jsonv2&addressdetails=1&zoom=14" +
+            "&lat=" + encodeURIComponent(lat) +
+            "&lon=" + encodeURIComponent(lon) +
+            "&accept-language=ja";
+
+        const response = await fetch(url, {
+            headers: { "User-Agent": "Puttan/2.3 (GPS tracking tool; contact: leftdeadlive81@gmail.com)" }
+        });
+
+        if (!response.ok) {
+            throw new Error("HTTP " + response.status);
+        }
+
+        const data = await response.json();
+        const address = data.address || {};
+
+        const parts = [
+            address.state,
+            address.city || address.town || address.village,
+            address.suburb || address.neighbourhood || address.city_district
+        ].filter(Boolean);
+
+        const name = parts.length ? parts.join(" ") : (data.display_name || null);
+
+        res.json({ name });
+    }
+    catch (err) {
+        console.error("逆ジオコーディングエラー", err);
+        res.status(502).json({ error: "reverse geocode failed" });
+    }
+});
+
+//============================================================
 // PostgreSQL / Supabase
 //============================================================
 
