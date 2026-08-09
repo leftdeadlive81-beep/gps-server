@@ -2135,6 +2135,7 @@ async function loadChronology() {
 
 
 //============================================================
+//============================================================
 // ユーザー復元
 //============================================================
 
@@ -2144,7 +2145,7 @@ async function loadUsers() {
 
         const result =
             await pool.query(
-                "SELECT * FROM current_users"
+                "SELECT * FROM users ORDER BY user_id"
             );
 
 
@@ -2152,47 +2153,167 @@ async function loadUsers() {
             user => {
 
                 users[
-                    user.name
+                    user.user_id
                 ] = {
 
-                    name:
-                        user.name,
+                    //========================================
+                    // ユーザー基本情報
+                    //========================================
 
-                    lat:
-                        user.lat,
+                    user_id:
+                        user.user_id,
 
-                    lon:
-                        user.lon,
+                    display_name:
+                        user.display_name,
 
-                    utmZone:
-                        user.utmzone,
+                    account_name:
+                        user.account_name,
 
-                    utmE:
-                        user.utme,
+                    role:
+                        user.role || "user",
 
-                    utmN:
-                        user.utmn,
+                    unit:
+                        user.unit || "",
 
-                    water:
-                        user.water,
+                    rank:
+                        user.rank || "",
 
-                    fuel:
-                        user.fuel,
+                    vehicle:
+                        user.vehicle || "",
+
+                    vehicle_type:
+                        user.vehicle_type || "",
+
+                    icon:
+                        user.icon || "1",
+
+                    phone:
+                        user.phone || "",
+
+                    status:
+                        user.status || "",
+
+                    status_next:
+                        user.status_next || "",
+
+                    health:
+                        user.health || "",
 
                     destination:
-                        user.destination,
+                        user.destination || "",
 
-                    iconType:
-                        user.icontype ||
-                        "1",
+                    //========================================
+                    // 現在位置
+                    //========================================
+
+                    lat:
+                        null,
+
+                    lon:
+                        null,
+
+                    utmZone:
+                        "52S",
+
+                    utmE:
+                        null,
+
+                    utmN:
+                        null,
+
+                    //========================================
+                    // 現在状態
+                    //========================================
+
+                    movement:
+                        "",
 
                     online:
                         false,
 
                     lastUpdate:
-                        user.lastupdate
+                        null,
+
+                    //========================================
+                    // 物資
+                    //========================================
+
+                    water:
+                        0,
+
+                    fuel:
+                        0
 
                 };
+
+            }
+        );
+
+
+        //====================================================
+        // current_usersから現在位置・状態を復元
+        //====================================================
+
+        const currentResult =
+            await pool.query(
+                "SELECT * FROM current_users"
+            );
+
+
+        currentResult.rows.forEach(
+            current => {
+
+                const user =
+                    users[
+                        current.user_id
+                    ];
+
+
+                if (!user) {
+
+                    return;
+
+                }
+
+
+                user.lat =
+                    current.lat;
+
+                user.lon =
+                    current.lon;
+
+                user.utmZone =
+                    current.utmzone ||
+                    "52S";
+
+                user.utmE =
+                    current.utme;
+
+                user.utmN =
+                    current.utmn;
+
+                user.destination =
+                    current.destination ||
+                    user.destination;
+
+                user.water =
+                    current.water || 0;
+
+                user.fuel =
+                    current.fuel || 0;
+
+                user.icon =
+                    current.icontype ||
+                    user.icon ||
+                    "1";
+
+                user.online =
+                    Boolean(
+                        current.online
+                    );
+
+                user.lastUpdate =
+                    current.lastupdate;
 
             }
         );
