@@ -1525,6 +1525,7 @@ async function deleteUserById(userId, displayName){
 socket.on("userDeleted", userId => {
     if(userId === socketUserId){
         registered = false;
+        localStorage.removeItem("puttan_registered_done");
         stopGPS();
 
         const status = document.getElementById("registerStatus");
@@ -1803,7 +1804,7 @@ socket.on("connect", async () => {
     if(currentAuthUser){
         socketUserId = await resolveSocketUserId();
 
-        if(socketUserId){
+        if(socketUserId && localStorage.getItem("puttan_registered_done") === "true"){
             registerSocketUser();
         }
     }
@@ -1865,7 +1866,7 @@ window.addEventListener("load", async () => {
 
                 showAppAfterAuth();
 
-                if(socketUserId){
+                if(socketUserId && localStorage.getItem("puttan_registered_done") === "true"){
                     registerSocketUser();
                 }
             }
@@ -1936,7 +1937,7 @@ window.addEventListener("load", () => {
                 socketUserId = await resolveSocketUserId();
             }
 
-            if(socketUserId){
+            if(socketUserId && localStorage.getItem("puttan_registered_done") === "true"){
                 if(!registered){
                     await registerSocketUser();
                 }

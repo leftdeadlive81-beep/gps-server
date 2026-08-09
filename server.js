@@ -1535,16 +1535,23 @@ io.on("connection", socket => {
         delete users[userId];
 
         try {
-            await pool.query("DELETE FROM current_users WHERE user_id=$1", [userId]);
-            await pool.query("DELETE FROM users WHERE user_id=$1", [userId]);
+            const currentResult = await pool.query("DELETE FROM current_users WHERE user_id=$1", [userId]);
+            const usersResult = await pool.query("DELETE FROM users WHERE user_id=$1", [userId]);
+
+            console.log(
+                "ユーザー削除:", userId,
+                "current_users:", currentResult.rowCount, "件",
+                "users:", usersResult.rowCount, "件"
+            );
         }
         catch (err) {
-            console.error("削除エラー", err);
+            console.error("削除エラー:", userId, err);
         }
 
         io.emit("locations", users);
 
-        socket.emit("userDeleted", userId);
+        // 削除された本人が接続中の場合も通知する（自動再登録を止めるため）
+        io.emit("userDeleted", userId);
     });
 
     //====================================================
