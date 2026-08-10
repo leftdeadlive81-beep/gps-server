@@ -187,6 +187,11 @@ input, select {
     overflow: hidden;
 }
 
+.announcementBar.active ~ #mapTab #map {
+    height: calc(100vh - 180px);
+    height: calc(100dvh - 180px);
+}
+
 .navPanel {
     position: absolute;
     top: 16px;
@@ -1645,6 +1650,12 @@ socket.on("announcement", text => {
             bar.classList.remove("active");
         }
     }
+
+    setTimeout(()=>{
+        if(typeof map !== "undefined" && map){
+            map.invalidateSize();
+        }
+    }, 100);
 });
 
 /* ==================================================
