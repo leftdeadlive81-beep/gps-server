@@ -204,9 +204,53 @@ input, select {
     overflow: hidden;
 }
 
+.addressSearchBox {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 910;
+    width: 90%;
+    max-width: 320px;
+}
+.addressSearchRow { display: flex; gap: 6px; }
+.addressSearchRow input {
+    flex: 1;
+    padding: 8px 10px;
+    border: 1px solid #999;
+    border-radius: 6px;
+    font-size: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.3);
+}
+.addressSearchRow button {
+    border: none;
+    background: #1976d2;
+    color: white;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: bold;
+}
+.addressSearchResults {
+    margin-top: 4px;
+    background: white;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.35);
+    max-height: 200px;
+    overflow-y: auto;
+}
+.addressSearchResultRow {
+    padding: 8px 10px;
+    font-size: 13px;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+}
+.addressSearchResultRow:last-child { border-bottom: none; }
+.addressSearchResultRow:hover { background: #f0f4f8; }
+
 .navPanel {
     position: absolute;
-    top: 16px;
+    top: 66px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 900;
@@ -673,6 +717,14 @@ input, select {
 
     <div id="mapTab" class="tabContent active">
         <div id="map"></div>
+
+        <div id="addressSearchBox" class="addressSearchBox">
+            <div class="addressSearchRow">
+                <input id="addressSearchInput" placeholder="🔍 住所・地名で検索" onkeydown="if(event.key==='Enter'){searchAddress();}">
+                <button onclick="searchAddress()">検索</button>
+            </div>
+            <div id="addressSearchResults" class="addressSearchResults"></div>
+        </div>
 
         <div id="navPanel" class="navPanel" style="display:none;">
             <div class="navPanelHeader">
@@ -1739,6 +1791,64 @@ map.on("move", updateUtmCenterDisplay);
 map.on("moveend", schedulePlaceNameUpdate);
 updateUtmCenterDisplay();
 updatePlaceName();
+
+/* ==================================================
+   住所検索
+================================================== */
+
+let addressSearchMarker = null;
+let addressSearchResults = [];
+
+async function searchAddress(){
+    const input = document.getElementById("addressSearchInput");
+    const resultsBox = document.getElementById("addressSearchResults");
+    const query = input ? input.value.trim() : "";
+
+    if(!query || !resultsBox){ return; }
+
+    resultsBox.innerHTML = `<div class="addressSearchResultRow">検索中...</div>`;
+
+    try{
+        const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
+        const data = await response.json();
+
+        const results = Array.isArray(data.results) ? data.results : [];
+
+        if(results.length === 0){
+            resultsBox.innerHTML = `<div class="addressSearchResultRow">見つかりませんでした</div>`;
+            return;
+        }
+
+        resultsBox.innerHTML = results.map((r, i) => `
+            <div class="addressSearchResultRow" onclick="selectAddressResult(${i})">
+                ${escapeHtml(r.name)}
+            </div>
+        `).join("");
+
+        addressSearchResults = results;
+    }
+    catch(error){
+        console.error("住所検索エラー:", error);
+        resultsBox.innerHTML = `<div class="addressSearchResultRow">検索に失敗しました</div>`;
+    }
+}
+
+function selectAddressResult(index){
+    const result = addressSearchResults[index];
+    if(!result){ return; }
+
+    if(addressSearchMarker){
+        map.removeLayer(addressSearchMarker);
+    }
+
+    addressSearchMarker = L.marker([result.lat, result.lon]).addTo(map);
+    addressSearchMarker.bindPopup(escapeHtml(result.name)).openPopup();
+
+    map.setView([result.lat, result.lon], 16, { animate: true });
+
+    const resultsBox = document.getElementById("addressSearchResults");
+    if(resultsBox){ resultsBox.innerHTML = ""; }
+}
 
 /* ==================================================
    全体周知

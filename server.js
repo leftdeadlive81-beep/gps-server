@@ -96,6 +96,50 @@ app.get("/api/reverse-geocode", async (req, res) => {
 });
 
 //============================================================
+// 住所検索（地図上の検索ボックス用）
+// ・Nominatim (OpenStreetMap) を利用規約に沿ってサーバー経由で中継
+//============================================================
+
+app.get("/api/geocode", async (req, res) => {
+    const query = String(req.query.q || "").trim();
+
+    if (!query) {
+        res.status(400).json({ error: "query is required" });
+        return;
+    }
+
+    try {
+        const url =
+            "https://nominatim.openstreetmap.org/search" +
+            "?format=jsonv2&addressdetails=1&limit=5" +
+            "&countrycodes=jp&accept-language=ja" +
+            "&q=" + encodeURIComponent(query);
+
+        const response = await fetch(url, {
+            headers: { "User-Agent": "Puttan/2.5 (GPS tracking tool; contact: leftdeadlive81@gmail.com)" }
+        });
+
+        if (!response.ok) {
+            throw new Error("HTTP " + response.status);
+        }
+
+        const data = await response.json();
+
+        const results = (Array.isArray(data) ? data : []).map(item => ({
+            name: item.display_name,
+            lat: Number(item.lat),
+            lon: Number(item.lon)
+        }));
+
+        res.json({ results });
+    }
+    catch (err) {
+        console.error("住所検索エラー", err);
+        res.status(502).json({ error: "geocode failed" });
+    }
+});
+
+//============================================================
 // PostgreSQL / Supabase
 //============================================================
 
