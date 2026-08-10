@@ -1,5 +1,5 @@
 //============================================================
-// Puttan Version 2.5
+// Puttan Version 2.6
 // server.js
 //
 // ・PostgreSQL / Supabase
@@ -110,7 +110,7 @@ app.get("/api/reverse-geocode", async (req, res) => {
             "&accept-language=ja";
 
         const response = await fetch(url, {
-            headers: { "User-Agent": "Puttan/2.5 (GPS tracking tool; contact: leftdeadlive81@gmail.com)" }
+            headers: { "User-Agent": "Puttan/2.6 (GPS tracking tool; contact: leftdeadlive81@gmail.com)" }
         });
 
         if (!response.ok) {
@@ -157,7 +157,7 @@ app.get("/api/geocode", async (req, res) => {
             "&q=" + encodeURIComponent(query);
 
         const response = await fetch(url, {
-            headers: { "User-Agent": "Puttan/2.5 (GPS tracking tool; contact: leftdeadlive81@gmail.com)" }
+            headers: { "User-Agent": "Puttan/2.6 (GPS tracking tool; contact: leftdeadlive81@gmail.com)" }
         });
 
         if (!response.ok) {
@@ -286,7 +286,7 @@ function getTrafficTestData() {
 
 async function httpGetBuffer(url) {
     const response = await fetch(url, {
-        headers: { "User-Agent": "Puttan/2.5 traffic data client" }
+        headers: { "User-Agent": "Puttan/2.6 traffic data client" }
     });
 
     if (!response.ok) {
@@ -305,7 +305,7 @@ async function findMlitLatestGeoJsonZipUrl() {
     console.log("国土交通省 道路規制GIS URLを検索しています...");
 
     const response = await fetch(MLIT_TRAFFIC_PAGE, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; Puttan/2.5)" }
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; Puttan/2.6)" }
     });
 
     if (!response.ok) {
