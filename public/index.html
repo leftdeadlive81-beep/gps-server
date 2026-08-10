@@ -607,12 +607,12 @@ input, select {
                 <input id="fuel" type="number" value="100" placeholder="⛽燃料">
             </div>
             <div class="inputRow">
-                <input id="item_a" type="number" value="0" placeholder="📦 物資1">
-                <input id="item_b" type="number" value="0" placeholder="📦 物資2">
+                <input id="item_a" type="text" placeholder="📦 物資1">
+                <input id="item_b" type="text" placeholder="📦 物資2">
             </div>
             <div class="inputRow">
-                <input id="item_c" type="number" value="0" placeholder="📦 物資3">
-                <input id="item_d" type="number" value="0" placeholder="📦 物資4">
+                <input id="item_c" type="text" placeholder="📦 物資3">
+                <input id="item_d" type="text" placeholder="📦 物資4">
             </div>
             <button class="settingsButton" onclick="registerUser()">📦 物資情報を保存</button>
         </div>
@@ -1062,10 +1062,10 @@ async function registerUser(){
     const iconType = normalizeIconType(document.getElementById("iconType").value);
     const water = Number(document.getElementById("water").value) || 0;
     const fuel = Number(document.getElementById("fuel").value) || 0;
-    const itemA = Number(document.getElementById("item_a").value) || 0;
-    const itemB = Number(document.getElementById("item_b").value) || 0;
-    const itemC = Number(document.getElementById("item_c").value) || 0;
-    const itemD = Number(document.getElementById("item_d").value) || 0;
+    const itemA = document.getElementById("item_a").value.trim();
+    const itemB = document.getElementById("item_b").value.trim();
+    const itemC = document.getElementById("item_c").value.trim();
+    const itemD = document.getElementById("item_d").value.trim();
     const destination = document.getElementById("destination").value.trim();
     const status = document.getElementById("status").value.trim();
     const statusNext = document.getElementById("status_next").value.trim();
@@ -1128,10 +1128,10 @@ function registerSocketUser(){
         const iconType = normalizeIconType(document.getElementById("iconType").value);
         const water = Number(document.getElementById("water").value) || 0;
         const fuel = Number(document.getElementById("fuel").value) || 0;
-        const itemA = Number(document.getElementById("item_a").value) || 0;
-        const itemB = Number(document.getElementById("item_b").value) || 0;
-        const itemC = Number(document.getElementById("item_c").value) || 0;
-        const itemD = Number(document.getElementById("item_d").value) || 0;
+        const itemA = document.getElementById("item_a").value.trim();
+        const itemB = document.getElementById("item_b").value.trim();
+        const itemC = document.getElementById("item_c").value.trim();
+        const itemD = document.getElementById("item_d").value.trim();
         const destination = document.getElementById("destination").value.trim();
         const status = document.getElementById("status").value.trim();
         const statusNext = document.getElementById("status_next").value.trim();
@@ -2213,10 +2213,10 @@ socket.on("locations", data => {
                 <div class="popupSection popupGrid">
                     <div>💧水：${user.water ?? 0}</div>
                     <div>⛽燃料：${user.fuel ?? 0}</div>
-                    <div>📦物資1：${user.item_a ?? 0}</div>
-                    <div>📦物資2：${user.item_b ?? 0}</div>
-                    <div>📦物資3：${user.item_c ?? 0}</div>
-                    <div>📦物資4：${user.item_d ?? 0}</div>
+                    <div>📦物資1：${escapeHtml(user.item_a || "-")}</div>
+                    <div>📦物資2：${escapeHtml(user.item_b || "-")}</div>
+                    <div>📦物資3：${escapeHtml(user.item_c || "-")}</div>
+                    <div>📦物資4：${escapeHtml(user.item_d || "-")}</div>
                 </div>
 
                 <div class="popupSection popupLocation">

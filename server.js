@@ -877,10 +877,10 @@ async function loadUsers() {
 
                 water: 0,
                 fuel: 0,
-                item_a: 0,
-                item_b: 0,
-                item_c: 0,
-                item_d: 0
+                item_a: "",
+                item_b: "",
+                item_c: "",
+                item_d: ""
             };
         });
 
@@ -909,10 +909,10 @@ async function loadUsers() {
 
             user.water = inventory.water || 0;
             user.fuel = inventory.fuel || 0;
-            user.item_a = inventory.item_a || 0;
-            user.item_b = inventory.item_b || 0;
-            user.item_c = inventory.item_c || 0;
-            user.item_d = inventory.item_d || 0;
+            user.item_a = inventory.item_a || "";
+            user.item_b = inventory.item_b || "";
+            user.item_c = inventory.item_c || "";
+            user.item_d = inventory.item_d || "";
         });
 
         console.log("復元ユーザー:", Object.keys(users));
@@ -1124,10 +1124,10 @@ io.on("connection", socket => {
 
                 water: Number(data.water) || 0,
                 fuel: Number(data.fuel) || 0,
-                item_a: Number(data.item_a) || 0,
-                item_b: Number(data.item_b) || 0,
-                item_c: Number(data.item_c) || 0,
-                item_d: Number(data.item_d) || 0
+                item_a: String(data.item_a || ""),
+                item_b: String(data.item_b || ""),
+                item_c: String(data.item_c || ""),
+                item_d: String(data.item_d || "")
             };
 
             //================================================
