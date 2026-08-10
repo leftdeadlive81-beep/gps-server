@@ -89,6 +89,32 @@ button { cursor: pointer; }
 
 #appScreen { display: none; width: 100%; min-height: 100vh; }
 
+.announcementBar {
+    display: none;
+    background: #d32f2f;
+    color: white;
+    overflow: hidden;
+    white-space: nowrap;
+    height: 30px;
+    line-height: 30px;
+    position: sticky;
+    top: 0;
+    z-index: 1001;
+}
+.announcementBar.active { display: block; }
+.announcementTrack {
+    display: inline-block;
+    padding-left: 100%;
+    font-size: 13px;
+    font-weight: bold;
+    animation: announcementScroll 20s linear infinite;
+}
+.announcementBar.active ~ .tabBar { top: 30px; }
+@keyframes announcementScroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-100%); }
+}
+
 .tabBar {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -542,6 +568,12 @@ input, select {
 ================================================= -->
 <div id="appScreen">
 
+    <div id="announcementBar" class="announcementBar">
+        <div class="announcementTrack">
+            <span id="announcementText"></span>
+        </div>
+    </div>
+
     <div class="tabBar">
         <button class="tabButton active" onclick="showTab('mapTab',this)">
             <span class="tabIcon">🗺️</span><span class="tabText">地図</span>
@@ -669,6 +701,12 @@ input, select {
                 <input type="checkbox" id="navAvoidHighways" onchange="onNavAvoidHighwaysChange()">
                 🛣 高速道路・有料道路を避ける
             </label>
+        </div>
+
+        <div class="card settingsCard">
+            <div class="sectionTitle">📢 全体周知</div>
+            <input id="announcementInput" placeholder="全員に表示するお知らせ">
+            <button class="settingsButton" onclick="updateAnnouncement()">📢 周知を更新</button>
         </div>
 
         <div class="card settingsCard">
@@ -1558,6 +1596,34 @@ map.on("move", updateUtmCenterDisplay);
 map.on("moveend", schedulePlaceNameUpdate);
 updateUtmCenterDisplay();
 updatePlaceName();
+
+/* ==================================================
+   全体周知
+================================================== */
+
+function updateAnnouncement(){
+    const input = document.getElementById("announcementInput");
+    const text = input ? input.value.trim() : "";
+    socket.emit("updateAnnouncement", text);
+}
+
+socket.on("announcement", text => {
+    const bar = document.getElementById("announcementBar");
+    const textElement = document.getElementById("announcementText");
+    const input = document.getElementById("announcementInput");
+
+    if(textElement){ textElement.textContent = text || ""; }
+    if(input){ input.value = text || ""; }
+
+    if(bar){
+        if(text){
+            bar.classList.add("active");
+        }
+        else{
+            bar.classList.remove("active");
+        }
+    }
+});
 
 /* ==================================================
    交通規制受信

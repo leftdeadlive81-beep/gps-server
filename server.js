@@ -112,6 +112,7 @@ let users = {};
 let points = {};
 let chronology = [];
 let trafficRegulations = [];
+let announcementText = "";
 
 //============================================================
 // 交通規制 自動更新間隔
@@ -965,6 +966,7 @@ io.on("connection", socket => {
     socket.emit("points", points);
     socket.emit("chronology", chronology);
     socket.emit("trafficRegulations", trafficRegulations);
+    socket.emit("announcement", announcementText);
 
     //====================================================
     // 地点登録
@@ -1735,6 +1737,18 @@ io.on("connection", socket => {
         io.emit("trafficRegulations", trafficRegulations);
 
         console.log("交通規制手動更新:", trafficRegulations.length, "件");
+    });
+
+    //====================================================
+    // 全体周知
+    //====================================================
+
+    socket.on("updateAnnouncement", text => {
+        announcementText = String(text || "").slice(0, 300).trim();
+
+        io.emit("announcement", announcementText);
+
+        console.log("周知情報更新:", announcementText);
     });
 
     //====================================================
