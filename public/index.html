@@ -178,7 +178,9 @@ input, select {
     color: white;
     font-size: 15px;
     margin-top: 7px;
+    transition: background-color .15s;
 }
+.buttonPressed { background: #2e7d32 !important; }
 
 .navSettingRow {
     display: flex;
@@ -681,7 +683,7 @@ input, select {
                     <option value="4">🚛 大型</option>
                 </select>
             </div>
-            <button class="settingsButton" onclick="registerUser()">👤 ユーザー情報を保存</button>
+            <button class="settingsButton" onclick="registerUser(this)">👤 ユーザー情報を保存</button>
             <div id="registerStatus">未登録</div>
         </div>
 
@@ -690,7 +692,7 @@ input, select {
             <input id="status" placeholder="📋 現在の活動内容">
             <input id="destination" placeholder="📍次の目的地">
             <input id="status_next" placeholder="⚠️ 懸念事項">
-            <button class="settingsButton" onclick="registerUser()">📋 活動状況を保存</button>
+            <button class="settingsButton" onclick="registerUser(this)">📋 活動状況を保存</button>
         </div>
 
         <div class="card settingsCard">
@@ -707,7 +709,7 @@ input, select {
                 <input id="item_c" type="text" placeholder="📦 物資3">
                 <input id="item_d" type="text" placeholder="📦 物資4">
             </div>
-            <button class="settingsButton" onclick="registerUser()">📦 物資情報を保存</button>
+            <button class="settingsButton" onclick="registerUser(this)">📦 物資情報を保存</button>
         </div>
 
         <div class="card settingsCard">
@@ -720,8 +722,8 @@ input, select {
                 <option value="point">📍その他</option>
             </select>
             <div class="pointButtonRow">
-                <button onclick="addPoint()">📍登録</button>
-                <button onclick="deletePoint()">🗑削除</button>
+                <button onclick="addPoint(this)">📍登録</button>
+                <button onclick="deletePoint(this)">🗑削除</button>
             </div>
             <div class="pointInfo">
                 <div>📍 緯度：<span id="pointLat">-</span></div>
@@ -744,7 +746,7 @@ input, select {
         <div class="card settingsCard">
             <div class="sectionTitle">📢 全体周知</div>
             <input id="announcementInput" placeholder="全員に表示するお知らせ">
-            <button class="settingsButton" onclick="updateAnnouncement()">📢 周知を更新</button>
+            <button class="settingsButton" onclick="updateAnnouncement(this)">📢 周知を更新</button>
         </div>
 
         <div class="card settingsCard">
@@ -1142,7 +1144,7 @@ async function resolveSocketUserId(){
    ユーザー情報保存
 ================================================== */
 
-async function registerUser(){
+async function registerUser(button){
     if(!currentAuthUser){
         alert("先にログインしてください");
         return;
@@ -1200,6 +1202,7 @@ async function registerUser(){
         }
 
         await registerSocketUser();
+        showButtonFeedback(button);
     }
     catch(error){
         console.error("ユーザー情報保存エラー:", error);
@@ -1310,6 +1313,34 @@ function updateRegisterStatus(name){
     if(status){
         status.innerHTML = "🟢 登録済み : " + escapeHtml(name);
     }
+}
+
+/* ==================================================
+   ボタン押下フィードバック
+   ・押した瞬間の時刻を一時的にボタン内に表示する
+================================================== */
+
+function showButtonFeedback(button){
+    if(!button){ return; }
+
+    if(button.dataset.originalLabel === undefined){
+        button.dataset.originalLabel = button.textContent;
+    }
+
+    if(button._feedbackTimer){
+        clearTimeout(button._feedbackTimer);
+    }
+
+    const timeText = new Date().toLocaleTimeString("ja-JP", { hour12: false });
+
+    button.textContent = `✅ 完了 ${timeText}`;
+    button.classList.add("buttonPressed");
+
+    button._feedbackTimer = setTimeout(() => {
+        button.textContent = button.dataset.originalLabel;
+        button.classList.remove("buttonPressed");
+        button._feedbackTimer = null;
+    }, 2000);
 }
 
 /* ==================================================
@@ -1652,10 +1683,11 @@ updatePlaceName();
    全体周知
 ================================================== */
 
-function updateAnnouncement(){
+function updateAnnouncement(button){
     const input = document.getElementById("announcementInput");
     const text = input ? input.value.trim() : "";
     socket.emit("updateAnnouncement", text);
+    showButtonFeedback(button);
 }
 
 socket.on("announcement", text => {
@@ -2670,7 +2702,7 @@ map.on("click", e => {
    地点登録
 ================================================== */
 
-function addPoint(){
+function addPoint(button){
     if(!currentAuthUser){
         alert("先にログインしてください");
         return;
@@ -2694,13 +2726,14 @@ function addPoint(){
     });
 
     document.getElementById("pointName").value = "";
+    showButtonFeedback(button);
 }
 
 /* ==================================================
    地点削除
 ================================================== */
 
-async function deletePoint(){
+async function deletePoint(button){
     const name = selectedPointName || document.getElementById("pointName").value.trim();
     if(name === ""){
         alert("削除する地点を選択してください");
@@ -2711,6 +2744,7 @@ async function deletePoint(){
     }
 
     socket.emit("deletePoint", name);
+    showButtonFeedback(button);
 }
 
 /* ==================================================
