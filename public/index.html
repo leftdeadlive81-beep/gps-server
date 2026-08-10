@@ -421,21 +421,21 @@ input, select {
     pointer-events: auto;
     transition: left .15s linear;
 }
-.arTarget .arIcon { font-size: 26px; }
+.arTarget .arIcon { font-size: 30px; transition: font-size .2s linear; }
 .arTarget .arName {
-    margin-top: 2px;
-    font-size: 12px;
+    margin-top: 3px;
+    font-size: 16px;
     font-weight: bold;
-    background: rgba(0,0,0,.5);
-    padding: 2px 7px;
+    background: rgba(0,0,0,.65);
+    padding: 4px 10px;
     border-radius: 10px;
     white-space: nowrap;
 }
 .arTarget .arDist {
-    margin-top: 2px;
-    font-size: 11px;
-    background: rgba(0,0,0,.5);
-    padding: 1px 6px;
+    margin-top: 3px;
+    font-size: 14px;
+    background: rgba(0,0,0,.65);
+    padding: 2px 8px;
     border-radius: 8px;
 }
 .arMessage {
@@ -2528,8 +2528,9 @@ async function startAR(){
 
     arWatchId = navigator.geolocation.watchPosition(
         pos => {
-            arMyLat = pos.coords.latitude;
-            arMyLon = pos.coords.longitude;
+            // GPSの微小なブレをそのまま反映すると近距離の対象が揺れるため平滑化する
+            arMyLat = arMyLat === null ? pos.coords.latitude : arMyLat + (pos.coords.latitude - arMyLat) * 0.3;
+            arMyLon = arMyLon === null ? pos.coords.longitude : arMyLon + (pos.coords.longitude - arMyLon) * 0.3;
         },
         error => {
             console.error("AR位置取得エラー:", error);
@@ -2580,7 +2581,16 @@ function handleArOrientation(event){
     }
 
     if(heading === null || Number.isNaN(heading)){ return; }
-    arHeading = ((heading % 360) + 360) % 360;
+    heading = ((heading % 360) + 360) % 360;
+
+    // センサーの生値をそのまま使うと表示がガタつくため、円環を考慮して平滑化する
+    if(arHeading === null){
+        arHeading = heading;
+    }
+    else{
+        const diff = ((heading - arHeading + 540) % 360) - 180;
+        arHeading = ((arHeading + diff * 0.15) % 360 + 360) % 360;
+    }
 }
 
 function bearingBetween(lat1, lon1, lat2, lon2){
@@ -2691,11 +2701,12 @@ function renderAR(){
         const distText = t.distance >= 1000
             ? (t.distance / 1000).toFixed(1) + " km"
             : Math.round(t.distance) + " m";
-        const scale = Math.max(0.55, Math.min(1.3, 300 / Math.max(t.distance, 30)));
+        // 文字は常に一定サイズを保ち、距離が近いほどアイコンだけ大きくする
+        const iconScale = Math.max(0.8, Math.min(1.7, 300 / Math.max(t.distance, 40)));
 
         html += `
-            <div class="arTarget" style="left:${xPercent}%; transform: translate(-50%, -50%) scale(${scale.toFixed(2)});">
-                <div class="arIcon">${t.icon}</div>
+            <div class="arTarget" style="left:${xPercent}%;">
+                <div class="arIcon" style="font-size:${Math.round(30 * iconScale)}px;">${t.icon}</div>
                 <div class="arName">${escapeHtml(t.name)}</div>
                 <div class="arDist">${distText}</div>
             </div>
