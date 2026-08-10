@@ -958,8 +958,19 @@ function levelFromExperience(experience) {
 // Socket.IO
 //============================================================
 
+const viewingSockets = new Set();
+
+function broadcastConnectionCounts() {
+    io.emit("connectionCounts", {
+        connections: io.engine.clientsCount,
+        viewers: viewingSockets.size
+    });
+}
+
 io.on("connection", socket => {
     console.log("接続:", socket.id);
+
+    broadcastConnectionCounts();
 
     //====================================================
     // 初期データ
@@ -1762,11 +1773,27 @@ io.on("connection", socket => {
     });
 
     //====================================================
+    // 閲覧状態（接続数・閲覧中ユーザー数の表示用）
+    //====================================================
+
+    socket.on("viewerActive", () => {
+        viewingSockets.add(socket.id);
+        broadcastConnectionCounts();
+    });
+
+    socket.on("viewerInactive", () => {
+        viewingSockets.delete(socket.id);
+        broadcastConnectionCounts();
+    });
+
+    //====================================================
     // 切断
     //====================================================
 
     socket.on("disconnect", () => {
         console.log("切断:", socket.id);
+        viewingSockets.delete(socket.id);
+        broadcastConnectionCounts();
     });
 });
 
