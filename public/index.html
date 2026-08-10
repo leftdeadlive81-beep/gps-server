@@ -525,6 +525,18 @@ input, select {
     padding: 2px 5px;
     border-radius: 3px;
 }
+.leaflet-div-icon { background: transparent; border: none; }
+.pointDivIcon {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,.4);
+    border: 2px solid white;
+}
+.pointDivIcon span { font-size: 17px; line-height: 1; }
 .markerStatusLine {
     font-weight: normal;
     font-size: 11px;
@@ -3102,6 +3114,41 @@ function wireMapLongPress(){
 }
 wireMapLongPress();
 
+/* ==================================================
+   地点の種類（絵文字アイコン、10種類）
+================================================== */
+
+const POINT_TYPES = {
+    CP:      { emoji: "🏳️", label: "指揮所(CP)", color: "#5c6bc0" },
+    water:   { emoji: "💧", label: "給水所",       color: "#29b6f6" },
+    supply:  { emoji: "📦", label: "補給地点",     color: "#8d6e63" },
+    medical: { emoji: "🏥", label: "医療拠点",     color: "#ef5350" },
+    aid:     { emoji: "⛑️", label: "救護所",       color: "#ff7043" },
+    heli:    { emoji: "🚁", label: "ヘリポート",   color: "#42a5f5" },
+    fuel:    { emoji: "⛽", label: "燃料補給",     color: "#fb8c00" },
+    blocked: { emoji: "🚧", label: "通行止め",     color: "#ffca28" },
+    danger:  { emoji: "⚠️", label: "危険箇所",     color: "#e53935" },
+    point:   { emoji: "📍", label: "その他",       color: "#78909c" }
+};
+
+function createPointIcon(type){
+    const info = POINT_TYPES[type] || POINT_TYPES.point;
+    return L.divIcon({
+        className: "pointDivIconWrapper",
+        html: `<div class="pointDivIcon" style="background:${info.color};"><span>${info.emoji}</span></div>`,
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
+        popupAnchor: [0, -22]
+    });
+}
+
+function pointTypeOptionsHtml(){
+    return Object.keys(POINT_TYPES).map(key => {
+        const info = POINT_TYPES[key];
+        return `<option value="${key}">${info.emoji} ${info.label}</option>`;
+    }).join("");
+}
+
 function openPointRegisterPopup(latlng){
     if(!currentAuthUser){
         alert("先にログインしてください");
@@ -3115,10 +3162,7 @@ function openPointRegisterPopup(latlng){
                 <div class="pointRegisterTitle">この地点を登録しますか？</div>
                 <input id="pointRegisterName" placeholder="地点名（例：CP1、給水所）">
                 <select id="pointRegisterType">
-                    <option value="CP">🏳 指揮所(CP)</option>
-                    <option value="water">💧給水所</option>
-                    <option value="supply">📦補給地点</option>
-                    <option value="point">📍その他</option>
+                    ${pointTypeOptionsHtml()}
                 </select>
                 <div class="pointRegisterButtons">
                     <button onclick="confirmPointRegister(${latlng.lat}, ${latlng.lng})">📍登録</button>
@@ -3183,12 +3227,7 @@ socket.on("points", data => {
         pointMarkers[name] = L.marker(
             [Number(p.lat), Number(p.lon)],
             {
-                icon: L.icon({
-                    iconUrl: "/icon/point.png",
-                    iconSize: [60, 60],
-                    iconAnchor: [30, 60],
-                    popupAnchor: [15, -70]
-                })
+                icon: createPointIcon(p.type)
             }
         ).addTo(map);
 
@@ -3199,8 +3238,12 @@ socket.on("points", data => {
             className: "pointLabel"
         });
 
+        const typeInfo = POINT_TYPES[p.type] || POINT_TYPES.point;
+
         pointMarkers[name].bindPopup(`
-            <b>📍 ${escapeHtml(name)}</b>
+            <b>${typeInfo.emoji} ${escapeHtml(name)}</b>
+            <br>
+            <span style="color:#666;">${typeInfo.label}</span>
             <br>
             ${Number(p.lat).toFixed(6)}
             <br>
