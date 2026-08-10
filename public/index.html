@@ -685,7 +685,7 @@ input, select {
 
         <div class="gpsButtonRow">
             <button class="gpsButton" onclick="startGPS()">📡 GPS開始</button>
-            <button class="reportButton" onclick="updateStatus()">🔄 現在地報告</button>
+            <button class="reportButton" onclick="updateStatus(this)">🔄 現在地報告</button>
         </div>
         <div id="gpsStatus">🔴 GPS停止中</div>
         <div id="lastSend">最終送信：-</div>
@@ -2035,7 +2035,7 @@ function getDeviceId(){
    現在地報告
 ================================================== */
 
-async function updateStatus(){
+async function updateStatus(button){
     if(!currentAuthUser){
         alert("先にログインしてください");
         return;
@@ -2054,7 +2054,7 @@ async function updateStatus(){
             await registerSocketUser();
         }
 
-        getCurrentPositionOnce();
+        getCurrentPositionOnce(button);
     }
     catch(error){
         console.error("現在地報告エラー:", error);
@@ -2065,10 +2065,11 @@ async function updateStatus(){
    現在地1回取得
 ================================================== */
 
-function getCurrentPositionOnce(){
+function getCurrentPositionOnce(button){
     navigator.geolocation.getCurrentPosition(
         pos => {
             sendLocation(pos.coords.latitude, pos.coords.longitude);
+            showButtonFeedback(button);
         },
         err => {
             console.error("現在地取得エラー:", err);
