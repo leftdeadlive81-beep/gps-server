@@ -2066,14 +2066,37 @@ async function updateStatus(button){
 ================================================== */
 
 function getCurrentPositionOnce(button){
+    let reported = false;
+
+    // 高精度の測位を待たず、まず大まかな位置（キャッシュ/低精度）を即座に送る
     navigator.geolocation.getCurrentPosition(
         pos => {
             sendLocation(pos.coords.latitude, pos.coords.longitude);
-            showButtonFeedback(button);
+            if(!reported){
+                reported = true;
+                showButtonFeedback(button);
+            }
+        },
+        err => {
+            console.log("現在地取得エラー（概略）:", err);
+        },
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
+    );
+
+    // 続けて高精度な位置に補正する
+    navigator.geolocation.getCurrentPosition(
+        pos => {
+            sendLocation(pos.coords.latitude, pos.coords.longitude);
+            if(!reported){
+                reported = true;
+                showButtonFeedback(button);
+            }
         },
         err => {
             console.error("現在地取得エラー:", err);
-            alert("現在地を取得できませんでした");
+            if(!reported){
+                alert("現在地を取得できませんでした");
+            }
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
