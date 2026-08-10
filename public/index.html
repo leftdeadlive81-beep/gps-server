@@ -290,18 +290,32 @@ input, select {
 .confirmBtnCancel { background: #e0e0e0; }
 .confirmBtnOk { background: #d32f2f; color: white; }
 
-.chronoInputRow { display: flex; gap: 5px; }
-.chronoInputRow input { flex: 1; }
-.chronoInputRow button {
-    width: 65px;
-    border: none;
-    border-radius: 5px;
+.timelineItem {
+    border-bottom: 1px solid #ddd;
+    padding: 8px 3px;
+}
+.timelineHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    color: #666;
+}
+.timelineCategory {
+    display: inline-block;
     background: #1976d2;
     color: white;
+    font-size: 11px;
+    font-weight: bold;
+    padding: 1px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
 }
-.timelineItem { border-bottom: 1px solid #ddd; padding: 8px 3px; }
-.timelineTime { font-size: 11px; color: #666; }
-.timelineMessage { font-size: 14px; margin-top: 3px; }
+.timelineCategory.catUrgent { background: #c62828; }
+.timelineSender { font-weight: bold; color: #333; }
+.timelineMessage { font-size: 14px; margin-top: 4px; }
+.timelineRemarks { font-size: 12px; color: #777; margin-top: 2px; }
 
 .pointButtonRow { display: flex; gap: 6px; margin-top: 7px; }
 .pointButtonRow button {
@@ -622,10 +636,18 @@ input, select {
     <div id="chronoTab" class="tabContent">
         <div class="card">
             <div class="sectionTitle">📋 報連相</div>
-            <div class="chronoInputRow">
-                <input id="chronoMessage" placeholder="活動内容を入力">
-                <button id="chronoSendButton" onclick="sendChronology()">送信</button>
-            </div>
+
+            <select id="chronoCategory">
+                <option value="報告">📢 報告</option>
+                <option value="連絡">📞 連絡</option>
+                <option value="相談">💬 相談</option>
+                <option value="緊急">🚨 緊急</option>
+                <option value="その他">📝 その他</option>
+            </select>
+            <input id="chronoMessage" placeholder="内容を入力">
+            <input id="chronoRemarks" placeholder="備考（任意）">
+            <button id="chronoSendButton" class="settingsButton" onclick="sendChronology()">送信</button>
+
             <div id="timeline"></div>
         </div>
     </div>
@@ -2724,12 +2746,18 @@ function sendChronology(){
     const msg = element.value.trim();
     if(msg === ""){ return; }
 
+    const category = document.getElementById("chronoCategory").value;
+    const remarks = document.getElementById("chronoRemarks").value.trim();
+
     socket.emit("addChronology", {
         message: msg,
-        user: document.getElementById("name").value
+        user: document.getElementById("name").value,
+        category: category,
+        remarks: remarks
     });
 
     element.value = "";
+    document.getElementById("chronoRemarks").value = "";
 }
 
 /* ==================================================
@@ -2740,10 +2768,23 @@ function renderChronology(){
     let html = "";
 
     chronology.forEach(item => {
+        const remarksLine = item.remarks
+            ? `<div class="timelineRemarks">📝 ${escapeHtml(item.remarks)}</div>`
+            : "";
+
         html += `
             <div class="timelineItem">
-                <div class="timelineTime">${escapeHtml(item.time || "")}</div>
+                <div class="timelineHeader">
+                    <span>
+                        <span class="timelineCategory ${item.category === "緊急" ? "catUrgent" : ""}">
+                            ${escapeHtml(item.category || "その他")}
+                        </span>
+                        <span class="timelineSender">${escapeHtml(item.user || "-")}</span>
+                    </span>
+                    <span>${escapeHtml(item.time || "")}</span>
+                </div>
                 <div class="timelineMessage">${escapeHtml(item.message || "")}</div>
+                ${remarksLine}
             </div>
         `;
     });
@@ -2761,7 +2802,7 @@ function renderChronology(){
 document.addEventListener("keydown", event => {
     if(event.key !== "Enter"){ return; }
 
-    if(document.activeElement && document.activeElement.id === "chronoMessage"){
+    if(document.activeElement && ["chronoMessage", "chronoRemarks"].includes(document.activeElement.id)){
         sendChronology();
     }
 });

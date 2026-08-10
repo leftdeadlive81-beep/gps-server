@@ -831,7 +831,10 @@ async function loadChronology() {
 
         chronology = result.rows.map(row => ({
             time: new Date(Number(row.created)).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", hour12: false }),
-            message: (row.user_name ? "[" + row.user_name + "] " : "") + row.message
+            user: row.user_name || "",
+            message: row.message || "",
+            category: row.category || "その他",
+            remarks: row.remarks || ""
         }));
 
         console.log("クロノロジー復元:", chronology.length);
@@ -1639,11 +1642,18 @@ io.on("connection", socket => {
     //====================================================
 
     socket.on("addChronology", async data => {
+        if (!data || !String(data.message || "").trim()) {
+            return;
+        }
+
         const now = Date.now();
 
         const item = {
             time: new Date(now).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", hour12: false }),
-            message: (data.user ? "[" + data.user + "] " : "") + data.message
+            user: String(data.user || "").trim(),
+            message: String(data.message || "").trim(),
+            category: String(data.category || "その他").trim(),
+            remarks: String(data.remarks || "").trim()
         };
 
         chronology.unshift(item);
@@ -1655,10 +1665,10 @@ io.on("connection", socket => {
         try {
             await pool.query(
                 `
-                INSERT INTO chronology (user_name, message, created)
-                VALUES ($1,$2,$3)
+                INSERT INTO chronology (user_name, message, category, remarks, created)
+                VALUES ($1,$2,$3,$4,$5)
                 `,
-                [data.user || "", data.message, now]
+                [item.user, item.message, item.category, item.remarks, now]
             );
         }
         catch (err) {
