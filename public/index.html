@@ -364,6 +364,20 @@ input, select {
     border-color: #1976d2;
 }
 .reactionCount { font-size: 11px; color: #555; font-weight: bold; }
+.reactionDetailTitle { font-weight: bold; font-size: 15px; margin-bottom: 10px; text-align: center; }
+.reactionDetailRow {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid #eee;
+    text-align: left;
+}
+.reactionDetailRow:last-child { border-bottom: none; }
+.reactionDetailEmoji { font-size: 18px; }
+.reactionDetailNames { font-size: 13px; color: #333; }
+.reactionDetailEmpty { text-align: center; color: #999; font-size: 13px; padding: 10px 0; }
+.reactionDetailCloseButton { width: 100%; margin-top: 12px; }
 .chronoLoadMoreDone {
     text-align: center;
     font-size: 12px;
@@ -805,6 +819,14 @@ input, select {
     </div>
 </div>
 
+<div id="reactionDetailOverlay" class="confirmOverlay" onclick="closeReactionDetail()">
+    <div class="confirmBox" onclick="event.stopPropagation()">
+        <div class="reactionDetailTitle">リアクション詳細</div>
+        <div id="reactionDetailBody"></div>
+        <button class="confirmBtnCancel reactionDetailCloseButton" onclick="closeReactionDetail()">閉じる</button>
+    </div>
+</div>
+
 <script>
 
 /* ==================================================
@@ -839,6 +861,7 @@ let socketUserId = null;
 let registered = false;
 let markers = {};
 let pointMarkers = {};
+let latestUsersData = {};
 let chronology = [];
 let olderChronology = [];
 let chronologyExhausted = false;
@@ -2407,6 +2430,8 @@ function stopNavigation(){
 socket.on("locations", data => {
     if(!data || typeof data !== "object"){ return; }
 
+    latestUsersData = data;
+
     Object.keys(markers).forEach(userId => {
         if(!data[userId]){
             if(markers[userId]){
@@ -2946,9 +2971,10 @@ function renderChronologyItem(item){
         : "";
 
     const tapToReact = item.id ? `onclick="toggleReactionPicker(${item.id})"` : "";
+    const idAttr = item.id ? `data-chronology-id="${item.id}"` : "";
 
     return `
-        <div class="timelineItem" ${tapToReact}>
+        <div class="timelineItem" ${idAttr} ${tapToReact}>
             <div class="timelineHeader">
                 <span>
                     <span class="timelineCategory ${item.category === "緊急" ? "catUrgent" : ""}">
@@ -3004,6 +3030,85 @@ function renderChronology(){
     if(timeline){
         timeline.innerHTML = html;
     }
+
+    wireChronologyLongPress();
+}
+
+/* ==================================================
+   長押しでリアクション詳細（誰が押したか）を表示
+================================================== */
+
+function wireChronologyLongPress(){
+    document.querySelectorAll(".timelineItem[data-chronology-id]").forEach(el => {
+        let pressTimer = null;
+        let longPressed = false;
+
+        const start = () => {
+            longPressed = false;
+            pressTimer = setTimeout(() => {
+                longPressed = true;
+                showReactionDetail(Number(el.dataset.chronologyId));
+            }, 500);
+        };
+
+        const cancel = () => {
+            if(pressTimer){
+                clearTimeout(pressTimer);
+                pressTimer = null;
+            }
+        };
+
+        el.addEventListener("mousedown", start);
+        el.addEventListener("touchstart", start, { passive: true });
+        el.addEventListener("mouseup", cancel);
+        el.addEventListener("mouseleave", cancel);
+        el.addEventListener("touchend", cancel);
+        el.addEventListener("touchmove", cancel);
+
+        el.addEventListener("click", event => {
+            if(longPressed){
+                event.stopPropagation();
+                event.preventDefault();
+                longPressed = false;
+            }
+        }, true);
+    });
+}
+
+function showReactionDetail(chronologyId){
+    const item = chronology.concat(olderChronology).find(i => i.id === chronologyId);
+    if(!item){ return; }
+
+    const reactions = item.reactions || {};
+    const rows = REACTION_EMOJIS
+        .filter(emoji => (reactions[emoji] || []).length > 0)
+        .map(emoji => {
+            const names = reactions[emoji].map(userId => {
+                const user = latestUsersData[userId];
+                return escapeHtml(user ? (user.display_name || user.name || userId) : userId);
+            }).join("、");
+
+            return `
+                <div class="reactionDetailRow">
+                    <span class="reactionDetailEmoji">${emoji}</span>
+                    <span class="reactionDetailNames">${names}</span>
+                </div>
+            `;
+        })
+        .join("");
+
+    const body = document.getElementById("reactionDetailBody");
+    if(body){
+        body.innerHTML = rows || `<div class="reactionDetailEmpty">まだリアクションはありません</div>`;
+    }
+
+    const overlay = document.getElementById("reactionDetailOverlay");
+    if(overlay){ overlay.classList.add("active"); }
+}
+
+function closeReactionDetail(){
+    const overlay = document.getElementById("reactionDetailOverlay");
+    if(overlay){ overlay.classList.remove("active"); }
 }
 
 /* ==================================================
