@@ -876,7 +876,11 @@ async function loadUsers() {
                 lastUpdate: null,
 
                 water: 0,
-                fuel: 0
+                fuel: 0,
+                item_a: 0,
+                item_b: 0,
+                item_c: 0,
+                item_d: 0
             };
         });
 
@@ -892,11 +896,23 @@ async function loadUsers() {
             user.utmE = current.utme;
             user.utmN = current.utmn;
             user.destination = current.destination || user.destination;
-            user.water = current.water || 0;
-            user.fuel = current.fuel || 0;
             user.icon = current.icontype || user.icon || "1";
             user.online = Boolean(current.online);
             user.lastUpdate = current.lastupdate;
+        });
+
+        const inventoryResult = await pool.query("SELECT * FROM user_inventory");
+
+        inventoryResult.rows.forEach(inventory => {
+            const user = users[inventory.user_id];
+            if (!user) { return; }
+
+            user.water = inventory.water || 0;
+            user.fuel = inventory.fuel || 0;
+            user.item_a = inventory.item_a || 0;
+            user.item_b = inventory.item_b || 0;
+            user.item_c = inventory.item_c || 0;
+            user.item_d = inventory.item_d || 0;
         });
 
         console.log("復元ユーザー:", Object.keys(users));
@@ -1107,7 +1123,11 @@ io.on("connection", socket => {
                 lastUpdate: now,
 
                 water: Number(data.water) || 0,
-                fuel: Number(data.fuel) || 0
+                fuel: Number(data.fuel) || 0,
+                item_a: Number(data.item_a) || 0,
+                item_b: Number(data.item_b) || 0,
+                item_c: Number(data.item_c) || 0,
+                item_d: Number(data.item_d) || 0
             };
 
             //================================================
@@ -1208,6 +1228,37 @@ io.on("connection", socket => {
                     1,
                     now,
                     user.user_id
+                ]
+            );
+
+            //================================================
+            // user_inventory（水・燃料・物資1〜4）
+            //================================================
+
+            await pool.query(
+                `
+                INSERT INTO user_inventory
+                (user_id, water, fuel, item_a, item_b, item_c, item_d, updated_at)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                ON CONFLICT(user_id)
+                DO UPDATE SET
+                    water = EXCLUDED.water,
+                    fuel = EXCLUDED.fuel,
+                    item_a = EXCLUDED.item_a,
+                    item_b = EXCLUDED.item_b,
+                    item_c = EXCLUDED.item_c,
+                    item_d = EXCLUDED.item_d,
+                    updated_at = EXCLUDED.updated_at
+                `,
+                [
+                    user.user_id,
+                    user.water,
+                    user.fuel,
+                    user.item_a,
+                    user.item_b,
+                    user.item_c,
+                    user.item_d,
+                    now
                 ]
             );
 
@@ -1352,14 +1403,11 @@ io.on("connection", socket => {
             const utmN = Number.isFinite(utmNValue) ? utmNValue : (oldUser.utmN ?? null);
 
             //================================================
-            // ⑨ 物資情報
+            // ⑨ 物資情報（user_inventoryが正、GPS送信では変更しない）
             //================================================
 
-            const waterValue = Number(data.water);
-            const fuelValue = Number(data.fuel);
-
-            const water = Number.isFinite(waterValue) ? waterValue : (Number(oldUser.water) || 0);
-            const fuel = Number.isFinite(fuelValue) ? fuelValue : (Number(oldUser.fuel) || 0);
+            const water = Number(oldUser.water) || 0;
+            const fuel = Number(oldUser.fuel) || 0;
 
             //================================================
             // ⑩ 行動・目的地

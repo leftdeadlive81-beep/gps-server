@@ -542,13 +542,26 @@ input, select {
                     <option value="4">🚛 大型</option>
                 </select>
             </div>
+            <input id="destination" placeholder="📍次の目的地">
+            <button class="settingsButton" onclick="registerUser()">👤 ユーザー情報を保存</button>
+            <div id="registerStatus">未登録</div>
+        </div>
+
+        <div class="card settingsCard">
+            <div class="sectionTitle">📦 物資管理</div>
             <div class="inputRow">
                 <input id="water" type="number" value="100" placeholder="💧水量">
                 <input id="fuel" type="number" value="100" placeholder="⛽燃料">
             </div>
-            <input id="destination" placeholder="📍次の目的地">
-            <button class="settingsButton" onclick="registerUser()">👤 ユーザー情報を保存</button>
-            <div id="registerStatus">未登録</div>
+            <div class="inputRow">
+                <input id="item_a" type="number" value="0" placeholder="📦 物資1">
+                <input id="item_b" type="number" value="0" placeholder="📦 物資2">
+            </div>
+            <div class="inputRow">
+                <input id="item_c" type="number" value="0" placeholder="📦 物資3">
+                <input id="item_d" type="number" value="0" placeholder="📦 物資4">
+            </div>
+            <button class="settingsButton" onclick="registerUser()">📦 物資情報を保存</button>
         </div>
 
         <div class="card settingsCard">
@@ -996,6 +1009,10 @@ async function registerUser(){
     const iconType = normalizeIconType(document.getElementById("iconType").value);
     const water = Number(document.getElementById("water").value) || 0;
     const fuel = Number(document.getElementById("fuel").value) || 0;
+    const itemA = Number(document.getElementById("item_a").value) || 0;
+    const itemB = Number(document.getElementById("item_b").value) || 0;
+    const itemC = Number(document.getElementById("item_c").value) || 0;
+    const itemD = Number(document.getElementById("item_d").value) || 0;
     const destination = document.getElementById("destination").value.trim();
 
     try{
@@ -1005,6 +1022,10 @@ async function registerUser(){
         localStorage.setItem("name", name);
         localStorage.setItem("water", water);
         localStorage.setItem("fuel", fuel);
+        localStorage.setItem("item_a", itemA);
+        localStorage.setItem("item_b", itemB);
+        localStorage.setItem("item_c", itemC);
+        localStorage.setItem("item_d", itemD);
         localStorage.setItem("destination", destination);
         localStorage.setItem("iconType", iconType);
 
@@ -1050,6 +1071,10 @@ function registerSocketUser(){
         const iconType = normalizeIconType(document.getElementById("iconType").value);
         const water = Number(document.getElementById("water").value) || 0;
         const fuel = Number(document.getElementById("fuel").value) || 0;
+        const itemA = Number(document.getElementById("item_a").value) || 0;
+        const itemB = Number(document.getElementById("item_b").value) || 0;
+        const itemC = Number(document.getElementById("item_c").value) || 0;
+        const itemD = Number(document.getElementById("item_d").value) || 0;
         const destination = document.getElementById("destination").value.trim();
 
         localStorage.setItem("puttan_user_id", socketUserId);
@@ -1091,6 +1116,10 @@ function registerSocketUser(){
             icon: iconType,
             water: water,
             fuel: fuel,
+            item_a: itemA,
+            item_b: itemB,
+            item_c: itemC,
+            item_d: itemD,
             destination: destination
         });
 
@@ -1599,15 +1628,11 @@ function sendLocation(lat, lon){
     const utmN = Math.round(utm[1]);
 
     const name = document.getElementById("name").value.trim();
-    const water = Number(document.getElementById("water").value) || 0;
-    const fuel = Number(document.getElementById("fuel").value) || 0;
     const destination = document.getElementById("destination").value.trim();
     const iconType = normalizeIconType(document.getElementById("iconType").value);
 
     localStorage.setItem("puttan_user_id", socketUserId);
     localStorage.setItem("name", name);
-    localStorage.setItem("water", water);
-    localStorage.setItem("fuel", fuel);
     localStorage.setItem("destination", destination);
     localStorage.setItem("iconType", iconType);
 
@@ -1627,8 +1652,6 @@ function sendLocation(lat, lon){
         utmZone: "52S",
         utmE: utmE,
         utmN: utmN,
-        water: water,
-        fuel: fuel,
         destination: destination,
         iconType: iconType,
         device_id: getDeviceId()
@@ -2112,6 +2135,10 @@ socket.on("locations", data => {
             💧水：${user.water ?? 0}
             <br>
             ⛽燃料：${user.fuel ?? 0}
+            <br>
+            📦物資1：${user.item_a ?? 0}　📦物資2：${user.item_b ?? 0}
+            <br>
+            📦物資3：${user.item_c ?? 0}　📦物資4：${user.item_d ?? 0}
             <br>
             📍目的地：${escapeHtml(user.destination || "-")}
             <br>
@@ -2628,7 +2655,7 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
 ================================================== */
 
 function restoreLocalUser(){
-    ["name", "water", "fuel", "destination", "iconType"].forEach(key => {
+    ["name", "water", "fuel", "item_a", "item_b", "item_c", "item_d", "destination", "iconType"].forEach(key => {
         const value = localStorage.getItem(key);
         const element = document.getElementById(key);
 
