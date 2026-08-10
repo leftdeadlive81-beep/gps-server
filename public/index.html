@@ -302,6 +302,16 @@ input, select {
     font-size: 11px;
     color: #1976d2;
 }
+.markerLevelBadge {
+    display: inline-block;
+    background: #ffb300;
+    color: #5d3a00;
+    font-size: 10px;
+    font-weight: bold;
+    padding: 1px 4px;
+    border-radius: 3px;
+    margin-right: 2px;
+}
 
 .popupCard { font-size: 13px; min-width: 210px; }
 .popupHeader {
@@ -2232,7 +2242,9 @@ socket.on("locations", data => {
             ? `<br><span class="markerStatusLine">${escapeHtml(user.status)}</span>`
             : "";
 
-        markers[userId].bindTooltip(`${escapeHtml(displayName)}${statusLine}`, {
+        const levelBadge = `<span class="markerLevelBadge">Lv.${user.level ?? 1}</span> `;
+
+        markers[userId].bindTooltip(`${levelBadge}${escapeHtml(displayName)}${statusLine}`, {
             permanent: true,
             direction: "top",
             offset: [0, -30],
@@ -2251,13 +2263,17 @@ socket.on("locations", data => {
         markers[userId].bindPopup(`
             <div class="popupCard">
                 <div class="popupHeader">
-                    <b>${escapeHtml(displayName)}</b>
+                    <b><span class="markerLevelBadge">Lv.${user.level ?? 1}</span> ${escapeHtml(displayName)}</b>
                     <span class="popupOnline ${user.online ? "isOnline" : "isOffline"}">
                         ${user.online ? "🟢 ONLINE" : "🔴 OFFLINE"}
                     </span>
                 </div>
 
                 <div class="popupSection">
+                    <div class="popupRow">
+                        <span class="popupLabel">🏃 総移動距離</span>
+                        <span class="popupValue">${Math.round(user.experience ?? 0)} km</span>
+                    </div>
                     <div class="popupRow">
                         <span class="popupLabel">📋 活動内容</span>
                         <span class="popupValue">${escapeHtml(user.status || "-")}</span>

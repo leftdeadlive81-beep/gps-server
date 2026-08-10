@@ -880,7 +880,10 @@ async function loadUsers() {
                 item_a: "",
                 item_b: "",
                 item_c: "",
-                item_d: ""
+                item_d: "",
+
+                experience: user.experience || 0,
+                level: levelFromExperience(user.experience || 0)
             };
         });
 
@@ -920,6 +923,31 @@ async function loadUsers() {
     catch (err) {
         console.error("DB復元エラー", err);
     }
+}
+
+//============================================================
+// 距離計算（経験値用、サーバー側で算出しユーザーは操作不可）
+//============================================================
+
+function getDistanceMeters(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) *
+        Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) ** 2;
+
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// GPSの誤差・瞬間移動的な異常値を経験値に反映しないための上限（1回のpingあたり）
+const MAX_VALID_JUMP_METERS = 5000;
+
+function levelFromExperience(experience) {
+    return Math.floor((experience || 0) / 100) + 1;
 }
 
 //============================================================
@@ -1127,7 +1155,11 @@ io.on("connection", socket => {
                 item_a: String(data.item_a || ""),
                 item_b: String(data.item_b || ""),
                 item_c: String(data.item_c || ""),
-                item_d: String(data.item_d || "")
+                item_d: String(data.item_d || ""),
+
+                // 経験値・LVはサーバーが移動距離から算出する値。ここでは維持のみ行う
+                experience: oldUser?.experience || 0,
+                level: levelFromExperience(oldUser?.experience || 0)
             };
 
             //================================================
@@ -1403,6 +1435,21 @@ io.on("connection", socket => {
             const utmN = Number.isFinite(utmNValue) ? utmNValue : (oldUser.utmN ?? null);
 
             //================================================
+            // ⑧.5 経験値・LV（1km移動＝経験値1、サーバー側でのみ計算・ユーザー操作不可）
+            //================================================
+
+            let movedMeters = 0;
+            if (Number.isFinite(oldUser.lat) && Number.isFinite(oldUser.lon)) {
+                movedMeters = getDistanceMeters(oldUser.lat, oldUser.lon, lat, lon);
+            }
+            if (movedMeters > MAX_VALID_JUMP_METERS) {
+                movedMeters = 0;
+            }
+
+            const experience = (Number(oldUser.experience) || 0) + (movedMeters / 1000);
+            const level = levelFromExperience(experience);
+
+            //================================================
             // ⑨ 物資情報（user_inventoryが正、GPS送信では変更しない）
             //================================================
 
@@ -1443,7 +1490,9 @@ io.on("connection", socket => {
                 icon: iconType,
                 iconType: iconType,
                 online: true,
-                lastUpdate: now
+                lastUpdate: now,
+                experience: experience,
+                level: level
             };
 
             //================================================
@@ -1456,10 +1505,11 @@ io.on("connection", socket => {
                 SET
                     destination = $2,
                     icon = $3,
-                    updated_at = $4
+                    updated_at = $4,
+                    experience = $5
                 WHERE user_id = $1
                 `,
-                [userId, destination, iconType, now]
+                [userId, destination, iconType, now, Math.round(experience)]
             );
 
             //================================================
