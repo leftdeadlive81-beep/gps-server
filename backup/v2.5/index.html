@@ -1,0 +1,2684 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Puttan Version 2.5</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+<style>
+* { box-sizing: border-box; }
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    font-family: "Yu Gothic", "Meiryo", sans-serif;
+    background: #f2f4f7;
+}
+button, input, select { font-family: inherit; }
+button { cursor: pointer; }
+
+#authScreen {
+    position: fixed;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    padding: 20px 12px 12px;
+    background: #4444;
+    z-index: 9999;
+}
+.authBox {
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto 8px;
+    padding: 20px;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow: 0 2px 10px rgba(0,0,0,.15);
+}
+.authBox h2 { margin-top: 0; text-align: center; }
+.authBox h3 { text-align: center; }
+.authBox input {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 10px;
+    border: 1px solid #bbb;
+    border-radius: 6px;
+    font-size: 16px;
+}
+.authBox button {
+    width: 100%;
+    padding: 12px;
+    margin-top: 8px;
+    border: 0;
+    border-radius: 6px;
+    background: #1976d2;
+    color: white;
+    font-size: 16px;
+}
+.authMessage {
+    margin-top: 15px;
+    min-height: 24px;
+    text-align: center;
+    font-weight: bold;
+}
+.authInfoCard {
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: #f5f7fa;
+    border: 1px solid #d9dee5;
+    box-shadow: 0 1px 5px rgba(0,0,0,.08);
+    font-size: 13px;
+    line-height: 1.6;
+    color: #333;
+}
+.authInfoTitle {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 8px;
+    text-align: center;
+}
+.authInfoText { text-align: center; }
+
+#appScreen { display: none; width: 100%; min-height: 100vh; }
+
+.tabBar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2px;
+    background: #263238;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+.tabButton {
+    border: none;
+    padding: 9px 4px;
+    background: #455a64;
+    color: white;
+    font-size: 13px;
+}
+.tabButton.active { background: #1976d2; font-weight: bold; }
+.tabIcon { display: block; font-size: 20px; }
+.tabText { display: block; }
+
+.tabContent { display: none; padding: 8px; }
+.tabContent.active { display: block; }
+
+.card {
+    background: white;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.12);
+}
+.settingsCard { margin-bottom: 10px; }
+.sectionTitle { font-weight: bold; font-size: 17px; margin-bottom: 8px; }
+
+.inputRow { display: flex; gap: 6px; margin-bottom: 7px; }
+.inputRow > * { flex: 1; }
+input, select {
+    width: 100%;
+    padding: 9px;
+    border: 1px solid #aaa;
+    border-radius: 5px;
+    font-size: 15px;
+}
+.settingsButton {
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: 6px;
+    background: #1976d2;
+    color: white;
+    font-size: 15px;
+    margin-top: 7px;
+}
+
+.navSettingRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+}
+.navSettingRow input { width: auto; margin: 0; }
+
+#mapTab { position: relative; }
+
+#map {
+    width: 100%;
+    height: calc(100vh - 150px);
+    height: calc(100dvh - 150px);
+    min-height: 300px;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.navPanel {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 900;
+    background: rgba(25,118,210,.95);
+    color: white;
+    border-radius: 8px;
+    padding: 8px 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.4);
+    min-width: 220px;
+    max-width: 90%;
+    text-align: center;
+}
+.navPanelHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 15px;
+    font-weight: bold;
+}
+.navStopButton {
+    border: none;
+    background: #c62828;
+    color: white;
+    border-radius: 5px;
+    padding: 5px 10px;
+    font-size: 13px;
+    font-weight: bold;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.navDistanceText { font-size: 22px; font-weight: bold; margin-top: 4px; }
+.navSummaryText { font-size: 12px; opacity: .85; margin-top: 2px; }
+
+.gpsButtonRow { display: flex; gap: 6px; margin-top: 7px; }
+.gpsButton, .reportButton {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 6px;
+    color: white;
+    font-size: 14px;
+}
+.gpsButton { background: #388e3c; }
+.reportButton { background: #1976d2; }
+#gpsStatus, #lastSend { text-align: center; padding: 4px; font-size: 13px; }
+
+.userHeader, .userRow {
+    display: grid;
+    grid-template-columns: 48px minmax(80px, 1fr) 50px 55px 65px 42px;
+    align-items: center;
+    gap: 3px;
+}
+.userHeader {
+    background: #455a64;
+    color: white;
+    padding: 6px 3px;
+    font-size: 12px;
+    text-align: center;
+}
+.userRow {
+    min-height: 42px;
+    border-bottom: 1px solid #ddd;
+    background: white;
+    font-size: 13px;
+    text-align: center;
+}
+.userRow > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deleteButton { border: none; background: transparent; font-size: 18px; }
+
+.confirmOverlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+}
+.confirmOverlay.active { display: flex; }
+.confirmBox {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    width: 80%;
+    max-width: 320px;
+    text-align: center;
+}
+.confirmMessage { font-size: 15px; margin-bottom: 16px; white-space: pre-wrap; }
+.confirmButtons { display: flex; gap: 10px; }
+.confirmButtons button {
+    flex: 1;
+    border: none;
+    border-radius: 5px;
+    padding: 10px;
+    font-size: 14px;
+}
+.confirmBtnCancel { background: #e0e0e0; }
+.confirmBtnOk { background: #d32f2f; color: white; }
+
+.chronoInputRow { display: flex; gap: 5px; }
+.chronoInputRow input { flex: 1; }
+.chronoInputRow button {
+    width: 65px;
+    border: none;
+    border-radius: 5px;
+    background: #1976d2;
+    color: white;
+}
+.timelineItem { border-bottom: 1px solid #ddd; padding: 8px 3px; }
+.timelineTime { font-size: 11px; color: #666; }
+.timelineMessage { font-size: 14px; margin-top: 3px; }
+
+.pointButtonRow { display: flex; gap: 6px; margin-top: 7px; }
+.pointButtonRow button {
+    flex: 1;
+    padding: 9px;
+    border: none;
+    border-radius: 5px;
+    background: #1976d2;
+    color: white;
+}
+.pointButtonRow button:last-child { background: #c62828; }
+.pointInfo { margin-top: 10px; line-height: 1.7; font-size: 14px; }
+
+.pointLabel {
+    background: rgba(255,255,255,.9);
+    border: 1px solid #555;
+    color: #111;
+    font-weight: bold;
+    padding: 2px 5px;
+    border-radius: 3px;
+}
+
+.trafficIcon {
+    background: #ff9800;
+    border: 3px solid #e65100;
+    border-radius: 50%;
+    box-shadow: 0 1px 5px rgba(0,0,0,.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    line-height: 1;
+}
+
+.utmGridLabel {
+    color: #d84315;
+    font-size: 10px;
+    font-weight: bold;
+    font-family: "Consolas", monospace;
+    text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.footer { text-align: center; padding: 15px; font-size: 12px; color: #666; }
+.footer a { color: #1976d2; }
+
+.utmCenterBox {
+    background: rgba(255,255,255,.92);
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-family: "Consolas", monospace;
+    line-height: 1.5;
+    color: #111;
+    white-space: nowrap;
+    box-shadow: 0 1px 4px rgba(0,0,0,.3);
+    text-align: center;
+}
+#placeNameText {
+    font-family: "Yu Gothic", "Meiryo", sans-serif;
+    font-weight: bold;
+    font-size: 13px;
+    margin-bottom: 3px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid #ccc;
+}
+
+.leaflet-control-scale-line {
+    background: rgba(255,255,255,.92) !important;
+    border: 2px solid #333 !important;
+    border-top: none !important;
+    color: #111 !important;
+    font-size: 13px !important;
+    font-weight: bold !important;
+    padding: 2px 6px !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,.3);
+}
+#mapTab.active ~ .footer { display: none; }
+
+/* ==================================================
+   レイヤー選択パネル
+================================================== */
+
+.leaflet-control-layers {
+    border-radius: 8px !important;
+    border: 1px solid #555 !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,.35) !important;
+}
+.leaflet-control-layers-toggle {
+    width: 40px !important;
+    height: 40px !important;
+}
+.leaflet-control-layers-expanded {
+    padding: 10px 14px 12px !important;
+    background: rgba(255,255,255,.97) !important;
+}
+.leaflet-control-layers-base,
+.leaflet-control-layers-overlays {
+    display: flex;
+    flex-direction: column;
+}
+.leaflet-control-layers-base::before,
+.leaflet-control-layers-overlays::before {
+    display: block;
+    font-weight: bold;
+    font-size: 12px;
+    color: #1976d2;
+    margin-bottom: 4px;
+}
+.leaflet-control-layers-base::before { content: "🗺 ベースマップ"; }
+.leaflet-control-layers-overlays::before {
+    content: "📌 重ね合わせ表示";
+    margin-top: 2px;
+}
+.leaflet-control-layers label {
+    display: flex;
+    align-items: center;
+    padding: 5px 2px;
+    font-size: 14px;
+    white-space: nowrap;
+}
+.leaflet-control-layers-selector {
+    width: 17px;
+    height: 17px;
+    margin-right: 8px;
+}
+.leaflet-control-layers-separator {
+    margin: 6px 0;
+    border-top: 1px solid #ddd;
+}
+
+@media (max-width: 600px) {
+    #authScreen { padding: 10px 10px 12px; }
+    .authBox { padding: 16px; margin-bottom: 6px; }
+    .authInfoCard { padding: 12px 14px; font-size: 12px; }
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
+
+</head>
+<body>
+
+<!-- ================================================
+     認証画面
+================================================= -->
+<div id="authScreen">
+
+    <div id="loginBox" class="authBox">
+        <h2>災害情報共有システム<br>【試作ver0.2】</h2>
+        <h3>🔐 ログイン</h3>
+        <input type="text" id="loginUsername" placeholder="任意のログインID(英数字)" autocomplete="username">
+        <input type="password" id="loginPassword" placeholder="パスワード(6文字以上)" autocomplete="current-password">
+        <button onclick="loginUser()">🔐 ログイン</button>
+        <button onclick="showRegister()">👤 新規アカウント登録</button>
+        <div id="loginMessage" class="authMessage"></div>
+        <h3>※初めて使用する際は<br>「新規アカウント登録」をして下さい。<br>次回以降は自動的にログオンします。</h3>
+    </div>
+
+    <div id="loginInfoCard" class="authInfoCard">
+        <div class="authInfoTitle">🐈 このアプリについて 🐈</div>
+        <div class="authInfoText">
+            災害時などの活動において、隊員の現在位置や情報を共有したり、地図上で様々な情報を表示したりできる情報共有システムです。
+            <br>
+            🗺️ 地図　📡 GPS　👥 隊員情報
+            <br>
+            📍 地点登録　📋 クロノロ
+            <br>
+            <strong>※ 本システムは試作版です。</strong>
+        </div>
+    </div>
+
+    <div id="registerBox" class="authBox" style="display:none;">
+        <h2>災害情報共有システム<br>【試作ver0.2】</h2>
+        <h3>👤 新規アカウント登録</h3>
+        <input type="text" id="registerUsername" placeholder="ログインID（英数字）" autocomplete="username">
+        <input type="text" id="registerDisplayName" placeholder="表示名（例：第1小隊 山田）" autocomplete="name">
+        <input type="password" id="registerPassword" placeholder="パスワード（6文字以上）" autocomplete="new-password">
+        <input type="password" id="registerPassword2" placeholder="パスワード（確認）" autocomplete="new-password">
+        <button onclick="registerAuthUser()">👤 アカウント登録</button>
+        <button onclick="showLogin()">🔐 ログイン画面へ戻る</button>
+        <div id="registerMessage" class="authMessage"></div>
+    </div>
+
+</div>
+
+<!-- ================================================
+     アプリ画面
+================================================= -->
+<div id="appScreen">
+
+    <div class="tabBar">
+        <button class="tabButton active" onclick="showTab('mapTab',this)">
+            <span class="tabIcon">🗺️</span><span class="tabText">地図</span>
+        </button>
+        <button class="tabButton" onclick="showTab('usersTab',this)">
+            <span class="tabIcon">👥</span><span class="tabText">隊員一覧</span>
+        </button>
+        <button class="tabButton" onclick="showTab('chronoTab',this)">
+            <span class="tabIcon">📋</span><span class="tabText">クロノロ</span>
+        </button>
+        <button class="tabButton" onclick="showTab('settingsTab',this)">
+            <span class="tabIcon">⚙️</span><span class="tabText">登録・設定</span>
+        </button>
+    </div>
+
+    <div id="mapTab" class="tabContent active">
+        <div id="map"></div>
+
+        <div id="navPanel" class="navPanel" style="display:none;">
+            <div class="navPanelHeader">
+                <span id="navInstructionText">-</span>
+                <button class="navStopButton" onclick="stopNavigation()">🛑 ナビ終了</button>
+            </div>
+            <div id="navDistanceText" class="navDistanceText">-</div>
+            <div id="navSummary" class="navSummaryText">-</div>
+        </div>
+
+        <div class="gpsButtonRow">
+            <button class="gpsButton" onclick="startGPS()">📡 GPS開始</button>
+            <button class="reportButton" onclick="updateStatus()">🔄 現在地報告</button>
+        </div>
+        <div id="gpsStatus">🔴 GPS停止中</div>
+        <div id="lastSend">最終送信：-</div>
+    </div>
+
+    <div id="usersTab" class="tabContent">
+        <div class="card">
+            <div class="sectionTitle">👥 接続ユーザー</div>
+            <div class="userHeader">
+                <div>状態</div><div>名前</div><div>💧水</div><div>⛽燃料</div><div>最終</div><div>操作</div>
+            </div>
+            <div id="users"></div>
+        </div>
+    </div>
+
+    <div id="chronoTab" class="tabContent">
+        <div class="card">
+            <div class="sectionTitle">📋 報連相</div>
+            <div class="chronoInputRow">
+                <input id="chronoMessage" placeholder="活動内容を入力">
+                <button id="chronoSendButton" onclick="sendChronology()">送信</button>
+            </div>
+            <div id="timeline"></div>
+        </div>
+    </div>
+
+    <div id="settingsTab" class="tabContent">
+
+        <div class="card settingsCard">
+            <div class="sectionTitle">👤 使用者情報</div>
+            <div class="inputRow">
+                <input id="name" value="隊員A" placeholder="表示名">
+                <select id="iconType">
+                    <option value="1">👤 隊員</option>
+                    <option value="2">🚙 小型</option>
+                    <option value="3">🚚 中型</option>
+                    <option value="4">🚛 大型</option>
+                </select>
+            </div>
+            <div class="inputRow">
+                <input id="water" type="number" value="100" placeholder="💧水量">
+                <input id="fuel" type="number" value="100" placeholder="⛽燃料">
+            </div>
+            <input id="destination" placeholder="📍次の目的地">
+            <button class="settingsButton" onclick="registerUser()">👤 ユーザー情報を保存</button>
+            <div id="registerStatus">未登録</div>
+        </div>
+
+        <div class="card settingsCard">
+            <div class="sectionTitle">📍 地点登録</div>
+            <input id="pointName" placeholder="地点名（例：CP1、給水所）">
+            <select id="pointType">
+                <option value="CP">🏳 指揮所(CP)</option>
+                <option value="water">💧給水所</option>
+                <option value="supply">📦補給地点</option>
+                <option value="point">📍その他</option>
+            </select>
+            <div class="pointButtonRow">
+                <button onclick="addPoint()">📍登録</button>
+                <button onclick="deletePoint()">🗑削除</button>
+            </div>
+            <div class="pointInfo">
+                <div>📍 緯度：<span id="pointLat">-</span></div>
+                <div>📍 経度：<span id="pointLon">-</span></div>
+                <hr>
+                <div>🧭 UTM：<span id="pointUtmZone">-</span></div>
+                <div>E：<span id="pointUtmE">-</span></div>
+                <div>N：<span id="pointUtmN">-</span></div>
+            </div>
+        </div>
+
+        <div class="card settingsCard">
+            <div class="sectionTitle">🧭 ナビ設定</div>
+            <label class="navSettingRow">
+                <input type="checkbox" id="navAvoidHighways" onchange="onNavAvoidHighwaysChange()">
+                🛣 高速道路・有料道路を避ける
+            </label>
+        </div>
+
+        <div class="card settingsCard">
+            <div class="sectionTitle">🔐 アカウント</div>
+            <button class="settingsButton" onclick="logoutUser()">🚪 ログアウト</button>
+        </div>
+
+    </div>
+
+    <div class="footer">
+        <div>Puttan Version 2.5</div>
+        <div><a href="/manual.html">📖 マニュアル</a></div>
+    </div>
+
+</div>
+
+<div id="confirmOverlay" class="confirmOverlay">
+    <div class="confirmBox">
+        <div id="confirmMessage" class="confirmMessage"></div>
+        <div class="confirmButtons">
+            <button class="confirmBtnCancel" onclick="closeConfirm(false)">キャンセル</button>
+            <button class="confirmBtnOk" onclick="closeConfirm(true)">OK</button>
+        </div>
+    </div>
+</div>
+
+<script>
+
+/* ==================================================
+   Supabase
+================================================== */
+
+const SUPABASE_URL = "https://seqqgkryrhcvmxnwyybr.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_pUI0REFogJSgZYs3OJepEQ_Zl27Iw73";
+
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ==================================================
+   Socket.IO
+================================================== */
+
+const socket = io({
+    transports: ["polling", "websocket"],
+    upgrade: true,
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000
+});
+
+/* ==================================================
+   状態
+================================================== */
+
+let currentAuthUser = null;
+let currentProfile = null;
+let socketUserId = null;
+let registered = false;
+let markers = {};
+let pointMarkers = {};
+let chronology = [];
+let watchID = null;
+
+let navRouteLine = null;
+let navRoute = null;
+let navSteps = [];
+let navCurrentStepIndex = 0;
+let navDestination = null;
+let navWatchID = null;
+let navAnnouncedThresholds = {};
+let navLastRerouteTime = 0;
+let currentTrafficRegulations = [];
+let gpsTimer = null;
+let lastLat = 0;
+let lastLon = 0;
+let lastSendTime = 0;
+let selectedPointLat = null;
+let selectedPointLon = null;
+let selectedPointName = null;
+
+const SEND_INTERVAL = 30000;
+const MOVE_DISTANCE = 10;
+
+/* ==================================================
+   任意ログインID → Auth用メール
+================================================== */
+
+function makeAuthEmail(loginId){
+    return loginId.trim().toLowerCase() + "@puttan.local";
+}
+
+/* ==================================================
+   Auth画面切替
+================================================== */
+
+function showLogin(){
+    const loginBox = document.getElementById("loginBox");
+    const registerBox = document.getElementById("registerBox");
+    if(loginBox){ loginBox.style.display = "block"; }
+    if(registerBox){ registerBox.style.display = "none"; }
+    const message = document.getElementById("loginMessage");
+    if(message){ message.textContent = ""; }
+}
+
+function showRegister(){
+    const loginBox = document.getElementById("loginBox");
+    const registerBox = document.getElementById("registerBox");
+    if(loginBox){ loginBox.style.display = "none"; }
+    if(registerBox){ registerBox.style.display = "block"; }
+    const message = document.getElementById("registerMessage");
+    if(message){ message.textContent = ""; }
+}
+
+function showAuth(){
+    const authScreen = document.getElementById("authScreen");
+    const appScreen = document.getElementById("appScreen");
+    if(authScreen){ authScreen.style.display = "flex"; }
+    if(appScreen){ appScreen.style.display = "none"; }
+}
+
+function showApp(){
+    const authScreen = document.getElementById("authScreen");
+    const appScreen = document.getElementById("appScreen");
+    if(authScreen){ authScreen.style.display = "none"; }
+    if(appScreen){ appScreen.style.display = "block"; }
+    setTimeout(()=>{
+        if(typeof map !== "undefined" && map){
+            map.invalidateSize();
+        }
+    }, 300);
+}
+
+/* ==================================================
+   ログインIDチェック
+================================================== */
+
+function validateLoginId(loginId){
+    if(!loginId){ return "ログインIDを入力してください"; }
+    if(loginId.length < 2){ return "ログインIDは2文字以上にしてください"; }
+    if(loginId.length > 50){ return "ログインIDは50文字以内にしてください"; }
+    if(!/^[A-Za-z0-9]+$/.test(loginId)){ return "ログインIDは英数字のみ使用できます"; }
+    return null;
+}
+
+/* ==================================================
+   新規Auth登録
+================================================== */
+
+async function registerAuthUser(){
+    const loginId = document.getElementById("registerUsername").value.trim();
+    const displayName = document.getElementById("registerDisplayName").value.trim();
+    const password = document.getElementById("registerPassword").value;
+    const password2 = document.getElementById("registerPassword2").value;
+    const message = document.getElementById("registerMessage");
+
+    if(displayName === ""){
+        message.textContent = "表示名を入力してください";
+        return;
+    }
+    if(displayName.length > 50){
+        message.textContent = "表示名は50文字以内にしてください";
+        return;
+    }
+    const validation = validateLoginId(loginId);
+    if(validation){
+        message.textContent = validation;
+        return;
+    }
+    if(password.length < 6){
+        message.textContent = "パスワードは6文字以上にしてください";
+        return;
+    }
+    if(password !== password2){
+        message.textContent = "パスワードが一致しません";
+        return;
+    }
+
+    message.textContent = "登録処理中...";
+
+    try{
+        const { data: existing, error: checkError } = await supabaseClient
+            .from("profiles")
+            .select("user_id")
+            .eq("login_id", loginId)
+            .maybeSingle();
+
+        if(checkError){ throw checkError; }
+
+        if(existing){
+            message.textContent = "そのログインIDは既に使用されています";
+            return;
+        }
+
+        const authEmail = makeAuthEmail(loginId);
+
+        const { data, error } = await supabaseClient.auth.signUp({
+            email: authEmail,
+            password: password
+        });
+
+        if(error){ throw error; }
+        if(!data || !data.user){
+            throw new Error("Authユーザーを取得できませんでした");
+        }
+
+        const user = data.user;
+
+        const { error: profileError } = await supabaseClient
+            .from("profiles")
+            .upsert(
+                {
+                    user_id: user.id,
+                    login_id: loginId,
+                    display_name: displayName,
+                    icon_type: "1",
+                    role: "user"
+                },
+                { onConflict: "user_id" }
+            );
+
+        if(profileError){ throw profileError; }
+
+        message.textContent = "🟢 アカウント登録成功";
+
+        const { data: sessionData } = await supabaseClient.auth.getSession();
+
+        if(sessionData && sessionData.session){
+            currentAuthUser = sessionData.session.user;
+            await loadProfile(currentAuthUser);
+            showApp();
+        }
+        else{
+            message.textContent = "登録しました。ログインしてください。";
+            showLogin();
+            document.getElementById("loginUsername").value = loginId;
+        }
+    }
+    catch(error){
+        console.error("登録エラー:", error);
+        message.textContent = "登録に失敗しました：" + (error.message || error);
+    }
+}
+
+/* ==================================================
+   ログイン
+================================================== */
+
+window.loginUser = async function loginUser(){
+    const loginInput = document.getElementById("loginUsername");
+    const passwordInput = document.getElementById("loginPassword");
+    const message = document.getElementById("loginMessage");
+
+    const loginId = loginInput.value.trim();
+    const password = passwordInput.value;
+
+    const validation = validateLoginId(loginId);
+    if(validation){
+        message.textContent = validation;
+        return;
+    }
+    if(!password){
+        message.textContent = "パスワードを入力してください";
+        return;
+    }
+
+    message.textContent = "ログイン中...";
+
+    try{
+        const authEmail = makeAuthEmail(loginId);
+
+        const { data, error } = await supabaseClient.auth.signInWithPassword({
+            email: authEmail,
+            password: password
+        });
+
+        if(error){ throw error; }
+        if(!data || !data.user){
+            throw new Error("ログインユーザーを取得できませんでした");
+        }
+
+        currentAuthUser = data.user;
+
+        const profile = await loadProfile(currentAuthUser);
+        if(!profile){
+            throw new Error("プロフィール情報を取得できませんでした");
+        }
+
+        message.textContent = "";
+        showApp();
+    }
+    catch(error){
+        console.error("ログインエラー:", error);
+        message.textContent = "ログインに失敗しました：" + (error.message || error);
+    }
+};
+
+/* ==================================================
+   プロフィール取得
+================================================== */
+
+async function loadProfile(user){
+    if(!user){ return null; }
+
+    const { data, error } = await supabaseClient
+        .from("profiles")
+        .select("user_id,display_name,icon_type,role,login_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+    if(error){
+        console.error("プロフィール取得エラー:", error);
+        return null;
+    }
+    if(!data){
+        console.warn("プロフィールが存在しません");
+        return null;
+    }
+
+    currentAuthUser = user;
+    currentProfile = data;
+
+    const nameElement = document.getElementById("name");
+    const iconElement = document.getElementById("iconType");
+
+    if(nameElement && data.display_name){
+        nameElement.value = data.display_name;
+    }
+    if(iconElement){
+        iconElement.value = normalizeIconType(data.icon_type);
+    }
+
+    localStorage.setItem("name", data.display_name || "");
+    localStorage.setItem("iconType", normalizeIconType(data.icon_type));
+
+    return data;
+}
+
+/* ==================================================
+   現在のlogin_id
+================================================== */
+
+async function getCurrentLoginId(){
+    if(!currentAuthUser){ return ""; }
+
+    const { data, error } = await supabaseClient
+        .from("profiles")
+        .select("login_id")
+        .eq("user_id", currentAuthUser.id)
+        .maybeSingle();
+
+    if(error){
+        console.error("login_id取得エラー:", error);
+        return "";
+    }
+
+    return data?.login_id || "";
+}
+
+/* ==================================================
+   Socket用ユーザーID取得
+   Version 2.3.1（修正）
+   ★ userId入力欄には依存しない
+   ★ Supabase AuthのUUID(currentAuthUser.id)を
+     そのままGPS共有用のuser_idとして利用する
+================================================== */
+
+async function resolveSocketUserId(){
+
+    /* ① メモリ上のuser_id */
+    if(socketUserId){
+        return socketUserId;
+    }
+
+    /* ② localStorage */
+    const localUserId = localStorage.getItem("puttan_user_id");
+    if(localUserId){
+        socketUserId = localUserId;
+        return localUserId;
+    }
+
+    /* ③ ログイン中のSupabase Auth UUIDを使用 */
+    if(currentAuthUser && currentAuthUser.id){
+        const userId = currentAuthUser.id;
+        localStorage.setItem("puttan_user_id", userId);
+        socketUserId = userId;
+        return userId;
+    }
+
+    return null;
+}
+
+/* ==================================================
+   ユーザー情報保存
+================================================== */
+
+async function registerUser(){
+    if(!currentAuthUser){
+        alert("先にログインしてください");
+        return;
+    }
+
+    const userId = await resolveSocketUserId();
+    if(!userId){
+        alert("ユーザーIDを取得できませんでした。再度ログインしてください。");
+        return;
+    }
+
+    const name = document.getElementById("name").value.trim();
+    if(!name){
+        alert("表示名を入力してください");
+        return;
+    }
+
+    const iconType = normalizeIconType(document.getElementById("iconType").value);
+    const water = Number(document.getElementById("water").value) || 0;
+    const fuel = Number(document.getElementById("fuel").value) || 0;
+    const destination = document.getElementById("destination").value.trim();
+
+    try{
+        socketUserId = userId;
+
+        localStorage.setItem("puttan_user_id", userId);
+        localStorage.setItem("name", name);
+        localStorage.setItem("water", water);
+        localStorage.setItem("fuel", fuel);
+        localStorage.setItem("destination", destination);
+        localStorage.setItem("iconType", iconType);
+
+        await registerSocketUser();
+    }
+    catch(error){
+        console.error("ユーザー情報保存エラー:", error);
+        alert("ユーザー情報の保存に失敗しました");
+    }
+}
+
+/* ==================================================
+   Socket側ユーザー登録
+   Version 2.3.1（修正）
+   ★ サーバーは"registerUserResult"一本で結果を返すため、
+     クライアントも同じイベント名で受け取る
+================================================== */
+
+function registerSocketUser(){
+    return new Promise(async (resolve, reject)=>{
+
+        if(!currentAuthUser){
+            resolve(false);
+            return;
+        }
+
+        if(!socketUserId){
+            const userId = await resolveSocketUserId();
+            if(!userId){
+                alert("ユーザーIDがありません");
+                resolve(false);
+                return;
+            }
+        }
+
+        const nameElement = document.getElementById("name");
+        const name = nameElement ? nameElement.value.trim() : "";
+        if(!name){
+            resolve(false);
+            return;
+        }
+
+        const iconType = normalizeIconType(document.getElementById("iconType").value);
+        const water = Number(document.getElementById("water").value) || 0;
+        const fuel = Number(document.getElementById("fuel").value) || 0;
+        const destination = document.getElementById("destination").value.trim();
+
+        localStorage.setItem("puttan_user_id", socketUserId);
+
+        const timeout = setTimeout(()=>{
+            socket.off("registerUserResult", resultHandler);
+            console.warn("Socketユーザー登録確認タイムアウト");
+            registered = true;
+            localStorage.setItem("puttan_registered_done", "true");
+            updateRegisterStatus(name);
+            resolve(true);
+        }, 5000);
+
+        function resultHandler(result){
+            clearTimeout(timeout);
+            socket.off("registerUserResult", resultHandler);
+
+            if(result && result.success){
+                registered = true;
+                localStorage.setItem("puttan_registered_done", "true");
+                updateRegisterStatus(name);
+                console.log("Socketユーザー登録成功:", socketUserId);
+                resolve(true);
+            }
+            else{
+                registered = false;
+                console.error("Socketユーザー登録エラー:", result && result.message);
+                alert("ユーザー登録に失敗しました：" + (result && result.message ? result.message : "不明なエラー"));
+                reject(new Error(result && result.message ? result.message : "登録失敗"));
+            }
+        }
+
+        socket.once("registerUserResult", resultHandler);
+
+        socket.emit("registerUser", {
+            user_id: socketUserId,
+            display_name: name,
+            account_name: await getCurrentLoginId(),
+            icon: iconType,
+            water: water,
+            fuel: fuel,
+            destination: destination
+        });
+
+        console.log("Socketユーザー登録送信:", socketUserId);
+    });
+}
+
+/* ==================================================
+   登録状態表示
+================================================== */
+
+function updateRegisterStatus(name){
+    const status = document.getElementById("registerStatus");
+    if(status){
+        status.innerHTML = "🟢 登録済み : " + escapeHtml(name);
+    }
+}
+
+/* ==================================================
+   ログアウト
+================================================== */
+
+async function logoutUser(){
+    if(!(await showConfirm("ログアウトしますか？"))){
+        return;
+    }
+
+    stopGPS();
+    registered = false;
+
+    if(socketUserId){
+        socket.emit("deleteUser", socketUserId);
+    }
+
+    try{
+        const { error } = await supabaseClient.auth.signOut();
+        if(error){ throw error; }
+
+        currentAuthUser = null;
+        currentProfile = null;
+        socketUserId = null;
+
+        localStorage.removeItem("puttan_user_id");
+        localStorage.removeItem("puttan_registered_done");
+
+        showAuth();
+        showLogin();
+
+        const username = document.getElementById("loginUsername");
+        const password = document.getElementById("loginPassword");
+        if(username){ username.value = ""; }
+        if(password){ password.value = ""; }
+    }
+    catch(error){
+        console.error("ログアウトエラー:", error);
+        alert("ログアウトに失敗しました：" + error.message);
+    }
+}
+
+/* ==================================================
+   地図
+================================================== */
+
+const map = L.map("map").setView([32.803, 130.707], 13);
+
+const osm = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors"
+});
+
+const satellite = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+    attribution: "Tiles &copy; Esri"
+});
+
+const terrain = L.tileLayer("https://tile.opentopomap.org/{z}/{x}/{y}.png", {
+    attribution: "OpenTopoMap"
+});
+
+const gsi = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", {
+    attribution: "国土地理院"
+});
+
+const gsiPale = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", {
+    attribution: "国土地理院 淡色地図"
+});
+
+osm.addTo(map);
+
+let trafficRegulationLayer = L.layerGroup();
+
+/* ==================================================
+   雨雲レーダー（RainViewer）
+================================================== */
+
+const rainRadarLayer = L.layerGroup();
+let rainRadarTileLayer = null;
+
+async function updateRainRadarLayer(){
+    try{
+        const response = await fetch("https://api.rainviewer.com/public/weather-maps.json");
+        const data = await response.json();
+
+        const frames = data && data.radar && data.radar.past;
+        if(!frames || frames.length === 0){ return; }
+
+        const latest = frames[frames.length - 1];
+        const url = `${data.host}${latest.path}/256/{z}/{x}/{y}/2/1_1.png`;
+
+        if(rainRadarTileLayer){
+            rainRadarLayer.removeLayer(rainRadarTileLayer);
+        }
+
+        rainRadarTileLayer = L.tileLayer(url, {
+            opacity: 0.6,
+            attribution: "Weather data &copy; <a href=\"https://www.rainviewer.com/\">RainViewer</a>"
+        });
+
+        rainRadarLayer.addLayer(rainRadarTileLayer);
+    }
+    catch(error){
+        console.error("雨雲レーダー取得エラー:", error);
+    }
+}
+
+updateRainRadarLayer();
+setInterval(updateRainRadarLayer, 5 * 60 * 1000);
+
+/* ==================================================
+   UTMグリッド（デフォルトON）
+================================================== */
+
+const UTM_PROJ = "+proj=utm +zone=52 +south +datum=WGS84";
+
+const utmGridLayer = L.layerGroup();
+
+function pickUtmGridInterval(zoom, lat){
+    const metersPerPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+    const targetMeters = metersPerPixel * 120;
+
+    const niceSteps = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
+    for(const step of niceSteps){
+        if(step >= targetMeters){ return step; }
+    }
+    return niceSteps[niceSteps.length - 1];
+}
+
+function drawUtmGrid(){
+    utmGridLayer.clearLayers();
+
+    const bounds = map.getBounds();
+    const sw = bounds.getSouthWest();
+    const ne = bounds.getNorthEast();
+
+    const utmSW = proj4("EPSG:4326", UTM_PROJ, [sw.lng, sw.lat]);
+    const utmNE = proj4("EPSG:4326", UTM_PROJ, [ne.lng, ne.lat]);
+
+    const minE = Math.min(utmSW[0], utmNE[0]);
+    const maxE = Math.max(utmSW[0], utmNE[0]);
+    const minN = Math.min(utmSW[1], utmNE[1]);
+    const maxN = Math.max(utmSW[1], utmNE[1]);
+
+    const center = map.getCenter();
+    const interval = pickUtmGridInterval(map.getZoom(), center.lat);
+
+    const startE = Math.floor(minE / interval) * interval;
+    const startN = Math.floor(minN / interval) * interval;
+
+    const lineStyle = { color: "#ff5722", weight: 1, opacity: 0.65, interactive: false };
+
+    for(let e = startE; e <= maxE; e += interval){
+        const p1 = proj4(UTM_PROJ, "EPSG:4326", [e, minN]);
+        const p2 = proj4(UTM_PROJ, "EPSG:4326", [e, maxN]);
+
+        L.polyline([[p1[1], p1[0]], [p2[1], p2[0]]], lineStyle).addTo(utmGridLayer);
+
+        L.marker([p2[1], p2[0]], {
+            icon: L.divIcon({
+                className: "utmGridLabel",
+                html: Math.round(e).toString(),
+                iconSize: [60, 14],
+                iconAnchor: [30, 14]
+            }),
+            interactive: false
+        }).addTo(utmGridLayer);
+    }
+
+    for(let n = startN; n <= maxN; n += interval){
+        const p1 = proj4(UTM_PROJ, "EPSG:4326", [minE, n]);
+        const p2 = proj4(UTM_PROJ, "EPSG:4326", [maxE, n]);
+
+        L.polyline([[p1[1], p1[0]], [p2[1], p2[0]]], lineStyle).addTo(utmGridLayer);
+
+        L.marker([p1[1], p1[0]], {
+            icon: L.divIcon({
+                className: "utmGridLabel",
+                html: Math.round(n).toString(),
+                iconSize: [60, 14],
+                iconAnchor: [-4, 7]
+            }),
+            interactive: false
+        }).addTo(utmGridLayer);
+    }
+}
+
+map.on("moveend", drawUtmGrid);
+drawUtmGrid();
+utmGridLayer.addTo(map);
+
+L.control.layers(
+    {
+        "🗺 標準地図": osm,
+        "🛰 航空写真": satellite,
+        "⛰ 地形図": terrain,
+        "🇯🇵 国土地理院": gsi,
+        "🚒 防災淡色地図": gsiPale
+    },
+    {
+        "🧭 UTMグリッド": utmGridLayer,
+        "🚧 交通規制": trafficRegulationLayer,
+        "🌧 雨雲レーダー": rainRadarLayer
+    }
+).addTo(map);
+
+L.control.scale({
+    metric: true,
+    imperial: false,
+    position: "bottomleft"
+}).addTo(map);
+
+/* ==================================================
+   画面中心のUTM座標・地名を常時表示
+================================================== */
+
+const utmCenterControl = L.control({ position: "bottomright" });
+
+utmCenterControl.onAdd = function(){
+    const div = L.DomUtil.create("div", "utmCenterBox");
+    div.innerHTML = `
+        <div id="placeNameText">取得中...</div>
+        <div id="utmCenterText">UTM 52S<br>E: -　N: -</div>
+    `;
+    L.DomEvent.disableClickPropagation(div);
+    return div;
+};
+
+utmCenterControl.addTo(map);
+
+function updateUtmCenterDisplay(){
+    const center = map.getCenter();
+
+    const utm = proj4(
+        "EPSG:4326",
+        "+proj=utm +zone=52 +south +datum=WGS84",
+        [center.lng, center.lat]
+    );
+
+    const utmText = document.getElementById("utmCenterText");
+    if(utmText){
+        utmText.innerHTML = `UTM 52S<br>E: ${Math.round(utm[0])}　N: ${Math.round(utm[1])}`;
+    }
+}
+
+const placeNameCache = {};
+let placeNameTimer = null;
+
+function schedulePlaceNameUpdate(){
+    if(placeNameTimer){ clearTimeout(placeNameTimer); }
+    placeNameTimer = setTimeout(updatePlaceName, 700);
+}
+
+async function updatePlaceName(){
+    const center = map.getCenter();
+    const key = center.lat.toFixed(3) + "," + center.lng.toFixed(3);
+
+    const placeNameElement = document.getElementById("placeNameText");
+    if(!placeNameElement){ return; }
+
+    if(placeNameCache[key]){
+        placeNameElement.textContent = placeNameCache[key];
+        return;
+    }
+
+    placeNameElement.textContent = "取得中...";
+
+    try{
+        const response = await fetch(
+            `/api/reverse-geocode?lat=${center.lat}&lon=${center.lng}`
+        );
+        const data = await response.json();
+
+        const name = data.name || "地名不明";
+        placeNameCache[key] = name;
+
+        const latestCenter = map.getCenter();
+        const latestKey = latestCenter.lat.toFixed(3) + "," + latestCenter.lng.toFixed(3);
+        if(latestKey === key){
+            placeNameElement.textContent = name;
+        }
+    }
+    catch(error){
+        console.error("地名取得エラー:", error);
+        placeNameElement.textContent = "地名取得失敗";
+    }
+}
+
+map.on("move", updateUtmCenterDisplay);
+map.on("moveend", schedulePlaceNameUpdate);
+updateUtmCenterDisplay();
+updatePlaceName();
+
+/* ==================================================
+   交通規制受信
+================================================== */
+
+socket.on("trafficRegulations", regulations => {
+    trafficRegulationLayer.clearLayers();
+
+    if(!Array.isArray(regulations)){ return; }
+
+    currentTrafficRegulations = regulations.filter(
+        r => r && r.lat != null && r.lon != null
+    );
+
+    regulations.forEach(regulation => {
+        if(regulation.lat == null || regulation.lon == null){ return; }
+
+        const marker = L.marker(
+            [Number(regulation.lat), Number(regulation.lon)],
+            {
+                icon: L.divIcon({
+                    className: "trafficIcon",
+                    html: "🚧",
+                    iconSize: [38, 38],
+                    iconAnchor: [19, 19]
+                })
+            }
+        );
+
+        marker.bindPopup(`
+            <b>🚧 交通規制</b>
+            <hr>
+            路線：${escapeHtml(regulation.route || "-")}
+            <br>
+            規制：${escapeHtml(regulation.type || "-")}
+            <br>
+            原因：${escapeHtml(regulation.reason || "-")}
+            <br>
+            区間：${escapeHtml(regulation.section || "-")}
+            <br>
+            開始：${escapeHtml(regulation.start || "-")}
+        `);
+
+        trafficRegulationLayer.addLayer(marker);
+    });
+});
+
+/* ==================================================
+   GPS開始
+================================================== */
+
+async function startGPS(){
+    if(!currentAuthUser){
+        alert("先にログインしてください");
+        return;
+    }
+
+    try{
+        const userId = await resolveSocketUserId();
+        if(!userId){
+            alert("ユーザーIDを取得できません。\n先にユーザー情報を保存してください。");
+            return;
+        }
+
+        socketUserId = userId;
+
+        console.log("GPS開始 user_id:", socketUserId);
+
+        if(!registered){
+            await registerSocketUser();
+        }
+
+        if(!registered){
+            alert("Socketユーザー登録に失敗しました");
+            return;
+        }
+
+        startGPSCore();
+    }
+    catch(error){
+        console.error("GPS開始エラー:", error);
+        alert("GPSを開始できませんでした");
+    }
+}
+
+/* ==================================================
+   GPS本体開始
+================================================== */
+
+function startGPSCore(){
+    localStorage.setItem("gpsRunning", "true");
+
+    if(watchID !== null){
+        return;
+    }
+
+    gpsTimer = setInterval(()=>{
+        navigator.geolocation.getCurrentPosition(
+            pos => {
+                sendLocation(pos.coords.latitude, pos.coords.longitude);
+            },
+            err => {
+                console.log("GPSタイマーエラー", err);
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+    }, SEND_INTERVAL);
+
+    watchID = navigator.geolocation.watchPosition(
+        pos => {
+            const lat = pos.coords.latitude;
+            const lon = pos.coords.longitude;
+
+            if(lastLat === 0){
+                sendLocation(lat, lon);
+                lastLat = lat;
+                lastLon = lon;
+                lastSendTime = Date.now();
+                return;
+            }
+
+            const distance = getDistance(lastLat, lastLon, lat, lon);
+            const now = Date.now();
+
+            if(distance >= MOVE_DISTANCE || now - lastSendTime >= SEND_INTERVAL){
+                sendLocation(lat, lon);
+                lastLat = lat;
+                lastLon = lon;
+                lastSendTime = now;
+            }
+        },
+        err => {
+            console.log("GPSエラー", err);
+            const status = document.getElementById("gpsStatus");
+            if(status){ status.innerHTML = "🔴 GPSエラー"; }
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+
+    const status = document.getElementById("gpsStatus");
+    if(status){ status.innerHTML = "🟢 GPS稼働中"; }
+
+    console.log("GPS開始 user_id:", socketUserId);
+}
+
+/* ==================================================
+   GPS停止
+================================================== */
+
+function stopGPS(){
+    if(watchID !== null){
+        navigator.geolocation.clearWatch(watchID);
+        watchID = null;
+    }
+    if(gpsTimer !== null){
+        clearInterval(gpsTimer);
+        gpsTimer = null;
+    }
+
+    lastLat = 0;
+    lastLon = 0;
+    lastSendTime = 0;
+
+    localStorage.removeItem("gpsRunning");
+
+    const status = document.getElementById("gpsStatus");
+    if(status){ status.innerHTML = "🔴 GPS停止中"; }
+}
+
+/* ==================================================
+   GPS送信
+================================================== */
+
+function sendLocation(lat, lon){
+    if(!currentAuthUser){ return; }
+    if(!registered){
+        console.warn("GPS送信中止: Socket未登録");
+        return;
+    }
+    if(!socketUserId){
+        console.warn("GPS送信中止: user_idがありません");
+        return;
+    }
+    if(!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))){
+        return;
+    }
+
+    lat = Number(lat);
+    lon = Number(lon);
+
+    const utm = proj4(
+        "EPSG:4326",
+        "+proj=utm +zone=52 +south +datum=WGS84",
+        [lon, lat]
+    );
+
+    const utmE = Math.round(utm[0]);
+    const utmN = Math.round(utm[1]);
+
+    const name = document.getElementById("name").value.trim();
+    const water = Number(document.getElementById("water").value) || 0;
+    const fuel = Number(document.getElementById("fuel").value) || 0;
+    const destination = document.getElementById("destination").value.trim();
+    const iconType = normalizeIconType(document.getElementById("iconType").value);
+
+    localStorage.setItem("puttan_user_id", socketUserId);
+    localStorage.setItem("name", name);
+    localStorage.setItem("water", water);
+    localStorage.setItem("fuel", fuel);
+    localStorage.setItem("destination", destination);
+    localStorage.setItem("iconType", iconType);
+
+    const gpsStatus = document.getElementById("gpsStatus");
+    if(gpsStatus){ gpsStatus.innerHTML = "🟢 GPS稼働中"; }
+
+    const lastSend = document.getElementById("lastSend");
+    if(lastSend){
+        lastSend.innerHTML = "最終送信：" + new Date().toLocaleTimeString();
+    }
+
+    const locationData = {
+        user_id: socketUserId,
+        display_name: name,
+        lat: lat,
+        lon: lon,
+        utmZone: "52S",
+        utmE: utmE,
+        utmN: utmN,
+        water: water,
+        fuel: fuel,
+        destination: destination,
+        iconType: iconType,
+        device_id: getDeviceId()
+    };
+
+    console.log("GPS送信:", locationData);
+
+    socket.emit("location", locationData);
+}
+
+/* ==================================================
+   端末ID
+================================================== */
+
+function getDeviceId(){
+    let deviceId = localStorage.getItem("puttan_device_id");
+    if(!deviceId){
+        deviceId = "web-" + crypto.randomUUID();
+        localStorage.setItem("puttan_device_id", deviceId);
+    }
+    return deviceId;
+}
+
+/* ==================================================
+   現在地報告
+================================================== */
+
+async function updateStatus(){
+    if(!currentAuthUser){
+        alert("先にログインしてください");
+        return;
+    }
+
+    try{
+        const userId = await resolveSocketUserId();
+        if(!userId){
+            alert("ユーザーIDを取得できません。\n先にユーザー情報を保存してください。");
+            return;
+        }
+
+        socketUserId = userId;
+
+        if(!registered){
+            await registerSocketUser();
+        }
+
+        getCurrentPositionOnce();
+    }
+    catch(error){
+        console.error("現在地報告エラー:", error);
+    }
+}
+
+/* ==================================================
+   現在地1回取得
+================================================== */
+
+function getCurrentPositionOnce(){
+    navigator.geolocation.getCurrentPosition(
+        pos => {
+            sendLocation(pos.coords.latitude, pos.coords.longitude);
+        },
+        err => {
+            console.error("現在地取得エラー:", err);
+            alert("現在地を取得できませんでした");
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+}
+
+/* ==================================================
+   距離計算
+================================================== */
+
+function getDistance(lat1, lon1, lat2, lon2){
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) *
+        Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) ** 2;
+
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/* ==================================================
+   車両ナビゲーション（音声案内）
+   ・OSRM公開サーバー + Leaflet Routing Machine
+   ・maneuver種別は英語固定enumなので自前で和訳する
+================================================== */
+
+const NAV_INSTRUCTION_JA = {
+    "Head": "出発",
+    "Continue": "道なりに進む",
+    "Straight": "直進",
+    "SlightRight": "やや右方向",
+    "Right": "右折",
+    "SharpRight": "急な右折",
+    "Uturn": "Uターン",
+    "SharpLeft": "急な左折",
+    "Left": "左折",
+    "SlightLeft": "やや左方向",
+    "Roundabout": "ラウンドアバウトに進入",
+    "Merge": "合流",
+    "Fork": "分岐点を進む",
+    "OnRamp": "ランプに進入",
+    "OffRamp": "ランプを降りる",
+    "EndOfRoad": "道路の終端を進む",
+    "DestinationReached": "目的地に到着",
+    "WaypointReached": "経由地に到着"
+};
+
+function navInstructionText(instruction){
+    return NAV_INSTRUCTION_JA[instruction.type] || "直進";
+}
+
+function speakJa(text){
+    if(!("speechSynthesis" in window)){ return; }
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "ja-JP";
+    window.speechSynthesis.speak(utter);
+}
+
+function startNavigation(lat, lon, name){
+    if(!("geolocation" in navigator)){
+        alert("この端末は位置情報に対応していません");
+        return;
+    }
+
+    navDestination = { lat: lat, lon: lon, name: name };
+
+    const panel = document.getElementById("navPanel");
+    if(panel){ panel.style.display = "block"; }
+
+    document.getElementById("navInstructionText").textContent = "ルート計算中...";
+    document.getElementById("navDistanceText").textContent = "-";
+    document.getElementById("navSummary").textContent = "-";
+
+    map.closePopup();
+
+    navigator.geolocation.getCurrentPosition(
+        pos => {
+            beginNavRoute(pos.coords.latitude, pos.coords.longitude);
+        },
+        err => {
+            console.error("現在地取得エラー:", err);
+            alert("現在地を取得できませんでした");
+            stopNavigation();
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+}
+
+const navRouter = L.Routing.osrmv1({ profile: "driving" });
+
+function distanceToRouteCoords(lat, lon, coordinates){
+    let min = Infinity;
+    for(const c of coordinates){
+        const d = getDistance(lat, lon, c.lat, c.lng);
+        if(d < min){ min = d; }
+    }
+    return min;
+}
+
+function countRegulationConflicts(route){
+    if(!currentTrafficRegulations.length){ return 0; }
+
+    let conflicts = 0;
+    for(const reg of currentTrafficRegulations){
+        const d = distanceToRouteCoords(Number(reg.lat), Number(reg.lon), route.coordinates);
+        if(d < 60){ conflicts++; }
+    }
+    return conflicts;
+}
+
+/* ==================================================
+   高速道路・有料道路の回避（道路名によるヒューリスティック判定）
+   ・OSRM公開デモサーバーはexclude=motorway/tollを
+     受け付けないため、道路名パターンで判定する
+================================================== */
+
+const NAV_HIGHWAY_NAME_PATTERN = /(高速|自動車道|有料道路|高規格道路)/;
+
+function isAvoidHighwaysEnabled(){
+    return localStorage.getItem("puttan_nav_avoid_highways") === "true";
+}
+
+function routeUsesHighway(route){
+    if(!route.instructions){ return false; }
+    return route.instructions.some(instr => NAV_HIGHWAY_NAME_PATTERN.test(instr.road || ""));
+}
+
+function scoreRoute(route){
+    let score = countRegulationConflicts(route);
+    if(isAvoidHighwaysEnabled() && routeUsesHighway(route)){
+        score += 1000;
+    }
+    return score;
+}
+
+function pickBestRoute(routes){
+    let best = routes[0];
+    let bestScore = scoreRoute(routes[0]);
+
+    for(let i = 1; i < routes.length; i++){
+        const score = scoreRoute(routes[i]);
+        if(score < bestScore){
+            best = routes[i];
+            bestScore = score;
+        }
+    }
+
+    return {
+        route: best,
+        conflicts: countRegulationConflicts(best),
+        usesHighway: routeUsesHighway(best)
+    };
+}
+
+function drawNavRouteLine(route){
+    if(navRouteLine){
+        map.removeLayer(navRouteLine);
+    }
+
+    navRouteLine = L.polyline(
+        route.coordinates.map(c => [c.lat, c.lng]),
+        { color: "#1976d2", weight: 6, opacity: 0.8, interactive: false }
+    ).addTo(map);
+
+    map.fitBounds(navRouteLine.getBounds(), { padding: [40, 40] });
+}
+
+function requestNavRoute(startLat, startLon, onDone){
+    const waypoints = [
+        { latLng: L.latLng(startLat, startLon) },
+        { latLng: L.latLng(navDestination.lat, navDestination.lon) }
+    ];
+
+    navRouter.route(waypoints, (err, routes) => {
+        if(err || !routes || routes.length === 0){
+            const instructionElement = document.getElementById("navInstructionText");
+            if(instructionElement){ instructionElement.textContent = "ルートが見つかりませんでした"; }
+            return;
+        }
+
+        onDone(pickBestRoute(routes));
+    });
+}
+
+function applyNavRoute(startLat, startLon, isReroute){
+    requestNavRoute(startLat, startLon, ({ route, conflicts, usesHighway }) => {
+        navRoute = route;
+        navSteps = route.instructions || [];
+        navCurrentStepIndex = 0;
+        navAnnouncedThresholds = {};
+
+        drawNavRouteLine(route);
+
+        const totalKm = (route.summary.totalDistance / 1000).toFixed(1);
+        const totalMin = Math.round(route.summary.totalTime / 60);
+
+        const highwayWarning = isAvoidHighwaysEnabled() && usesHighway;
+
+        const warnings = [];
+        if(conflicts > 0){ warnings.push("規制区間の可能性あり"); }
+        if(highwayWarning){ warnings.push("高速・有料道路を含む"); }
+
+        const summaryElement = document.getElementById("navSummary");
+        if(summaryElement){
+            summaryElement.textContent = `残り約${totalKm}km／約${totalMin}分`
+                + (warnings.length ? `（${warnings.join("・")}）` : "");
+        }
+
+        renderNavInstruction();
+
+        const spokenWarnings = [];
+        if(conflicts > 0){ spokenWarnings.push("交通規制区間を含む可能性があります"); }
+        if(highwayWarning){ spokenWarnings.push("高速道路・有料道路を避けきれませんでした"); }
+
+        if(isReroute){
+            if(spokenWarnings.length){
+                speakJa("再計算しました。" + spokenWarnings.join("。"));
+            }
+            return;
+        }
+
+        speakJa(
+            spokenWarnings.length
+                ? `${navDestination.name}までのナビを開始します。${spokenWarnings.join("。")}`
+                : `${navDestination.name}までのナビを開始します`
+        );
+    });
+}
+
+function beginNavRoute(startLat, startLon){
+    applyNavRoute(startLat, startLon, false);
+
+    if(navWatchID !== null){
+        navigator.geolocation.clearWatch(navWatchID);
+    }
+
+    navWatchID = navigator.geolocation.watchPosition(
+        pos => handleNavPosition(pos.coords.latitude, pos.coords.longitude),
+        err => console.log("ナビGPSエラー:", err),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+}
+
+function renderNavInstruction(){
+    const step = navSteps[navCurrentStepIndex];
+    const instructionElement = document.getElementById("navInstructionText");
+    if(instructionElement){
+        instructionElement.textContent = step ? navInstructionText(step) : "目的地に接近中";
+    }
+}
+
+function updateNavDistanceText(distance){
+    const el = document.getElementById("navDistanceText");
+    if(!el){ return; }
+    el.textContent = distance >= 1000
+        ? (distance / 1000).toFixed(1) + " km"
+        : Math.round(distance) + " m";
+}
+
+const NAV_THRESHOLDS = [500, 200, 50];
+
+function announceIfNeeded(distance, step){
+    const text = navInstructionText(step);
+
+    NAV_THRESHOLDS.forEach(threshold => {
+        if(distance <= threshold && !navAnnouncedThresholds[threshold]){
+            navAnnouncedThresholds[threshold] = true;
+
+            if(threshold >= 100){
+                speakJa(`${threshold}メートル先、${text}です`);
+            }
+            else{
+                speakJa(`まもなく${text}です`);
+            }
+        }
+    });
+}
+
+function checkOffRoute(lat, lon){
+    if(!navRoute || !navRoute.coordinates || navRoute.coordinates.length < 2){ return; }
+
+    const minDist = distanceToRouteCoords(lat, lon, navRoute.coordinates);
+
+    const now = Date.now();
+    if(minDist > 80 && now - navLastRerouteTime > 15000){
+        navLastRerouteTime = now;
+        speakJa("ルートを再計算します");
+        applyNavRoute(lat, lon, true);
+    }
+}
+
+function handleNavPosition(lat, lon){
+    if(!navRoute || !navDestination){ return; }
+
+    const step = navSteps[navCurrentStepIndex];
+
+    if(!step){
+        const distanceToDest = getDistance(lat, lon, navDestination.lat, navDestination.lon);
+        updateNavDistanceText(distanceToDest);
+
+        if(distanceToDest < 25){
+            speakJa("目的地に到着しました");
+            stopNavigation();
+        }
+        return;
+    }
+
+    const targetCoord = navRoute.coordinates[step.index];
+    if(!targetCoord){ return; }
+
+    const distance = getDistance(lat, lon, targetCoord.lat, targetCoord.lng);
+    updateNavDistanceText(distance);
+    announceIfNeeded(distance, step);
+
+    if(distance < 25){
+        navCurrentStepIndex++;
+        navAnnouncedThresholds = {};
+        renderNavInstruction();
+    }
+
+    checkOffRoute(lat, lon);
+}
+
+function stopNavigation(){
+    if(navWatchID !== null){
+        navigator.geolocation.clearWatch(navWatchID);
+        navWatchID = null;
+    }
+    if(navRouteLine){
+        map.removeLayer(navRouteLine);
+        navRouteLine = null;
+    }
+    if("speechSynthesis" in window){
+        window.speechSynthesis.cancel();
+    }
+
+    navRoute = null;
+    navSteps = [];
+    navCurrentStepIndex = 0;
+    navDestination = null;
+    navAnnouncedThresholds = {};
+
+    const panel = document.getElementById("navPanel");
+    if(panel){ panel.style.display = "none"; }
+}
+
+/* ==================================================
+   locations受信
+================================================== */
+
+socket.on("locations", data => {
+    if(!data || typeof data !== "object"){ return; }
+
+    Object.keys(markers).forEach(userId => {
+        if(!data[userId]){
+            if(markers[userId]){
+                map.removeLayer(markers[userId]);
+            }
+            delete markers[userId];
+        }
+    });
+
+    Object.keys(data).forEach(userId => {
+        const user = data[userId];
+        if(!user){ return; }
+
+        if(user.lat == null || user.lon == null){ return; }
+
+        const lat = Number(user.lat);
+        const lon = Number(user.lon);
+
+        if(!Number.isFinite(lat) || !Number.isFinite(lon)){ return; }
+
+        const displayName = user.display_name || user.name || userId;
+
+        if(markers[userId]){
+            markers[userId].setLatLng([lat, lon]);
+        }
+        else{
+            markers[userId] = L.marker(
+                [lat, lon],
+                { icon: createIcon(user.icon || user.iconType || "1") }
+            ).addTo(map);
+        }
+
+        markers[userId].setIcon(createIcon(user.icon || user.iconType || "1"));
+
+        markers[userId].bindTooltip(escapeHtml(displayName), {
+            permanent: true,
+            direction: "top",
+            offset: [0, -30],
+            className: "pointLabel"
+        });
+
+        markers[userId].bindPopup(`
+            <b>${escapeHtml(displayName)}</b>
+            <hr>
+            ユーザーID：${escapeHtml(userId)}
+            <br>
+            状態：${user.online ? "🟢 ONLINE" : "🔴 OFFLINE"}
+            <br>
+            緯度：${lat.toFixed(6)}
+            <br>
+            経度：${lon.toFixed(6)}
+            <br>
+            UTM：${escapeHtml(user.utmZone || "52S")}
+            <br>
+            E：${user.utmE ?? "-"}
+            <br>
+            N：${user.utmN ?? "-"}
+            <br>
+            💧水：${user.water ?? 0}
+            <br>
+            ⛽燃料：${user.fuel ?? 0}
+            <br>
+            📍目的地：${escapeHtml(user.destination || "-")}
+            <br>
+            最終更新：${timeAgo(user.lastUpdate)}
+            <br>
+            <button onclick="startNavigation(${lat}, ${lon}, '${escapeHtml(displayName)}')">🧭 ここへナビ</button>
+        `);
+    });
+
+    renderUsers(data);
+});
+
+/* ==================================================
+   隊員一覧
+================================================== */
+
+function renderUsers(data){
+    let html = "";
+
+    Object.keys(data).forEach(userId => {
+        const user = data[userId];
+        if(!user){ return; }
+
+        const safeUserId = escapeHtml(userId);
+        const safeName = escapeHtml(user.display_name || user.name || userId);
+
+        html += `
+            <div class="userRow">
+                <div onclick="focusUserById('${safeUserId}')">
+                    ${user.online ? "🟢ON" : "🔴OFF"}
+                </div>
+                <div onclick="focusUserById('${safeUserId}')">
+                    ${safeName}
+                </div>
+                <div onclick="focusUserById('${safeUserId}')">
+                    ${user.water ?? 0}
+                </div>
+                <div onclick="focusUserById('${safeUserId}')">
+                    ${user.fuel ?? 0}
+                </div>
+                <div onclick="focusUserById('${safeUserId}')">
+                    ${timeAgo(user.lastUpdate)}
+                </div>
+                <div>
+                    <button class="deleteButton" onclick="event.stopPropagation(); deleteUserById('${safeUserId}', '${safeName}')">🗑</button>
+                </div>
+            </div>
+        `;
+    });
+
+    const usersElement = document.getElementById("users");
+    if(usersElement){
+        usersElement.innerHTML = html;
+    }
+}
+
+/* ==================================================
+   HTMLエスケープ
+================================================== */
+
+function escapeHtml(value){
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+/* ==================================================
+   確認ダイアログ（window.confirmはPWA/ホーム画面追加時に
+   動作しない端末があるため自前実装）
+================================================== */
+
+let confirmResolve = null;
+
+function showConfirm(message){
+    return new Promise(resolve => {
+        confirmResolve = resolve;
+
+        const overlay = document.getElementById("confirmOverlay");
+        const messageElement = document.getElementById("confirmMessage");
+
+        if(messageElement){ messageElement.textContent = message; }
+        if(overlay){ overlay.classList.add("active"); }
+    });
+}
+
+function closeConfirm(result){
+    const overlay = document.getElementById("confirmOverlay");
+    if(overlay){ overlay.classList.remove("active"); }
+
+    if(confirmResolve){
+        confirmResolve(result);
+        confirmResolve = null;
+    }
+}
+
+/* ==================================================
+   ユーザーへ移動
+================================================== */
+
+function focusUserById(userId){
+    const marker = markers[userId];
+    if(!marker){ return; }
+
+    const mapButton = document.querySelector('.tabButton[onclick*="mapTab"]');
+    showTab("mapTab", mapButton);
+
+    setTimeout(() => {
+        const pos = marker.getLatLng();
+        map.setView([pos.lat, pos.lng], 17, { animate: true });
+        marker.openPopup();
+    }, 150);
+}
+
+/* ==================================================
+   ユーザー削除
+================================================== */
+
+async function deleteUserById(userId, displayName){
+    if(!(await showConfirm(displayName + " を削除しますか？"))){
+        return;
+    }
+    socket.emit("deleteUser", userId);
+}
+
+socket.on("userDeleted", userId => {
+    if(userId === socketUserId){
+        registered = false;
+        localStorage.removeItem("puttan_registered_done");
+        stopGPS();
+
+        const status = document.getElementById("registerStatus");
+        if(status){
+            status.innerHTML = "未登録";
+        }
+    }
+});
+
+/* ==================================================
+   最終更新時間
+================================================== */
+
+function timeAgo(t){
+    if(!t){ return "-"; }
+
+    const sec = Math.floor((Date.now() - Number(t)) / 1000);
+    if(sec < 60){ return sec + "秒前"; }
+
+    const min = Math.floor(sec / 60);
+    if(min < 60){ return min + "分前"; }
+
+    return Math.floor(min / 60) + "時間前";
+}
+
+/* ==================================================
+   アイコン
+================================================== */
+
+function normalizeIconType(type){
+    type = String(type || "");
+
+    if(type === "person"){ return "1"; }
+    if(type === "vehicle"){ return "2"; }
+    if(["1", "2", "3", "4"].includes(type)){ return type; }
+
+    return "1";
+}
+
+function createIcon(type){
+    type = normalizeIconType(type);
+
+    let image;
+    switch(type){
+        case "1": image = "/icon/person.png"; break;
+        case "2": image = "/icon/vehicle_small.png"; break;
+        case "3": image = "/icon/vehicle_medium.png"; break;
+        case "4": image = "/icon/vehicle_large.png"; break;
+        default: image = "/icon/person.png"; break;
+    }
+
+    return L.icon({
+        iconUrl: image,
+        iconSize: [60, 60],
+        iconAnchor: [30, 60],
+        popupAnchor: [0, -70]
+    });
+}
+
+/* ==================================================
+   地図クリック
+================================================== */
+
+map.on("click", e => {
+    selectedPointLat = e.latlng.lat;
+    selectedPointLon = e.latlng.lng;
+    selectedPointName = null;
+
+    const latElement = document.getElementById("pointLat");
+    const lonElement = document.getElementById("pointLon");
+
+    if(latElement){ latElement.textContent = selectedPointLat.toFixed(6); }
+    if(lonElement){ lonElement.textContent = selectedPointLon.toFixed(6); }
+
+    const utm = proj4(
+        "EPSG:4326",
+        "+proj=utm +zone=52 +south +datum=WGS84",
+        [selectedPointLon, selectedPointLat]
+    );
+
+    document.getElementById("pointUtmZone").textContent = "52S";
+    document.getElementById("pointUtmE").textContent = Math.round(utm[0]);
+    document.getElementById("pointUtmN").textContent = Math.round(utm[1]);
+});
+
+/* ==================================================
+   地点登録
+================================================== */
+
+function addPoint(){
+    if(!currentAuthUser){
+        alert("先にログインしてください");
+        return;
+    }
+    if(selectedPointLat === null){
+        alert("先に地図をクリックして登録位置を選択してください");
+        return;
+    }
+
+    const name = document.getElementById("pointName").value.trim();
+    if(name === ""){
+        alert("地点名を入力してください");
+        return;
+    }
+
+    socket.emit("addPoint", {
+        name: name,
+        type: document.getElementById("pointType").value,
+        lat: selectedPointLat,
+        lon: selectedPointLon
+    });
+
+    document.getElementById("pointName").value = "";
+}
+
+/* ==================================================
+   地点削除
+================================================== */
+
+async function deletePoint(){
+    const name = selectedPointName || document.getElementById("pointName").value.trim();
+    if(name === ""){
+        alert("削除する地点を選択してください");
+        return;
+    }
+    if(!(await showConfirm(name + " を削除しますか？"))){
+        return;
+    }
+
+    socket.emit("deletePoint", name);
+}
+
+/* ==================================================
+   地点受信
+================================================== */
+
+socket.on("points", data => {
+    data = data || {};
+
+    Object.keys(pointMarkers).forEach(name => {
+        if(!data[name]){
+            map.removeLayer(pointMarkers[name]);
+            delete pointMarkers[name];
+        }
+    });
+
+    Object.keys(data).forEach(name => {
+        const p = data[name];
+
+        if(pointMarkers[name]){
+            map.removeLayer(pointMarkers[name]);
+        }
+
+        pointMarkers[name] = L.marker(
+            [Number(p.lat), Number(p.lon)],
+            {
+                icon: L.icon({
+                    iconUrl: "/icon/point.png",
+                    iconSize: [60, 60],
+                    iconAnchor: [30, 60],
+                    popupAnchor: [15, -70]
+                })
+            }
+        ).addTo(map);
+
+        pointMarkers[name].bindTooltip(escapeHtml(name), {
+            permanent: true,
+            direction: "top",
+            offset: [0, -30],
+            className: "pointLabel"
+        });
+
+        pointMarkers[name].on("click", () => {
+            selectedPointName = name;
+            document.getElementById("pointName").value = name;
+
+            selectedPointLat = Number(p.lat);
+            selectedPointLon = Number(p.lon);
+
+            document.getElementById("pointLat").textContent = selectedPointLat.toFixed(6);
+            document.getElementById("pointLon").textContent = selectedPointLon.toFixed(6);
+
+            const utm = proj4(
+                "EPSG:4326",
+                "+proj=utm +zone=52 +south +datum=WGS84",
+                [selectedPointLon, selectedPointLat]
+            );
+
+            document.getElementById("pointUtmZone").textContent = "52S";
+            document.getElementById("pointUtmE").textContent = Math.round(utm[0]);
+            document.getElementById("pointUtmN").textContent = Math.round(utm[1]);
+        });
+
+        pointMarkers[name].bindPopup(`
+            <b>📍 ${escapeHtml(name)}</b>
+            <br>
+            ${Number(p.lat).toFixed(6)}
+            <br>
+            ${Number(p.lon).toFixed(6)}
+            <br>
+            <button onclick="startNavigation(${Number(p.lat)}, ${Number(p.lon)}, '${escapeHtml(name)}')">🧭 ここへナビ</button>
+        `);
+    });
+});
+
+/* ==================================================
+   クロノロジー受信
+================================================== */
+
+socket.on("chronology", data => {
+    chronology = Array.isArray(data) ? data : [];
+    renderChronology();
+});
+
+/* ==================================================
+   クロノロジー送信
+================================================== */
+
+function sendChronology(){
+    if(!currentAuthUser){
+        alert("先にログインしてください");
+        return;
+    }
+
+    const element = document.getElementById("chronoMessage");
+    const msg = element.value.trim();
+    if(msg === ""){ return; }
+
+    socket.emit("addChronology", {
+        message: msg,
+        user: document.getElementById("name").value
+    });
+
+    element.value = "";
+}
+
+/* ==================================================
+   クロノロジー表示
+================================================== */
+
+function renderChronology(){
+    let html = "";
+
+    chronology.forEach(item => {
+        html += `
+            <div class="timelineItem">
+                <div class="timelineTime">${escapeHtml(item.time || "")}</div>
+                <div class="timelineMessage">${escapeHtml(item.message || "")}</div>
+            </div>
+        `;
+    });
+
+    const timeline = document.getElementById("timeline");
+    if(timeline){
+        timeline.innerHTML = html;
+    }
+}
+
+/* ==================================================
+   Enterキー
+================================================== */
+
+document.addEventListener("keydown", event => {
+    if(event.key !== "Enter"){ return; }
+
+    if(document.activeElement && document.activeElement.id === "chronoMessage"){
+        sendChronology();
+    }
+});
+
+/* ==================================================
+   Socket接続
+================================================== */
+
+socket.on("connect", async () => {
+    console.log("サーバー接続");
+
+    if(currentAuthUser){
+        socketUserId = await resolveSocketUserId();
+
+        if(socketUserId && localStorage.getItem("puttan_registered_done") === "true"){
+            registerSocketUser();
+        }
+    }
+});
+
+socket.on("disconnect", () => {
+    const gpsStatus = document.getElementById("gpsStatus");
+    if(gpsStatus){
+        gpsStatus.innerHTML = "🔴 サーバー切断";
+    }
+});
+
+/* ==================================================
+   タブ切替
+================================================== */
+
+function showTab(tabId, button){
+    document.querySelectorAll(".tabContent").forEach(tab => {
+        tab.classList.remove("active");
+    });
+    document.querySelectorAll(".tabButton").forEach(btn => {
+        btn.classList.remove("active");
+    });
+
+    const tab = document.getElementById(tabId);
+    if(tab){ tab.classList.add("active"); }
+    if(button){ button.classList.add("active"); }
+
+    if(tabId === "mapTab" && typeof map !== "undefined"){
+        setTimeout(() => {
+            map.invalidateSize();
+        }, 100);
+    }
+}
+
+/* ==================================================
+   Auth状態確認
+================================================== */
+
+window.addEventListener("load", async () => {
+    console.log("Version 2.5 起動");
+
+    try{
+        const { data, error } = await supabaseClient.auth.getSession();
+
+        if(error){
+            console.error("セッション取得エラー:", error);
+            showAuth();
+            return;
+        }
+
+        if(data && data.session && data.session.user){
+            currentAuthUser = data.session.user;
+
+            const profile = await loadProfile(currentAuthUser);
+
+            if(profile){
+                socketUserId = await resolveSocketUserId();
+
+                showApp();
+
+                if(socketUserId && localStorage.getItem("puttan_registered_done") === "true"){
+                    registerSocketUser();
+                }
+            }
+            else{
+                await supabaseClient.auth.signOut();
+                showAuth();
+            }
+        }
+        else{
+            showAuth();
+        }
+    }
+    catch(error){
+        console.error("起動処理エラー:", error);
+        showAuth();
+    }
+});
+
+/* ==================================================
+   Auth状態変更
+================================================== */
+
+supabaseClient.auth.onAuthStateChange(async (event, session) => {
+    console.log("Auth状態:", event);
+
+    if(event === "SIGNED_OUT"){
+        currentAuthUser = null;
+        currentProfile = null;
+        socketUserId = null;
+        registered = false;
+        localStorage.removeItem("puttan_registered_done");
+        stopGPS();
+        showAuth();
+        showLogin();
+    }
+});
+
+/* ==================================================
+   初期ローカル情報
+================================================== */
+
+function restoreLocalUser(){
+    ["name", "water", "fuel", "destination", "iconType"].forEach(key => {
+        const value = localStorage.getItem(key);
+        const element = document.getElementById(key);
+
+        if(value !== null && element){
+            if(key === "iconType"){
+                element.value = normalizeIconType(value);
+            }
+            else{
+                element.value = value;
+            }
+        }
+    });
+}
+
+restoreLocalUser();
+
+function onNavAvoidHighwaysChange(){
+    const checkbox = document.getElementById("navAvoidHighways");
+    if(checkbox){
+        localStorage.setItem("puttan_nav_avoid_highways", checkbox.checked);
+    }
+}
+
+const navAvoidHighwaysCheckbox = document.getElementById("navAvoidHighways");
+if(navAvoidHighwaysCheckbox){
+    navAvoidHighwaysCheckbox.checked = isAvoidHighwaysEnabled();
+}
+
+/* ==================================================
+   GPS自動再開
+================================================== */
+
+window.addEventListener("load", () => {
+    setTimeout(async () => {
+        if(localStorage.getItem("gpsRunning") === "true" && currentAuthUser){
+            if(!socketUserId){
+                socketUserId = await resolveSocketUserId();
+            }
+
+            if(socketUserId && localStorage.getItem("puttan_registered_done") === "true"){
+                if(!registered){
+                    await registerSocketUser();
+                }
+                startGPS();
+            }
+        }
+    }, 1500);
+});
+
+</script>
+
+</body>
+</html>
