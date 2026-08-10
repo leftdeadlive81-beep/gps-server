@@ -1365,7 +1365,7 @@ async function logoutUser(){
     registered = false;
 
     if(socketUserId){
-        socket.emit("deleteUser", socketUserId);
+        socket.emit("userOffline", socketUserId);
     }
 
     try{
