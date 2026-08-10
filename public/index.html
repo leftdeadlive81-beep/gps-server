@@ -986,6 +986,7 @@ function showApp(){
     const appScreen = document.getElementById("appScreen");
     if(authScreen){ authScreen.style.display = "none"; }
     if(appScreen){ appScreen.style.display = "block"; }
+    window.scrollTo(0, 0);
     document.body.style.overflow = "hidden";
     socket.emit("viewerActive");
     setTimeout(()=>{
@@ -3348,6 +3349,7 @@ function showTab(tabId, button){
     if(tab){ tab.classList.add("active"); }
     if(button){ button.classList.add("active"); }
 
+    window.scrollTo(0, 0);
     document.body.style.overflow = (tabId === "mapTab") ? "hidden" : "";
 
     if(tabId === "mapTab" && typeof map !== "undefined"){
