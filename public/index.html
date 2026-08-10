@@ -494,8 +494,20 @@ input, select {
 }
 #chronoLoadMoreButton { margin-top: 10px; }
 
-.pointButtonRow { display: flex; gap: 6px; margin-top: 7px; }
-.pointButtonRow button {
+.pointRegisterForm { min-width: 200px; }
+.pointRegisterTitle { font-weight: bold; font-size: 14px; margin-bottom: 8px; }
+.pointRegisterForm input,
+.pointRegisterForm select {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 8px;
+    border: 1px solid #bbb;
+    border-radius: 5px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+.pointRegisterButtons { display: flex; gap: 6px; }
+.pointRegisterButtons button {
     flex: 1;
     padding: 9px;
     border: none;
@@ -503,8 +515,7 @@ input, select {
     background: #1976d2;
     color: white;
 }
-.pointButtonRow button:last-child { background: #c62828; }
-.pointInfo { margin-top: 10px; line-height: 1.7; font-size: 14px; }
+.pointRegisterButtons button:last-child { background: #757575; }
 
 .pointLabel {
     background: rgba(255,255,255,.9);
@@ -895,29 +906,6 @@ input, select {
         </div>
 
         <div class="card settingsCard">
-            <div class="sectionTitle">📍 地点登録</div>
-            <input id="pointName" placeholder="地点名（例：CP1、給水所）">
-            <select id="pointType">
-                <option value="CP">🏳 指揮所(CP)</option>
-                <option value="water">💧給水所</option>
-                <option value="supply">📦補給地点</option>
-                <option value="point">📍その他</option>
-            </select>
-            <div class="pointButtonRow">
-                <button onclick="addPoint(this)">📍登録</button>
-                <button onclick="deletePoint(this)">🗑削除</button>
-            </div>
-            <div class="pointInfo">
-                <div>📍 緯度：<span id="pointLat">-</span></div>
-                <div>📍 経度：<span id="pointLon">-</span></div>
-                <hr>
-                <div>🧭 UTM：<span id="pointUtmZone">-</span></div>
-                <div>E：<span id="pointUtmE">-</span></div>
-                <div>N：<span id="pointUtmN">-</span></div>
-            </div>
-        </div>
-
-        <div class="card settingsCard">
             <div class="sectionTitle">🧭 ナビ設定</div>
             <label class="navSettingRow">
                 <input type="checkbox" id="navAvoidHighways" onchange="onNavAvoidHighwaysChange()">
@@ -1016,9 +1004,6 @@ let gpsTimer = null;
 let lastLat = 0;
 let lastLon = 0;
 let lastSendTime = 0;
-let selectedPointLat = null;
-let selectedPointLon = null;
-let selectedPointName = null;
 
 const SEND_INTERVAL = 30000;
 const MOVE_DISTANCE = 10;
@@ -3047,78 +3032,101 @@ function createIcon(type){
 }
 
 /* ==================================================
-   地図クリック
+   地図の長押しで地点登録
+   ・空いている場所を長押しすると、その場所にポップアップが開き
+     地点名を入力して登録できる
 ================================================== */
 
-map.on("click", e => {
-    selectedPointLat = e.latlng.lat;
-    selectedPointLon = e.latlng.lng;
-    selectedPointName = null;
+function wireMapLongPress(){
+    const LONG_PRESS_MS = 550;
+    const MOVE_TOLERANCE_PX = 12;
+    let pressTimer = null;
+    let startPoint = null;
 
-    const latElement = document.getElementById("pointLat");
-    const lonElement = document.getElementById("pointLon");
+    function clearPress(){
+        if(pressTimer){
+            clearTimeout(pressTimer);
+            pressTimer = null;
+        }
+        startPoint = null;
+    }
 
-    if(latElement){ latElement.textContent = selectedPointLat.toFixed(6); }
-    if(lonElement){ lonElement.textContent = selectedPointLon.toFixed(6); }
+    map.on("mousedown", e => {
+        startPoint = e.containerPoint;
+        pressTimer = setTimeout(() => {
+            openPointRegisterPopup(e.latlng);
+            clearPress();
+        }, LONG_PRESS_MS);
+    });
 
-    const utm = proj4(
-        "EPSG:4326",
-        "+proj=utm +zone=52 +south +datum=WGS84",
-        [selectedPointLon, selectedPointLat]
-    );
+    map.on("mousemove", e => {
+        if(!startPoint){ return; }
+        const dx = e.containerPoint.x - startPoint.x;
+        const dy = e.containerPoint.y - startPoint.y;
+        if(Math.hypot(dx, dy) > MOVE_TOLERANCE_PX){ clearPress(); }
+    });
 
-    document.getElementById("pointUtmZone").textContent = "52S";
-    document.getElementById("pointUtmE").textContent = Math.round(utm[0]);
-    document.getElementById("pointUtmN").textContent = Math.round(utm[1]);
-});
+    map.on("mouseup", clearPress);
+    map.on("dragstart", clearPress);
+    map.on("zoomstart", clearPress);
+}
+wireMapLongPress();
 
-/* ==================================================
-   地点登録
-================================================== */
-
-function addPoint(button){
+function openPointRegisterPopup(latlng){
     if(!currentAuthUser){
         alert("先にログインしてください");
         return;
     }
-    if(selectedPointLat === null){
-        alert("先に地図をクリックして登録位置を選択してください");
-        return;
-    }
 
-    const name = document.getElementById("pointName").value.trim();
+    L.popup({ closeButton: true, className: "pointRegisterPopup" })
+        .setLatLng(latlng)
+        .setContent(`
+            <div class="pointRegisterForm">
+                <div class="pointRegisterTitle">この地点を登録しますか？</div>
+                <input id="pointRegisterName" placeholder="地点名（例：CP1、給水所）">
+                <select id="pointRegisterType">
+                    <option value="CP">🏳 指揮所(CP)</option>
+                    <option value="water">💧給水所</option>
+                    <option value="supply">📦補給地点</option>
+                    <option value="point">📍その他</option>
+                </select>
+                <div class="pointRegisterButtons">
+                    <button onclick="confirmPointRegister(${latlng.lat}, ${latlng.lng})">📍登録</button>
+                    <button onclick="map.closePopup()">キャンセル</button>
+                </div>
+            </div>
+        `)
+        .openOn(map);
+
+    setTimeout(() => {
+        const input = document.getElementById("pointRegisterName");
+        if(input){ input.focus(); }
+    }, 50);
+}
+
+function confirmPointRegister(lat, lon){
+    const nameInput = document.getElementById("pointRegisterName");
+    const name = nameInput ? nameInput.value.trim() : "";
     if(name === ""){
         alert("地点名を入力してください");
         return;
     }
+    const type = document.getElementById("pointRegisterType").value;
 
-    socket.emit("addPoint", {
-        name: name,
-        type: document.getElementById("pointType").value,
-        lat: selectedPointLat,
-        lon: selectedPointLon
-    });
-
-    document.getElementById("pointName").value = "";
-    showButtonFeedback(button);
+    socket.emit("addPoint", { name, type, lat, lon });
+    map.closePopup();
 }
 
 /* ==================================================
-   地点削除
+   地点削除（地点マーカーのポップアップから実行）
 ================================================== */
 
-async function deletePoint(button){
-    const name = selectedPointName || document.getElementById("pointName").value.trim();
-    if(name === ""){
-        alert("削除する地点を選択してください");
-        return;
-    }
+async function deletePointByName(name){
     if(!(await showConfirm(name + " を削除しますか？"))){
         return;
     }
-
     socket.emit("deletePoint", name);
-    showButtonFeedback(button);
+    map.closePopup();
 }
 
 /* ==================================================
@@ -3161,27 +3169,6 @@ socket.on("points", data => {
             className: "pointLabel"
         });
 
-        pointMarkers[name].on("click", () => {
-            selectedPointName = name;
-            document.getElementById("pointName").value = name;
-
-            selectedPointLat = Number(p.lat);
-            selectedPointLon = Number(p.lon);
-
-            document.getElementById("pointLat").textContent = selectedPointLat.toFixed(6);
-            document.getElementById("pointLon").textContent = selectedPointLon.toFixed(6);
-
-            const utm = proj4(
-                "EPSG:4326",
-                "+proj=utm +zone=52 +south +datum=WGS84",
-                [selectedPointLon, selectedPointLat]
-            );
-
-            document.getElementById("pointUtmZone").textContent = "52S";
-            document.getElementById("pointUtmE").textContent = Math.round(utm[0]);
-            document.getElementById("pointUtmN").textContent = Math.round(utm[1]);
-        });
-
         pointMarkers[name].bindPopup(`
             <b>📍 ${escapeHtml(name)}</b>
             <br>
@@ -3190,6 +3177,7 @@ socket.on("points", data => {
             ${Number(p.lon).toFixed(6)}
             <br>
             <button onclick="startNavigation(${Number(p.lat)}, ${Number(p.lon)}, '${escapeHtml(name)}')">🧭 ここへナビ</button>
+            <button onclick="deletePointByName('${escapeHtml(name)}')">🗑削除</button>
         `);
     });
 });
