@@ -859,6 +859,7 @@ function showAuth(){
     const appScreen = document.getElementById("appScreen");
     if(authScreen){ authScreen.style.display = "flex"; }
     if(appScreen){ appScreen.style.display = "none"; }
+    document.body.style.overflow = "";
     socket.emit("viewerInactive");
 }
 
@@ -867,6 +868,7 @@ function showApp(){
     const appScreen = document.getElementById("appScreen");
     if(authScreen){ authScreen.style.display = "none"; }
     if(appScreen){ appScreen.style.display = "block"; }
+    document.body.style.overflow = "hidden";
     socket.emit("viewerActive");
     setTimeout(()=>{
         if(typeof map !== "undefined" && map){
@@ -2919,6 +2921,8 @@ function showTab(tabId, button){
     const tab = document.getElementById(tabId);
     if(tab){ tab.classList.add("active"); }
     if(button){ button.classList.add("active"); }
+
+    document.body.style.overflow = (tabId === "mapTab") ? "hidden" : "";
 
     if(tabId === "mapTab" && typeof map !== "undefined"){
         setTimeout(() => {
