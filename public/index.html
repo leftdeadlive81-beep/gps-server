@@ -303,6 +303,47 @@ input, select {
     color: #1976d2;
 }
 
+.popupCard { font-size: 13px; min-width: 210px; }
+.popupHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-bottom: 6px;
+}
+.popupHeader b { font-size: 15px; }
+.popupOnline { font-size: 11px; white-space: nowrap; font-weight: bold; }
+.popupOnline.isOnline { color: #2e7d32; }
+.popupOnline.isOffline { color: #c62828; }
+.popupSection { padding: 6px 0; border-top: 1px solid #e0e0e0; }
+.popupRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    padding: 2px 0;
+}
+.popupLabel { color: #777; font-size: 12px; white-space: nowrap; }
+.popupValue { font-weight: bold; text-align: right; }
+.popupConcern {
+    background: #fff3e0;
+    border: 1px solid #ff9800;
+    border-radius: 4px;
+    padding: 4px 6px;
+    margin-top: 3px;
+}
+.popupConcern .popupLabel, .popupConcern .popupValue { color: #e65100; }
+.popupGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px 12px;
+    font-size: 12px;
+}
+.popupLocation { font-size: 11px; color: #555; line-height: 1.5; }
+.popupFooter { padding-top: 6px; border-top: 1px solid #e0e0e0; text-align: center; }
+.popupFooter button { width: 100%; margin-top: 4px; }
+.popupUserId { font-size: 10px; color: #aaa; margin-top: 5px; word-break: break-all; }
+
 .trafficIcon {
     background: #ff9800;
     border: 3px solid #e65100;
@@ -2139,40 +2180,56 @@ socket.on("locations", data => {
             className: "pointLabel"
         });
 
+        const concernRow = user.status_next
+            ? `
+                <div class="popupRow popupConcern">
+                    <span class="popupLabel">⚠️ 懸念事項</span>
+                    <span class="popupValue">${escapeHtml(user.status_next)}</span>
+                </div>
+              `
+            : "";
+
         markers[userId].bindPopup(`
-            <b>${escapeHtml(displayName)}</b>
-            <hr>
-            ユーザーID：${escapeHtml(userId)}
-            <br>
-            状態：${user.online ? "🟢 ONLINE" : "🔴 OFFLINE"}
-            <br>
-            緯度：${lat.toFixed(6)}
-            <br>
-            経度：${lon.toFixed(6)}
-            <br>
-            UTM：${escapeHtml(user.utmZone || "52S")}
-            <br>
-            E：${user.utmE ?? "-"}
-            <br>
-            N：${user.utmN ?? "-"}
-            <br>
-            💧水：${user.water ?? 0}
-            <br>
-            ⛽燃料：${user.fuel ?? 0}
-            <br>
-            📦物資1：${user.item_a ?? 0}　📦物資2：${user.item_b ?? 0}
-            <br>
-            📦物資3：${user.item_c ?? 0}　📦物資4：${user.item_d ?? 0}
-            <br>
-            📋活動内容：${escapeHtml(user.status || "-")}
-            <br>
-            📍目的地：${escapeHtml(user.destination || "-")}
-            <br>
-            ⚠️懸念事項：${escapeHtml(user.status_next || "-")}
-            <br>
-            最終更新：${timeAgo(user.lastUpdate)}
-            <br>
-            <button onclick="startNavigation(${lat}, ${lon}, '${escapeHtml(displayName)}')">🧭 ここへナビ</button>
+            <div class="popupCard">
+                <div class="popupHeader">
+                    <b>${escapeHtml(displayName)}</b>
+                    <span class="popupOnline ${user.online ? "isOnline" : "isOffline"}">
+                        ${user.online ? "🟢 ONLINE" : "🔴 OFFLINE"}
+                    </span>
+                </div>
+
+                <div class="popupSection">
+                    <div class="popupRow">
+                        <span class="popupLabel">📋 活動内容</span>
+                        <span class="popupValue">${escapeHtml(user.status || "-")}</span>
+                    </div>
+                    <div class="popupRow">
+                        <span class="popupLabel">📍 目的地</span>
+                        <span class="popupValue">${escapeHtml(user.destination || "-")}</span>
+                    </div>
+                    ${concernRow}
+                </div>
+
+                <div class="popupSection popupGrid">
+                    <div>💧水：${user.water ?? 0}</div>
+                    <div>⛽燃料：${user.fuel ?? 0}</div>
+                    <div>📦物資1：${user.item_a ?? 0}</div>
+                    <div>📦物資2：${user.item_b ?? 0}</div>
+                    <div>📦物資3：${user.item_c ?? 0}</div>
+                    <div>📦物資4：${user.item_d ?? 0}</div>
+                </div>
+
+                <div class="popupSection popupLocation">
+                    緯度経度：${lat.toFixed(6)}, ${lon.toFixed(6)}<br>
+                    UTM ${escapeHtml(user.utmZone || "52S")}　E：${user.utmE ?? "-"}　N：${user.utmN ?? "-"}
+                </div>
+
+                <div class="popupFooter">
+                    最終更新：${timeAgo(user.lastUpdate)}
+                    <button onclick="startNavigation(${lat}, ${lon}, '${escapeHtml(displayName)}')">🧭 ここへナビ</button>
+                    <div class="popupUserId">ID：${escapeHtml(userId)}</div>
+                </div>
+            </div>
         `);
     });
 
