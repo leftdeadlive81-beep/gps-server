@@ -50,6 +50,7 @@ const io = new Server(server, {
 });
 
 app.use(express.static("public"));
+app.use(express.json());
 
 //============================================================
 // 逆ジオコーディング（地図中央の地名取得）
@@ -1135,6 +1136,350 @@ async function markStaleUsersOffline() {
 
 setInterval(markStaleUsersOffline, 60 * 1000);
 
+//====================================================
+// GPS位置情報更新（共通処理）
+//====================================================
+//
+// ・user_idを基準にGPSを管理
+// ・未登録ユーザーのGPSは拒否
+// ・緯度 / 経度をチェック
+// ・UTM座標対応
+// ・current_usersへ現在位置を保存
+// ・location_historyへ位置履歴を保存
+// ・全接続端末へリアルタイム配信
+// ・Socket.IO("location")とREST(/api/mobile-location、モバイルアプリの
+//   バックグラウンドHTTP自動送信用)の両方から呼ばれる共通ロジック
+//
+//====================================================
+
+async function processLocationUpdate(data, socket) {
+    try {
+        //================================================
+        // ① GPSデータ存在確認
+        //================================================
+
+        if (!data || typeof data !== "object") {
+            console.log("GPS受信拒否: データなし");
+            return;
+        }
+
+        //================================================
+        // ② user_id取得
+        //================================================
+
+        const userId = String(data.user_id || data.name || "").trim();
+
+        if (!userId) {
+            console.log("GPS受信拒否: user_idなし");
+            return;
+        }
+
+        //================================================
+        // ③ 登録ユーザー確認
+        //================================================
+
+        const oldUser = users[userId];
+
+        if (!oldUser) {
+            console.log("未登録GPS拒否:", userId);
+            return;
+        }
+
+        if (socket) {
+            associateSocketWithUser(socket, userId);
+        }
+
+        //================================================
+        // ④ 現在時刻
+        //================================================
+
+        const now = Date.now();
+
+        //================================================
+        // ⑤ 表示名
+        //================================================
+
+        const displayName = String(
+            oldUser.display_name || data.display_name || data.name || userId
+        ).trim();
+
+        //================================================
+        // ⑥ 緯度・経度
+        //================================================
+
+        const lat = Number(data.lat);
+        const lon = Number(data.lon);
+
+        //================================================
+        // ⑦ GPS座標チェック
+        //================================================
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+            console.log("GPS受信拒否: 座標不正", { user_id: userId, lat: data.lat, lon: data.lon });
+            return;
+        }
+
+        if (lat < -90 || lat > 90) {
+            console.log("GPS受信拒否: 緯度範囲外", lat);
+            return;
+        }
+
+        if (lon < -180 || lon > 180) {
+            console.log("GPS受信拒否: 経度範囲外", lon);
+            return;
+        }
+
+        //================================================
+        // ⑧ UTM
+        //================================================
+
+        const utmZone = String(data.utmZone || oldUser.utmZone || "52S");
+
+        const utmEValue = Number(data.utmE);
+        const utmNValue = Number(data.utmN);
+
+        const utmE = Number.isFinite(utmEValue) ? utmEValue : (oldUser.utmE ?? null);
+        const utmN = Number.isFinite(utmNValue) ? utmNValue : (oldUser.utmN ?? null);
+
+        //================================================
+        // ⑧.5 経験値・LV（1km移動＝経験値1、サーバー側でのみ計算・ユーザー操作不可）
+        //================================================
+
+        let movedMeters = 0;
+        if (Number.isFinite(oldUser.lat) && Number.isFinite(oldUser.lon)) {
+            movedMeters = getDistanceMeters(oldUser.lat, oldUser.lon, lat, lon);
+        }
+        if (movedMeters > MAX_VALID_JUMP_METERS) {
+            movedMeters = 0;
+        }
+
+        const experience = (Number(oldUser.experience) || 0) + (movedMeters / 1000);
+        const level = levelFromExperience(experience);
+
+        //================================================
+        // ⑨ 物資情報（user_inventoryが正、GPS送信では変更しない）
+        //================================================
+
+        const water = Number(oldUser.water) || 0;
+        const fuel = Number(oldUser.fuel) || 0;
+
+        //================================================
+        // ⑩ 行動・目的地
+        //================================================
+
+        const movement = data.movement ?? oldUser.movement ?? "";
+        const destination = data.destination ?? oldUser.destination ?? "";
+
+        //================================================
+        // ⑪ アイコン
+        //================================================
+
+        const iconType = String(data.iconType || data.icon || oldUser.icon || "1");
+
+        //================================================
+        // ⑫ メモリ上のユーザー情報更新
+        //================================================
+
+        users[userId] = {
+            ...oldUser,
+            user_id: userId,
+            name: displayName,
+            display_name: displayName,
+            lat: lat,
+            lon: lon,
+            utmZone: utmZone,
+            utmE: utmE,
+            utmN: utmN,
+            movement: movement,
+            destination: destination,
+            water: water,
+            fuel: fuel,
+            icon: iconType,
+            iconType: iconType,
+            online: true,
+            lastUpdate: now,
+            experience: experience,
+            level: level
+        };
+
+        //================================================
+        // ⑬ usersテーブル更新
+        //================================================
+
+        await pool.query(
+            `
+            UPDATE users
+            SET
+                destination = $2,
+                icon = $3,
+                updated_at = $4,
+                experience = $5
+            WHERE user_id = $1
+            `,
+            [userId, destination, iconType, now, Math.round(experience)]
+        );
+
+        //================================================
+        // ⑭ current_users更新
+        //================================================
+
+        const currentResult = await pool.query(
+            `
+            UPDATE current_users
+            SET
+                name = $2,
+                lat = $3,
+                lon = $4,
+                utmzone = $5,
+                utme = $6,
+                utmn = $7,
+                water = $8,
+                fuel = $9,
+                destination = $10,
+                icontype = $11,
+                online = $12,
+                lastupdate = $13,
+                device_id = $14
+            WHERE user_id = $1
+            `,
+            [
+                userId,
+                displayName,
+                lat,
+                lon,
+                utmZone,
+                utmE,
+                utmN,
+                water,
+                fuel,
+                destination,
+                iconType,
+                1,
+                now,
+                data.device_id || userId
+            ]
+        );
+
+        //================================================
+        // ⑮ current_usersに存在しない場合
+        //================================================
+
+        if (currentResult.rowCount === 0) {
+            await pool.query(
+                `
+                INSERT INTO current_users
+                (
+                    user_id, name, lat, lon, utmzone, utme, utmn,
+                    water, fuel, destination, icontype, online, lastupdate, device_id
+                )
+                VALUES
+                ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+                ON CONFLICT(user_id)
+                DO UPDATE SET
+                    name = EXCLUDED.name,
+                    lat = EXCLUDED.lat,
+                    lon = EXCLUDED.lon,
+                    utmzone = EXCLUDED.utmzone,
+                    utme = EXCLUDED.utme,
+                    utmn = EXCLUDED.utmn,
+                    water = EXCLUDED.water,
+                    fuel = EXCLUDED.fuel,
+                    destination = EXCLUDED.destination,
+                    icontype = EXCLUDED.icontype,
+                    online = EXCLUDED.online,
+                    lastupdate = EXCLUDED.lastupdate,
+                    device_id = EXCLUDED.device_id
+                `,
+                [
+                    userId,
+                    displayName,
+                    lat,
+                    lon,
+                    utmZone,
+                    utmE,
+                    utmN,
+                    water,
+                    fuel,
+                    destination,
+                    iconType,
+                    1,
+                    now,
+                    data.device_id || userId
+                ]
+            );
+        }
+
+        //================================================
+        // ⑯ GPS位置履歴保存
+        //================================================
+
+        await pool.query(
+            `
+            INSERT INTO location_history
+            (name, lat, lon, water, fuel, destination, created, user_id)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+            `,
+            [displayName, lat, lon, water, fuel, destination, now, userId]
+        );
+
+        //================================================
+        // ⑰ 全端末へ最新位置を配信
+        //================================================
+
+        io.emit("locations", users);
+
+        //================================================
+        // ⑱ サーバーログ
+        //================================================
+
+        console.log("GPS更新:", userId, displayName, lat, lon);
+    }
+    catch (err) {
+        console.error("GPS位置情報保存エラー:", err);
+    }
+}
+
+//====================================================
+// モバイルアプリ(Capacitor)のバックグラウンド位置情報用REST受信口
+//====================================================
+//
+// @transistorsoft/capacitor-background-geolocation はスマホの画面OFF中、
+// WebView(JS)が休止しSocket.IO送信が止まってしまうため、ネイティブ側の
+// HTTP自動送信機能(http.url/autoSync)経由でここに直接POSTさせる。
+// リクエスト形式は rootProperty:"location" 設定に対応:
+// { location: { coords: { latitude, longitude }, extras: { user_id, display_name, device_id }, ... } }
+//
+//====================================================
+
+app.post("/api/mobile-location", async (req, res) => {
+    try {
+        const location = req.body && req.body.location;
+        const coords = location && location.coords;
+        const extras = (location && location.extras) || {};
+
+        if (!coords) {
+            return res.sendStatus(400);
+        }
+
+        await processLocationUpdate(
+            {
+                user_id: extras.user_id,
+                display_name: extras.display_name,
+                device_id: extras.device_id,
+                lat: coords.latitude,
+                lon: coords.longitude
+            },
+            null
+        );
+
+        res.sendStatus(200);
+    }
+    catch (err) {
+        console.error("モバイル位置情報受信エラー:", err);
+        res.sendStatus(500);
+    }
+});
+
 io.on("connection", socket => {
     console.log("接続:", socket.id);
 
@@ -1536,288 +1881,7 @@ io.on("connection", socket => {
     //====================================================
 
     socket.on("location", async data => {
-        try {
-            //================================================
-            // ① GPSデータ存在確認
-            //================================================
-
-            if (!data || typeof data !== "object") {
-                console.log("GPS受信拒否: データなし");
-                return;
-            }
-
-            //================================================
-            // ② user_id取得
-            //================================================
-
-            const userId = String(data.user_id || data.name || "").trim();
-
-            if (!userId) {
-                console.log("GPS受信拒否: user_idなし");
-                return;
-            }
-
-            //================================================
-            // ③ 登録ユーザー確認
-            //================================================
-
-            const oldUser = users[userId];
-
-            if (!oldUser) {
-                console.log("未登録GPS拒否:", userId);
-                return;
-            }
-
-            associateSocketWithUser(socket, userId);
-
-            //================================================
-            // ④ 現在時刻
-            //================================================
-
-            const now = Date.now();
-
-            //================================================
-            // ⑤ 表示名
-            //================================================
-
-            const displayName = String(
-                oldUser.display_name || data.display_name || data.name || userId
-            ).trim();
-
-            //================================================
-            // ⑥ 緯度・経度
-            //================================================
-
-            const lat = Number(data.lat);
-            const lon = Number(data.lon);
-
-            //================================================
-            // ⑦ GPS座標チェック
-            //================================================
-
-            if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-                console.log("GPS受信拒否: 座標不正", { user_id: userId, lat: data.lat, lon: data.lon });
-                return;
-            }
-
-            if (lat < -90 || lat > 90) {
-                console.log("GPS受信拒否: 緯度範囲外", lat);
-                return;
-            }
-
-            if (lon < -180 || lon > 180) {
-                console.log("GPS受信拒否: 経度範囲外", lon);
-                return;
-            }
-
-            //================================================
-            // ⑧ UTM
-            //================================================
-
-            const utmZone = String(data.utmZone || oldUser.utmZone || "52S");
-
-            const utmEValue = Number(data.utmE);
-            const utmNValue = Number(data.utmN);
-
-            const utmE = Number.isFinite(utmEValue) ? utmEValue : (oldUser.utmE ?? null);
-            const utmN = Number.isFinite(utmNValue) ? utmNValue : (oldUser.utmN ?? null);
-
-            //================================================
-            // ⑧.5 経験値・LV（1km移動＝経験値1、サーバー側でのみ計算・ユーザー操作不可）
-            //================================================
-
-            let movedMeters = 0;
-            if (Number.isFinite(oldUser.lat) && Number.isFinite(oldUser.lon)) {
-                movedMeters = getDistanceMeters(oldUser.lat, oldUser.lon, lat, lon);
-            }
-            if (movedMeters > MAX_VALID_JUMP_METERS) {
-                movedMeters = 0;
-            }
-
-            const experience = (Number(oldUser.experience) || 0) + (movedMeters / 1000);
-            const level = levelFromExperience(experience);
-
-            //================================================
-            // ⑨ 物資情報（user_inventoryが正、GPS送信では変更しない）
-            //================================================
-
-            const water = Number(oldUser.water) || 0;
-            const fuel = Number(oldUser.fuel) || 0;
-
-            //================================================
-            // ⑩ 行動・目的地
-            //================================================
-
-            const movement = data.movement ?? oldUser.movement ?? "";
-            const destination = data.destination ?? oldUser.destination ?? "";
-
-            //================================================
-            // ⑪ アイコン
-            //================================================
-
-            const iconType = String(data.iconType || data.icon || oldUser.icon || "1");
-
-            //================================================
-            // ⑫ メモリ上のユーザー情報更新
-            //================================================
-
-            users[userId] = {
-                ...oldUser,
-                user_id: userId,
-                name: displayName,
-                display_name: displayName,
-                lat: lat,
-                lon: lon,
-                utmZone: utmZone,
-                utmE: utmE,
-                utmN: utmN,
-                movement: movement,
-                destination: destination,
-                water: water,
-                fuel: fuel,
-                icon: iconType,
-                iconType: iconType,
-                online: true,
-                lastUpdate: now,
-                experience: experience,
-                level: level
-            };
-
-            //================================================
-            // ⑬ usersテーブル更新
-            //================================================
-
-            await pool.query(
-                `
-                UPDATE users
-                SET
-                    destination = $2,
-                    icon = $3,
-                    updated_at = $4,
-                    experience = $5
-                WHERE user_id = $1
-                `,
-                [userId, destination, iconType, now, Math.round(experience)]
-            );
-
-            //================================================
-            // ⑭ current_users更新
-            //================================================
-
-            const currentResult = await pool.query(
-                `
-                UPDATE current_users
-                SET
-                    name = $2,
-                    lat = $3,
-                    lon = $4,
-                    utmzone = $5,
-                    utme = $6,
-                    utmn = $7,
-                    water = $8,
-                    fuel = $9,
-                    destination = $10,
-                    icontype = $11,
-                    online = $12,
-                    lastupdate = $13,
-                    device_id = $14
-                WHERE user_id = $1
-                `,
-                [
-                    userId,
-                    displayName,
-                    lat,
-                    lon,
-                    utmZone,
-                    utmE,
-                    utmN,
-                    water,
-                    fuel,
-                    destination,
-                    iconType,
-                    1,
-                    now,
-                    data.device_id || userId
-                ]
-            );
-
-            //================================================
-            // ⑮ current_usersに存在しない場合
-            //================================================
-
-            if (currentResult.rowCount === 0) {
-                await pool.query(
-                    `
-                    INSERT INTO current_users
-                    (
-                        user_id, name, lat, lon, utmzone, utme, utmn,
-                        water, fuel, destination, icontype, online, lastupdate, device_id
-                    )
-                    VALUES
-                    ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-                    ON CONFLICT(user_id)
-                    DO UPDATE SET
-                        name = EXCLUDED.name,
-                        lat = EXCLUDED.lat,
-                        lon = EXCLUDED.lon,
-                        utmzone = EXCLUDED.utmzone,
-                        utme = EXCLUDED.utme,
-                        utmn = EXCLUDED.utmn,
-                        water = EXCLUDED.water,
-                        fuel = EXCLUDED.fuel,
-                        destination = EXCLUDED.destination,
-                        icontype = EXCLUDED.icontype,
-                        online = EXCLUDED.online,
-                        lastupdate = EXCLUDED.lastupdate,
-                        device_id = EXCLUDED.device_id
-                    `,
-                    [
-                        userId,
-                        displayName,
-                        lat,
-                        lon,
-                        utmZone,
-                        utmE,
-                        utmN,
-                        water,
-                        fuel,
-                        destination,
-                        iconType,
-                        1,
-                        now,
-                        data.device_id || userId
-                    ]
-                );
-            }
-
-            //================================================
-            // ⑯ GPS位置履歴保存
-            //================================================
-
-            await pool.query(
-                `
-                INSERT INTO location_history
-                (name, lat, lon, water, fuel, destination, created, user_id)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-                `,
-                [displayName, lat, lon, water, fuel, destination, now, userId]
-            );
-
-            //================================================
-            // ⑰ 全端末へ最新位置を配信
-            //================================================
-
-            io.emit("locations", users);
-
-            //================================================
-            // ⑱ サーバーログ
-            //================================================
-
-            console.log("GPS更新:", userId, displayName, lat, lon);
-        }
-        catch (err) {
-            console.error("GPS位置情報保存エラー:", err);
-        }
+        await processLocationUpdate(data, socket);
     });
 
     //====================================================
