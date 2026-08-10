@@ -6,6 +6,7 @@
 <title>現在位置自動共有君 Version 2.4</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css">
 
 <style>
 * { box-sizing: border-box; }
@@ -142,6 +143,8 @@ input, select {
     margin-top: 7px;
 }
 
+#mapTab { position: relative; }
+
 #map {
     width: 100%;
     height: calc(100vh - 150px);
@@ -150,6 +153,44 @@ input, select {
     border-radius: 6px;
     overflow: hidden;
 }
+
+.leaflet-routing-container { display: none !important; }
+
+.navPanel {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 900;
+    background: rgba(25,118,210,.95);
+    color: white;
+    border-radius: 8px;
+    padding: 8px 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.4);
+    min-width: 220px;
+    max-width: 90%;
+    text-align: center;
+}
+.navPanelHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 15px;
+    font-weight: bold;
+}
+.navStopButton {
+    border: none;
+    background: rgba(255,255,255,.25);
+    color: white;
+    border-radius: 50%;
+    width: 26px;
+    height: 26px;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+.navDistanceText { font-size: 22px; font-weight: bold; margin-top: 4px; }
+.navSummaryText { font-size: 12px; opacity: .85; margin-top: 2px; }
 
 .gpsButtonRow { display: flex; gap: 6px; margin-top: 7px; }
 .gpsButton, .reportButton {
@@ -372,6 +413,7 @@ input, select {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/socket.io/socket.io.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
 
 </head>
@@ -442,6 +484,16 @@ input, select {
 
     <div id="mapTab" class="tabContent active">
         <div id="map"></div>
+
+        <div id="navPanel" class="navPanel" style="display:none;">
+            <div class="navPanelHeader">
+                <span id="navInstructionText">-</span>
+                <button class="navStopButton" onclick="stopNavigation()">🛑</button>
+            </div>
+            <div id="navDistanceText" class="navDistanceText">-</div>
+            <div id="navSummary" class="navSummaryText">-</div>
+        </div>
+
         <div class="gpsButtonRow">
             <button class="gpsButton" onclick="startGPS()">📡 GPS開始</button>
             <button class="reportButton" onclick="updateStatus()">🔄 現在地報告</button>
@@ -576,6 +628,15 @@ let markers = {};
 let pointMarkers = {};
 let chronology = [];
 let watchID = null;
+
+let navRouteControl = null;
+let navRoute = null;
+let navSteps = [];
+let navCurrentStepIndex = 0;
+let navDestination = null;
+let navWatchID = null;
+let navAnnouncedThresholds = {};
+let navLastRerouteTime = 0;
 let gpsTimer = null;
 let lastLat = 0;
 let lastLon = 0;
@@ -1638,6 +1699,241 @@ function getDistance(lat1, lon1, lat2, lon2){
 }
 
 /* ==================================================
+   車両ナビゲーション（音声案内）
+   ・OSRM公開サーバー + Leaflet Routing Machine
+   ・maneuver種別は英語固定enumなので自前で和訳する
+================================================== */
+
+const NAV_INSTRUCTION_JA = {
+    "Straight": "直進",
+    "SlightRight": "やや右方向",
+    "Right": "右折",
+    "SharpRight": "急な右折",
+    "TurnAround": "Uターン",
+    "SharpLeft": "急な左折",
+    "Left": "左折",
+    "SlightLeft": "やや左方向",
+    "Roundabout": "ラウンドアバウトに進入",
+    "StayOnRoundabout": "ラウンドアバウトを継続",
+    "StartAt": "出発",
+    "DestinationReached": "目的地に到着",
+    "WaypointReached": "経由地に到着",
+    "Via": "経由地へ",
+    "EnterAgainstAllowedDirection": "進入方向にご注意",
+    "LeaveAgainstAllowedDirection": "進出方向にご注意"
+};
+
+function navInstructionText(instruction){
+    return NAV_INSTRUCTION_JA[instruction.type] || "直進";
+}
+
+function speakJa(text){
+    if(!("speechSynthesis" in window)){ return; }
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "ja-JP";
+    window.speechSynthesis.speak(utter);
+}
+
+function startNavigation(lat, lon, name){
+    if(!("geolocation" in navigator)){
+        alert("この端末は位置情報に対応していません");
+        return;
+    }
+
+    navDestination = { lat: lat, lon: lon, name: name };
+
+    const panel = document.getElementById("navPanel");
+    if(panel){ panel.style.display = "block"; }
+
+    document.getElementById("navInstructionText").textContent = "ルート計算中...";
+    document.getElementById("navDistanceText").textContent = "-";
+    document.getElementById("navSummary").textContent = "-";
+
+    map.closePopup();
+
+    navigator.geolocation.getCurrentPosition(
+        pos => {
+            beginNavRoute(pos.coords.latitude, pos.coords.longitude);
+        },
+        err => {
+            console.error("現在地取得エラー:", err);
+            alert("現在地を取得できませんでした");
+            stopNavigation();
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+}
+
+function beginNavRoute(startLat, startLon){
+    if(navRouteControl){
+        map.removeControl(navRouteControl);
+        navRouteControl = null;
+    }
+
+    navRouteControl = L.Routing.control({
+        waypoints: [
+            L.latLng(startLat, startLon),
+            L.latLng(navDestination.lat, navDestination.lon)
+        ],
+        router: L.Routing.osrmv1({ profile: "driving" }),
+        routeWhileDragging: false,
+        addWaypoints: false,
+        draggableWaypoints: false,
+        fitSelectedRoutes: true,
+        show: false,
+        lineOptions: {
+            styles: [{ color: "#1976d2", weight: 6, opacity: 0.8 }]
+        },
+        createMarker: () => null
+    }).addTo(map);
+
+    navRouteControl.on("routesfound", e => {
+        const route = e.routes[0];
+        navRoute = route;
+        navSteps = route.instructions || [];
+        navCurrentStepIndex = 0;
+        navAnnouncedThresholds = {};
+
+        const totalKm = (route.summary.totalDistance / 1000).toFixed(1);
+        const totalMin = Math.round(route.summary.totalTime / 60);
+
+        const summaryElement = document.getElementById("navSummary");
+        if(summaryElement){
+            summaryElement.textContent = `残り約${totalKm}km／約${totalMin}分`;
+        }
+
+        renderNavInstruction();
+        speakJa(`${navDestination.name}までのナビを開始します`);
+    });
+
+    navRouteControl.on("routingerror", () => {
+        const instructionElement = document.getElementById("navInstructionText");
+        if(instructionElement){ instructionElement.textContent = "ルートが見つかりませんでした"; }
+    });
+
+    if(navWatchID !== null){
+        navigator.geolocation.clearWatch(navWatchID);
+    }
+
+    navWatchID = navigator.geolocation.watchPosition(
+        pos => handleNavPosition(pos.coords.latitude, pos.coords.longitude),
+        err => console.log("ナビGPSエラー:", err),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+}
+
+function renderNavInstruction(){
+    const step = navSteps[navCurrentStepIndex];
+    const instructionElement = document.getElementById("navInstructionText");
+    if(instructionElement){
+        instructionElement.textContent = step ? navInstructionText(step) : "目的地に接近中";
+    }
+}
+
+function updateNavDistanceText(distance){
+    const el = document.getElementById("navDistanceText");
+    if(!el){ return; }
+    el.textContent = distance >= 1000
+        ? (distance / 1000).toFixed(1) + " km"
+        : Math.round(distance) + " m";
+}
+
+const NAV_THRESHOLDS = [500, 200, 50];
+
+function announceIfNeeded(distance, step){
+    const text = navInstructionText(step);
+
+    NAV_THRESHOLDS.forEach(threshold => {
+        if(distance <= threshold && !navAnnouncedThresholds[threshold]){
+            navAnnouncedThresholds[threshold] = true;
+
+            if(threshold >= 100){
+                speakJa(`${threshold}メートル先、${text}です`);
+            }
+            else{
+                speakJa(`まもなく${text}です`);
+            }
+        }
+    });
+}
+
+function checkOffRoute(lat, lon){
+    if(!navRoute || !navRoute.coordinates || navRoute.coordinates.length < 2){ return; }
+
+    let minDist = Infinity;
+    for(const c of navRoute.coordinates){
+        const d = getDistance(lat, lon, c.lat, c.lng);
+        if(d < minDist){ minDist = d; }
+    }
+
+    const now = Date.now();
+    if(minDist > 80 && now - navLastRerouteTime > 15000){
+        navLastRerouteTime = now;
+        speakJa("ルートを再計算します");
+        navRouteControl.setWaypoints([
+            L.latLng(lat, lon),
+            L.latLng(navDestination.lat, navDestination.lon)
+        ]);
+    }
+}
+
+function handleNavPosition(lat, lon){
+    if(!navRoute || !navDestination){ return; }
+
+    const step = navSteps[navCurrentStepIndex];
+
+    if(!step){
+        const distanceToDest = getDistance(lat, lon, navDestination.lat, navDestination.lon);
+        updateNavDistanceText(distanceToDest);
+
+        if(distanceToDest < 25){
+            speakJa("目的地に到着しました");
+            stopNavigation();
+        }
+        return;
+    }
+
+    const targetCoord = navRoute.coordinates[step.index];
+    if(!targetCoord){ return; }
+
+    const distance = getDistance(lat, lon, targetCoord.lat, targetCoord.lng);
+    updateNavDistanceText(distance);
+    announceIfNeeded(distance, step);
+
+    if(distance < 25){
+        navCurrentStepIndex++;
+        navAnnouncedThresholds = {};
+        renderNavInstruction();
+    }
+
+    checkOffRoute(lat, lon);
+}
+
+function stopNavigation(){
+    if(navWatchID !== null){
+        navigator.geolocation.clearWatch(navWatchID);
+        navWatchID = null;
+    }
+    if(navRouteControl){
+        map.removeControl(navRouteControl);
+        navRouteControl = null;
+    }
+    if("speechSynthesis" in window){
+        window.speechSynthesis.cancel();
+    }
+
+    navRoute = null;
+    navSteps = [];
+    navCurrentStepIndex = 0;
+    navDestination = null;
+    navAnnouncedThresholds = {};
+
+    const panel = document.getElementById("navPanel");
+    if(panel){ panel.style.display = "none"; }
+}
+
+/* ==================================================
    locations受信
 ================================================== */
 
@@ -1709,6 +2005,8 @@ socket.on("locations", data => {
             📍目的地：${escapeHtml(user.destination || "-")}
             <br>
             最終更新：${timeAgo(user.lastUpdate)}
+            <br>
+            <button onclick="startNavigation(${lat}, ${lon}, '${escapeHtml(displayName)}')">🧭 ここへナビ</button>
         `);
     });
 
@@ -2033,6 +2331,8 @@ socket.on("points", data => {
             ${Number(p.lat).toFixed(6)}
             <br>
             ${Number(p.lon).toFixed(6)}
+            <br>
+            <button onclick="startNavigation(${Number(p.lat)}, ${Number(p.lon)}, '${escapeHtml(name)}')">🧭 ここへナビ</button>
         `);
     });
 });
