@@ -96,40 +96,6 @@ app.get("/api/reverse-geocode", async (req, res) => {
 });
 
 //============================================================
-// v2.5バックアップ用 一時エクスポート（使用後に削除）
-//============================================================
-
-const BACKUP_EXPORT_TOKEN = "6c35aab03aa1fb746e5cd0b2702874b8e042d19ad1c29b66";
-
-app.get("/api/admin/export-v25-backup", async (req, res) => {
-    if (req.query.token !== BACKUP_EXPORT_TOKEN) {
-        res.status(403).json({ error: "forbidden" });
-        return;
-    }
-
-    try {
-        const [usersResult, currentUsersResult, pointsResult, chronologyResult] = await Promise.all([
-            pool.query("SELECT * FROM users"),
-            pool.query("SELECT * FROM current_users"),
-            pool.query("SELECT * FROM points"),
-            pool.query("SELECT * FROM chronology")
-        ]);
-
-        res.json({
-            exported_at: new Date().toISOString(),
-            users: usersResult.rows,
-            current_users: currentUsersResult.rows,
-            points: pointsResult.rows,
-            chronology: chronologyResult.rows
-        });
-    }
-    catch (err) {
-        console.error("バックアップエクスポートエラー", err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-//============================================================
 // PostgreSQL / Supabase
 //============================================================
 
