@@ -186,7 +186,8 @@ app.get("/api/geocode", async (req, res) => {
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false },
+    max: 30 // 既定10だと高頻度書き込み時にプールが詰まる可能性を切り分けるため一時的に増加
 });
 
 //============================================================
