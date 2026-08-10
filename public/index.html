@@ -35,33 +35,74 @@ button { cursor: pointer; }
     width: 100%;
     max-width: 420px;
     margin: 0 auto 8px;
-    padding: 20px;
+    padding: 24px 20px;
     border-radius: 14px;
     background: #ffffff;
     box-shadow: 0 2px 10px rgba(0,0,0,.15);
 }
-.authBox h2 { margin-top: 0; text-align: center; }
-.authBox h3 { text-align: center; }
+.authBrand { text-align: center; }
+.authBrandTitle { font-size: 19px; font-weight: 700; color: #1c2733; }
+.authBrandVersion {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: #eef2f7;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .02em;
+}
+.authFormTitle {
+    text-align: center;
+    margin: 20px 0 14px;
+    font-size: 15px;
+    color: #37424c;
+}
 .authBox input {
     width: 100%;
-    padding: 12px;
+    padding: 12px 14px;
     margin-bottom: 10px;
-    border: 1px solid #bbb;
-    border-radius: 6px;
+    border: 1px solid #d7dce2;
+    border-radius: 8px;
     font-size: 16px;
+    background: #fbfcfd;
+    transition: border-color .15s, box-shadow .15s;
 }
-.authBox button {
+.authBox input:focus {
+    outline: none;
+    border-color: #1976d2;
+    box-shadow: 0 0 0 3px rgba(25,118,210,.12);
+    background: #fff;
+}
+.authButtonPrimary, .authButtonSecondary {
+    display: block;
     width: 100%;
-    padding: 12px;
+    padding: 13px;
     margin-top: 8px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
     border: 0;
-    border-radius: 6px;
-    background: #1976d2;
-    color: white;
-    font-size: 16px;
+}
+.authButtonPrimary { background: #1976d2; color: #fff; }
+.authButtonPrimary:active { background: #145ea8; }
+.authButtonSecondary {
+    background: transparent;
+    color: #1976d2;
+    border: 1px solid #c7d7ea;
+}
+.authButtonSecondary:active { background: #f2f6fb; }
+.authDivider { height: 1px; background: #eceff2; margin: 18px 0 4px; }
+.authHint {
+    margin: 12px 0 0;
+    text-align: center;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #8792a0;
 }
 .authMessage {
-    margin-top: 15px;
+    margin-top: 14px;
     min-height: 24px;
     text-align: center;
     font-weight: bold;
@@ -651,14 +692,18 @@ input, select {
 <div id="authScreen">
 
     <div id="loginBox" class="authBox">
-        <h2>災害情報共有システム<br>【試作ver0.2】</h2>
-        <h3>🔐 ログイン</h3>
-        <input type="text" id="loginUsername" placeholder="任意のログインID(英数字)" autocomplete="username">
+        <div class="authBrand">
+            <div class="authBrandTitle">🐈 災害情報共有システム</div>
+            <span class="authBrandVersion">試作 ver0.2</span>
+        </div>
+        <h3 class="authFormTitle">🔐 ログイン</h3>
+        <input type="text" id="loginUsername" placeholder="ログインID(英数字)" autocomplete="username">
         <input type="password" id="loginPassword" placeholder="パスワード(6文字以上)" autocomplete="current-password">
-        <button onclick="loginUser()">🔐 ログイン</button>
-        <button onclick="showRegister()">👤 新規アカウント登録</button>
+        <button class="authButtonPrimary" onclick="loginUser()">🔐 ログイン</button>
         <div id="loginMessage" class="authMessage"></div>
-        <h3>※初めて使用する際は<br>「新規アカウント登録」をして下さい。<br>次回以降は自動的にログオンします。</h3>
+        <div class="authDivider"></div>
+        <button class="authButtonSecondary" onclick="showRegister()">👤 新規アカウント登録</button>
+        <p class="authHint">初めて使用する場合は「新規アカウント登録」から。<br>次回以降は自動的にログオンします。</p>
     </div>
 
     <div id="loginInfoCard" class="authInfoCard">
@@ -675,15 +720,19 @@ input, select {
     </div>
 
     <div id="registerBox" class="authBox" style="display:none;">
-        <h2>災害情報共有システム<br>【試作ver0.2】</h2>
-        <h3>👤 新規アカウント登録</h3>
+        <div class="authBrand">
+            <div class="authBrandTitle">🐈 災害情報共有システム</div>
+            <span class="authBrandVersion">試作 ver0.2</span>
+        </div>
+        <h3 class="authFormTitle">👤 新規アカウント登録</h3>
         <input type="text" id="registerUsername" placeholder="ログインID（英数字）" autocomplete="username">
         <input type="text" id="registerDisplayName" placeholder="表示名（例：第1小隊 山田）" autocomplete="name">
         <input type="password" id="registerPassword" placeholder="パスワード（6文字以上）" autocomplete="new-password">
         <input type="password" id="registerPassword2" placeholder="パスワード（確認）" autocomplete="new-password">
-        <button onclick="registerAuthUser()">👤 アカウント登録</button>
-        <button onclick="showLogin()">🔐 ログイン画面へ戻る</button>
+        <button class="authButtonPrimary" onclick="registerAuthUser()">👤 アカウント登録</button>
         <div id="registerMessage" class="authMessage"></div>
+        <div class="authDivider"></div>
+        <button class="authButtonSecondary" onclick="showLogin()">🔐 ログイン画面へ戻る</button>
     </div>
 
 </div>
