@@ -28,10 +28,44 @@ const http = require("http");
 const { Server } = require("socket.io");
 const { Pool } = require("pg");
 const zlib = require("zlib");
+const fs = require("fs");
+const admin = require("firebase-admin");
 
 const app = express();
 
 const server = http.createServer(app);
+
+//============================================================
+// Firebase Admin（クロノロジー投稿のプッシュ通知用）
+// ・サービスアカウントJSONはRenderの「Secret Files」機能で
+//   /etc/secrets/firebase-service-account.json に配置する
+//   （秘密情報のためgit管理はしない。ローカル開発時は環境変数
+//   FIREBASE_SERVICE_ACCOUNT_JSON でも代用可）
+// ・どちらも無い場合はプッシュ通知機能だけ無効化し、他の機能には影響しない
+//============================================================
+
+let firebaseMessaging = null;
+
+try {
+    const secretFilePath = "/etc/secrets/firebase-service-account.json";
+
+    const serviceAccountJson = fs.existsSync(secretFilePath)
+        ? fs.readFileSync(secretFilePath, "utf8")
+        : process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+
+    if (serviceAccountJson) {
+        admin.initializeApp({
+            credential: admin.credential.cert(JSON.parse(serviceAccountJson))
+        });
+        firebaseMessaging = admin.messaging();
+    }
+    else {
+        console.warn("Firebaseサービスアカウントが見つからないため、プッシュ通知は無効です");
+    }
+}
+catch (err) {
+    console.error("Firebase Admin初期化エラー:", err);
+}
 
 //============================================================
 // Socket.IO
@@ -976,7 +1010,9 @@ async function loadUsers() {
                 item_d: "",
 
                 experience: user.experience || 0,
-                level: levelFromExperience(user.experience || 0)
+                level: levelFromExperience(user.experience || 0),
+
+                pushToken: user.push_token || null
             };
         });
 
@@ -1148,6 +1184,44 @@ async function markStaleUsersOffline() {
 
     if (changed) {
         io.emit("locations", users);
+    }
+}
+
+//====================================================
+// クロノロジー投稿のプッシュ通知
+// ・投稿者本人を除く、プッシュトークン登録済みの全ユーザーへ送信
+//====================================================
+
+async function sendChronologyPushNotifications(item, excludeUserId) {
+    if (!firebaseMessaging) { return; }
+
+    const tokens = Object.values(users)
+        .filter(user => user.user_id !== excludeUserId && typeof user.pushToken === "string" && user.pushToken)
+        .map(user => user.pushToken);
+
+    if (tokens.length === 0) { return; }
+
+    try {
+        const response = await firebaseMessaging.sendEachForMulticast({
+            tokens: tokens,
+            notification: {
+                title: "【" + item.category + "】" + (item.user || "クロノロジー"),
+                body: item.message.slice(0, 100)
+            },
+            data: {
+                type: "chronology",
+                chronologyId: String(item.id || "")
+            }
+        });
+
+        response.responses.forEach((res, index) => {
+            if (!res.success) {
+                console.error("プッシュ通知送信失敗:", tokens[index], res.error && res.error.message);
+            }
+        });
+    }
+    catch (err) {
+        console.error("プッシュ通知送信エラー:", err);
     }
 }
 
@@ -1993,6 +2067,8 @@ io.on("connection", socket => {
         ).slice(0, 300);
 
         io.emit("announcement", announcementText);
+
+        await sendChronologyPushNotifications(item, socket.userId);
     });
 
     //====================================================
@@ -2134,6 +2210,26 @@ io.on("connection", socket => {
 
     socket.on("userOffline", async userId => {
         await markUserOffline(userId);
+    });
+
+    //====================================================
+    // プッシュ通知トークン登録（Puttanモバイルアプリ用）
+    //====================================================
+
+    socket.on("registerPushToken", async data => {
+        const userId = String(data && data.user_id || "").trim();
+        const token = String(data && data.token || "").trim();
+
+        if (!userId || !token || !users[userId]) { return; }
+
+        users[userId].pushToken = token;
+
+        try {
+            await pool.query("UPDATE users SET push_token=$2 WHERE user_id=$1", [userId, token]);
+        }
+        catch (err) {
+            console.error("プッシュ通知トークン保存エラー:", userId, err);
+        }
     });
 
     //====================================================
