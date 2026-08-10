@@ -312,6 +312,7 @@ input, select {
 .timelineItem {
     border-bottom: 1px solid #ddd;
     padding: 8px 3px;
+    cursor: pointer;
 }
 .timelineHeader {
     display: flex;
@@ -335,12 +336,21 @@ input, select {
 .timelineSender { font-weight: bold; color: #333; }
 .timelineMessage { font-size: 14px; margin-top: 4px; }
 .timelineRemarks { font-size: 12px; color: #777; margin-top: 2px; }
-.reactionBar {
+.reactionSummary {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
     margin-top: 6px;
 }
+.reactionPicker {
+    display: none;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed #ddd;
+}
+.reactionPicker.open { display: flex; }
 .reactionButton {
     display: flex;
     align-items: center;
@@ -2893,24 +2903,44 @@ function sendChronology(){
 
 const REACTION_EMOJIS = ["👍", "🙇‍♂️", "🙆‍♂️", "🙅‍♂️", "🤷‍♂️", "🫶", "🍙", "🐈"];
 
-function renderReactionBar(item){
-    if(!item.id){ return ""; }
+function renderReactionSummary(item){
+    const reactions = item.reactions || {};
 
+    const chips = REACTION_EMOJIS
+        .filter(emoji => (reactions[emoji] || []).length > 0)
+        .map(emoji => {
+            const users = reactions[emoji] || [];
+            const mine = socketUserId && users.includes(socketUserId);
+
+            return `
+                <button class="reactionButton ${mine ? "reactionMine" : ""}"
+                        onclick="event.stopPropagation(); toggleReaction(${item.id}, '${emoji}')">
+                    ${emoji}<span class="reactionCount">${users.length}</span>
+                </button>
+            `;
+        })
+        .join("");
+
+    if(!chips){ return ""; }
+
+    return `<div class="reactionSummary">${chips}</div>`;
+}
+
+function renderReactionPicker(item){
     const reactions = item.reactions || {};
 
     const buttons = REACTION_EMOJIS.map(emoji => {
-        const users = reactions[emoji] || [];
-        const count = users.length;
-        const mine = socketUserId && users.includes(socketUserId);
+        const mine = socketUserId && (reactions[emoji] || []).includes(socketUserId);
 
         return `
-            <button class="reactionButton ${mine ? "reactionMine" : ""}" onclick="toggleReaction(${item.id}, '${emoji}')">
-                ${emoji}${count > 0 ? `<span class="reactionCount">${count}</span>` : ""}
+            <button class="reactionButton ${mine ? "reactionMine" : ""}"
+                    onclick="event.stopPropagation(); toggleReaction(${item.id}, '${emoji}')">
+                ${emoji}
             </button>
         `;
     }).join("");
 
-    return `<div class="reactionBar">${buttons}</div>`;
+    return `<div class="reactionPicker" id="reactionPicker-${item.id}">${buttons}</div>`;
 }
 
 function renderChronologyItem(item){
@@ -2918,8 +2948,10 @@ function renderChronologyItem(item){
         ? `<div class="timelineRemarks">📝 ${escapeHtml(item.remarks)}</div>`
         : "";
 
+    const tapToReact = item.id ? `onclick="toggleReactionPicker(${item.id})"` : "";
+
     return `
-        <div class="timelineItem">
+        <div class="timelineItem" ${tapToReact}>
             <div class="timelineHeader">
                 <span>
                     <span class="timelineCategory ${item.category === "緊急" ? "catUrgent" : ""}">
@@ -2931,7 +2963,8 @@ function renderChronologyItem(item){
             </div>
             <div class="timelineMessage">${escapeHtml(item.message || "")}</div>
             ${remarksLine}
-            ${renderReactionBar(item)}
+            ${renderReactionSummary(item)}
+            ${item.id ? renderReactionPicker(item) : ""}
         </div>
     `;
 }
@@ -2942,6 +2975,11 @@ function toggleReaction(chronologyId, emoji){
         return;
     }
     socket.emit("toggleReaction", { chronologyId: chronologyId, emoji: emoji, userId: socketUserId });
+}
+
+function toggleReactionPicker(chronologyId){
+    const picker = document.getElementById(`reactionPicker-${chronologyId}`);
+    if(picker){ picker.classList.toggle("open"); }
 }
 
 socket.on("chronologyReactionUpdate", data => {
