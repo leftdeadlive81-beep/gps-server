@@ -1142,6 +1142,18 @@ function decrementSocketCount(userId) {
     }
 }
 
+// 1人分の更新だけを全端末へ配信する。頻繁に発生する更新（GPS位置・
+// オンライン状態など）はこちらを使い、"locations"（全員分の完全なスナップ
+// ショット）は新規接続時の初期同期と隊員削除時のみに限定する。
+// これにより、1人の更新のたびに登録人数分のデータを全員へ送っていた
+// O(N^2)的な負荷集中を避ける
+function broadcastUserUpdate(userId) {
+    const user = users[userId];
+    if (!user) { return; }
+
+    io.emit("locationUpdate", { userId, user });
+}
+
 async function markUserOffline(userId) {
     const user = users[userId];
     if (!user || !user.online) { return; }
@@ -1156,12 +1168,11 @@ async function markUserOffline(userId) {
         console.error("オフライン更新エラー:", userId, err);
     }
 
-    io.emit("locations", users);
+    broadcastUserUpdate(userId);
 }
 
 async function markStaleUsersOffline() {
     const now = Date.now();
-    let changed = false;
 
     for (const userId of Object.keys(users)) {
         const user = users[userId];
@@ -1172,7 +1183,6 @@ async function markStaleUsersOffline() {
 
         if (now - lastUpdate > OFFLINE_STALE_MS) {
             user.online = false;
-            changed = true;
 
             try {
                 await pool.query("UPDATE current_users SET online=$2 WHERE user_id=$1", [userId, 0]);
@@ -1180,11 +1190,9 @@ async function markStaleUsersOffline() {
             catch (err) {
                 console.error("自動オフライン更新エラー:", userId, err);
             }
-        }
-    }
 
-    if (changed) {
-        io.emit("locations", users);
+            broadcastUserUpdate(userId);
+        }
     }
 }
 
@@ -1536,7 +1544,7 @@ async function processLocationUpdate(data, socket) {
         // ⑰ 全端末へ最新位置を配信
         //================================================
 
-        io.emit("locations", users);
+        broadcastUserUpdate(userId);
 
         //================================================
         // ⑱ サーバーログ
@@ -1979,7 +1987,7 @@ io.on("connection", socket => {
             // 全端末へ配信
             //================================================
 
-            io.emit("locations", users);
+            broadcastUserUpdate(userId);
 
             //================================================
             // 登録元へ成功通知

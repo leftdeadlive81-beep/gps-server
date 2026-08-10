@@ -2652,7 +2652,105 @@ function stopNavigation(){
 }
 
 /* ==================================================
-   locations受信
+   隊員マーカー描画（初期同期・差分更新の共通処理）
+================================================== */
+
+function renderUserMarker(userId, user){
+    if(!user){ return; }
+    if(user.lat == null || user.lon == null){ return; }
+
+    const lat = Number(user.lat);
+    const lon = Number(user.lon);
+
+    if(!Number.isFinite(lat) || !Number.isFinite(lon)){ return; }
+
+    const displayName = user.display_name || user.name || userId;
+
+    if(markers[userId]){
+        markers[userId].setLatLng([lat, lon]);
+    }
+    else{
+        markers[userId] = L.marker(
+            [lat, lon],
+            { icon: createIcon(user.icon || user.iconType || "1") }
+        ).addTo(map);
+    }
+
+    markers[userId].setIcon(createIcon(user.icon || user.iconType || "1"));
+
+    const statusLine = user.status
+        ? `<br><span class="markerStatusLine">${escapeHtml(user.status)}</span>`
+        : "";
+
+    const levelBadge = `<span class="markerLevelBadge">Lv.${user.level ?? 1}</span> `;
+
+    markers[userId].bindTooltip(`${levelBadge}${escapeHtml(displayName)}${statusLine}`, {
+        permanent: true,
+        direction: "top",
+        offset: [0, -30],
+        className: "pointLabel"
+    });
+
+    const concernRow = user.status_next
+        ? `
+            <div class="popupRow popupConcern">
+                <span class="popupLabel">⚠️ 懸念事項</span>
+                <span class="popupValue">${escapeHtml(user.status_next)}</span>
+            </div>
+          `
+        : "";
+
+    markers[userId].bindPopup(`
+        <div class="popupCard">
+            <div class="popupHeader">
+                <b><span class="markerLevelBadge">Lv.${user.level ?? 1}</span> ${escapeHtml(displayName)}</b>
+                <span class="popupOnline ${user.online ? "isOnline" : "isOffline"}">
+                    ${user.online ? "🟢 ONLINE" : "🔴 OFFLINE"}
+                </span>
+            </div>
+
+            <div class="popupSection">
+                <div class="popupRow">
+                    <span class="popupLabel">🎖 経験値</span>
+                    <span class="popupValue">${Math.round(user.experience ?? 0)}</span>
+                </div>
+                <div class="popupRow">
+                    <span class="popupLabel">📋 活動内容</span>
+                    <span class="popupValue">${escapeHtml(user.status || "-")}</span>
+                </div>
+                <div class="popupRow">
+                    <span class="popupLabel">📍 目的地</span>
+                    <span class="popupValue">${escapeHtml(user.destination || "-")}</span>
+                </div>
+                ${concernRow}
+            </div>
+
+            <div class="popupSection popupGrid">
+                <div>💧水：${user.water ?? 0}</div>
+                <div>⛽燃料：${user.fuel ?? 0}</div>
+                <div>📦物資1：${escapeHtml(user.item_a || "-")}</div>
+                <div>📦物資2：${escapeHtml(user.item_b || "-")}</div>
+                <div>📦物資3：${escapeHtml(user.item_c || "-")}</div>
+                <div>📦物資4：${escapeHtml(user.item_d || "-")}</div>
+            </div>
+
+            <div class="popupSection popupLocation">
+                緯度経度：${lat.toFixed(6)}, ${lon.toFixed(6)}<br>
+                UTM ${escapeHtml(user.utmZone || "52S")}　E：${user.utmE ?? "-"}　N：${user.utmN ?? "-"}<br>
+                ${formatMovement(user.speed, user.heading)}
+            </div>
+
+            <div class="popupFooter">
+                最終更新：${timeAgo(user.lastUpdate)}
+                <button onclick="startNavigation(${lat}, ${lon}, '${escapeHtml(displayName)}')">🧭 ここへナビ</button>
+                <div class="popupUserId">ID：${escapeHtml(userId)}</div>
+            </div>
+        </div>
+    `);
+}
+
+/* ==================================================
+   locations受信（新規接続時の初期同期・隊員削除時の全件再同期）
 ================================================== */
 
 socket.on("locations", data => {
@@ -2669,103 +2767,23 @@ socket.on("locations", data => {
         }
     });
 
-    Object.keys(data).forEach(userId => {
-        const user = data[userId];
-        if(!user){ return; }
-
-        if(user.lat == null || user.lon == null){ return; }
-
-        const lat = Number(user.lat);
-        const lon = Number(user.lon);
-
-        if(!Number.isFinite(lat) || !Number.isFinite(lon)){ return; }
-
-        const displayName = user.display_name || user.name || userId;
-
-        if(markers[userId]){
-            markers[userId].setLatLng([lat, lon]);
-        }
-        else{
-            markers[userId] = L.marker(
-                [lat, lon],
-                { icon: createIcon(user.icon || user.iconType || "1") }
-            ).addTo(map);
-        }
-
-        markers[userId].setIcon(createIcon(user.icon || user.iconType || "1"));
-
-        const statusLine = user.status
-            ? `<br><span class="markerStatusLine">${escapeHtml(user.status)}</span>`
-            : "";
-
-        const levelBadge = `<span class="markerLevelBadge">Lv.${user.level ?? 1}</span> `;
-
-        markers[userId].bindTooltip(`${levelBadge}${escapeHtml(displayName)}${statusLine}`, {
-            permanent: true,
-            direction: "top",
-            offset: [0, -30],
-            className: "pointLabel"
-        });
-
-        const concernRow = user.status_next
-            ? `
-                <div class="popupRow popupConcern">
-                    <span class="popupLabel">⚠️ 懸念事項</span>
-                    <span class="popupValue">${escapeHtml(user.status_next)}</span>
-                </div>
-              `
-            : "";
-
-        markers[userId].bindPopup(`
-            <div class="popupCard">
-                <div class="popupHeader">
-                    <b><span class="markerLevelBadge">Lv.${user.level ?? 1}</span> ${escapeHtml(displayName)}</b>
-                    <span class="popupOnline ${user.online ? "isOnline" : "isOffline"}">
-                        ${user.online ? "🟢 ONLINE" : "🔴 OFFLINE"}
-                    </span>
-                </div>
-
-                <div class="popupSection">
-                    <div class="popupRow">
-                        <span class="popupLabel">🎖 経験値</span>
-                        <span class="popupValue">${Math.round(user.experience ?? 0)}</span>
-                    </div>
-                    <div class="popupRow">
-                        <span class="popupLabel">📋 活動内容</span>
-                        <span class="popupValue">${escapeHtml(user.status || "-")}</span>
-                    </div>
-                    <div class="popupRow">
-                        <span class="popupLabel">📍 目的地</span>
-                        <span class="popupValue">${escapeHtml(user.destination || "-")}</span>
-                    </div>
-                    ${concernRow}
-                </div>
-
-                <div class="popupSection popupGrid">
-                    <div>💧水：${user.water ?? 0}</div>
-                    <div>⛽燃料：${user.fuel ?? 0}</div>
-                    <div>📦物資1：${escapeHtml(user.item_a || "-")}</div>
-                    <div>📦物資2：${escapeHtml(user.item_b || "-")}</div>
-                    <div>📦物資3：${escapeHtml(user.item_c || "-")}</div>
-                    <div>📦物資4：${escapeHtml(user.item_d || "-")}</div>
-                </div>
-
-                <div class="popupSection popupLocation">
-                    緯度経度：${lat.toFixed(6)}, ${lon.toFixed(6)}<br>
-                    UTM ${escapeHtml(user.utmZone || "52S")}　E：${user.utmE ?? "-"}　N：${user.utmN ?? "-"}<br>
-                    ${formatMovement(user.speed, user.heading)}
-                </div>
-
-                <div class="popupFooter">
-                    最終更新：${timeAgo(user.lastUpdate)}
-                    <button onclick="startNavigation(${lat}, ${lon}, '${escapeHtml(displayName)}')">🧭 ここへナビ</button>
-                    <div class="popupUserId">ID：${escapeHtml(userId)}</div>
-                </div>
-            </div>
-        `);
-    });
+    Object.keys(data).forEach(userId => renderUserMarker(userId, data[userId]));
 
     renderUsers(data);
+});
+
+/* ==================================================
+   locationUpdate受信（1人分の差分更新）
+================================================== */
+
+socket.on("locationUpdate", payload => {
+    if(!payload || !payload.userId || !payload.user){ return; }
+
+    latestUsersData[payload.userId] = payload.user;
+
+    renderUserMarker(payload.userId, payload.user);
+
+    renderUsers(latestUsersData);
 });
 
 /* ==================================================
