@@ -29,7 +29,8 @@ const { Server } = require("socket.io");
 const { Pool } = require("pg");
 const zlib = require("zlib");
 const fs = require("fs");
-const admin = require("firebase-admin");
+const { initializeApp, cert } = require("firebase-admin/app");
+const { getMessaging } = require("firebase-admin/messaging");
 
 const app = express();
 
@@ -55,10 +56,10 @@ try {
         : process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
 
     if (serviceAccountJson) {
-        admin.initializeApp({
-            credential: admin.credential.cert(JSON.parse(serviceAccountJson))
+        const firebaseApp = initializeApp({
+            credential: cert(JSON.parse(serviceAccountJson))
         });
-        firebaseMessaging = admin.messaging();
+        firebaseMessaging = getMessaging(firebaseApp);
     }
     else {
         firebaseInitError = "サービスアカウントファイル・環境変数のどちらも見つかりません";
