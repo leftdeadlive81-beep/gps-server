@@ -1687,6 +1687,18 @@ io.on("connection", socket => {
         }
 
         io.emit("chronology", chronology);
+
+        //================================================
+        // 全体周知へ自動反映
+        //================================================
+
+        announcementText = (
+            "【" + item.category + "】" +
+            (item.user ? item.user + "：" : "") +
+            item.message
+        ).slice(0, 300);
+
+        io.emit("announcement", announcementText);
     });
 
     //====================================================
