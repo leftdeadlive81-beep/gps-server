@@ -1194,6 +1194,18 @@ async function registerUser(){
         localStorage.setItem("status_next", statusNext);
         localStorage.setItem("iconType", iconType);
 
+        const { error: profileError } = await supabaseClient
+            .from("profiles")
+            .update({
+                display_name: name,
+                icon_type: iconType
+            })
+            .eq("user_id", currentAuthUser.id);
+
+        if(profileError){
+            console.error("プロフィール更新エラー:", profileError);
+        }
+
         await registerSocketUser();
     }
     catch(error){
