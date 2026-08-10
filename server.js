@@ -1065,6 +1065,12 @@ function broadcastConnectionCounts() {
 
 const OFFLINE_STALE_MS = 5 * 60 * 1000;
 
+// Puttanモバイル(Capacitor)アプリは画面OFF中、Socket.IOを介さずネイティブHTTPで
+// 位置情報を直接送信し続ける。そのため切断イベントがREST経由の更新と競合しても、
+// 直近この猶予時間内に位置情報が届いていれば即オフライン化しない
+// （本当に更新が止まった場合は5分後にmarkStaleUsersOffline()が拾う）
+const DISCONNECT_OFFLINE_GRACE_MS = 90 * 1000;
+
 // userId -> 現在その userId に紐づいている socket 数
 // （同じアカウントで複数端末/タブが繋がっていても、全部切れるまではオフラインにしない）
 const socketCountByUserId = {};
@@ -2156,7 +2162,14 @@ io.on("connection", socket => {
         if (socket.userId) {
             decrementSocketCount(socket.userId);
             if (!socketCountByUserId[socket.userId]) {
-                markUserOffline(socket.userId);
+                const user = users[socket.userId];
+                const lastUpdate = user ? Number(user.lastUpdate) : NaN;
+                const recentlyUpdated = Number.isFinite(lastUpdate)
+                    && (Date.now() - lastUpdate < DISCONNECT_OFFLINE_GRACE_MS);
+
+                if (!recentlyUpdated) {
+                    markUserOffline(socket.userId);
+                }
             }
         }
     });
