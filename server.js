@@ -1006,6 +1006,86 @@ function broadcastConnectionCounts() {
     });
 }
 
+//============================================================
+// オフライン自動判定
+// ・切断（socket disconnect）を検知したら自動でオフライン扱い
+// ・一定時間（既定5分）位置情報の更新がなければ自動でオフライン扱い
+//   （GPSロストなど、接続は生きているが更新が止まったケースを検知）
+//============================================================
+
+const OFFLINE_STALE_MS = 5 * 60 * 1000;
+
+// userId -> 現在その userId に紐づいている socket 数
+// （同じアカウントで複数端末/タブが繋がっていても、全部切れるまではオフラインにしない）
+const socketCountByUserId = {};
+
+function associateSocketWithUser(socket, userId) {
+    if (!userId || socket.userId === userId) { return; }
+
+    if (socket.userId) {
+        decrementSocketCount(socket.userId);
+    }
+
+    socket.userId = userId;
+    socketCountByUserId[userId] = (socketCountByUserId[userId] || 0) + 1;
+}
+
+function decrementSocketCount(userId) {
+    if (!userId || !socketCountByUserId[userId]) { return; }
+
+    socketCountByUserId[userId] -= 1;
+    if (socketCountByUserId[userId] <= 0) {
+        delete socketCountByUserId[userId];
+    }
+}
+
+async function markUserOffline(userId) {
+    const user = users[userId];
+    if (!user || !user.online) { return; }
+
+    user.online = false;
+
+    try {
+        await pool.query("UPDATE current_users SET online=$2 WHERE user_id=$1", [userId, 0]);
+    }
+    catch (err) {
+        console.error("オフライン更新エラー:", userId, err);
+    }
+
+    io.emit("locations", users);
+}
+
+async function markStaleUsersOffline() {
+    const now = Date.now();
+    let changed = false;
+
+    for (const userId of Object.keys(users)) {
+        const user = users[userId];
+        if (!user.online) { continue; }
+
+        const lastUpdate = Number(user.lastUpdate);
+        if (!Number.isFinite(lastUpdate)) { continue; }
+
+        if (now - lastUpdate > OFFLINE_STALE_MS) {
+            user.online = false;
+            changed = true;
+
+            try {
+                await pool.query("UPDATE current_users SET online=$2 WHERE user_id=$1", [userId, 0]);
+            }
+            catch (err) {
+                console.error("自動オフライン更新エラー:", userId, err);
+            }
+        }
+    }
+
+    if (changed) {
+        io.emit("locations", users);
+    }
+}
+
+setInterval(markStaleUsersOffline, 60 * 1000);
+
 io.on("connection", socket => {
     console.log("接続:", socket.id);
 
@@ -1109,6 +1189,8 @@ io.on("connection", socket => {
 
                 return;
             }
+
+            associateSocketWithUser(socket, userId);
 
             //================================================
             // 表示名
@@ -1436,6 +1518,8 @@ io.on("connection", socket => {
                 console.log("未登録GPS拒否:", userId);
                 return;
             }
+
+            associateSocketWithUser(socket, userId);
 
             //================================================
             // ④ 現在時刻
@@ -1882,19 +1966,7 @@ io.on("connection", socket => {
     //====================================================
 
     socket.on("userOffline", async userId => {
-        const user = users[userId];
-        if (!user) { return; }
-
-        user.online = false;
-
-        try {
-            await pool.query("UPDATE current_users SET online=$2 WHERE user_id=$1", [userId, 0]);
-        }
-        catch (err) {
-            console.error("オフライン更新エラー:", userId, err);
-        }
-
-        io.emit("locations", users);
+        await markUserOffline(userId);
     });
 
     //====================================================
@@ -1967,6 +2039,13 @@ io.on("connection", socket => {
         console.log("切断:", socket.id);
         viewingSockets.delete(socket.id);
         broadcastConnectionCounts();
+
+        if (socket.userId) {
+            decrementSocketCount(socket.userId);
+            if (!socketCountByUserId[socket.userId]) {
+                markUserOffline(socket.userId);
+            }
+        }
     });
 });
 
