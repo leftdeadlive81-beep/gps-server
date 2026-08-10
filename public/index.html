@@ -240,6 +240,13 @@ input, select {
 }
 .buttonPressed { background: #2e7d32 !important; }
 
+.manualLink {
+    display: block;
+    text-align: center;
+    text-decoration: none;
+    box-sizing: border-box;
+}
+
 .navSettingRow {
     display: flex;
     align-items: center;
@@ -924,6 +931,10 @@ input, select {
         <div class="card settingsCard">
             <div class="sectionTitle">🔐 アカウント</div>
             <button class="settingsButton" onclick="logoutUser()">🚪 ログアウト</button>
+        </div>
+
+        <div class="card settingsCard">
+            <a href="/manual.html" target="_blank" rel="noopener" class="settingsButton manualLink">📖 操作マニュアルを見る</a>
         </div>
 
     </div>
