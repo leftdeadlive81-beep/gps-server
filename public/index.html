@@ -2608,15 +2608,18 @@ function createIcon(type){
         default: image = "/icon/person.png"; break;
     }
 
-    const targetHeight = 60;
+    // 縦横どちらが長くても、長い方の辺を基準サイズに収める
+    const targetMax = 46;
     const [nativeWidth, nativeHeight] = ICON_NATIVE_SIZE[type] || ICON_NATIVE_SIZE["1"];
-    const width = Math.round(targetHeight * (nativeWidth / nativeHeight));
+    const scale = targetMax / Math.max(nativeWidth, nativeHeight);
+    const width = Math.round(nativeWidth * scale);
+    const height = Math.round(nativeHeight * scale);
 
     return L.icon({
         iconUrl: image,
-        iconSize: [width, targetHeight],
-        iconAnchor: [width / 2, targetHeight],
-        popupAnchor: [0, -(targetHeight + 10)]
+        iconSize: [width, height],
+        iconAnchor: [width / 2, height],
+        popupAnchor: [0, -(height + 10)]
     });
 }
 
