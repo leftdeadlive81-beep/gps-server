@@ -41,7 +41,12 @@ const io = new Server(server, {
     transports: ["polling", "websocket"],
     allowUpgrades: true,
     pingInterval: 25000,
-    pingTimeout: 60000
+    pingTimeout: 60000,
+    // Puttanモバイル(Capacitor)アプリなど別オリジンからのSocket.IO接続を許可
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
 });
 
 app.use(express.static("public"));
