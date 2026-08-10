@@ -3040,35 +3040,65 @@ function createIcon(type){
 function wireMapLongPress(){
     const LONG_PRESS_MS = 550;
     const MOVE_TOLERANCE_PX = 12;
+    const container = map.getContainer();
+
     let pressTimer = null;
-    let startPoint = null;
+    let startX = null;
+    let startY = null;
 
     function clearPress(){
         if(pressTimer){
             clearTimeout(pressTimer);
             pressTimer = null;
         }
-        startPoint = null;
+        startX = null;
+        startY = null;
     }
 
-    map.on("mousedown", e => {
-        startPoint = e.containerPoint;
+    function latLngFromClientPoint(clientX, clientY){
+        const rect = container.getBoundingClientRect();
+        const containerPoint = L.point(clientX - rect.left, clientY - rect.top);
+        return map.containerPointToLatLng(containerPoint);
+    }
+
+    function startPress(clientX, clientY){
+        startX = clientX;
+        startY = clientY;
+        const latlng = latLngFromClientPoint(clientX, clientY);
         pressTimer = setTimeout(() => {
-            openPointRegisterPopup(e.latlng);
+            openPointRegisterPopup(latlng);
             clearPress();
         }, LONG_PRESS_MS);
-    });
+    }
 
-    map.on("mousemove", e => {
-        if(!startPoint){ return; }
-        const dx = e.containerPoint.x - startPoint.x;
-        const dy = e.containerPoint.y - startPoint.y;
+    function movePress(clientX, clientY){
+        if(startX === null){ return; }
+        const dx = clientX - startX;
+        const dy = clientY - startY;
         if(Math.hypot(dx, dy) > MOVE_TOLERANCE_PX){ clearPress(); }
-    });
+    }
 
-    map.on("mouseup", clearPress);
-    map.on("dragstart", clearPress);
-    map.on("zoomstart", clearPress);
+    // スマートフォン（タッチ）
+    container.addEventListener("touchstart", e => {
+        if(e.touches.length !== 1){ clearPress(); return; }
+        const t = e.touches[0];
+        startPress(t.clientX, t.clientY);
+    }, { passive: true });
+
+    container.addEventListener("touchmove", e => {
+        if(e.touches.length !== 1){ clearPress(); return; }
+        const t = e.touches[0];
+        movePress(t.clientX, t.clientY);
+    }, { passive: true });
+
+    container.addEventListener("touchend", clearPress);
+    container.addEventListener("touchcancel", clearPress);
+
+    // PC（マウス）
+    container.addEventListener("mousedown", e => { startPress(e.clientX, e.clientY); });
+    container.addEventListener("mousemove", e => { movePress(e.clientX, e.clientY); });
+    container.addEventListener("mouseup", clearPress);
+    container.addEventListener("mouseleave", clearPress);
 }
 wireMapLongPress();
 
