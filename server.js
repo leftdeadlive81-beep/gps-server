@@ -120,6 +120,35 @@ const CHRONOLOGY_LIVE_LIMIT = 100;
 // 「もっと見る」で1回に取得する過去ログの件数
 const CHRONOLOGY_PAGE_SIZE = 50;
 
+// クロノロジーへのリアクション（絵文字は固定8種、DBはchronology_reactionsに保存）
+const REACTION_EMOJIS = ["👍", "🙇‍♂️", "🙆‍♂️", "🙅‍♂️", "🤷‍♂️", "🫶", "🍙", "🐈"];
+
+// { [chronologyId]: { [emoji]: [user_id, ...] } }
+let chronologyReactions = {};
+
+async function loadChronologyReactions() {
+    try {
+        const result = await pool.query("SELECT chronology_id, emoji, user_id FROM chronology_reactions");
+
+        chronologyReactions = {};
+        result.rows.forEach(row => {
+            const id = row.chronology_id;
+            if (!chronologyReactions[id]) { chronologyReactions[id] = {}; }
+            if (!chronologyReactions[id][row.emoji]) { chronologyReactions[id][row.emoji] = []; }
+            chronologyReactions[id][row.emoji].push(row.user_id);
+        });
+
+        console.log("リアクション復元:", result.rows.length, "件");
+    }
+    catch (err) {
+        console.error("リアクション復元エラー", err);
+    }
+}
+
+function attachReactions(item) {
+    return { ...item, reactions: chronologyReactions[item.id] || {} };
+}
+
 //============================================================
 // 交通規制 自動更新間隔
 //============================================================
@@ -838,7 +867,7 @@ async function loadChronology() {
             [CHRONOLOGY_LIVE_LIMIT]
         );
 
-        chronology = result.rows.map(row => ({
+        chronology = result.rows.map(row => attachReactions({
             id: row.id,
             time: new Date(Number(row.created)).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", hour12: false }),
             user: row.user_name || "",
@@ -1675,7 +1704,8 @@ io.on("connection", socket => {
             user: String(data.user || "").trim(),
             message: String(data.message || "").trim(),
             category: String(data.category || "その他").trim(),
-            remarks: String(data.remarks || "").trim()
+            remarks: String(data.remarks || "").trim(),
+            reactions: {}
         };
 
         try {
@@ -1734,7 +1764,7 @@ io.on("connection", socket => {
                     [CHRONOLOGY_PAGE_SIZE]
                   );
 
-            const items = result.rows.map(row => ({
+            const items = result.rows.map(row => attachReactions({
                 id: row.id,
                 time: new Date(Number(row.created)).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", hour12: false }),
                 user: row.user_name || "",
@@ -1753,6 +1783,57 @@ io.on("connection", socket => {
                 callback({ success: false, message: err.message });
             }
         }
+    });
+
+    //====================================================
+    // クロノロジー リアクション（ワンタッチ絵文字レスポンス）
+    //====================================================
+
+    socket.on("toggleReaction", async data => {
+        const chronologyId = data && Number.isFinite(Number(data.chronologyId)) ? Number(data.chronologyId) : null;
+        const emoji = data && String(data.emoji || "");
+        const userId = data && String(data.userId || "").trim();
+
+        if (!chronologyId || !userId || !REACTION_EMOJIS.includes(emoji)) {
+            return;
+        }
+
+        if (!chronologyReactions[chronologyId]) { chronologyReactions[chronologyId] = {}; }
+        if (!chronologyReactions[chronologyId][emoji]) { chronologyReactions[chronologyId][emoji] = []; }
+
+        const list = chronologyReactions[chronologyId][emoji];
+        const index = list.indexOf(userId);
+
+        try {
+            if (index >= 0) {
+                list.splice(index, 1);
+
+                await pool.query(
+                    "DELETE FROM chronology_reactions WHERE chronology_id=$1 AND user_id=$2 AND emoji=$3",
+                    [chronologyId, userId, emoji]
+                );
+            }
+            else {
+                list.push(userId);
+
+                await pool.query(
+                    `
+                    INSERT INTO chronology_reactions (chronology_id, user_id, emoji, created)
+                    VALUES ($1,$2,$3,$4)
+                    ON CONFLICT (chronology_id, user_id, emoji) DO NOTHING
+                    `,
+                    [chronologyId, userId, emoji, Date.now()]
+                );
+            }
+        }
+        catch (err) {
+            console.error("リアクション更新エラー", err);
+        }
+
+        io.emit("chronologyReactionUpdate", {
+            chronologyId: chronologyId,
+            reactions: chronologyReactions[chronologyId]
+        });
     });
 
     //====================================================
@@ -1898,6 +1979,7 @@ const PORT = process.env.PORT || 10000;
 async function startServer() {
     await loadUsers();
     await loadPoints();
+    await loadChronologyReactions();
     await loadChronology();
 
     server.listen(PORT, async () => {

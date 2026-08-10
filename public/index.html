@@ -335,6 +335,27 @@ input, select {
 .timelineSender { font-weight: bold; color: #333; }
 .timelineMessage { font-size: 14px; margin-top: 4px; }
 .timelineRemarks { font-size: 12px; color: #777; margin-top: 2px; }
+.reactionBar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+.reactionButton {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    border: 1px solid #ddd;
+    background: #f5f5f5;
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 14px;
+}
+.reactionButton.reactionMine {
+    background: #e3f2fd;
+    border-color: #1976d2;
+}
+.reactionCount { font-size: 11px; color: #555; font-weight: bold; }
 .chronoLoadMoreDone {
     text-align: center;
     font-size: 12px;
@@ -2870,6 +2891,28 @@ function sendChronology(){
    クロノロジー表示
 ================================================== */
 
+const REACTION_EMOJIS = ["👍", "🙇‍♂️", "🙆‍♂️", "🙅‍♂️", "🤷‍♂️", "🫶", "🍙", "🐈"];
+
+function renderReactionBar(item){
+    if(!item.id){ return ""; }
+
+    const reactions = item.reactions || {};
+
+    const buttons = REACTION_EMOJIS.map(emoji => {
+        const users = reactions[emoji] || [];
+        const count = users.length;
+        const mine = socketUserId && users.includes(socketUserId);
+
+        return `
+            <button class="reactionButton ${mine ? "reactionMine" : ""}" onclick="toggleReaction(${item.id}, '${emoji}')">
+                ${emoji}${count > 0 ? `<span class="reactionCount">${count}</span>` : ""}
+            </button>
+        `;
+    }).join("");
+
+    return `<div class="reactionBar">${buttons}</div>`;
+}
+
 function renderChronologyItem(item){
     const remarksLine = item.remarks
         ? `<div class="timelineRemarks">📝 ${escapeHtml(item.remarks)}</div>`
@@ -2888,9 +2931,29 @@ function renderChronologyItem(item){
             </div>
             <div class="timelineMessage">${escapeHtml(item.message || "")}</div>
             ${remarksLine}
+            ${renderReactionBar(item)}
         </div>
     `;
 }
+
+function toggleReaction(chronologyId, emoji){
+    if(!socketUserId){
+        alert("先にログインしてください");
+        return;
+    }
+    socket.emit("toggleReaction", { chronologyId: chronologyId, emoji: emoji, userId: socketUserId });
+}
+
+socket.on("chronologyReactionUpdate", data => {
+    if(!data || !data.chronologyId){ return; }
+
+    [chronology, olderChronology].forEach(list => {
+        const item = list.find(i => i.id === data.chronologyId);
+        if(item){ item.reactions = data.reactions || {}; }
+    });
+
+    renderChronology();
+});
 
 function renderChronology(){
     let html = "";
