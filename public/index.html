@@ -263,6 +263,16 @@ input, select {
     line-height: 1;
 }
 
+.utmGridLabel {
+    color: #d84315;
+    font-size: 10px;
+    font-weight: bold;
+    font-family: "Consolas", monospace;
+    text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
 .footer { text-align: center; padding: 15px; font-size: 12px; color: #666; }
 .footer a { color: #1976d2; }
 
@@ -1131,6 +1141,87 @@ async function updateRainRadarLayer(){
 updateRainRadarLayer();
 setInterval(updateRainRadarLayer, 5 * 60 * 1000);
 
+/* ==================================================
+   UTMグリッド（デフォルトON）
+================================================== */
+
+const UTM_PROJ = "+proj=utm +zone=52 +south +datum=WGS84";
+
+const utmGridLayer = L.layerGroup();
+
+function pickUtmGridInterval(zoom, lat){
+    const metersPerPixel = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
+    const targetMeters = metersPerPixel * 120;
+
+    const niceSteps = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
+    for(const step of niceSteps){
+        if(step >= targetMeters){ return step; }
+    }
+    return niceSteps[niceSteps.length - 1];
+}
+
+function drawUtmGrid(){
+    utmGridLayer.clearLayers();
+
+    const bounds = map.getBounds();
+    const sw = bounds.getSouthWest();
+    const ne = bounds.getNorthEast();
+
+    const utmSW = proj4("EPSG:4326", UTM_PROJ, [sw.lng, sw.lat]);
+    const utmNE = proj4("EPSG:4326", UTM_PROJ, [ne.lng, ne.lat]);
+
+    const minE = Math.min(utmSW[0], utmNE[0]);
+    const maxE = Math.max(utmSW[0], utmNE[0]);
+    const minN = Math.min(utmSW[1], utmNE[1]);
+    const maxN = Math.max(utmSW[1], utmNE[1]);
+
+    const center = map.getCenter();
+    const interval = pickUtmGridInterval(map.getZoom(), center.lat);
+
+    const startE = Math.floor(minE / interval) * interval;
+    const startN = Math.floor(minN / interval) * interval;
+
+    const lineStyle = { color: "#ff5722", weight: 1, opacity: 0.65, interactive: false };
+
+    for(let e = startE; e <= maxE; e += interval){
+        const p1 = proj4(UTM_PROJ, "EPSG:4326", [e, minN]);
+        const p2 = proj4(UTM_PROJ, "EPSG:4326", [e, maxN]);
+
+        L.polyline([[p1[1], p1[0]], [p2[1], p2[0]]], lineStyle).addTo(utmGridLayer);
+
+        L.marker([p2[1], p2[0]], {
+            icon: L.divIcon({
+                className: "utmGridLabel",
+                html: Math.round(e).toString(),
+                iconSize: [60, 14],
+                iconAnchor: [30, 14]
+            }),
+            interactive: false
+        }).addTo(utmGridLayer);
+    }
+
+    for(let n = startN; n <= maxN; n += interval){
+        const p1 = proj4(UTM_PROJ, "EPSG:4326", [minE, n]);
+        const p2 = proj4(UTM_PROJ, "EPSG:4326", [maxE, n]);
+
+        L.polyline([[p1[1], p1[0]], [p2[1], p2[0]]], lineStyle).addTo(utmGridLayer);
+
+        L.marker([p1[1], p1[0]], {
+            icon: L.divIcon({
+                className: "utmGridLabel",
+                html: Math.round(n).toString(),
+                iconSize: [60, 14],
+                iconAnchor: [-4, 7]
+            }),
+            interactive: false
+        }).addTo(utmGridLayer);
+    }
+}
+
+map.on("moveend", drawUtmGrid);
+drawUtmGrid();
+utmGridLayer.addTo(map);
+
 L.control.layers(
     {
         "🗺 標準地図": osm,
@@ -1140,6 +1231,7 @@ L.control.layers(
         "🚒 防災淡色地図": gsiPale
     },
     {
+        "🧭 UTMグリッド": utmGridLayer,
         "🚧 交通規制": trafficRegulationLayer,
         "🌧 雨雲レーダー": rainRadarLayer
     }
