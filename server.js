@@ -1833,7 +1833,11 @@ io.on("connection", socket => {
 
                 // 経験値・LVはサーバーが移動距離から算出する値。ここでは維持のみ行う
                 experience: oldUser?.experience || 0,
-                level: levelFromExperience(oldUser?.experience || 0)
+                level: levelFromExperience(oldUser?.experience || 0),
+
+                // プッシュ通知トークンはregisterPushTokenで別途登録されるため、
+                // 再接続時のユーザー再構築で消さないよう引き継ぐ
+                pushToken: oldUser?.pushToken || null
             };
 
             //================================================
