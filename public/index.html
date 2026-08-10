@@ -2621,7 +2621,8 @@ function createIcon(type){
     }
 
     // 縦横どちらが長くても、長い方の辺を基準サイズに収める
-    const targetMax = 46;
+    // 車両アイコンは人アイコンより一回り大きく見せる
+    const targetMax = (type === "1") ? 46 : 62;
     const [nativeWidth, nativeHeight] = ICON_NATIVE_SIZE[type] || ICON_NATIVE_SIZE["1"];
     const scale = targetMax / Math.max(nativeWidth, nativeHeight);
     const width = Math.round(nativeWidth * scale);
