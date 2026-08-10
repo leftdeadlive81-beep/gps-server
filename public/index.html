@@ -206,7 +206,7 @@ input, select {
 
 .addressSearchBox {
     position: absolute;
-    top: 120px;
+    top: 12px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 910;
@@ -250,7 +250,7 @@ input, select {
 
 .navPanel {
     position: absolute;
-    top: 174px;
+    top: 66px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 900;
@@ -528,6 +528,9 @@ input, select {
     white-space: nowrap;
     pointer-events: none;
 }
+
+/* 検索ボックスと重ならないよう、ズーム・レイヤー等の標準コントロールを下げる */
+#mapTab .leaflet-top { margin-top: 60px; }
 
 .locateControlBar { margin-top: 10px !important; }
 .locateButton {
