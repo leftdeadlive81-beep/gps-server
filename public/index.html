@@ -2589,7 +2589,10 @@ function handleArOrientation(event){
     }
     else{
         const diff = ((heading - arHeading + 540) % 360) - 180;
-        arHeading = ((arHeading + diff * 0.15) % 360 + 360) % 360;
+        // 1度未満の揺れは無視し（不感帯）、それ以外は強めに平滑化する
+        if(Math.abs(diff) >= 1){
+            arHeading = ((arHeading + diff * 0.06) % 360 + 360) % 360;
+        }
     }
 }
 
