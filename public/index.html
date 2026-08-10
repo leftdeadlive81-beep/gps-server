@@ -1986,7 +1986,7 @@ function startGPSCore(){
     // 高精度GPSの初回測位を待たず、キャッシュ/大まかな位置で即座に仮表示する
     navigator.geolocation.getCurrentPosition(
         pos => {
-            sendLocation(pos.coords.latitude, pos.coords.longitude);
+            sendLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.speed, pos.coords.heading);
         },
         err => {
             console.log("初回位置取得エラー（概略）:", err);
@@ -1997,7 +1997,7 @@ function startGPSCore(){
     gpsTimer = setInterval(()=>{
         navigator.geolocation.getCurrentPosition(
             pos => {
-                sendLocation(pos.coords.latitude, pos.coords.longitude);
+                sendLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.speed, pos.coords.heading);
             },
             err => {
                 console.log("GPSタイマーエラー", err);
@@ -2012,7 +2012,7 @@ function startGPSCore(){
             const lon = pos.coords.longitude;
 
             if(lastLat === 0){
-                sendLocation(lat, lon);
+                sendLocation(lat, lon, pos.coords.speed, pos.coords.heading);
                 lastLat = lat;
                 lastLon = lon;
                 lastSendTime = Date.now();
@@ -2023,7 +2023,7 @@ function startGPSCore(){
             const now = Date.now();
 
             if(distance >= MOVE_DISTANCE || now - lastSendTime >= SEND_INTERVAL){
-                sendLocation(lat, lon);
+                sendLocation(lat, lon, pos.coords.speed, pos.coords.heading);
                 lastLat = lat;
                 lastLon = lon;
                 lastSendTime = now;
@@ -2071,7 +2071,7 @@ function stopGPS(){
    GPS送信
 ================================================== */
 
-function sendLocation(lat, lon){
+function sendLocation(lat, lon, speed, heading){
     if(!currentAuthUser){ return; }
     if(!registered){
         console.warn("GPS送信中止: Socket未登録");
@@ -2124,7 +2124,9 @@ function sendLocation(lat, lon){
         utmN: utmN,
         destination: destination,
         iconType: iconType,
-        device_id: getDeviceId()
+        device_id: getDeviceId(),
+        speed: Number.isFinite(speed) ? speed : null,
+        heading: Number.isFinite(heading) ? heading : null
     };
 
     console.log("GPS送信:", locationData);
@@ -2662,7 +2664,8 @@ socket.on("locations", data => {
 
                 <div class="popupSection popupLocation">
                     緯度経度：${lat.toFixed(6)}, ${lon.toFixed(6)}<br>
-                    UTM ${escapeHtml(user.utmZone || "52S")}　E：${user.utmE ?? "-"}　N：${user.utmN ?? "-"}
+                    UTM ${escapeHtml(user.utmZone || "52S")}　E：${user.utmE ?? "-"}　N：${user.utmN ?? "-"}<br>
+                    ${formatMovement(user.speed, user.heading)}
                 </div>
 
                 <div class="popupFooter">
@@ -2819,6 +2822,32 @@ function timeAgo(t){
     if(min < 60){ return min + "分前"; }
 
     return Math.floor(min / 60) + "時間前";
+}
+
+/* ==================================================
+   進行方向・速度
+================================================== */
+
+const STOP_SPEED_THRESHOLD = 0.5; // m/s（GPS誤差程度の揺れは停止中扱いにする）
+
+function compassDirection(heading){
+    const dirs = ["北", "北東", "東", "南東", "南", "南西", "西", "北西"];
+    const index = Math.round(heading / 45) % 8;
+    return dirs[index];
+}
+
+function formatMovement(speed, heading){
+    const speedValue = Number(speed);
+
+    if(!Number.isFinite(speedValue) || speedValue < STOP_SPEED_THRESHOLD){
+        return "🧭 停止中";
+    }
+
+    const kmh = (speedValue * 3.6).toFixed(1);
+    const headingValue = Number(heading);
+    const direction = Number.isFinite(headingValue) ? compassDirection(headingValue) : "";
+
+    return `🧭 ${direction}方向　${kmh} km/h`;
 }
 
 /* ==================================================

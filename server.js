@@ -1253,6 +1253,16 @@ async function processLocationUpdate(data, socket) {
         const utmN = Number.isFinite(utmNValue) ? utmNValue : (oldUser.utmN ?? null);
 
         //================================================
+        // ⑧.2 進行方向・速度（GPS単位: m/s, 度。取得できない場合はnull＝停止中扱い）
+        //================================================
+
+        const speedValue = Number(data.speed);
+        const speed = Number.isFinite(speedValue) && speedValue >= 0 ? speedValue : null;
+
+        const headingValue = Number(data.heading);
+        const heading = Number.isFinite(headingValue) && headingValue >= 0 ? headingValue : null;
+
+        //================================================
         // ⑧.5 経験値・LV（1km移動＝経験値1、サーバー側でのみ計算・ユーザー操作不可）
         //================================================
 
@@ -1301,6 +1311,8 @@ async function processLocationUpdate(data, socket) {
             utmZone: utmZone,
             utmE: utmE,
             utmN: utmN,
+            speed: speed,
+            heading: heading,
             movement: movement,
             destination: destination,
             water: water,
