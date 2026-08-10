@@ -6,6 +6,8 @@
 <title>Puttan Version 2.6</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
 
 <style>
 * { box-sizing: border-box; }
@@ -727,6 +729,7 @@ input, select {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/socket.io/socket.io.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
 
@@ -1605,6 +1608,14 @@ async function logoutUser(){
 ================================================== */
 
 const map = L.map("map").setView([32.803, 130.707], 13);
+
+// 地点が増えてもDOM要素数を抑えるため、ズームアウト時はまとめて表示する
+// （ズームレベル17以上では個々の地点を常に個別表示）
+const pointClusterGroup = L.markerClusterGroup({
+    maxClusterRadius: 50,
+    disableClusteringAtZoom: 17
+});
+map.addLayer(pointClusterGroup);
 
 const osm = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors"
@@ -3204,55 +3215,79 @@ async function deletePointByName(name){
 }
 
 /* ==================================================
-   地点受信
+   地点マーカー描画（初期同期・差分更新の共通処理）
+================================================== */
+
+function renderPointMarker(name, p){
+    if(pointMarkers[name]){
+        pointClusterGroup.removeLayer(pointMarkers[name]);
+    }
+
+    const marker = L.marker(
+        [Number(p.lat), Number(p.lon)],
+        { icon: createPointIcon(p.type) }
+    );
+
+    marker.bindTooltip(escapeHtml(name), {
+        permanent: true,
+        direction: "top",
+        offset: [0, -30],
+        className: "pointLabel"
+    });
+
+    const typeInfo = POINT_TYPES[p.type] || POINT_TYPES.point;
+
+    marker.bindPopup(`
+        <b>${typeInfo.emoji} ${escapeHtml(name)}</b>
+        <br>
+        <span style="color:#666;">${typeInfo.label}</span>
+        <br>
+        ${Number(p.lat).toFixed(6)}
+        <br>
+        ${Number(p.lon).toFixed(6)}
+        <br>
+        <button onclick="startNavigation(${Number(p.lat)}, ${Number(p.lon)}, '${escapeHtml(name)}')">🧭 ここへナビ</button>
+        <button onclick="deletePointByName('${escapeHtml(name)}')">🗑削除</button>
+    `);
+
+    pointMarkers[name] = marker;
+    pointClusterGroup.addLayer(marker);
+}
+
+function removePointMarker(name){
+    if(pointMarkers[name]){
+        pointClusterGroup.removeLayer(pointMarkers[name]);
+        delete pointMarkers[name];
+    }
+}
+
+/* ==================================================
+   地点受信（新規接続時の初期同期）
 ================================================== */
 
 socket.on("points", data => {
     data = data || {};
 
     Object.keys(pointMarkers).forEach(name => {
-        if(!data[name]){
-            map.removeLayer(pointMarkers[name]);
-            delete pointMarkers[name];
-        }
+        if(!data[name]){ removePointMarker(name); }
     });
 
     Object.keys(data).forEach(name => {
-        const p = data[name];
-
-        if(pointMarkers[name]){
-            map.removeLayer(pointMarkers[name]);
-        }
-
-        pointMarkers[name] = L.marker(
-            [Number(p.lat), Number(p.lon)],
-            {
-                icon: createPointIcon(p.type)
-            }
-        ).addTo(map);
-
-        pointMarkers[name].bindTooltip(escapeHtml(name), {
-            permanent: true,
-            direction: "top",
-            offset: [0, -30],
-            className: "pointLabel"
-        });
-
-        const typeInfo = POINT_TYPES[p.type] || POINT_TYPES.point;
-
-        pointMarkers[name].bindPopup(`
-            <b>${typeInfo.emoji} ${escapeHtml(name)}</b>
-            <br>
-            <span style="color:#666;">${typeInfo.label}</span>
-            <br>
-            ${Number(p.lat).toFixed(6)}
-            <br>
-            ${Number(p.lon).toFixed(6)}
-            <br>
-            <button onclick="startNavigation(${Number(p.lat)}, ${Number(p.lon)}, '${escapeHtml(name)}')">🧭 ここへナビ</button>
-            <button onclick="deletePointByName('${escapeHtml(name)}')">🗑削除</button>
-        `);
+        renderPointMarker(name, data[name]);
     });
+});
+
+/* ==================================================
+   地点の差分更新（登録・削除のたびに1件だけ届く）
+================================================== */
+
+socket.on("pointAdded", p => {
+    if(!p || !p.name){ return; }
+    renderPointMarker(p.name, p);
+});
+
+socket.on("pointDeleted", name => {
+    removePointMarker(name);
 });
 
 /* ==================================================

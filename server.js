@@ -1678,7 +1678,7 @@ io.on("connection", socket => {
                 created: created
             };
 
-            io.emit("points", points);
+            io.emit("pointAdded", points[point.name]);
 
             console.log("地点登録:", point.name);
         }
@@ -2291,7 +2291,7 @@ io.on("connection", socket => {
             console.error("地点削除エラー", err);
         }
 
-        io.emit("points", points);
+        io.emit("pointDeleted", name);
 
         console.log("地点削除:", name);
     });
