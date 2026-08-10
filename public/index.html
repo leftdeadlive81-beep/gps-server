@@ -982,6 +982,7 @@ async function registerAuthUser(){
             currentAuthUser = sessionData.session.user;
             await loadProfile(currentAuthUser);
             showApp();
+            startGPS();
         }
         else{
             message.textContent = "登録しました。ログインしてください。";
@@ -1041,6 +1042,7 @@ window.loginUser = async function loginUser(){
 
         message.textContent = "";
         showApp();
+        startGPS();
     }
     catch(error){
         console.error("ログインエラー:", error);
