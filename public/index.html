@@ -2587,6 +2587,15 @@ function normalizeIconType(type){
     return "1";
 }
 
+// 画像本来の横x縦（px）。正方形に押し込むと縦横比が崩れるため、
+// 高さ60pxに揃え、幅はこの比率から計算する
+const ICON_NATIVE_SIZE = {
+    "1": [100, 133], // person.png
+    "2": [100, 58],  // vehicle_small.png
+    "3": [110, 73],  // vehicle_medium.png
+    "4": [120, 69]   // vehicle_large.png
+};
+
 function createIcon(type){
     type = normalizeIconType(type);
 
@@ -2599,11 +2608,15 @@ function createIcon(type){
         default: image = "/icon/person.png"; break;
     }
 
+    const targetHeight = 60;
+    const [nativeWidth, nativeHeight] = ICON_NATIVE_SIZE[type] || ICON_NATIVE_SIZE["1"];
+    const width = Math.round(targetHeight * (nativeWidth / nativeHeight));
+
     return L.icon({
         iconUrl: image,
-        iconSize: [60, 60],
-        iconAnchor: [30, 60],
-        popupAnchor: [0, -70]
+        iconSize: [width, targetHeight],
+        iconAnchor: [width / 2, targetHeight],
+        popupAnchor: [0, -(targetHeight + 10)]
     });
 }
 
