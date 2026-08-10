@@ -1425,6 +1425,7 @@ function registerSocketUser(){
             user_id: socketUserId,
             display_name: name,
             account_name: await getCurrentLoginId(),
+            device_id: getDeviceId(),
             icon: iconType,
             water: water,
             fuel: fuel,

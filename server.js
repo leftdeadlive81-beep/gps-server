@@ -1080,6 +1080,11 @@ const DISCONNECT_OFFLINE_GRACE_MS = 90 * 1000;
 // （同じアカウントで複数端末/タブが繋がっていても、全部切れるまではオフラインにしない）
 const socketCountByUserId = {};
 
+// userId -> 現在そのアカウントを使用中の端末のdevice_id
+// 同一ログインIDでの多端末同時ログインを防ぐため、最初にログインした端末を記録する
+// （同じ端末の再接続・複数タブは device_id が同じなので許可される）
+const activeDeviceIdByUserId = {};
+
 function associateSocketWithUser(socket, userId) {
     if (!userId || socket.userId === userId) { return; }
 
@@ -1105,6 +1110,7 @@ async function markUserOffline(userId) {
     if (!user || !user.online) { return; }
 
     user.online = false;
+    delete activeDeviceIdByUserId[userId];
 
     try {
         await pool.query("UPDATE current_users SET online=$2 WHERE user_id=$1", [userId, 0]);
@@ -1605,6 +1611,31 @@ io.on("connection", socket => {
                 });
 
                 return;
+            }
+
+            //================================================
+            // 多端末同時ログイン拒否（先にログインした端末を優先）
+            //================================================
+
+            const deviceId = String(data.device_id || "").trim();
+            const alreadyActiveDeviceId = activeDeviceIdByUserId[userId];
+            const isDifferentDevice = alreadyActiveDeviceId
+                && deviceId
+                && alreadyActiveDeviceId !== deviceId;
+
+            if (isDifferentDevice && (socketCountByUserId[userId] || 0) > 0) {
+                console.log("ユーザー登録拒否: 別端末でログイン中", userId);
+
+                socket.emit("registerUserResult", {
+                    success: false,
+                    message: "このアカウントは既に別の端末でログイン中です"
+                });
+
+                return;
+            }
+
+            if (deviceId) {
+                activeDeviceIdByUserId[userId] = deviceId;
             }
 
             associateSocketWithUser(socket, userId);
