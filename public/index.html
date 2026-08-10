@@ -2471,6 +2471,8 @@ let arRenderTimer = null;
 let arHeading = null;
 let arMyLat = null;
 let arMyLon = null;
+let arEventCount = 0;
+let arLastEventInfo = "";
 
 async function startAR(){
     if(!currentAuthUser){
@@ -2517,6 +2519,8 @@ async function startAR(){
     arHeading = null;
     arMyLat = null;
     arMyLon = null;
+    arEventCount = 0;
+    arLastEventInfo = "";
     setArMessage("方位を取得中です。スマホを軽く8の字に動かしてください。");
 
     window.addEventListener("deviceorientationabsolute", handleArOrientation, true);
@@ -2558,6 +2562,12 @@ function stopAR(){
 }
 
 function handleArOrientation(event){
+    arEventCount++;
+    arLastEventInfo =
+        `type=${event.type} absolute=${event.absolute} ` +
+        `alpha=${event.alpha === null || event.alpha === undefined ? "null" : event.alpha.toFixed(1)} ` +
+        `webkit=${typeof event.webkitCompassHeading === "number" ? event.webkitCompassHeading.toFixed(1) : "-"}`;
+
     let heading = null;
 
     if(typeof event.webkitCompassHeading === "number"){
@@ -2601,7 +2611,10 @@ function renderAR(){
     if(!labelsEl || !compassEl){ return; }
 
     if(arHeading === null){
-        setArMessage("方位を取得中です。スマホを軽く8の字に動かしてください。");
+        const debugInfo = arEventCount === 0
+            ? "（方位センサーのイベントを1件も受信していません）"
+            : `（${arEventCount}件受信 / 最新: ${arLastEventInfo}）`;
+        setArMessage("方位を取得中です。スマホを軽く8の字に動かしてください。" + debugInfo);
         return;
     }
     if(arMyLat === null || arMyLon === null){
