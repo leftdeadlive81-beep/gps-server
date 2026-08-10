@@ -45,6 +45,7 @@ const server = http.createServer(app);
 //============================================================
 
 let firebaseMessaging = null;
+let firebaseInitError = null;
 
 try {
     const secretFilePath = "/etc/secrets/firebase-service-account.json";
@@ -60,10 +61,12 @@ try {
         firebaseMessaging = admin.messaging();
     }
     else {
+        firebaseInitError = "サービスアカウントファイル・環境変数のどちらも見つかりません";
         console.warn("Firebaseサービスアカウントが見つからないため、プッシュ通知は無効です");
     }
 }
 catch (err) {
+    firebaseInitError = err.message;
     console.error("Firebase Admin初期化エラー:", err);
 }
 
@@ -85,6 +88,17 @@ const io = new Server(server, {
 
 app.use(express.static("public"));
 app.use(express.json());
+
+//============================================================
+// プッシュ通知診断用（一時的なデバッグ用エンドポイント）
+//============================================================
+
+app.get("/api/push-status", (req, res) => {
+    res.json({
+        enabled: Boolean(firebaseMessaging),
+        error: firebaseInitError
+    });
+});
 
 //============================================================
 // 逆ジオコーディング（地図中央の地名取得）
