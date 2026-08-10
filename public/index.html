@@ -297,6 +297,11 @@ input, select {
     padding: 2px 5px;
     border-radius: 3px;
 }
+.markerStatusLine {
+    font-weight: normal;
+    font-size: 11px;
+    color: #1976d2;
+}
 
 .trafficIcon {
     background: #ff9800;
@@ -542,9 +547,16 @@ input, select {
                     <option value="4">🚛 大型</option>
                 </select>
             </div>
-            <input id="destination" placeholder="📍次の目的地">
             <button class="settingsButton" onclick="registerUser()">👤 ユーザー情報を保存</button>
             <div id="registerStatus">未登録</div>
+        </div>
+
+        <div class="card settingsCard">
+            <div class="sectionTitle">📋 活動状況</div>
+            <input id="status" placeholder="📋 現在の活動内容">
+            <input id="destination" placeholder="📍次の目的地">
+            <input id="status_next" placeholder="⚠️ 懸念事項">
+            <button class="settingsButton" onclick="registerUser()">📋 活動状況を保存</button>
         </div>
 
         <div class="card settingsCard">
@@ -1014,6 +1026,8 @@ async function registerUser(){
     const itemC = Number(document.getElementById("item_c").value) || 0;
     const itemD = Number(document.getElementById("item_d").value) || 0;
     const destination = document.getElementById("destination").value.trim();
+    const status = document.getElementById("status").value.trim();
+    const statusNext = document.getElementById("status_next").value.trim();
 
     try{
         socketUserId = userId;
@@ -1027,6 +1041,8 @@ async function registerUser(){
         localStorage.setItem("item_c", itemC);
         localStorage.setItem("item_d", itemD);
         localStorage.setItem("destination", destination);
+        localStorage.setItem("status", status);
+        localStorage.setItem("status_next", statusNext);
         localStorage.setItem("iconType", iconType);
 
         await registerSocketUser();
@@ -1076,6 +1092,8 @@ function registerSocketUser(){
         const itemC = Number(document.getElementById("item_c").value) || 0;
         const itemD = Number(document.getElementById("item_d").value) || 0;
         const destination = document.getElementById("destination").value.trim();
+        const status = document.getElementById("status").value.trim();
+        const statusNext = document.getElementById("status_next").value.trim();
 
         localStorage.setItem("puttan_user_id", socketUserId);
 
@@ -1120,7 +1138,9 @@ function registerSocketUser(){
             item_b: itemB,
             item_c: itemC,
             item_d: itemD,
-            destination: destination
+            destination: destination,
+            status: status,
+            status_next: statusNext
         });
 
         console.log("Socketユーザー登録送信:", socketUserId);
@@ -2108,7 +2128,11 @@ socket.on("locations", data => {
 
         markers[userId].setIcon(createIcon(user.icon || user.iconType || "1"));
 
-        markers[userId].bindTooltip(escapeHtml(displayName), {
+        const statusLine = user.status
+            ? `<br><span class="markerStatusLine">${escapeHtml(user.status)}</span>`
+            : "";
+
+        markers[userId].bindTooltip(`${escapeHtml(displayName)}${statusLine}`, {
             permanent: true,
             direction: "top",
             offset: [0, -30],
@@ -2140,7 +2164,11 @@ socket.on("locations", data => {
             <br>
             📦物資3：${user.item_c ?? 0}　📦物資4：${user.item_d ?? 0}
             <br>
+            📋活動内容：${escapeHtml(user.status || "-")}
+            <br>
             📍目的地：${escapeHtml(user.destination || "-")}
+            <br>
+            ⚠️懸念事項：${escapeHtml(user.status_next || "-")}
             <br>
             最終更新：${timeAgo(user.lastUpdate)}
             <br>
@@ -2655,7 +2683,7 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
 ================================================== */
 
 function restoreLocalUser(){
-    ["name", "water", "fuel", "item_a", "item_b", "item_c", "item_d", "destination", "iconType"].forEach(key => {
+    ["name", "water", "fuel", "item_a", "item_b", "item_c", "item_d", "destination", "status", "status_next", "iconType"].forEach(key => {
         const value = localStorage.getItem(key);
         const element = document.getElementById(key);
 
