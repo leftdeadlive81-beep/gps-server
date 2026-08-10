@@ -335,6 +335,13 @@ input, select {
 .timelineSender { font-weight: bold; color: #333; }
 .timelineMessage { font-size: 14px; margin-top: 4px; }
 .timelineRemarks { font-size: 12px; color: #777; margin-top: 2px; }
+.chronoLoadMoreDone {
+    text-align: center;
+    font-size: 12px;
+    color: #999;
+    padding: 12px 0;
+}
+#chronoLoadMoreButton { margin-top: 10px; }
 
 .pointButtonRow { display: flex; gap: 6px; margin-top: 7px; }
 .pointButtonRow button {
@@ -804,6 +811,8 @@ let registered = false;
 let markers = {};
 let pointMarkers = {};
 let chronology = [];
+let olderChronology = [];
+let chronologyExhausted = false;
 let watchID = null;
 
 let navRouteLine = null;
@@ -2861,35 +2870,78 @@ function sendChronology(){
    クロノロジー表示
 ================================================== */
 
+function renderChronologyItem(item){
+    const remarksLine = item.remarks
+        ? `<div class="timelineRemarks">📝 ${escapeHtml(item.remarks)}</div>`
+        : "";
+
+    return `
+        <div class="timelineItem">
+            <div class="timelineHeader">
+                <span>
+                    <span class="timelineCategory ${item.category === "緊急" ? "catUrgent" : ""}">
+                        ${escapeHtml(item.category || "その他")}
+                    </span>
+                    <span class="timelineSender">${escapeHtml(item.user || "-")}</span>
+                </span>
+                <span>${escapeHtml(item.time || "")}</span>
+            </div>
+            <div class="timelineMessage">${escapeHtml(item.message || "")}</div>
+            ${remarksLine}
+        </div>
+    `;
+}
+
 function renderChronology(){
     let html = "";
 
-    chronology.forEach(item => {
-        const remarksLine = item.remarks
-            ? `<div class="timelineRemarks">📝 ${escapeHtml(item.remarks)}</div>`
-            : "";
+    chronology.forEach(item => { html += renderChronologyItem(item); });
+    olderChronology.forEach(item => { html += renderChronologyItem(item); });
 
-        html += `
-            <div class="timelineItem">
-                <div class="timelineHeader">
-                    <span>
-                        <span class="timelineCategory ${item.category === "緊急" ? "catUrgent" : ""}">
-                            ${escapeHtml(item.category || "その他")}
-                        </span>
-                        <span class="timelineSender">${escapeHtml(item.user || "-")}</span>
-                    </span>
-                    <span>${escapeHtml(item.time || "")}</span>
-                </div>
-                <div class="timelineMessage">${escapeHtml(item.message || "")}</div>
-                ${remarksLine}
-            </div>
-        `;
-    });
+    html += chronologyExhausted
+        ? `<div class="chronoLoadMoreDone">これ以上の過去ログはありません</div>`
+        : `<button id="chronoLoadMoreButton" class="settingsButton" onclick="loadMoreChronology(this)">もっと見る</button>`;
 
     const timeline = document.getElementById("timeline");
     if(timeline){
         timeline.innerHTML = html;
     }
+}
+
+/* ==================================================
+   クロノロジー 過去ログ（もっと見る）
+================================================== */
+
+function loadMoreChronology(button){
+    const allItems = chronology.concat(olderChronology);
+    const oldest = allItems[allItems.length - 1];
+
+    if(!oldest){ return; }
+
+    if(button){
+        button.disabled = true;
+        button.textContent = "読み込み中...";
+    }
+
+    socket.emit("loadMoreChronology", { beforeId: oldest.id }, response => {
+        if(!response || !response.success){
+            if(button){
+                button.disabled = false;
+                button.textContent = "もっと見る";
+            }
+            alert("過去ログの取得に失敗しました");
+            return;
+        }
+
+        if(response.items.length === 0){
+            chronologyExhausted = true;
+        }
+        else{
+            olderChronology = olderChronology.concat(response.items);
+        }
+
+        renderChronology();
+    });
 }
 
 /* ==================================================

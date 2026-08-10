@@ -114,6 +114,12 @@ let chronology = [];
 let trafficRegulations = [];
 let announcementText = "";
 
+// クロノロジーをメモリ保持・全端末配信する件数の上限（この1箇所を変えれば全体に反映される）
+const CHRONOLOGY_LIVE_LIMIT = 100;
+
+// 「もっと見る」で1回に取得する過去ログの件数
+const CHRONOLOGY_PAGE_SIZE = 50;
+
 //============================================================
 // 交通規制 自動更新間隔
 //============================================================
@@ -827,9 +833,13 @@ async function loadPoints() {
 
 async function loadChronology() {
     try {
-        const result = await pool.query("SELECT * FROM chronology ORDER BY id DESC LIMIT 100");
+        const result = await pool.query(
+            "SELECT * FROM chronology ORDER BY id DESC LIMIT $1",
+            [CHRONOLOGY_LIVE_LIMIT]
+        );
 
         chronology = result.rows.map(row => ({
+            id: row.id,
             time: new Date(Number(row.created)).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", hour12: false }),
             user: row.user_name || "",
             message: row.message || "",
@@ -1660,6 +1670,7 @@ io.on("connection", socket => {
         const now = Date.now();
 
         const item = {
+            id: null,
             time: new Date(now).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", hour12: false }),
             user: String(data.user || "").trim(),
             message: String(data.message || "").trim(),
@@ -1667,23 +1678,25 @@ io.on("connection", socket => {
             remarks: String(data.remarks || "").trim()
         };
 
-        chronology.unshift(item);
-
-        if (chronology.length > 100) {
-            chronology.pop();
-        }
-
         try {
-            await pool.query(
+            const result = await pool.query(
                 `
                 INSERT INTO chronology (user_name, message, category, remarks, created)
                 VALUES ($1,$2,$3,$4,$5)
+                RETURNING id
                 `,
                 [item.user, item.message, item.category, item.remarks, now]
             );
+            item.id = result.rows[0].id;
         }
         catch (err) {
             console.error("クロノロジー保存エラー", err);
+        }
+
+        chronology.unshift(item);
+
+        if (chronology.length > CHRONOLOGY_LIVE_LIMIT) {
+            chronology.pop();
         }
 
         io.emit("chronology", chronology);
@@ -1699,6 +1712,47 @@ io.on("connection", socket => {
         ).slice(0, 300);
 
         io.emit("announcement", announcementText);
+    });
+
+    //====================================================
+    // クロノロジー 過去ログ（もっと見る）
+    //====================================================
+
+    socket.on("loadMoreChronology", async (params, callback) => {
+        const beforeId = params && Number.isFinite(Number(params.beforeId))
+            ? Number(params.beforeId)
+            : null;
+
+        try {
+            const result = beforeId
+                ? await pool.query(
+                    "SELECT * FROM chronology WHERE id < $1 ORDER BY id DESC LIMIT $2",
+                    [beforeId, CHRONOLOGY_PAGE_SIZE]
+                  )
+                : await pool.query(
+                    "SELECT * FROM chronology ORDER BY id DESC LIMIT $1",
+                    [CHRONOLOGY_PAGE_SIZE]
+                  );
+
+            const items = result.rows.map(row => ({
+                id: row.id,
+                time: new Date(Number(row.created)).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", hour12: false }),
+                user: row.user_name || "",
+                message: row.message || "",
+                category: row.category || "その他",
+                remarks: row.remarks || ""
+            }));
+
+            if (typeof callback === "function") {
+                callback({ success: true, items: items });
+            }
+        }
+        catch (err) {
+            console.error("過去ログ取得エラー", err);
+            if (typeof callback === "function") {
+                callback({ success: false, message: err.message });
+            }
+        }
     });
 
     //====================================================
