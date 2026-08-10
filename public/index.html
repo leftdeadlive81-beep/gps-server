@@ -1784,6 +1784,17 @@ function startGPSCore(){
         return;
     }
 
+    // 高精度GPSの初回測位を待たず、キャッシュ/大まかな位置で即座に仮表示する
+    navigator.geolocation.getCurrentPosition(
+        pos => {
+            sendLocation(pos.coords.latitude, pos.coords.longitude);
+        },
+        err => {
+            console.log("初回位置取得エラー（概略）:", err);
+        },
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
+    );
+
     gpsTimer = setInterval(()=>{
         navigator.geolocation.getCurrentPosition(
             pos => {
