@@ -6,7 +6,6 @@
 <title>現在位置自動共有君 Version 2.4</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css">
 
 <style>
 * { box-sizing: border-box; }
@@ -154,8 +153,6 @@ input, select {
     overflow: hidden;
 }
 
-.leaflet-routing-container { display: none !important; }
-
 .navPanel {
     position: absolute;
     top: 16px;
@@ -181,12 +178,13 @@ input, select {
 }
 .navStopButton {
     border: none;
-    background: rgba(255,255,255,.25);
+    background: #c62828;
     color: white;
-    border-radius: 50%;
-    width: 26px;
-    height: 26px;
+    border-radius: 5px;
+    padding: 5px 10px;
     font-size: 13px;
+    font-weight: bold;
+    white-space: nowrap;
     flex-shrink: 0;
 }
 .navDistanceText { font-size: 22px; font-weight: bold; margin-top: 4px; }
@@ -488,7 +486,7 @@ input, select {
         <div id="navPanel" class="navPanel" style="display:none;">
             <div class="navPanelHeader">
                 <span id="navInstructionText">-</span>
-                <button class="navStopButton" onclick="stopNavigation()">🛑</button>
+                <button class="navStopButton" onclick="stopNavigation()">🛑 ナビ終了</button>
             </div>
             <div id="navDistanceText" class="navDistanceText">-</div>
             <div id="navSummary" class="navSummaryText">-</div>
@@ -629,7 +627,7 @@ let pointMarkers = {};
 let chronology = [];
 let watchID = null;
 
-let navRouteControl = null;
+let navRouteLine = null;
 let navRoute = null;
 let navSteps = [];
 let navCurrentStepIndex = 0;
@@ -637,6 +635,7 @@ let navDestination = null;
 let navWatchID = null;
 let navAnnouncedThresholds = {};
 let navLastRerouteTime = 0;
+let currentTrafficRegulations = [];
 let gpsTimer = null;
 let lastLat = 0;
 let lastLon = 0;
@@ -1394,6 +1393,10 @@ socket.on("trafficRegulations", regulations => {
 
     if(!Array.isArray(regulations)){ return; }
 
+    currentTrafficRegulations = regulations.filter(
+        r => r && r.lat != null && r.lon != null
+    );
+
     regulations.forEach(regulation => {
         if(regulation.lat == null || regulation.lon == null){ return; }
 
@@ -1765,52 +1768,110 @@ function startNavigation(lat, lon, name){
     );
 }
 
-function beginNavRoute(startLat, startLon){
-    if(navRouteControl){
-        map.removeControl(navRouteControl);
-        navRouteControl = null;
+const navRouter = L.Routing.osrmv1({ profile: "driving" });
+
+function distanceToRouteCoords(lat, lon, coordinates){
+    let min = Infinity;
+    for(const c of coordinates){
+        const d = getDistance(lat, lon, c.lat, c.lng);
+        if(d < min){ min = d; }
+    }
+    return min;
+}
+
+function countRegulationConflicts(route){
+    if(!currentTrafficRegulations.length){ return 0; }
+
+    let conflicts = 0;
+    for(const reg of currentTrafficRegulations){
+        const d = distanceToRouteCoords(Number(reg.lat), Number(reg.lon), route.coordinates);
+        if(d < 60){ conflicts++; }
+    }
+    return conflicts;
+}
+
+function pickBestRoute(routes){
+    let best = routes[0];
+    let bestConflicts = countRegulationConflicts(routes[0]);
+
+    for(let i = 1; i < routes.length; i++){
+        const conflicts = countRegulationConflicts(routes[i]);
+        if(conflicts < bestConflicts){
+            best = routes[i];
+            bestConflicts = conflicts;
+        }
     }
 
-    navRouteControl = L.Routing.control({
-        waypoints: [
-            L.latLng(startLat, startLon),
-            L.latLng(navDestination.lat, navDestination.lon)
-        ],
-        router: L.Routing.osrmv1({ profile: "driving" }),
-        routeWhileDragging: false,
-        addWaypoints: false,
-        draggableWaypoints: false,
-        fitSelectedRoutes: true,
-        show: false,
-        lineOptions: {
-            styles: [{ color: "#1976d2", weight: 6, opacity: 0.8 }]
-        },
-        createMarker: () => null
-    }).addTo(map);
+    return { route: best, conflicts: bestConflicts };
+}
 
-    navRouteControl.on("routesfound", e => {
-        const route = e.routes[0];
+function drawNavRouteLine(route){
+    if(navRouteLine){
+        map.removeLayer(navRouteLine);
+    }
+
+    navRouteLine = L.polyline(
+        route.coordinates.map(c => [c.lat, c.lng]),
+        { color: "#1976d2", weight: 6, opacity: 0.8, interactive: false }
+    ).addTo(map);
+
+    map.fitBounds(navRouteLine.getBounds(), { padding: [40, 40] });
+}
+
+function requestNavRoute(startLat, startLon, onDone){
+    const waypoints = [
+        { latLng: L.latLng(startLat, startLon) },
+        { latLng: L.latLng(navDestination.lat, navDestination.lon) }
+    ];
+
+    navRouter.route(waypoints, (err, routes) => {
+        if(err || !routes || routes.length === 0){
+            const instructionElement = document.getElementById("navInstructionText");
+            if(instructionElement){ instructionElement.textContent = "ルートが見つかりませんでした"; }
+            return;
+        }
+
+        onDone(pickBestRoute(routes));
+    });
+}
+
+function applyNavRoute(startLat, startLon, isReroute){
+    requestNavRoute(startLat, startLon, ({ route, conflicts }) => {
         navRoute = route;
         navSteps = route.instructions || [];
         navCurrentStepIndex = 0;
         navAnnouncedThresholds = {};
+
+        drawNavRouteLine(route);
 
         const totalKm = (route.summary.totalDistance / 1000).toFixed(1);
         const totalMin = Math.round(route.summary.totalTime / 60);
 
         const summaryElement = document.getElementById("navSummary");
         if(summaryElement){
-            summaryElement.textContent = `残り約${totalKm}km／約${totalMin}分`;
+            summaryElement.textContent = `残り約${totalKm}km／約${totalMin}分`
+                + (conflicts > 0 ? "（規制区間の可能性あり）" : "");
         }
 
         renderNavInstruction();
-        speakJa(`${navDestination.name}までのナビを開始します`);
-    });
 
-    navRouteControl.on("routingerror", () => {
-        const instructionElement = document.getElementById("navInstructionText");
-        if(instructionElement){ instructionElement.textContent = "ルートが見つかりませんでした"; }
+        if(isReroute){
+            if(conflicts > 0){
+                speakJa("再計算しましたが、交通規制区間を含む可能性がある経路です");
+            }
+            return;
+        }
+
+        speakJa(
+            conflicts > 0
+                ? `${navDestination.name}までのナビを開始します。交通規制区間を含む可能性がある経路です`
+                : `${navDestination.name}までのナビを開始します`
+        );
     });
+}
+
+function beginNavRoute(startLat, startLon){
+    applyNavRoute(startLat, startLon, false);
 
     if(navWatchID !== null){
         navigator.geolocation.clearWatch(navWatchID);
@@ -1861,20 +1922,13 @@ function announceIfNeeded(distance, step){
 function checkOffRoute(lat, lon){
     if(!navRoute || !navRoute.coordinates || navRoute.coordinates.length < 2){ return; }
 
-    let minDist = Infinity;
-    for(const c of navRoute.coordinates){
-        const d = getDistance(lat, lon, c.lat, c.lng);
-        if(d < minDist){ minDist = d; }
-    }
+    const minDist = distanceToRouteCoords(lat, lon, navRoute.coordinates);
 
     const now = Date.now();
     if(minDist > 80 && now - navLastRerouteTime > 15000){
         navLastRerouteTime = now;
         speakJa("ルートを再計算します");
-        navRouteControl.setWaypoints([
-            L.latLng(lat, lon),
-            L.latLng(navDestination.lat, navDestination.lon)
-        ]);
+        applyNavRoute(lat, lon, true);
     }
 }
 
@@ -1915,9 +1969,9 @@ function stopNavigation(){
         navigator.geolocation.clearWatch(navWatchID);
         navWatchID = null;
     }
-    if(navRouteControl){
-        map.removeControl(navRouteControl);
-        navRouteControl = null;
+    if(navRouteLine){
+        map.removeLayer(navRouteLine);
+        navRouteLine = null;
     }
     if("speechSynthesis" in window){
         window.speechSynthesis.cancel();
