@@ -1223,6 +1223,12 @@ async function sendChronologyPushNotifications(item, excludeUserId) {
                 title: "【" + item.category + "】" + (item.user || "クロノロジー"),
                 body: item.message.slice(0, 100)
             },
+            android: {
+                priority: "high",
+                notification: {
+                    channelId: "chronology"
+                }
+            },
             data: {
                 type: "chronology",
                 chronologyId: String(item.id || "")
