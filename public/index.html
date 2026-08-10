@@ -41,7 +41,14 @@ button { cursor: pointer; }
     box-shadow: 0 2px 10px rgba(0,0,0,.15);
 }
 .authBrand { text-align: center; }
-.authBrandTitle { font-size: 19px; font-weight: 700; color: #1c2733; }
+.authBrandTagline {
+    font-size: 12px;
+    font-weight: 600;
+    color: #8792a0;
+    letter-spacing: .04em;
+    margin-bottom: 4px;
+}
+.authBrandTitle { font-size: 22px; font-weight: 700; color: #1c2733; letter-spacing: .03em; }
 .authBrandVersion {
     display: inline-block;
     margin-top: 6px;
@@ -52,6 +59,13 @@ button { cursor: pointer; }
     font-size: 11px;
     font-weight: 600;
     letter-spacing: .02em;
+}
+.authBrandAcronym {
+    margin-top: 8px;
+    font-size: 11px;
+    color: #97a2ae;
+    font-style: italic;
+    line-height: 1.5;
 }
 .authFormTitle {
     text-align: center;
@@ -693,8 +707,10 @@ input, select {
 
     <div id="loginBox" class="authBox">
         <div class="authBrand">
-            <div class="authBrandTitle">🐈 災害情報共有システム</div>
-            <span class="authBrandVersion">試作 ver0.2</span>
+            <div class="authBrandTagline">野外活動支援ツール</div>
+            <div class="authBrandTitle">🐈 P.U.T.T.A.N.</div>
+            <span class="authBrandVersion">ver2.5</span>
+            <div class="authBrandAcronym">Portable Utility for Terrain Tracking And Navigation</div>
         </div>
         <h3 class="authFormTitle">🔐 ログイン</h3>
         <input type="text" id="loginUsername" placeholder="ログインID(英数字)" autocomplete="username">
@@ -721,8 +737,10 @@ input, select {
 
     <div id="registerBox" class="authBox" style="display:none;">
         <div class="authBrand">
-            <div class="authBrandTitle">🐈 災害情報共有システム</div>
-            <span class="authBrandVersion">試作 ver0.2</span>
+            <div class="authBrandTagline">野外活動支援ツール</div>
+            <div class="authBrandTitle">🐈 P.U.T.T.A.N.</div>
+            <span class="authBrandVersion">ver2.5</span>
+            <div class="authBrandAcronym">Portable Utility for Terrain Tracking And Navigation</div>
         </div>
         <h3 class="authFormTitle">👤 新規アカウント登録</h3>
         <input type="text" id="registerUsername" placeholder="ログインID（英数字）" autocomplete="username">
