@@ -1064,18 +1064,38 @@ async function registerAuthUser(){
             password: password
         });
 
-        if(error){ throw error; }
-        if(!data || !data.user){
-            throw new Error("Authユーザーを取得できませんでした");
-        }
+        let authUser = null;
 
-        const user = data.user;
+        if(error){
+            const isAlreadyRegistered = /already registered|already exists/i.test(error.message || "");
+            if(!isAlreadyRegistered){ throw error; }
+
+            // profilesに行が無いのにAuth側だけ既に存在する = 過去の登録がAuthアカウント
+            // 作成後・プロフィール作成前に中断され孤立した可能性が高い。
+            // 同じパスワードでサインインできればプロフィールだけ補完して復旧する
+            const { data: signInData, error: signInError } = await supabaseClient.auth.signInWithPassword({
+                email: authEmail,
+                password: password
+            });
+
+            if(signInError || !signInData || !signInData.user){
+                throw new Error("このログインIDは既に登録されていますが、パスワードが一致しません。別のログインIDを使用するか、管理者にお問い合わせください。");
+            }
+
+            authUser = signInData.user;
+        }
+        else{
+            if(!data || !data.user){
+                throw new Error("Authユーザーを取得できませんでした");
+            }
+            authUser = data.user;
+        }
 
         const { error: profileError } = await supabaseClient
             .from("profiles")
             .upsert(
                 {
-                    user_id: user.id,
+                    user_id: authUser.id,
                     login_id: loginId,
                     display_name: displayName,
                     icon_type: "1",
