@@ -1013,8 +1013,8 @@ async function loadUsers() {
                 item_c: "",
                 item_d: "",
 
-                experience: user.experience || 0,
-                level: levelFromExperience(user.experience || 0),
+                experience: 0,
+                level: 1,
 
                 pushToken: user.push_token || null
             };
@@ -1049,6 +1049,16 @@ async function loadUsers() {
             user.item_b = inventory.item_b || "";
             user.item_c = inventory.item_c || "";
             user.item_d = inventory.item_d || "";
+        });
+
+        const gameResult = await pool.query("SELECT * FROM user_game");
+
+        gameResult.rows.forEach(game => {
+            const user = users[game.user_id];
+            if (!user) { return; }
+
+            user.experience = Number(game.experience) || 0;
+            user.level = levelFromExperience(user.experience);
         });
 
         console.log("復元ユーザー:", Object.keys(users));
@@ -1433,11 +1443,24 @@ async function processLocationUpdate(data, socket) {
             SET
                 destination = $2,
                 icon = $3,
-                updated_at = $4,
-                experience = $5
+                updated_at = $4
             WHERE user_id = $1
             `,
-            [userId, destination, iconType, now, Math.round(experience)]
+            [userId, destination, iconType, now]
+        );
+
+        // 経験値・LVはuser_gameテーブルで管理する（usersテーブルには列が無い）
+        await pool.query(
+            `
+            INSERT INTO user_game (user_id, experience, level, updated_at)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT(user_id)
+            DO UPDATE SET
+                experience = EXCLUDED.experience,
+                level = EXCLUDED.level,
+                updated_at = EXCLUDED.updated_at
+            `,
+            [userId, Math.round(experience), level, now]
         );
 
         //================================================
