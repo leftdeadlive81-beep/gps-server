@@ -352,7 +352,7 @@ input, select {
 .navSummaryText { font-size: 12px; opacity: .85; margin-top: 2px; }
 
 .gpsButtonRow { display: flex; gap: 6px; margin-top: 7px; }
-.gpsButton, .reportButton {
+.gpsButton, .reportButton, .arButton {
     flex: 1;
     padding: 10px;
     border: none;
@@ -362,7 +362,106 @@ input, select {
 }
 .gpsButton { background: #388e3c; }
 .reportButton { background: #1976d2; }
+.arButton { background: #6a1b9a; }
 #gpsStatus, #lastSend { text-align: center; padding: 4px; font-size: 13px; }
+
+/* ==================================================
+   AR表示
+================================================== */
+
+.arOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: #000;
+    overflow: hidden;
+}
+.arVideo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.arCompassStrip {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 34px;
+    background: rgba(0,0,0,.45);
+    color: #fff;
+    font-size: 13px;
+    font-weight: bold;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.arCompassMark {
+    position: absolute;
+    top: 0;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    transform: translateX(-50%);
+}
+.arLabels {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+.arTarget {
+    position: absolute;
+    top: 40%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: #fff;
+    text-shadow: 0 1px 4px rgba(0,0,0,.9);
+    pointer-events: auto;
+    transition: left .15s linear;
+}
+.arTarget .arIcon { font-size: 26px; }
+.arTarget .arName {
+    margin-top: 2px;
+    font-size: 12px;
+    font-weight: bold;
+    background: rgba(0,0,0,.5);
+    padding: 2px 7px;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+.arTarget .arDist {
+    margin-top: 2px;
+    font-size: 11px;
+    background: rgba(0,0,0,.5);
+    padding: 1px 6px;
+    border-radius: 8px;
+}
+.arMessage {
+    position: absolute;
+    left: 50%;
+    bottom: 90px;
+    transform: translateX(-50%);
+    color: #fff;
+    background: rgba(0,0,0,.55);
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    text-align: center;
+    max-width: 80%;
+}
+.arCloseButton {
+    position: absolute;
+    top: 42px;
+    right: 12px;
+    background: rgba(0,0,0,.55);
+    color: #fff;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+}
 
 .userHeader, .userRow {
     display: grid;
@@ -844,9 +943,18 @@ input, select {
         <div class="gpsButtonRow">
             <button class="gpsButton" onclick="startGPS()">📡 GPS開始</button>
             <button class="reportButton" onclick="updateStatus(this)">🔄 現在地報告</button>
+            <button class="arButton" onclick="startAR()">📷 AR表示</button>
         </div>
         <div id="gpsStatus">🔴 GPS停止中</div>
         <div id="lastSend">最終送信：-</div>
+    </div>
+
+    <div id="arOverlay" class="arOverlay" style="display:none;">
+        <video id="arVideo" class="arVideo" autoplay playsinline muted></video>
+        <div id="arCompassStrip" class="arCompassStrip"></div>
+        <div id="arLabels" class="arLabels"></div>
+        <div id="arMessage" class="arMessage"></div>
+        <button class="arCloseButton" onclick="stopAR()">✕ 閉じる</button>
     </div>
 
     <div id="usersTab" class="tabContent">
@@ -2344,6 +2452,243 @@ function getDistance(lat1, lon1, lat2, lon2){
         Math.sin(dLon / 2) ** 2;
 
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/* ==================================================
+   AR表示
+   ・カメラ映像に、方位センサーで求めた自分の向きをもとに
+     隊員・地点を重ねて表示する（WebXR不使用の簡易AR）
+   ・スマホのコンパス精度やセンサー対応状況に依存するため
+     あくまで目安表示
+================================================== */
+
+const AR_FOV_DEGREES = 60; // 画面に表示する視野角
+const AR_MAX_DISTANCE_M = 5000; // これより遠い対象は表示しない
+
+let arStream = null;
+let arWatchId = null;
+let arRenderTimer = null;
+let arHeading = null;
+let arMyLat = null;
+let arMyLon = null;
+
+async function startAR(){
+    if(!currentAuthUser){
+        alert("先にログインしてください");
+        return;
+    }
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        alert("この端末・ブラウザはカメラ機能に対応していません");
+        return;
+    }
+
+    // iOS 13+ はジェスチャー起点で明示的に許可を取る必要がある
+    if(typeof DeviceOrientationEvent !== "undefined" &&
+       typeof DeviceOrientationEvent.requestPermission === "function"){
+        try{
+            const permission = await DeviceOrientationEvent.requestPermission();
+            if(permission !== "granted"){
+                alert("方位センサーの利用が許可されませんでした");
+                return;
+            }
+        }
+        catch(error){
+            console.error("方位センサー許可エラー:", error);
+        }
+    }
+
+    try{
+        arStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" },
+            audio: false
+        });
+    }
+    catch(error){
+        alert("カメラを起動できませんでした：" + error.message);
+        return;
+    }
+
+    const video = document.getElementById("arVideo");
+    video.srcObject = arStream;
+
+    const overlay = document.getElementById("arOverlay");
+    if(overlay){ overlay.style.display = "block"; }
+
+    arHeading = null;
+    arMyLat = null;
+    arMyLon = null;
+    setArMessage("方位を取得中です。スマホを軽く8の字に動かしてください。");
+
+    window.addEventListener("deviceorientationabsolute", handleArOrientation, true);
+    window.addEventListener("deviceorientation", handleArOrientation, true);
+
+    arWatchId = navigator.geolocation.watchPosition(
+        pos => {
+            arMyLat = pos.coords.latitude;
+            arMyLon = pos.coords.longitude;
+        },
+        error => {
+            console.error("AR位置取得エラー:", error);
+        },
+        { enableHighAccuracy: true, maximumAge: 2000 }
+    );
+
+    arRenderTimer = setInterval(renderAR, 200);
+}
+
+function stopAR(){
+    if(arStream){
+        arStream.getTracks().forEach(track => track.stop());
+        arStream = null;
+    }
+    if(arWatchId !== null){
+        navigator.geolocation.clearWatch(arWatchId);
+        arWatchId = null;
+    }
+    if(arRenderTimer !== null){
+        clearInterval(arRenderTimer);
+        arRenderTimer = null;
+    }
+
+    window.removeEventListener("deviceorientationabsolute", handleArOrientation, true);
+    window.removeEventListener("deviceorientation", handleArOrientation, true);
+
+    const overlay = document.getElementById("arOverlay");
+    if(overlay){ overlay.style.display = "none"; }
+}
+
+function handleArOrientation(event){
+    let heading = null;
+
+    if(typeof event.webkitCompassHeading === "number"){
+        // iOS Safari: 真北からの角度がそのまま得られる
+        heading = event.webkitCompassHeading;
+    }
+    else if(typeof event.alpha === "number"){
+        // Android等: alphaは反時計回りのため向きを反転する
+        heading = 360 - event.alpha;
+    }
+
+    if(heading === null || Number.isNaN(heading)){ return; }
+    arHeading = ((heading % 360) + 360) % 360;
+}
+
+function bearingBetween(lat1, lon1, lat2, lon2){
+    const toRad = deg => deg * Math.PI / 180;
+    const toDeg = rad => rad * 180 / Math.PI;
+
+    const dLon = toRad(lon2 - lon1);
+    const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+    const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+              Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+
+    return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+function angleDiff(target, current){
+    // -180〜180の範囲に正規化した角度差
+    return ((target - current + 540) % 360) - 180;
+}
+
+function setArMessage(text){
+    const el = document.getElementById("arMessage");
+    if(el){ el.textContent = text || ""; }
+}
+
+function renderAR(){
+    const labelsEl = document.getElementById("arLabels");
+    const compassEl = document.getElementById("arCompassStrip");
+    if(!labelsEl || !compassEl){ return; }
+
+    if(arHeading === null){
+        setArMessage("方位を取得中です。スマホを軽く8の字に動かしてください。");
+        return;
+    }
+    if(arMyLat === null || arMyLon === null){
+        setArMessage("現在地を取得中です…");
+        return;
+    }
+
+    // コンパスストリップ（N/E/S/Wの目印を現在の向きに合わせてスクロール）
+    const compassMarks = [
+        { deg: 0, label: "N" }, { deg: 45, label: "NE" },
+        { deg: 90, label: "E" }, { deg: 135, label: "SE" },
+        { deg: 180, label: "S" }, { deg: 225, label: "SW" },
+        { deg: 270, label: "W" }, { deg: 315, label: "NW" }
+    ];
+    let compassHtml = "";
+    compassMarks.forEach(mark => {
+        const diff = angleDiff(mark.deg, arHeading);
+        if(Math.abs(diff) > AR_FOV_DEGREES / 2 + 10){ return; }
+        const xPercent = 50 + (diff / (AR_FOV_DEGREES / 2)) * 50;
+        compassHtml += `<div class="arCompassMark" style="left:${xPercent}%;">${mark.label}</div>`;
+    });
+    compassEl.innerHTML = compassHtml;
+
+    // 対象（隊員・地点）の収集
+    const targets = [];
+
+    Object.keys(latestUsersData || {}).forEach(userId => {
+        if(userId === socketUserId){ return; }
+        const u = latestUsersData[userId];
+        if(!u || u.lat == null || u.lon == null){ return; }
+
+        const distance = getDistance(arMyLat, arMyLon, u.lat, u.lon);
+        if(distance > AR_MAX_DISTANCE_M){ return; }
+
+        targets.push({
+            icon: "🧑",
+            name: u.display_name || u.name || userId,
+            distance,
+            bearing: bearingBetween(arMyLat, arMyLon, u.lat, u.lon)
+        });
+    });
+
+    Object.keys(pointMarkers || {}).forEach(name => {
+        const marker = pointMarkers[name];
+        if(!marker || !marker.getLatLng){ return; }
+        const latlng = marker.getLatLng();
+
+        const distance = getDistance(arMyLat, arMyLon, latlng.lat, latlng.lng);
+        if(distance > AR_MAX_DISTANCE_M){ return; }
+
+        targets.push({
+            icon: "📍",
+            name: name,
+            distance,
+            bearing: bearingBetween(arMyLat, arMyLon, latlng.lat, latlng.lng)
+        });
+    });
+
+    const visible = targets.filter(t => Math.abs(angleDiff(t.bearing, arHeading)) <= AR_FOV_DEGREES / 2);
+
+    if(visible.length === 0){
+        setArMessage(targets.length === 0
+            ? "近くに表示できる隊員・地点がありません"
+            : "スマホを動かすと近くの隊員・地点が表示されます");
+    }
+    else{
+        setArMessage("");
+    }
+
+    let html = "";
+    visible.forEach(t => {
+        const diff = angleDiff(t.bearing, arHeading);
+        const xPercent = 50 + (diff / (AR_FOV_DEGREES / 2)) * 50;
+        const distText = t.distance >= 1000
+            ? (t.distance / 1000).toFixed(1) + " km"
+            : Math.round(t.distance) + " m";
+        const scale = Math.max(0.55, Math.min(1.3, 300 / Math.max(t.distance, 30)));
+
+        html += `
+            <div class="arTarget" style="left:${xPercent}%; transform: translate(-50%, -50%) scale(${scale.toFixed(2)});">
+                <div class="arIcon">${t.icon}</div>
+                <div class="arName">${escapeHtml(t.name)}</div>
+                <div class="arDist">${distText}</div>
+            </div>
+        `;
+    });
+    labelsEl.innerHTML = html;
 }
 
 /* ==================================================
