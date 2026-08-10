@@ -541,6 +541,7 @@ input, select {
 .popupHeader b { font-size: 15px; }
 .popupOnline { font-size: 11px; white-space: nowrap; font-weight: bold; }
 .popupOnline.isOnline { color: #2e7d32; }
+.popupOnline.isStandby { color: #b8860b; }
 .popupOnline.isOffline { color: #c62828; }
 .popupSection { padding: 6px 0; border-top: 1px solid #e0e0e0; }
 .popupRow {
@@ -2713,12 +2714,14 @@ function renderUserMarker(userId, user){
           `
         : "";
 
+    const statusBadge = getStatusBadge(user);
+
     markers[userId].bindPopup(`
         <div class="popupCard">
             <div class="popupHeader">
                 <b><span class="markerLevelBadge">Lv.${user.level ?? 1}</span> ${escapeHtml(displayName)}</b>
-                <span class="popupOnline ${user.online ? "isOnline" : "isOffline"}">
-                    ${user.online ? "🟢 ONLINE" : "🔴 OFFLINE"}
+                <span class="popupOnline ${statusBadge.cls}">
+                    ${statusBadge.label}
                 </span>
             </div>
 
@@ -2812,11 +2815,12 @@ function renderUsers(data){
 
         const safeUserId = escapeHtml(userId);
         const safeName = escapeHtml(user.display_name || user.name || userId);
+        const statusBadge = getStatusBadge(user);
 
         html += `
             <div class="userRow">
                 <div onclick="focusUserById('${safeUserId}')">
-                    ${user.online ? "🟢ON" : "🔴OFF"}
+                    ${statusBadge.shortLabel}
                 </div>
                 <div onclick="focusUserById('${safeUserId}')">
                     ${safeName}
@@ -2967,6 +2971,28 @@ function formatMovement(speed, heading){
     const direction = Number.isFinite(headingValue) ? compassDirection(headingValue) : "";
 
     return `🧭 ${direction}方向　${kmh} km/h`;
+}
+
+/* ==================================================
+   オンライン状態バッジ
+   ・単純なON/OFFだけだと「移動中に応答が途絶えた」のか
+     「停止していただけで更新が止まった」のか区別できないため、
+     オフライン時は直前の速度から状態を推測して表示を分ける
+================================================== */
+
+function getStatusBadge(user){
+    if(user.online){
+        return { cls: "isOnline", label: "🟢 ONLINE", shortLabel: "🟢ON" };
+    }
+
+    const lastSpeed = Number(user.speed);
+    const wasStationary = !Number.isFinite(lastSpeed) || lastSpeed < STOP_SPEED_THRESHOLD;
+
+    if(wasStationary){
+        return { cls: "isStandby", label: "🟡 待機中（未更新）", shortLabel: "🟡待機" };
+    }
+
+    return { cls: "isOffline", label: "🔴 OFFLINE", shortLabel: "🔴OFF" };
 }
 
 /* ==================================================
