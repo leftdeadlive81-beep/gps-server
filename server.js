@@ -88,6 +88,51 @@ app.use(express.static("public"));
 app.use(express.json());
 
 //============================================================
+// 新規アカウント登録の合言葉チェック
+// ・部外者がアカウントを作れないようにする簡易的な防御。
+//   Supabaseの匿名キーはクライアントに公開される性質上、この
+//   チェックだけで完全に防げるものではない（ブラウザの開発者
+//   ツールから直接Supabase APIを叩けば理論上は回避できる）が、
+//   通りすがりの第三者による登録は防げる
+// ・合言葉はRenderの環境変数 REGISTRATION_PASSCODE に設定する。
+//   未設定の場合は安全側に倒し、登録を常に拒否する
+//============================================================
+
+const passcodeAttemptsByIp = new Map();
+const PASSCODE_MAX_ATTEMPTS = 10;
+const PASSCODE_WINDOW_MS = 15 * 60 * 1000;
+
+app.post("/api/verify-passcode", (req, res) => {
+    const ip = req.ip || "unknown";
+    const now = Date.now();
+
+    const record = passcodeAttemptsByIp.get(ip) || { count: 0, windowStart: now };
+    if (now - record.windowStart > PASSCODE_WINDOW_MS) {
+        record.count = 0;
+        record.windowStart = now;
+    }
+    record.count++;
+    passcodeAttemptsByIp.set(ip, record);
+
+    if (record.count > PASSCODE_MAX_ATTEMPTS) {
+        res.status(429).json({ valid: false, message: "試行回数が多すぎます。しばらくしてから再度お試しください" });
+        return;
+    }
+
+    const expected = process.env.REGISTRATION_PASSCODE;
+    if (!expected) {
+        console.warn("REGISTRATION_PASSCODE未設定のため、新規登録を拒否しました");
+        res.json({ valid: false, message: "現在、新規登録は無効化されています" });
+        return;
+    }
+
+    const submitted = String((req.body && req.body.code) || "").trim();
+    const valid = submitted.length > 0 && submitted === expected;
+
+    res.json({ valid: valid });
+});
+
+//============================================================
 // Nominatim (OpenStreetMap) 利用規約対応
 // ・1秒あたり1リクエストまでという規約があるため、全クライアント・
 //   全機能（地図中央の地名・隊員一覧の地名・住所検索）分をまとめて

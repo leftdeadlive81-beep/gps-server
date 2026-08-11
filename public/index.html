@@ -1138,6 +1138,7 @@ input, select {
             <img src="/logo.png" alt="P.U.T.T.A.N." class="authBrandLogo" onclick="handleLogoTap(event)">
         </div>
         <h3 class="authFormTitle">👤 新規アカウント登録</h3>
+        <input type="text" id="registerPasscode" placeholder="合言葉" autocomplete="off">
         <input type="text" id="registerUsername" placeholder="ログインID（英数字）" autocomplete="username">
         <input type="text" id="registerDisplayName" placeholder="表示名（例：第1小隊 山田）" autocomplete="name">
         <input type="password" id="registerPassword" placeholder="パスワード（6文字以上）" autocomplete="new-password">
@@ -1690,6 +1691,7 @@ function validateLoginId(loginId){
 ================================================== */
 
 async function registerAuthUser(){
+    const passcode = document.getElementById("registerPasscode").value.trim();
     const loginId = document.getElementById("registerUsername").value.trim();
     const displayName = document.getElementById("registerDisplayName").value.trim();
     const password = document.getElementById("registerPassword").value;
@@ -1715,6 +1717,31 @@ async function registerAuthUser(){
     }
     if(password !== password2){
         message.textContent = "パスワードが一致しません";
+        return;
+    }
+    if(passcode === ""){
+        message.textContent = "合言葉を入力してください";
+        return;
+    }
+
+    message.textContent = "確認中...";
+
+    try{
+        const passcodeResponse = await fetch("/api/verify-passcode", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code: passcode })
+        });
+        const passcodeResult = await passcodeResponse.json();
+
+        if(!passcodeResult.valid){
+            message.textContent = passcodeResult.message || "合言葉が違います";
+            return;
+        }
+    }
+    catch(error){
+        console.error("合言葉確認エラー:", error);
+        message.textContent = "合言葉の確認に失敗しました。通信状況をご確認ください";
         return;
     }
 
