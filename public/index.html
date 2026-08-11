@@ -630,6 +630,14 @@ input, select {
     border: 2px solid white;
 }
 .pointDivIcon span { font-size: 17px; line-height: 1; }
+.liveCameraPopupImg {
+    display: block;
+    width: 100%;
+    max-width: 260px;
+    border-radius: 4px;
+    margin-top: 6px;
+    background: #eee;
+}
 .markerStatusLine {
     font-weight: normal;
     font-size: 11px;
@@ -1743,6 +1751,87 @@ osm.addTo(map);
 let trafficRegulationLayer = L.layerGroup();
 
 /* ==================================================
+   ライブカメラ（国交省 九州地方整備局 熊本河川国道事務所）
+   ・全国統一の座標付きカメラAPIは存在しないため、活動エリア
+     （熊本県）周辺のカメラを手動でリスト化している
+   ・座標は住所ジオコーダーによる市町村レベルの概算値
+   ・画像は事務所サイトの静止画を直接埋め込み（数分〜十数分
+     おきに更新される想定。ポップアップを開くたびに再取得する）
+================================================== */
+
+const LIVE_CAMERAS = [
+    { name: "宇土市長浜（国道57号）", type: "road", lat: 32.690434, lon: 130.571259, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam2_5.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/road_live/road_live02.html" },
+    { name: "阿蘇口交差点（国道57号）", type: "road", lat: 32.922459, lon: 131.062347, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam2_1.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/road_live/road_live02.html" },
+    { name: "三角町三角浦（国道57号）", type: "road", lat: 32.699459, lon: 130.665588, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam2_8.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/road_live/road_live02.html" },
+    { name: "波野A（国道57号）", type: "road", lat: 32.94286, lon: 131.236572, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam2_146.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/road_live/road_live02.html" },
+    { name: "御船川合流点（緑川）", type: "river", lat: 32.714584, lon: 130.801895, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam4_8.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/kasen_live/kasen_live02.html" },
+    { name: "次郎兵衛橋（浜戸川）", type: "river", lat: 32.730885, lon: 130.741043, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam4_1.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/kasen_live/kasen_live02.html" },
+    { name: "加勢川背割堤（緑川）", type: "river", lat: 32.741749, lon: 130.681976, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam4_10.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/kasen_live/kasen_live02.html" },
+    { name: "益城橋（緑川）", type: "river", lat: 32.791607, lon: 130.816345, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam5_10.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/kasen_live/kasen_live02.html" },
+    { name: "大町（緑川）", type: "river", lat: 32.651173, lon: 130.811234, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam5_9.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/kasen_live/kasen_live02.html" },
+    { name: "田口橋（緑川）", type: "river", lat: 32.651173, lon: 130.811234, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam5_5.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/kasen_live/kasen_live02.html" },
+    { name: "霊台橋（緑川）", type: "river", lat: 32.639721, lon: 130.788895, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam5_16.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/kasen_live/kasen_live02.html" },
+    { name: "緑川ダム放水口（緑川）", type: "river", lat: 32.639721, lon: 130.788895, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam5_17.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/kasen_live/kasen_live02.html" }
+];
+
+const LIVE_CAMERA_TYPE_INFO = {
+    road:  { emoji: "🚗", label: "道路カメラ", color: "#455a64" },
+    river: { emoji: "🌊", label: "河川カメラ", color: "#00695c" }
+};
+
+const liveCameraLayer = L.layerGroup();
+
+function createLiveCameraIcon(type){
+    const info = LIVE_CAMERA_TYPE_INFO[type] || LIVE_CAMERA_TYPE_INFO.road;
+    return L.divIcon({
+        className: "pointDivIconWrapper",
+        html: `<div class="pointDivIcon" style="background:${info.color};"><span>📷</span></div>`,
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
+        popupAnchor: [0, -22]
+    });
+}
+
+function renderLiveCameras(){
+    LIVE_CAMERAS.forEach((cam, index) => {
+        const info = LIVE_CAMERA_TYPE_INFO[cam.type] || LIVE_CAMERA_TYPE_INFO.road;
+        const imgId = `liveCamImg_${index}`;
+
+        const marker = L.marker([cam.lat, cam.lon], { icon: createLiveCameraIcon(cam.type) });
+
+        marker.bindPopup(`
+            <div class="popupCard">
+                <div class="popupHeader">
+                    <b>${info.emoji} ${escapeHtml(cam.name)}</b>
+                </div>
+                <img id="${imgId}" class="liveCameraPopupImg" src="" alt="${escapeHtml(cam.name)}">
+                <div class="popupFooter">
+                    <button onclick="refreshLiveCameraImage(${index})">🔄 更新</button>
+                    <a href="${cam.pageUrl}" target="_blank" rel="noopener">公式ページ</a>
+                    <div class="popupUserId">国土交通省 九州地方整備局 提供・座標は概算</div>
+                </div>
+            </div>
+        `);
+
+        marker.on("popupopen", () => refreshLiveCameraImage(index));
+
+        marker.addTo(liveCameraLayer);
+    });
+}
+
+function refreshLiveCameraImage(index){
+    const cam = LIVE_CAMERAS[index];
+    if(!cam){ return; }
+
+    const img = document.getElementById(`liveCamImg_${index}`);
+    if(img){
+        img.src = `${cam.imageUrl}?t=${Date.now()}`;
+    }
+}
+
+renderLiveCameras();
+
+/* ==================================================
    雨雲レーダー（RainViewer）
 ================================================== */
 
@@ -1897,6 +1986,7 @@ L.control.layers(
     {
         "👥 隊員": memberLayerGroup,
         "📍 登録地点": pointClusterGroup,
+        "📷 ライブカメラ（熊本）": liveCameraLayer,
         "🧭 UTMグリッド": utmGridLayer,
         "🚧 交通規制": trafficRegulationLayer,
         "🌧 雨雲レーダー": rainRadarLayer
