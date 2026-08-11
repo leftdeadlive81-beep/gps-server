@@ -377,10 +377,10 @@ input, select {
 .navDistanceText { font-size: 22px; font-weight: bold; margin-top: 4px; }
 .navSummaryText { font-size: 12px; opacity: .85; margin-top: 2px; }
 
-.gpsButtonRow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.gpsButtonRow { display: flex; gap: 6px; margin-top: 7px; }
 .gpsButton, .reportButton, .arButton, .templateButton, .handoverButton {
-    flex: 1 1 calc(50% - 6px);
-    padding: 10px;
+    flex: 1;
+    padding: 10px 4px;
     border: none;
     border-radius: 6px;
     color: white;
@@ -1159,10 +1159,10 @@ input, select {
         </div>
 
         <div class="gpsButtonRow">
-            <button class="reportButton" onclick="openStatusReportPanel()">🔄 報告</button>
-            <button class="templateButton" onclick="openTemplateReportPanel()">📋 定型文</button>
-            <button class="handoverButton" onclick="openHandoverList()">📝 引き継ぎ</button>
-            <button class="arButton" onclick="startAR()">📷 AR表示</button>
+            <button class="reportButton" onclick="openStatusReportPanel()">報告</button>
+            <button class="templateButton" onclick="openTemplateReportPanel()">定型</button>
+            <button class="handoverButton" onclick="openHandoverList()">引継</button>
+            <button class="arButton" onclick="startAR()">AR</button>
         </div>
         <div id="gpsStatus">🔴 GPS停止中</div>
         <div id="lastSend">最終送信：-</div>
