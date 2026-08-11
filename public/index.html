@@ -333,6 +333,7 @@ input, select {
 .addressSearchResultRow {
     padding: 8px 10px;
     font-size: 13px;
+    color: #222;
     border-bottom: 1px solid #eee;
     cursor: pointer;
 }
@@ -713,6 +714,9 @@ input, select {
     border-radius: 3px;
 }
 .leaflet-div-icon { background: transparent; border: none; }
+/* 地図のポップアップは常に明るい配色のままにしているため、ダークモードでも
+   本文色が正しく見えるよう固定する（bodyのcolorを継承させない） */
+.leaflet-popup-content-wrapper, .leaflet-popup-content { color: #222; }
 .pointDivIcon {
     width: 34px;
     height: 34px;
