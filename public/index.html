@@ -1065,7 +1065,6 @@ input, select {
         </div>
 
         <div class="gpsButtonRow">
-            <button class="gpsButton" onclick="startGPS()">📡 GPS開始</button>
             <button class="reportButton" onclick="updateStatus(this)">🔄 現在地報告</button>
             <button class="arButton" onclick="startAR()">📷 AR表示</button>
         </div>
@@ -1181,6 +1180,7 @@ input, select {
 
         <div class="card settingsCard">
             <div class="sectionTitle">🔐 アカウント</div>
+            <button class="settingsButton gpsButton" onclick="startGPS()">📡 GPS開始</button>
             <button class="settingsButton logoutButton" onclick="logoutUser()">🚪 ログアウト</button>
         </div>
 
