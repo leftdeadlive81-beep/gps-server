@@ -1134,6 +1134,10 @@ const OFFLINE_STALE_MS = 20 * 60 * 1000;
 // （本当に更新が止まった場合は5分後にmarkStaleUsersOffline()が拾う）
 const DISCONNECT_OFFLINE_GRACE_MS = 90 * 1000;
 
+// 位置履歴（location_history）の保持期間。DB容量を抑えるため、
+// これより古いレコードは定期的に自動削除する
+const LOCATION_HISTORY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
 // userId -> 現在その userId に紐づいている socket 数
 // （同じアカウントで複数端末/タブが繋がっていても、全部切れるまではオフラインにしない）
 const socketCountByUserId = {};
@@ -1262,6 +1266,25 @@ async function sendChronologyPushNotifications(item, excludeUserId) {
 }
 
 setInterval(markStaleUsersOffline, 60 * 1000);
+
+//====================================================
+// 位置履歴の自動削除（保持期間より古いレコードのみ）
+//====================================================
+
+async function pruneLocationHistory() {
+    try {
+        const cutoff = Date.now() - LOCATION_HISTORY_RETENTION_MS;
+        const result = await pool.query("DELETE FROM location_history WHERE created < $1", [cutoff]);
+        if (result.rowCount > 0) {
+            console.log("位置履歴の自動削除:", result.rowCount, "件");
+        }
+    }
+    catch (err) {
+        console.error("位置履歴削除エラー:", err);
+    }
+}
+
+setInterval(pruneLocationHistory, 6 * 60 * 60 * 1000);
 
 //====================================================
 // GPS位置情報更新（共通処理）
@@ -2070,6 +2093,46 @@ io.on("connection", socket => {
     });
 
     //====================================================
+    // 位置履歴（指定ユーザー・指定日＝JSTの1日分の移動経路）
+    //====================================================
+
+    socket.on("getLocationHistory", async (params, callback) => {
+        const userId = String((params && params.userId) || "").trim();
+        const dateStr = String((params && params.date) || "").trim();
+
+        if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+            if (typeof callback === "function") { callback({ success: false, message: "パラメータが不正です" }); }
+            return;
+        }
+
+        const startMs = new Date(`${dateStr}T00:00:00+09:00`).getTime();
+
+        if (!Number.isFinite(startMs)) {
+            if (typeof callback === "function") { callback({ success: false, message: "日付が不正です" }); }
+            return;
+        }
+
+        const endMs = startMs + 24 * 60 * 60 * 1000;
+
+        try {
+            const result = await pool.query(
+                "SELECT lat, lon, created FROM location_history WHERE user_id=$1 AND created >= $2 AND created < $3 ORDER BY created ASC",
+                [userId, startMs, endMs]
+            );
+
+            const points = result.rows
+                .map(row => ({ lat: Number(row.lat), lon: Number(row.lon), t: Number(row.created) }))
+                .filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lon));
+
+            if (typeof callback === "function") { callback({ success: true, points: points }); }
+        }
+        catch (err) {
+            console.error("位置履歴取得エラー:", err);
+            if (typeof callback === "function") { callback({ success: false, message: err.message }); }
+        }
+    });
+
+    //====================================================
     // クロノロジー
     //====================================================
 
@@ -2389,6 +2452,7 @@ async function startServer() {
     await loadPoints();
     await loadChronologyReactions();
     await loadChronology();
+    await pruneLocationHistory();
 
     server.listen(PORT, async () => {
         console.log("================================");

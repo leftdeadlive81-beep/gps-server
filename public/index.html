@@ -457,7 +457,7 @@ input, select {
 
 .userHeader, .userRow {
     display: grid;
-    grid-template-columns: 48px minmax(80px, 1fr) 50px 55px 65px 42px;
+    grid-template-columns: 48px minmax(80px, 1fr) 50px 55px 65px 64px;
     align-items: center;
     gap: 3px;
 }
@@ -477,6 +477,8 @@ input, select {
 }
 .userRow > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .deleteButton { border: none; background: transparent; font-size: 18px; }
+.userActionsCell { display: flex; justify-content: center; gap: 2px; }
+.historyButton { border: none; background: transparent; font-size: 16px; }
 
 .confirmOverlay {
     display: none;
@@ -679,6 +681,21 @@ input, select {
     border: 2px solid white;
 }
 .pointDivIcon span { font-size: 17px; line-height: 1; }
+.historyDateInput {
+    display: block;
+    width: 100%;
+    margin: 10px 0;
+    padding: 8px;
+    font-size: 14px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+}
+.historyStatusText {
+    font-size: 13px;
+    color: #555;
+    min-height: 18px;
+    margin-bottom: 8px;
+}
 .evacHazardRow {
     display: flex;
     flex-wrap: wrap;
@@ -1149,6 +1166,15 @@ input, select {
 <div id="photoLightboxOverlay" class="confirmOverlay photoLightboxOverlay" onclick="closePhotoLightbox()">
     <img id="photoLightboxImg" class="photoLightboxImg" src="" onclick="event.stopPropagation()">
     <button class="photoLightboxCloseButton" onclick="closePhotoLightbox()">✕</button>
+</div>
+
+<div id="historyOverlay" class="confirmOverlay" onclick="closeHistoryViewer()">
+    <div class="confirmBox" onclick="event.stopPropagation()">
+        <div class="reactionDetailTitle" id="historyUserName">🕒 移動履歴</div>
+        <input type="date" id="historyDateInput" class="historyDateInput" onchange="loadUserHistory()">
+        <div id="historyStatusText" class="historyStatusText"></div>
+        <button class="confirmBtnCancel reactionDetailCloseButton" onclick="closeHistoryViewer()">閉じる</button>
+    </div>
 </div>
 
 <script>
@@ -3534,7 +3560,8 @@ function renderUsers(data){
                 <div onclick="focusUserById('${safeUserId}')">
                     ${timeAgo(user.lastUpdate)}
                 </div>
-                <div>
+                <div class="userActionsCell">
+                    <button class="historyButton" onclick="event.stopPropagation(); openHistoryViewer('${safeUserId}', '${safeName}')">🕒</button>
                     <button class="deleteButton" onclick="event.stopPropagation(); deleteUserById('${safeUserId}', '${safeName}')">🗑</button>
                 </div>
             </div>
@@ -3592,6 +3619,103 @@ function closeConfirm(result){
 /* ==================================================
    ユーザーへ移動
 ================================================== */
+
+/* ==================================================
+   隊員の移動履歴（過去7日分・1日単位）
+================================================== */
+
+let historyTargetUserId = null;
+let historyRouteLayer = null;
+
+function jstDateString(date){
+    return date.toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
+}
+
+function openHistoryViewer(userId, name){
+    historyTargetUserId = userId;
+
+    const titleElement = document.getElementById("historyUserName");
+    if(titleElement){ titleElement.textContent = `🕒 ${name} の移動履歴`; }
+
+    const dateInput = document.getElementById("historyDateInput");
+    if(dateInput){
+        const today = new Date();
+        const sevenDaysAgo = new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000);
+        dateInput.max = jstDateString(today);
+        dateInput.min = jstDateString(sevenDaysAgo);
+        dateInput.value = jstDateString(today);
+    }
+
+    const overlay = document.getElementById("historyOverlay");
+    if(overlay){ overlay.classList.add("active"); }
+
+    loadUserHistory();
+}
+
+function closeHistoryViewer(){
+    const overlay = document.getElementById("historyOverlay");
+    if(overlay){ overlay.classList.remove("active"); }
+}
+
+function loadUserHistory(){
+    if(!historyTargetUserId){ return; }
+
+    const dateStr = document.getElementById("historyDateInput").value;
+    if(!dateStr){ return; }
+
+    const statusElement = document.getElementById("historyStatusText");
+    if(statusElement){ statusElement.textContent = "読み込み中..."; }
+
+    socket.emit("getLocationHistory", { userId: historyTargetUserId, date: dateStr }, response => {
+        if(!response || !response.success){
+            if(statusElement){ statusElement.textContent = "履歴の取得に失敗しました"; }
+            return;
+        }
+
+        drawHistoryRoute(response.points, statusElement);
+    });
+}
+
+function drawHistoryRoute(points, statusElement){
+    if(historyRouteLayer){
+        map.removeLayer(historyRouteLayer);
+        historyRouteLayer = null;
+    }
+
+    if(!points || points.length === 0){
+        if(statusElement){ statusElement.textContent = "この日の記録はありません"; }
+        return;
+    }
+
+    historyRouteLayer = L.layerGroup().addTo(map);
+
+    const latlngs = points.map(p => [p.lat, p.lon]);
+    const routeLine = L.polyline(latlngs, { color: "#8e24aa", weight: 4, opacity: 0.8 });
+    routeLine.addTo(historyRouteLayer);
+
+    const startTime = new Date(points[0].t).toLocaleTimeString("ja-JP", { hour12: false });
+    const endTime = new Date(points[points.length - 1].t).toLocaleTimeString("ja-JP", { hour12: false });
+
+    L.circleMarker(latlngs[0], { radius: 7, color: "#2e7d32", fillColor: "#2e7d32", fillOpacity: 1 })
+        .bindTooltip(`開始 ${startTime}`)
+        .addTo(historyRouteLayer);
+
+    L.circleMarker(latlngs[latlngs.length - 1], { radius: 7, color: "#d32f2f", fillColor: "#d32f2f", fillOpacity: 1 })
+        .bindTooltip(`終了 ${endTime}`)
+        .addTo(historyRouteLayer);
+
+    if(statusElement){
+        statusElement.textContent = `${points.length}件の記録　${startTime} 〜 ${endTime}`;
+    }
+
+    const mapButton = document.querySelector('.tabButton[onclick*="mapTab"]');
+    showTab("mapTab", mapButton);
+    closeHistoryViewer();
+
+    setTimeout(() => {
+        map.fitBounds(routeLine.getBounds(), { padding: [40, 40] });
+    }, 150);
+}
 
 function focusUserById(userId){
     const marker = markers[userId];
