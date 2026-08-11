@@ -90,6 +90,38 @@ button { cursor: pointer; }
     margin: 0 auto;
     border-radius: 12px;
     box-shadow: 0 4px 14px rgba(0,0,0,.18);
+    cursor: pointer;
+}
+.authBrandLogo.nyaWiggle { animation: nyaWiggleKeyframes .5s ease; }
+@keyframes nyaWiggleKeyframes {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(-4deg); }
+    75% { transform: rotate(4deg); }
+}
+.nyaBubble {
+    display: none;
+    position: fixed;
+    top: 16%;
+    left: 50%;
+    transform: translate(-50%, 0) scale(.5);
+    background: #fff;
+    border: 2px solid #333;
+    border-radius: 16px;
+    padding: 10px 20px;
+    font-weight: bold;
+    font-size: 22px;
+    color: #333;
+    z-index: 10000;
+    box-shadow: 0 4px 12px rgba(0,0,0,.3);
+    pointer-events: none;
+}
+.nyaBubble.show { display: block; animation: nyaPop 1.4s ease forwards; }
+@keyframes nyaPop {
+    0% { transform: translate(-50%, 10px) scale(.4); opacity: 0; }
+    15% { transform: translate(-50%, 0) scale(1.15); opacity: 1; }
+    25% { transform: translate(-50%, 0) scale(1); opacity: 1; }
+    80% { transform: translate(-50%, 0) scale(1); opacity: 1; }
+    100% { transform: translate(-50%, -10px) scale(.9); opacity: 0; }
 }
 .authFormTitle {
     text-align: center;
@@ -1070,11 +1102,12 @@ input, select {
      認証画面
 ================================================= -->
 <div id="authScreen">
+    <div id="nyaBubble" class="nyaBubble">にゃー！</div>
 
     <div id="loginBox" class="authBox">
         <div class="authBrand">
             <div class="authBrandTagline">野外活動支援ツール</div>
-            <img src="/logo.png" alt="P.U.T.T.A.N." class="authBrandLogo">
+            <img src="/logo.png" alt="P.U.T.T.A.N." class="authBrandLogo" onclick="handleLogoTap(event)">
         </div>
         <h3 class="authFormTitle">🔐 ログイン</h3>
         <input type="text" id="loginUsername" placeholder="ログインID(英数字)" autocomplete="username">
@@ -1102,7 +1135,7 @@ input, select {
     <div id="registerBox" class="authBox" style="display:none;">
         <div class="authBrand">
             <div class="authBrandTagline">野外活動支援ツール</div>
-            <img src="/logo.png" alt="P.U.T.T.A.N." class="authBrandLogo">
+            <img src="/logo.png" alt="P.U.T.T.A.N." class="authBrandLogo" onclick="handleLogoTap(event)">
         </div>
         <h3 class="authFormTitle">👤 新規アカウント登録</h3>
         <input type="text" id="registerUsername" placeholder="ログインID（英数字）" autocomplete="username">
@@ -1540,6 +1573,53 @@ applyDarkModePreference();
 
 function makeAuthEmail(loginId){
     return loginId.trim().toLowerCase() + "@puttan.local";
+}
+
+/* ==================================================
+   イースターエッグ：ロゴを連打すると猫が鳴く
+================================================== */
+
+let logoTapTimes = [];
+const NYA_TAP_THRESHOLD = 5;
+const NYA_TAP_WINDOW_MS = 2000;
+
+function handleLogoTap(event){
+    const now = Date.now();
+    logoTapTimes.push(now);
+    logoTapTimes = logoTapTimes.filter(t => now - t <= NYA_TAP_WINDOW_MS);
+
+    if(logoTapTimes.length >= NYA_TAP_THRESHOLD){
+        logoTapTimes = [];
+        triggerNyaEasterEgg(event.target);
+    }
+}
+
+function triggerNyaEasterEgg(logoElement){
+    if(logoElement){
+        logoElement.classList.remove("nyaWiggle");
+        void logoElement.offsetWidth;
+        logoElement.classList.add("nyaWiggle");
+    }
+
+    const bubble = document.getElementById("nyaBubble");
+    if(bubble){
+        bubble.classList.remove("show");
+        void bubble.offsetWidth;
+        bubble.classList.add("show");
+    }
+
+    try{
+        if("speechSynthesis" in window){
+            const utterance = new SpeechSynthesisUtterance("にゃー");
+            utterance.lang = "ja-JP";
+            utterance.pitch = 1.6;
+            utterance.rate = 1.1;
+            speechSynthesis.speak(utterance);
+        }
+    }
+    catch(err){
+        console.error("鳴き声再生エラー:", err);
+    }
 }
 
 /* ==================================================
