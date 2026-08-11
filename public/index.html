@@ -490,7 +490,7 @@ input, select {
 
 .userHeader, .userRow {
     display: grid;
-    grid-template-columns: 48px minmax(80px, 1fr) 55px 65px 64px;
+    grid-template-columns: 48px minmax(70px, 1fr) minmax(70px, 1fr) 55px 65px 64px;
     align-items: center;
     gap: 3px;
 }
@@ -1085,7 +1085,7 @@ input, select {
         <div class="card">
             <div class="sectionTitle">👥 接続ユーザー</div>
             <div class="userHeader">
-                <div>状態</div><div>名前</div><div>🔋</div><div>最終</div><div>操作</div>
+                <div>状態</div><div>名前</div><div>現在地</div><div>🔋</div><div>最終</div><div>操作</div>
             </div>
             <div id="users"></div>
         </div>
@@ -2440,6 +2440,7 @@ function updateUtmCenterDisplay(){
 }
 
 const placeNameCache = {};
+const placeNameInFlight = new Set();
 let placeNameTimer = null;
 
 function schedulePlaceNameUpdate(){
@@ -3661,6 +3662,38 @@ socket.on("locationUpdate", payload => {
    隊員一覧
 ================================================== */
 
+/* ==================================================
+   隊員一覧の現在地（地名）
+   ・地図中央の地名表示と同じキャッシュを共有し、Nominatimへの
+     問い合わせ回数を抑える（サーバー側でも1秒1件に制限済み）
+================================================== */
+
+function getMemberPlaceName(lat, lon){
+    if(!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))){ return "-"; }
+
+    const key = Number(lat).toFixed(3) + "," + Number(lon).toFixed(3);
+
+    if(placeNameCache[key]){ return placeNameCache[key]; }
+
+    if(!placeNameInFlight.has(key)){
+        placeNameInFlight.add(key);
+
+        fetch(`/api/reverse-geocode?lat=${lat}&lon=${lon}`)
+            .then(response => response.json())
+            .then(data => {
+                placeNameCache[key] = data.name || "地名不明";
+                placeNameInFlight.delete(key);
+                renderUsers(latestUsersData);
+            })
+            .catch(error => {
+                console.error("隊員の地名取得エラー:", error);
+                placeNameInFlight.delete(key);
+            });
+    }
+
+    return "取得中...";
+}
+
 function renderUsers(data){
     let html = "";
 
@@ -3679,6 +3712,9 @@ function renderUsers(data){
                 </div>
                 <div onclick="focusUserById('${safeUserId}')">
                     ${safeName}
+                </div>
+                <div onclick="focusUserById('${safeUserId}')">
+                    ${escapeHtml(getMemberPlaceName(user.lat, user.lon))}
                 </div>
                 <div class="${batteryCellClass(user.battery)}" onclick="focusUserById('${safeUserId}')">
                     ${formatBatteryLabel(user.battery, user.batteryCharging)}

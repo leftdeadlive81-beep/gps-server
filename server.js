@@ -88,7 +88,29 @@ app.use(express.static("public"));
 app.use(express.json());
 
 //============================================================
-// 逆ジオコーディング（地図中央の地名取得）
+// Nominatim (OpenStreetMap) 利用規約対応
+// ・1秒あたり1リクエストまでという規約があるため、全クライアント・
+//   全機能（地図中央の地名・隊員一覧の地名・住所検索）分をまとめて
+//   このキューで直列化する
+// ・地名は同じ座標であれば結果が変わらないため、サーバー側でも
+//   キャッシュして実際のリクエスト数自体を減らす
+//============================================================
+
+let nominatimQueueTail = Promise.resolve();
+const NOMINATIM_MIN_INTERVAL_MS = 1100;
+
+function scheduleNominatimRequest(taskFn) {
+    const result = nominatimQueueTail.then(() => taskFn());
+    nominatimQueueTail = result
+        .catch(() => {})
+        .then(() => new Promise(resolve => setTimeout(resolve, NOMINATIM_MIN_INTERVAL_MS)));
+    return result;
+}
+
+const placeNameServerCache = {};
+
+//============================================================
+// 逆ジオコーディング（地図中央・隊員一覧の地名取得）
 // ・Nominatim (OpenStreetMap) を利用規約に沿ってサーバー経由で中継
 //============================================================
 
@@ -101,32 +123,45 @@ app.get("/api/reverse-geocode", async (req, res) => {
         return;
     }
 
-    try {
-        const url =
-            "https://nominatim.openstreetmap.org/reverse" +
-            "?format=jsonv2&addressdetails=1&zoom=14" +
-            "&lat=" + encodeURIComponent(lat) +
-            "&lon=" + encodeURIComponent(lon) +
-            "&accept-language=ja";
+    const cacheKey = lat.toFixed(3) + "," + lon.toFixed(3);
 
-        const response = await fetch(url, {
-            headers: { "User-Agent": "Puttan/2.6 (GPS tracking tool; contact: leftdeadlive81@gmail.com)" }
+    if (placeNameServerCache[cacheKey]) {
+        res.json({ name: placeNameServerCache[cacheKey] });
+        return;
+    }
+
+    try {
+        const name = await scheduleNominatimRequest(async () => {
+            const url =
+                "https://nominatim.openstreetmap.org/reverse" +
+                "?format=jsonv2&addressdetails=1&zoom=14" +
+                "&lat=" + encodeURIComponent(lat) +
+                "&lon=" + encodeURIComponent(lon) +
+                "&accept-language=ja";
+
+            const response = await fetch(url, {
+                headers: { "User-Agent": "Puttan/2.6 (GPS tracking tool; contact: leftdeadlive81@gmail.com)" }
+            });
+
+            if (!response.ok) {
+                throw new Error("HTTP " + response.status);
+            }
+
+            const data = await response.json();
+            const address = data.address || {};
+
+            const parts = [
+                address.state,
+                address.city || address.town || address.village,
+                address.suburb || address.neighbourhood || address.city_district
+            ].filter(Boolean);
+
+            return parts.length ? parts.join(" ") : (data.display_name || null);
         });
 
-        if (!response.ok) {
-            throw new Error("HTTP " + response.status);
+        if (name) {
+            placeNameServerCache[cacheKey] = name;
         }
-
-        const data = await response.json();
-        const address = data.address || {};
-
-        const parts = [
-            address.state,
-            address.city || address.town || address.village,
-            address.suburb || address.neighbourhood || address.city_district
-        ].filter(Boolean);
-
-        const name = parts.length ? parts.join(" ") : (data.display_name || null);
 
         res.json({ name });
     }
@@ -150,27 +185,29 @@ app.get("/api/geocode", async (req, res) => {
     }
 
     try {
-        const url =
-            "https://nominatim.openstreetmap.org/search" +
-            "?format=jsonv2&addressdetails=1&limit=5" +
-            "&countrycodes=jp&accept-language=ja" +
-            "&q=" + encodeURIComponent(query);
+        const results = await scheduleNominatimRequest(async () => {
+            const url =
+                "https://nominatim.openstreetmap.org/search" +
+                "?format=jsonv2&addressdetails=1&limit=5" +
+                "&countrycodes=jp&accept-language=ja" +
+                "&q=" + encodeURIComponent(query);
 
-        const response = await fetch(url, {
-            headers: { "User-Agent": "Puttan/2.6 (GPS tracking tool; contact: leftdeadlive81@gmail.com)" }
+            const response = await fetch(url, {
+                headers: { "User-Agent": "Puttan/2.6 (GPS tracking tool; contact: leftdeadlive81@gmail.com)" }
+            });
+
+            if (!response.ok) {
+                throw new Error("HTTP " + response.status);
+            }
+
+            const data = await response.json();
+
+            return (Array.isArray(data) ? data : []).map(item => ({
+                name: item.display_name,
+                lat: Number(item.lat),
+                lon: Number(item.lon)
+            }));
         });
-
-        if (!response.ok) {
-            throw new Error("HTTP " + response.status);
-        }
-
-        const data = await response.json();
-
-        const results = (Array.isArray(data) ? data : []).map(item => ({
-            name: item.display_name,
-            lat: Number(item.lat),
-            lon: Number(item.lon)
-        }));
 
         res.json({ results });
     }
