@@ -391,7 +391,16 @@ input, select {
 .templateButton { background: #00897b; }
 .handoverButton { background: #8d6e63; }
 .arButton { background: #6a1b9a; }
-#gpsStatus, #lastSend { text-align: center; padding: 4px; font-size: 13px; }
+#lastSend { text-align: center; padding: 4px; font-size: 13px; }
+.gpsStatusRow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 4px;
+    font-size: 13px;
+}
+.currentAccountId { color: var(--text-muted); }
 
 /* ==================================================
    AR表示
@@ -1164,7 +1173,10 @@ input, select {
             <button class="handoverButton" onclick="openHandoverList()">引継</button>
             <button class="arButton" onclick="startAR()">AR</button>
         </div>
-        <div id="gpsStatus">🔴 GPS停止中</div>
+        <div class="gpsStatusRow">
+            <span id="currentAccountId" class="currentAccountId"></span>
+            <span id="gpsStatus">🔴 GPS停止中</span>
+        </div>
         <div id="lastSend">最終送信：-</div>
     </div>
 
@@ -1805,6 +1817,11 @@ async function loadProfile(user){
     localStorage.setItem("name", data.display_name || "");
     localStorage.setItem("iconType", normalizeIconType(data.icon_type));
 
+    const accountIdElement = document.getElementById("currentAccountId");
+    if(accountIdElement){
+        accountIdElement.textContent = data.login_id ? `👤 ${data.login_id}` : "";
+    }
+
     return data;
 }
 
@@ -2094,6 +2111,9 @@ async function logoutUser(){
 
         localStorage.removeItem("puttan_user_id");
         localStorage.removeItem("puttan_registered_done");
+
+        const accountIdElement = document.getElementById("currentAccountId");
+        if(accountIdElement){ accountIdElement.textContent = ""; }
 
         showAuth();
         showLogin();
