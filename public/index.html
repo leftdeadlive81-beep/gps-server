@@ -1775,10 +1775,33 @@ updateRainRadarLayer();
 setInterval(updateRainRadarLayer, 5 * 60 * 1000);
 
 /* ==================================================
-   UTMグリッド（デフォルトON）
+   UTM座標変換（緯度経度からゾーン・南北を動的に算出する）
+   ・以前は熊本(52S)固定だったため、他地域では誤ったゾーン・
+     誤ったN値（南半球用の偽北距10,000,000mが北半球にも
+     かかっていた）になっていた
 ================================================== */
 
-const UTM_PROJ = "+proj=utm +zone=52 +south +datum=WGS84";
+function utmZoneNumber(lon){
+    return Math.floor((lon + 180) / 6) + 1;
+}
+
+function utmHemisphereLetter(lat){
+    return lat >= 0 ? "N" : "S";
+}
+
+function utmZoneLabel(lat, lon){
+    return utmZoneNumber(lon) + utmHemisphereLetter(lat);
+}
+
+function utmProjString(lat, lon){
+    const zone = utmZoneNumber(lon);
+    const south = lat < 0 ? " +south" : "";
+    return `+proj=utm +zone=${zone}${south} +datum=WGS84`;
+}
+
+/* ==================================================
+   UTMグリッド（デフォルトON）
+================================================== */
 
 const utmGridLayer = L.layerGroup();
 
@@ -1800,8 +1823,12 @@ function drawUtmGrid(){
     const sw = bounds.getSouthWest();
     const ne = bounds.getNorthEast();
 
-    const utmSW = proj4("EPSG:4326", UTM_PROJ, [sw.lng, sw.lat]);
-    const utmNE = proj4("EPSG:4326", UTM_PROJ, [ne.lng, ne.lat]);
+    // 表示範囲の中心の経緯度からゾーンを決め、範囲全体をそのゾーンで変換する
+    const gridCenter = map.getCenter();
+    const gridProj = utmProjString(gridCenter.lat, gridCenter.lng);
+
+    const utmSW = proj4("EPSG:4326", gridProj, [sw.lng, sw.lat]);
+    const utmNE = proj4("EPSG:4326", gridProj, [ne.lng, ne.lat]);
 
     const minE = Math.min(utmSW[0], utmNE[0]);
     const maxE = Math.max(utmSW[0], utmNE[0]);
@@ -1817,8 +1844,8 @@ function drawUtmGrid(){
     const lineStyle = { color: "#ff5722", weight: 1, opacity: 0.65, interactive: false };
 
     for(let e = startE; e <= maxE; e += interval){
-        const p1 = proj4(UTM_PROJ, "EPSG:4326", [e, minN]);
-        const p2 = proj4(UTM_PROJ, "EPSG:4326", [e, maxN]);
+        const p1 = proj4(gridProj, "EPSG:4326", [e, minN]);
+        const p2 = proj4(gridProj, "EPSG:4326", [e, maxN]);
 
         L.polyline([[p1[1], p1[0]], [p2[1], p2[0]]], lineStyle).addTo(utmGridLayer);
 
@@ -1834,8 +1861,8 @@ function drawUtmGrid(){
     }
 
     for(let n = startN; n <= maxN; n += interval){
-        const p1 = proj4(UTM_PROJ, "EPSG:4326", [minE, n]);
-        const p2 = proj4(UTM_PROJ, "EPSG:4326", [maxE, n]);
+        const p1 = proj4(gridProj, "EPSG:4326", [minE, n]);
+        const p2 = proj4(gridProj, "EPSG:4326", [maxE, n]);
 
         L.polyline([[p1[1], p1[0]], [p2[1], p2[0]]], lineStyle).addTo(utmGridLayer);
 
@@ -1931,7 +1958,7 @@ utmCenterControl.onAdd = function(){
     const div = L.DomUtil.create("div", "utmCenterBox");
     div.innerHTML = `
         <div id="placeNameText">取得中...</div>
-        <div id="utmCenterText">UTM 52S<br>E: -　N: -</div>
+        <div id="utmCenterText">UTM -<br>E: -　N: -</div>
     `;
     L.DomEvent.disableClickPropagation(div);
     return div;
@@ -1944,13 +1971,13 @@ function updateUtmCenterDisplay(){
 
     const utm = proj4(
         "EPSG:4326",
-        "+proj=utm +zone=52 +south +datum=WGS84",
+        utmProjString(center.lat, center.lng),
         [center.lng, center.lat]
     );
 
     const utmText = document.getElementById("utmCenterText");
     if(utmText){
-        utmText.innerHTML = `UTM 52S<br>E: ${Math.round(utm[0])}　N: ${Math.round(utm[1])}`;
+        utmText.innerHTML = `UTM ${utmZoneLabel(center.lat, center.lng)}<br>E: ${Math.round(utm[0])}　N: ${Math.round(utm[1])}`;
     }
 }
 
@@ -2296,7 +2323,7 @@ function sendLocation(lat, lon, speed, heading){
 
     const utm = proj4(
         "EPSG:4326",
-        "+proj=utm +zone=52 +south +datum=WGS84",
+        utmProjString(lat, lon),
         [lon, lat]
     );
 
@@ -2325,7 +2352,7 @@ function sendLocation(lat, lon, speed, heading){
         display_name: name,
         lat: lat,
         lon: lon,
-        utmZone: "52S",
+        utmZone: utmZoneLabel(lat, lon),
         utmE: utmE,
         utmN: utmN,
         destination: destination,
@@ -3602,14 +3629,16 @@ function renderPointMarker(name, p){
         ? `${escapeHtml(p.createdBy || "不明")}　${new Date(Number(p.created)).toLocaleString("ja-JP", { hour12: false })}`
         : "-";
 
-    const utm = proj4("EPSG:4326", UTM_PROJ, [Number(p.lon), Number(p.lat)]);
+    const pLat = Number(p.lat);
+    const pLon = Number(p.lon);
+    const utm = proj4("EPSG:4326", utmProjString(pLat, pLon), [pLon, pLat]);
 
     marker.bindPopup(`
         <b>${typeInfo.emoji} ${escapeHtml(name)}</b>
         <br>
         <span style="color:#666;">${typeInfo.label}</span>
         <br>
-        UTM 52S　E：${Math.round(utm[0])}　N：${Math.round(utm[1])}
+        UTM ${utmZoneLabel(pLat, pLon)}　E：${Math.round(utm[0])}　N：${Math.round(utm[1])}
         <br>
         <span style="color:#666; font-size:12px;">👤 登録：${registeredInfo}</span>
         <br>
