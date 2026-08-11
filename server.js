@@ -968,7 +968,8 @@ async function loadChronology() {
             user: row.user_name || "",
             message: row.message || "",
             category: row.category || "その他",
-            remarks: row.remarks || ""
+            remarks: row.remarks || "",
+            photoUrl: row.photo_url || ""
         }));
 
         console.log("クロノロジー復元:", chronology.length);
@@ -2086,17 +2087,18 @@ io.on("connection", socket => {
             message: String(data.message || "").trim(),
             category: String(data.category || "その他").trim(),
             remarks: String(data.remarks || "").trim(),
+            photoUrl: String(data.photoUrl || "").trim(),
             reactions: {}
         };
 
         try {
             const result = await pool.query(
                 `
-                INSERT INTO chronology (user_name, message, category, remarks, created)
-                VALUES ($1,$2,$3,$4,$5)
+                INSERT INTO chronology (user_name, message, category, remarks, photo_url, created)
+                VALUES ($1,$2,$3,$4,$5,$6)
                 RETURNING id
                 `,
-                [item.user, item.message, item.category, item.remarks, now]
+                [item.user, item.message, item.category, item.remarks, item.photoUrl || null, now]
             );
             item.id = result.rows[0].id;
         }
@@ -2153,7 +2155,8 @@ io.on("connection", socket => {
                 user: row.user_name || "",
                 message: row.message || "",
                 category: row.category || "その他",
-                remarks: row.remarks || ""
+                remarks: row.remarks || "",
+                photoUrl: row.photo_url || ""
             }));
 
             if (typeof callback === "function") {

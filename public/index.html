@@ -535,6 +535,55 @@ input, select {
 .timelineSender { font-weight: bold; color: #333; }
 .timelineMessage { font-size: 14px; margin-top: 4px; }
 .timelineRemarks { font-size: 12px; color: #777; margin-top: 2px; }
+.timelinePhoto {
+    display: block;
+    max-width: 200px;
+    max-height: 200px;
+    border-radius: 6px;
+    margin-top: 6px;
+    cursor: zoom-in;
+}
+.chronoPhotoButton { background: #546e7a; margin-top: 6px; }
+.chronoPhotoPreview {
+    position: relative;
+    display: inline-block;
+    margin-top: 8px;
+}
+.chronoPhotoPreview img {
+    max-width: 140px;
+    max-height: 140px;
+    border-radius: 6px;
+    display: block;
+}
+.chronoPhotoRemoveButton {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: #d32f2f;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 11px;
+    padding: 3px 7px;
+}
+.photoLightboxOverlay { background: rgba(0,0,0,0.9); flex-direction: column; }
+.photoLightboxImg {
+    max-width: 92vw;
+    max-height: 85vh;
+    border-radius: 4px;
+}
+.photoLightboxCloseButton {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+}
 .reactionSummary {
     display: flex;
     flex-wrap: wrap;
@@ -977,6 +1026,14 @@ input, select {
             </select>
             <input id="chronoMessage" placeholder="内容を入力">
             <input id="chronoRemarks" placeholder="備考（任意）">
+
+            <input type="file" id="chronoPhotoInput" accept="image/*" capture="environment" style="display:none" onchange="onChronoPhotoSelected(event)">
+            <button type="button" class="settingsButton chronoPhotoButton" onclick="document.getElementById('chronoPhotoInput').click()">📷 写真を添付</button>
+            <div id="chronoPhotoPreview" class="chronoPhotoPreview" style="display:none">
+                <img id="chronoPhotoPreviewImg" src="">
+                <button type="button" class="chronoPhotoRemoveButton" onclick="clearChronoPhoto()">✕ 取消</button>
+            </div>
+
             <button id="chronoSendButton" class="settingsButton" onclick="sendChronology()">送信</button>
 
             <div id="timeline"></div>
@@ -1069,6 +1126,11 @@ input, select {
         <div id="reactionDetailBody"></div>
         <button class="confirmBtnCancel reactionDetailCloseButton" onclick="closeReactionDetail()">閉じる</button>
     </div>
+</div>
+
+<div id="photoLightboxOverlay" class="confirmOverlay photoLightboxOverlay" onclick="closePhotoLightbox()">
+    <img id="photoLightboxImg" class="photoLightboxImg" src="" onclick="event.stopPropagation()">
+    <button class="photoLightboxCloseButton" onclick="closePhotoLightbox()">✕</button>
 </div>
 
 <script>
@@ -3823,7 +3885,71 @@ socket.on("chronology", data => {
    クロノロジー送信
 ================================================== */
 
-function sendChronology(){
+let chronoPhotoFile = null;
+
+function onChronoPhotoSelected(event){
+    const file = event.target.files && event.target.files[0];
+    if(!file){ return; }
+
+    chronoPhotoFile = file;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+        document.getElementById("chronoPhotoPreviewImg").src = reader.result;
+        document.getElementById("chronoPhotoPreview").style.display = "block";
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearChronoPhoto(){
+    chronoPhotoFile = null;
+    document.getElementById("chronoPhotoInput").value = "";
+    document.getElementById("chronoPhotoPreview").style.display = "none";
+    document.getElementById("chronoPhotoPreviewImg").src = "";
+}
+
+// 通信量・保存容量を抑えるため、送信前に長辺1600pxへ縮小しJPEGへ変換する
+function compressChronoPhoto(file){
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const maxSide = 1600;
+            const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.round(img.width * scale);
+            canvas.height = Math.round(img.height * scale);
+
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            canvas.toBlob(
+                blob => blob ? resolve(blob) : reject(new Error("画像の変換に失敗しました")),
+                "image/jpeg",
+                0.8
+            );
+        };
+        img.onerror = () => reject(new Error("画像の読み込みに失敗しました"));
+        img.src = URL.createObjectURL(file);
+    });
+}
+
+async function uploadChronoPhoto(file){
+    const blob = await compressChronoPhoto(file);
+    const path = `chronology/${currentAuthUser.id}/${Date.now()}.jpg`;
+
+    const { error: uploadError } = await supabaseClient.storage
+        .from("photos")
+        .upload(path, blob, { contentType: "image/jpeg" });
+
+    if(uploadError){
+        throw uploadError;
+    }
+
+    const { data } = supabaseClient.storage.from("photos").getPublicUrl(path);
+    return data.publicUrl;
+}
+
+async function sendChronology(){
     if(!currentAuthUser){
         alert("先にログインしてください");
         return;
@@ -3835,16 +3961,46 @@ function sendChronology(){
 
     const category = document.getElementById("chronoCategory").value;
     const remarks = document.getElementById("chronoRemarks").value.trim();
+    const photoFile = chronoPhotoFile;
+
+    const sendButton = document.getElementById("chronoSendButton");
+    if(sendButton){
+        sendButton.disabled = true;
+        sendButton.textContent = photoFile ? "写真アップロード中..." : "送信中...";
+    }
+
+    let photoUrl = "";
+    try{
+        if(photoFile){
+            photoUrl = await uploadChronoPhoto(photoFile);
+        }
+    }
+    catch(err){
+        console.error("写真アップロードエラー:", err);
+        alert("写真のアップロードに失敗しました。もう一度お試しください。");
+        if(sendButton){
+            sendButton.disabled = false;
+            sendButton.textContent = "送信";
+        }
+        return;
+    }
 
     socket.emit("addChronology", {
         message: msg,
         user: document.getElementById("name").value,
         category: category,
-        remarks: remarks
+        remarks: remarks,
+        photoUrl: photoUrl
     });
 
     element.value = "";
     document.getElementById("chronoRemarks").value = "";
+    clearChronoPhoto();
+
+    if(sendButton){
+        sendButton.disabled = false;
+        sendButton.textContent = "送信";
+    }
 }
 
 /* ==================================================
@@ -3898,6 +4054,10 @@ function renderChronologyItem(item){
         ? `<div class="timelineRemarks">📝 ${escapeHtml(item.remarks)}</div>`
         : "";
 
+    const photoLine = item.photoUrl
+        ? `<img class="timelinePhoto" src="${escapeHtml(item.photoUrl)}" loading="lazy" onclick="event.stopPropagation(); openPhotoLightbox('${escapeHtml(item.photoUrl)}')">`
+        : "";
+
     const tapToReact = item.id ? `onclick="toggleReactionPicker(${item.id})"` : "";
     const idAttr = item.id ? `data-chronology-id="${item.id}"` : "";
 
@@ -3914,10 +4074,25 @@ function renderChronologyItem(item){
             </div>
             <div class="timelineMessage">${escapeHtml(item.message || "")}</div>
             ${remarksLine}
+            ${photoLine}
             ${renderReactionSummary(item)}
             ${item.id ? renderReactionPicker(item) : ""}
         </div>
     `;
+}
+
+function openPhotoLightbox(url){
+    const overlay = document.getElementById("photoLightboxOverlay");
+    const img = document.getElementById("photoLightboxImg");
+    if(overlay && img){
+        img.src = url;
+        overlay.classList.add("active");
+    }
+}
+
+function closePhotoLightbox(){
+    const overlay = document.getElementById("photoLightboxOverlay");
+    if(overlay){ overlay.classList.remove("active"); }
 }
 
 function toggleReaction(chronologyId, emoji){
