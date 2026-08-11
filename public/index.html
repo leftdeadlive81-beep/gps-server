@@ -1171,7 +1171,8 @@ input, select {
 <div id="historyOverlay" class="confirmOverlay" onclick="closeHistoryViewer()">
     <div class="confirmBox" onclick="event.stopPropagation()">
         <div class="reactionDetailTitle" id="historyUserName">🕒 移動履歴</div>
-        <input type="date" id="historyDateInput" class="historyDateInput" onchange="loadUserHistory()">
+        <input type="date" id="historyDateInput" class="historyDateInput">
+        <button class="settingsButton" onclick="loadUserHistory()">🔍 この日の経路を表示</button>
         <div id="historyStatusText" class="historyStatusText"></div>
         <button class="confirmBtnCancel reactionDetailCloseButton" onclick="closeHistoryViewer()">閉じる</button>
     </div>
@@ -3646,10 +3647,11 @@ function openHistoryViewer(userId, name){
         dateInput.value = jstDateString(today);
     }
 
+    const statusElement = document.getElementById("historyStatusText");
+    if(statusElement){ statusElement.textContent = ""; }
+
     const overlay = document.getElementById("historyOverlay");
     if(overlay){ overlay.classList.add("active"); }
-
-    loadUserHistory();
 }
 
 function closeHistoryViewer(){
