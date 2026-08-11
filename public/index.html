@@ -3602,14 +3602,14 @@ function renderPointMarker(name, p){
         ? `${escapeHtml(p.createdBy || "不明")}　${new Date(Number(p.created)).toLocaleString("ja-JP", { hour12: false })}`
         : "-";
 
+    const utm = proj4("EPSG:4326", UTM_PROJ, [Number(p.lon), Number(p.lat)]);
+
     marker.bindPopup(`
         <b>${typeInfo.emoji} ${escapeHtml(name)}</b>
         <br>
         <span style="color:#666;">${typeInfo.label}</span>
         <br>
-        ${Number(p.lat).toFixed(6)}
-        <br>
-        ${Number(p.lon).toFixed(6)}
+        UTM 52S　E：${Math.round(utm[0])}　N：${Math.round(utm[1])}
         <br>
         <span style="color:#666; font-size:12px;">👤 登録：${registeredInfo}</span>
         <br>
