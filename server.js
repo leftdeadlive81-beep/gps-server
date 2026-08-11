@@ -2193,6 +2193,29 @@ io.on("connection", socket => {
     });
 
     //====================================================
+    // クロノロジー削除
+    //====================================================
+
+    socket.on("deleteChronology", async chronologyId => {
+        const id = Number(chronologyId);
+        if (!Number.isFinite(id)) { return; }
+
+        try {
+            await pool.query("DELETE FROM chronology_reactions WHERE chronology_id=$1", [id]);
+            await pool.query("DELETE FROM chronology WHERE id=$1", [id]);
+        }
+        catch (err) {
+            console.error("クロノロジー削除エラー:", err);
+            return;
+        }
+
+        chronology = chronology.filter(item => item.id !== id);
+        delete chronologyReactions[id];
+
+        io.emit("chronologyDeleted", id);
+    });
+
+    //====================================================
     // クロノロジー 過去ログ（もっと見る）
     //====================================================
 

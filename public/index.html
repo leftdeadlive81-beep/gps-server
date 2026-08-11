@@ -535,6 +535,13 @@ input, select {
 }
 .timelineCategory.catUrgent { background: #c62828; }
 .timelineSender { font-weight: bold; color: #333; }
+.timelineDeleteButton {
+    border: none;
+    background: transparent;
+    font-size: 12px;
+    padding: 0 0 0 4px;
+    vertical-align: middle;
+}
 .timelineMessage { font-size: 14px; margin-top: 4px; }
 .timelineRemarks { font-size: 12px; color: #777; margin-top: 2px; }
 .timelinePhoto {
@@ -4315,7 +4322,10 @@ function renderChronologyItem(item){
                     </span>
                     <span class="timelineSender">${escapeHtml(item.user || "-")}</span>
                 </span>
-                <span>${escapeHtml(item.time || "")}</span>
+                <span>
+                    ${escapeHtml(item.time || "")}
+                    ${item.id ? `<button class="timelineDeleteButton" onclick="event.stopPropagation(); deleteChronologyItem(${item.id})">🗑</button>` : ""}
+                </span>
             </div>
             <div class="timelineMessage">${escapeHtml(item.message || "")}</div>
             ${remarksLine}
@@ -4361,6 +4371,19 @@ socket.on("chronologyReactionUpdate", data => {
         if(item){ item.reactions = data.reactions || {}; }
     });
 
+    renderChronology();
+});
+
+async function deleteChronologyItem(chronologyId){
+    const ok = await showConfirm("この投稿を削除しますか？\n（全員のタイムラインから削除されます）");
+    if(!ok){ return; }
+
+    socket.emit("deleteChronology", chronologyId);
+}
+
+socket.on("chronologyDeleted", chronologyId => {
+    chronology = chronology.filter(item => item.id !== chronologyId);
+    olderChronology = olderChronology.filter(item => item.id !== chronologyId);
     renderChronology();
 });
 
