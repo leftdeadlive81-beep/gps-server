@@ -1138,6 +1138,10 @@ function levelFromExperience(experience) {
     return Math.floor((experience || 0) / 100) + 1;
 }
 
+function formatJstDateTime(ms) {
+    return new Date(ms).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", hour12: false });
+}
+
 //============================================================
 // Socket.IO
 //============================================================
@@ -2260,6 +2264,180 @@ io.on("connection", socket => {
         delete chronologyReactions[id];
 
         io.emit("chronologyDeleted", id);
+    });
+
+    //====================================================
+    // シフト引き継ぎメモ（スレッド掲示板、クロノロジーとは
+    // 別テーブル handover_threads / handover_replies）
+    //====================================================
+
+    socket.on("getHandoverThreads", async (params, callback) => {
+        try {
+            const result = await pool.query(
+                "SELECT id, title, created_by, last_activity, reply_count FROM handover_threads ORDER BY last_activity DESC LIMIT 200"
+            );
+
+            const threads = result.rows.map(row => ({
+                id: row.id,
+                title: row.title,
+                createdBy: row.created_by,
+                replyCount: row.reply_count,
+                lastActivityText: formatJstDateTime(Number(row.last_activity))
+            }));
+
+            if (typeof callback === "function") { callback({ success: true, threads: threads }); }
+        }
+        catch (err) {
+            console.error("引き継ぎスレッド一覧取得エラー:", err);
+            if (typeof callback === "function") { callback({ success: false, message: err.message }); }
+        }
+    });
+
+    socket.on("createHandoverThread", async (data, callback) => {
+        const title = String((data && data.title) || "").trim().slice(0, 200);
+        const body = String((data && data.body) || "").trim();
+        const createdBy = String((data && data.user) || "").trim() || "不明";
+
+        if (!title || !body) {
+            if (typeof callback === "function") { callback({ success: false, message: "題名と内容を入力してください" }); }
+            return;
+        }
+
+        const now = Date.now();
+
+        try {
+            const result = await pool.query(
+                `
+                INSERT INTO handover_threads (title, body, created_by, created, last_activity, reply_count)
+                VALUES ($1,$2,$3,$4,$4,0)
+                RETURNING id
+                `,
+                [title, body, createdBy, now]
+            );
+
+            const thread = {
+                id: result.rows[0].id,
+                title: title,
+                createdBy: createdBy,
+                replyCount: 0,
+                lastActivityText: formatJstDateTime(now)
+            };
+
+            io.emit("handoverThreadAdded", thread);
+
+            if (typeof callback === "function") { callback({ success: true, threadId: thread.id }); }
+        }
+        catch (err) {
+            console.error("引き継ぎスレッド作成エラー:", err);
+            if (typeof callback === "function") { callback({ success: false, message: err.message }); }
+        }
+    });
+
+    socket.on("getHandoverReplies", async (params, callback) => {
+        const threadId = Number(params && params.threadId);
+
+        if (!Number.isFinite(threadId)) {
+            if (typeof callback === "function") { callback({ success: false, message: "不正なスレッドIDです" }); }
+            return;
+        }
+
+        try {
+            const threadResult = await pool.query(
+                "SELECT id, title, body, created_by, created FROM handover_threads WHERE id=$1",
+                [threadId]
+            );
+
+            if (threadResult.rows.length === 0) {
+                if (typeof callback === "function") { callback({ success: false, message: "スレッドが見つかりません" }); }
+                return;
+            }
+
+            const row = threadResult.rows[0];
+            const thread = {
+                id: row.id,
+                title: row.title,
+                body: row.body,
+                createdBy: row.created_by,
+                createdText: formatJstDateTime(Number(row.created))
+            };
+
+            const repliesResult = await pool.query(
+                "SELECT id, message, created_by, created FROM handover_replies WHERE thread_id=$1 ORDER BY created ASC",
+                [threadId]
+            );
+
+            const replies = repliesResult.rows.map(r => ({
+                id: r.id,
+                message: r.message,
+                createdBy: r.created_by,
+                createdText: formatJstDateTime(Number(r.created))
+            }));
+
+            if (typeof callback === "function") { callback({ success: true, thread: thread, replies: replies }); }
+        }
+        catch (err) {
+            console.error("引き継ぎスレッド取得エラー:", err);
+            if (typeof callback === "function") { callback({ success: false, message: err.message }); }
+        }
+    });
+
+    socket.on("addHandoverReply", async (data, callback) => {
+        const threadId = Number(data && data.threadId);
+        const message = String((data && data.message) || "").trim();
+        const createdBy = String((data && data.user) || "").trim() || "不明";
+
+        if (!Number.isFinite(threadId) || !message) {
+            if (typeof callback === "function") { callback({ success: false, message: "パラメータが不正です" }); }
+            return;
+        }
+
+        const now = Date.now();
+
+        try {
+            const insertResult = await pool.query(
+                `
+                INSERT INTO handover_replies (thread_id, message, created_by, created)
+                VALUES ($1,$2,$3,$4)
+                RETURNING id
+                `,
+                [threadId, message, createdBy, now]
+            );
+
+            const updateResult = await pool.query(
+                `
+                UPDATE handover_threads
+                SET last_activity = $2, reply_count = reply_count + 1
+                WHERE id = $1
+                RETURNING reply_count
+                `,
+                [threadId, now]
+            );
+
+            if (updateResult.rows.length === 0) {
+                if (typeof callback === "function") { callback({ success: false, message: "スレッドが見つかりません" }); }
+                return;
+            }
+
+            const reply = {
+                id: insertResult.rows[0].id,
+                message: message,
+                createdBy: createdBy,
+                createdText: formatJstDateTime(now)
+            };
+
+            io.emit("handoverReplyAdded", {
+                threadId: threadId,
+                reply: reply,
+                replyCount: updateResult.rows[0].reply_count,
+                lastActivityText: formatJstDateTime(now)
+            });
+
+            if (typeof callback === "function") { callback({ success: true }); }
+        }
+        catch (err) {
+            console.error("引き継ぎ返信エラー:", err);
+            if (typeof callback === "function") { callback({ success: false, message: err.message }); }
+        }
     });
 
     //====================================================

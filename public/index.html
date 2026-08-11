@@ -790,6 +790,33 @@ input, select {
     background: #8d6e63;
     color: white;
 }
+.newHandoverThreadForm { margin-top: 8px; }
+.newHandoverThreadForm textarea {
+    width: 100%;
+    padding: 9px;
+    border: 1px solid var(--input-border);
+    border-radius: 5px;
+    font-size: 15px;
+    background: var(--input-bg);
+    color: var(--text);
+    font-family: inherit;
+    resize: vertical;
+}
+.handoverThreadListItem {
+    padding: 8px 4px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+}
+.handoverThreadListItem:last-child { border-bottom: none; }
+.handoverThreadListTitle { font-weight: bold; font-size: 14px; }
+.handoverThreadListMeta {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
 .inviteQrDesc { font-size: 13px; color: var(--text-muted); margin: 0 0 8px; }
 .inviteQrCode {
     display: flex;
@@ -1134,7 +1161,7 @@ input, select {
         <div class="gpsButtonRow">
             <button class="reportButton" onclick="openStatusReportPanel()">🔄 報告</button>
             <button class="templateButton" onclick="openTemplateReportPanel()">📋 定型文</button>
-            <button class="handoverButton" onclick="openHandoverThread()">📝 引き継ぎ</button>
+            <button class="handoverButton" onclick="openHandoverList()">📝 引き継ぎ</button>
             <button class="arButton" onclick="startAR()">📷 AR表示</button>
         </div>
         <div id="gpsStatus">🔴 GPS停止中</div>
@@ -1317,15 +1344,36 @@ input, select {
     </div>
 </div>
 
-<div id="handoverThreadOverlay" class="confirmOverlay" onclick="closeHandoverThread()">
+<div id="handoverListOverlay" class="confirmOverlay" onclick="closeHandoverList()">
     <div class="confirmBox handoverThreadBox" onclick="event.stopPropagation()">
         <div class="reactionDetailTitle">📝 シフト引き継ぎメモ</div>
-        <div id="handoverThreadList" class="handoverThreadList"></div>
-        <div class="handoverThreadInputRow">
-            <input id="handoverThreadInput" placeholder="引き継ぎ内容を入力" onkeydown="if(event.key==='Enter'){sendHandoverNote();}">
-            <button onclick="sendHandoverNote()">送信</button>
+
+        <button class="settingsButton" onclick="toggleNewHandoverThreadForm()">＋ 新規スレッド</button>
+
+        <div id="newHandoverThreadForm" class="newHandoverThreadForm" style="display:none">
+            <input id="newHandoverThreadTitle" placeholder="スレッドの題名">
+            <textarea id="newHandoverThreadBody" placeholder="内容を入力" rows="3"></textarea>
+            <button class="settingsButton" onclick="submitNewHandoverThread(this)">スレッドを立てる</button>
         </div>
-        <button class="confirmBtnCancel reactionDetailCloseButton" onclick="closeHandoverThread()">閉じる</button>
+
+        <div id="handoverThreadList" class="handoverThreadList"></div>
+        <button class="confirmBtnCancel reactionDetailCloseButton" onclick="closeHandoverList()">閉じる</button>
+    </div>
+</div>
+
+<div id="handoverDetailOverlay" class="confirmOverlay" onclick="closeHandoverDetail()">
+    <div class="confirmBox handoverThreadBox" onclick="event.stopPropagation()">
+        <div class="reactionDetailTitle" id="handoverDetailTitle">スレッド</div>
+
+        <div id="handoverDetailList" class="handoverThreadList"></div>
+
+        <div class="handoverThreadInputRow">
+            <input id="handoverReplyInput" placeholder="返信を入力" onkeydown="if(event.key==='Enter'){submitHandoverReply();}">
+            <button onclick="submitHandoverReply()">送信</button>
+        </div>
+
+        <button class="settingsButton" onclick="backToHandoverList()">← 一覧へ戻る</button>
+        <button class="confirmBtnCancel reactionDetailCloseButton" onclick="closeHandoverDetail()">閉じる</button>
     </div>
 </div>
 
@@ -3117,80 +3165,208 @@ function sendTemplateReport(index){
 }
 
 /* ==================================================
-   シフト引き継ぎメモ（スレッド形式）
-   ・クロノロジーの1カテゴリとして保存し、既存の保存・削除・
-     リアルタイム同期の仕組みをそのまま利用する
+   シフト引き継ぎメモ（掲示板形式・スレッドフロート型）
+   ・クロノロジーとは完全に別のDB（handover_threads /
+     handover_replies）に保存する
+   ・新しい返信が付くたびそのスレッドが一覧の上に浮上する
 ================================================== */
 
-const HANDOVER_CATEGORY = "引き継ぎ";
+let handoverThreads = [];
+let handoverCurrentThreadId = null;
 
-function getHandoverNotes(){
-    return chronology.concat(olderChronology)
-        .filter(item => item.category === HANDOVER_CATEGORY)
-        .sort((a, b) => (a.id || 0) - (b.id || 0));
-}
-
-function renderHandoverThread(){
-    const listElement = document.getElementById("handoverThreadList");
-    if(!listElement){ return; }
-
-    const notes = getHandoverNotes();
-
-    if(notes.length === 0){
-        listElement.innerHTML = `<div class="handoverThreadEmpty">まだ引き継ぎメモはありません</div>`;
-        return;
-    }
-
-    listElement.innerHTML = notes.map(item => `
-        <div class="handoverNoteItem">
-            <div class="handoverNoteHeader">
-                <span>${escapeHtml(item.user || "-")}</span>
-                <span>${escapeHtml(item.time || "")}</span>
-            </div>
-            <div>${escapeHtml(item.message || "")}</div>
-        </div>
-    `).join("");
-
-    listElement.scrollTop = listElement.scrollHeight;
-}
-
-function openHandoverThread(){
+function openHandoverList(){
     if(!currentAuthUser){
         alert("先にログインしてください");
         return;
     }
 
-    renderHandoverThread();
+    socket.emit("getHandoverThreads", null, response => {
+        if(response && response.success){
+            handoverThreads = response.threads || [];
+            renderHandoverThreadList();
+        }
+    });
 
-    const overlay = document.getElementById("handoverThreadOverlay");
+    const overlay = document.getElementById("handoverListOverlay");
     if(overlay){ overlay.classList.add("active"); }
-
-    setTimeout(() => {
-        const listElement = document.getElementById("handoverThreadList");
-        if(listElement){ listElement.scrollTop = listElement.scrollHeight; }
-    }, 50);
 }
 
-function closeHandoverThread(){
-    const overlay = document.getElementById("handoverThreadOverlay");
+function closeHandoverList(){
+    const overlay = document.getElementById("handoverListOverlay");
     if(overlay){ overlay.classList.remove("active"); }
+
+    const form = document.getElementById("newHandoverThreadForm");
+    if(form){ form.style.display = "none"; }
 }
 
-function sendHandoverNote(){
-    const input = document.getElementById("handoverThreadInput");
+function toggleNewHandoverThreadForm(){
+    const form = document.getElementById("newHandoverThreadForm");
+    if(form){ form.style.display = form.style.display === "none" ? "block" : "none"; }
+}
+
+function renderHandoverThreadList(){
+    const listElement = document.getElementById("handoverThreadList");
+    if(!listElement){ return; }
+
+    if(handoverThreads.length === 0){
+        listElement.innerHTML = `<div class="handoverThreadEmpty">まだスレッドはありません</div>`;
+        return;
+    }
+
+    listElement.innerHTML = handoverThreads.map(thread => `
+        <div class="handoverThreadListItem" onclick="openHandoverThreadDetail(${thread.id})">
+            <div class="handoverThreadListTitle">${escapeHtml(thread.title)}</div>
+            <div class="handoverThreadListMeta">
+                <span>${escapeHtml(thread.createdBy || "-")}　💬${thread.replyCount || 0}</span>
+                <span>${escapeHtml(thread.lastActivityText || "")}</span>
+            </div>
+        </div>
+    `).join("");
+}
+
+async function submitNewHandoverThread(button){
+    const titleInput = document.getElementById("newHandoverThreadTitle");
+    const bodyInput = document.getElementById("newHandoverThreadBody");
+    const title = titleInput.value.trim();
+    const body = bodyInput.value.trim();
+
+    if(!title || !body){
+        alert("題名と内容を入力してください");
+        return;
+    }
+
+    socket.emit("createHandoverThread", {
+        title: title,
+        body: body,
+        user: document.getElementById("name").value
+    }, response => {
+        if(!response || !response.success){
+            alert("スレッドの作成に失敗しました");
+            return;
+        }
+
+        titleInput.value = "";
+        bodyInput.value = "";
+        toggleNewHandoverThreadForm();
+    });
+}
+
+function openHandoverThreadDetail(threadId){
+    handoverCurrentThreadId = threadId;
+
+    socket.emit("getHandoverReplies", { threadId: threadId }, response => {
+        if(!response || !response.success){
+            alert("スレッドの取得に失敗しました");
+            return;
+        }
+
+        renderHandoverThreadDetail(response.thread, response.replies);
+
+        const listOverlay = document.getElementById("handoverListOverlay");
+        if(listOverlay){ listOverlay.classList.remove("active"); }
+
+        const detailOverlay = document.getElementById("handoverDetailOverlay");
+        if(detailOverlay){ detailOverlay.classList.add("active"); }
+    });
+}
+
+function renderHandoverThreadDetail(thread, replies){
+    const titleElement = document.getElementById("handoverDetailTitle");
+    if(titleElement){ titleElement.textContent = thread.title; }
+
+    const listElement = document.getElementById("handoverDetailList");
+    if(!listElement){ return; }
+
+    const opRow = `
+        <div class="handoverNoteItem">
+            <div class="handoverNoteHeader">
+                <span>${escapeHtml(thread.createdBy || "-")}</span>
+                <span>${escapeHtml(thread.createdText || "")}</span>
+            </div>
+            <div>${escapeHtml(thread.body || "")}</div>
+        </div>
+    `;
+
+    const replyRows = replies.map(reply => `
+        <div class="handoverNoteItem">
+            <div class="handoverNoteHeader">
+                <span>${escapeHtml(reply.createdBy || "-")}</span>
+                <span>${escapeHtml(reply.createdText || "")}</span>
+            </div>
+            <div>${escapeHtml(reply.message || "")}</div>
+        </div>
+    `).join("");
+
+    listElement.innerHTML = opRow + replyRows;
+    listElement.scrollTop = listElement.scrollHeight;
+}
+
+function submitHandoverReply(){
+    if(!handoverCurrentThreadId){ return; }
+
+    const input = document.getElementById("handoverReplyInput");
     const message = input.value.trim();
     if(!message){ return; }
 
-    socket.emit("addChronology", {
+    socket.emit("addHandoverReply", {
+        threadId: handoverCurrentThreadId,
         message: message,
-        user: document.getElementById("name").value,
-        category: HANDOVER_CATEGORY,
-        remarks: "",
-        photoUrl: ""
+        user: document.getElementById("name").value
+    }, response => {
+        if(!response || !response.success){
+            alert("返信の送信に失敗しました");
+        }
     });
 
     input.value = "";
 }
+
+function backToHandoverList(){
+    const detailOverlay = document.getElementById("handoverDetailOverlay");
+    if(detailOverlay){ detailOverlay.classList.remove("active"); }
+
+    handoverCurrentThreadId = null;
+    openHandoverList();
+}
+
+function closeHandoverDetail(){
+    const detailOverlay = document.getElementById("handoverDetailOverlay");
+    if(detailOverlay){ detailOverlay.classList.remove("active"); }
+    handoverCurrentThreadId = null;
+}
+
+socket.on("handoverThreadAdded", thread => {
+    handoverThreads = handoverThreads.filter(t => t.id !== thread.id);
+    handoverThreads.unshift(thread);
+    renderHandoverThreadList();
+});
+
+socket.on("handoverReplyAdded", data => {
+    const thread = handoverThreads.find(t => t.id === data.threadId);
+    if(thread){
+        thread.replyCount = data.replyCount;
+        thread.lastActivityText = data.lastActivityText;
+        handoverThreads = handoverThreads.filter(t => t.id !== data.threadId);
+        handoverThreads.unshift(thread);
+        renderHandoverThreadList();
+    }
+
+    if(handoverCurrentThreadId === data.threadId){
+        const listElement = document.getElementById("handoverDetailList");
+        if(listElement){
+            listElement.insertAdjacentHTML("beforeend", `
+                <div class="handoverNoteItem">
+                    <div class="handoverNoteHeader">
+                        <span>${escapeHtml(data.reply.createdBy || "-")}</span>
+                        <span>${escapeHtml(data.reply.createdText || "")}</span>
+                    </div>
+                    <div>${escapeHtml(data.reply.message || "")}</div>
+                </div>
+            `);
+            listElement.scrollTop = listElement.scrollHeight;
+        }
+    }
+});
 
 /* ==================================================
    現在地1回取得
@@ -4622,7 +4798,6 @@ socket.on("pointDeleted", name => {
 socket.on("chronology", data => {
     chronology = Array.isArray(data) ? data : [];
     renderChronology();
-    renderHandoverThread();
 });
 
 /* ==================================================
@@ -4877,7 +5052,6 @@ socket.on("chronologyDeleted", chronologyId => {
     chronology = chronology.filter(item => item.id !== chronologyId);
     olderChronology = olderChronology.filter(item => item.id !== chronologyId);
     renderChronology();
-    renderHandoverThread();
 });
 
 function renderChronology(){
