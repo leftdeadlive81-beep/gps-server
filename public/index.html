@@ -1184,6 +1184,12 @@ input, select {
 
         <div class="card settingsCard">
             <div class="sectionTitle">🔐 アカウント</div>
+
+            <input type="password" id="newPassword" placeholder="新しいパスワード（6文字以上）" autocomplete="new-password">
+            <input type="password" id="newPassword2" placeholder="新しいパスワード（確認）" autocomplete="new-password">
+            <button class="settingsButton" onclick="changePassword(this)">🔑 パスワードを変更</button>
+            <div id="changePasswordStatus"></div>
+
             <button class="settingsButton gpsButton" onclick="startGPS()">📡 GPS開始</button>
             <button class="settingsButton logoutButton" onclick="logoutUser()">🚪 ログアウト</button>
         </div>
@@ -1942,6 +1948,44 @@ async function logoutUser(){
     catch(error){
         console.error("ログアウトエラー:", error);
         alert("ログアウトに失敗しました：" + error.message);
+    }
+}
+
+/* ==================================================
+   パスワード変更
+================================================== */
+
+async function changePassword(button){
+    const statusElement = document.getElementById("changePasswordStatus");
+    const password = document.getElementById("newPassword").value;
+    const password2 = document.getElementById("newPassword2").value;
+
+    if(password.length < 6){
+        if(statusElement){ statusElement.textContent = "パスワードは6文字以上にしてください"; }
+        return;
+    }
+    if(password !== password2){
+        if(statusElement){ statusElement.textContent = "パスワードが一致しません"; }
+        return;
+    }
+
+    if(button){ button.disabled = true; }
+    if(statusElement){ statusElement.textContent = "変更中..."; }
+
+    try{
+        const { error } = await supabaseClient.auth.updateUser({ password: password });
+        if(error){ throw error; }
+
+        document.getElementById("newPassword").value = "";
+        document.getElementById("newPassword2").value = "";
+        if(statusElement){ statusElement.textContent = "🟢 パスワードを変更しました"; }
+    }
+    catch(error){
+        console.error("パスワード変更エラー:", error);
+        if(statusElement){ statusElement.textContent = "変更に失敗しました：" + error.message; }
+    }
+    finally{
+        if(button){ button.disabled = false; }
     }
 }
 
