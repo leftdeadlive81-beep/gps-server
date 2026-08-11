@@ -679,6 +679,21 @@ input, select {
     border: 2px solid white;
 }
 .pointDivIcon span { font-size: 17px; line-height: 1; }
+.evacHazardRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+.evacHazardChip {
+    background: #e8f5e9;
+    color: #2e7d32;
+    border: 1px solid #a5d6a7;
+    border-radius: 10px;
+    padding: 2px 7px;
+    font-size: 11px;
+    white-space: nowrap;
+}
 .liveCameraPopupImg {
     display: block;
     width: 100%;
@@ -1810,6 +1825,27 @@ const gsiPale = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{
 
 osm.addTo(map);
 
+/* ==================================================
+   ハザードマップ（国土交通省 ハザードマップポータルサイト提供のタイル）
+================================================== */
+
+const HAZARD_TILE_OPTIONS = {
+    attribution: "ハザードマップポータルサイト（国土交通省）",
+    opacity: 0.6,
+    maxNativeZoom: 17
+};
+
+const floodHazardLayer = L.tileLayer(
+    "https://disaportaldata.gsi.go.jp/raster/01_flood_l2_shinsuishin_data/{z}/{x}/{y}.png",
+    HAZARD_TILE_OPTIONS
+);
+
+const sedimentHazardLayer = L.layerGroup([
+    L.tileLayer("https://disaportaldata.gsi.go.jp/raster/05_dosekiryukeikaikuiki/{z}/{x}/{y}.png", HAZARD_TILE_OPTIONS),
+    L.tileLayer("https://disaportaldata.gsi.go.jp/raster/05_kyukeishakeikaikuiki/{z}/{x}/{y}.png", HAZARD_TILE_OPTIONS),
+    L.tileLayer("https://disaportaldata.gsi.go.jp/raster/05_jisuberikeikaikuiki/{z}/{x}/{y}.png", HAZARD_TILE_OPTIONS)
+]);
+
 let trafficRegulationLayer = L.layerGroup();
 
 /* ==================================================
@@ -1892,6 +1928,82 @@ function refreshLiveCameraImage(index){
 }
 
 renderLiveCameras();
+
+/* ==================================================
+   指定緊急避難場所（熊本市、国のオープンデータを整形して同梱）
+   ・出典: くまもとデータ連携基盤データカタログポータルサイト
+     「指定緊急避難場所一覧（熊本市）」（CC-BY）
+   ・全国統一のオープンデータは無いため、当面は活動エリアの
+     中心である熊本市のみを収録している
+   ・データ量が大きいため、レイヤーを一度ONにした時だけ
+     /data/kumamoto_evacuation_sites.json を取得する（遅延読込）
+================================================== */
+
+// 各地点のhazards配列の並び: [洪水,土砂災害,高潮,地震,津波,大規模火事,内水氾濫,火山現象]
+const EVACUATION_HAZARD_INFO = [
+    { emoji: "💧", label: "洪水" },
+    { emoji: "⛰️", label: "土砂災害" },
+    { emoji: "🌀", label: "高潮" },
+    { emoji: "🏚️", label: "地震" },
+    { emoji: "🌊", label: "津波" },
+    { emoji: "🔥", label: "大規模火事" },
+    { emoji: "☔", label: "内水氾濫" },
+    { emoji: "🌋", label: "火山現象" }
+];
+
+const evacuationLayer = L.markerClusterGroup({
+    maxClusterRadius: 60,
+    disableClusteringAtZoom: 16
+});
+
+let evacuationSitesLoaded = false;
+
+const evacuationIcon = L.divIcon({
+    className: "pointDivIconWrapper",
+    html: `<div class="pointDivIcon" style="background:#2e7d32;"><span>🏃</span></div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+    popupAnchor: [0, -22]
+});
+
+async function loadEvacuationSites(){
+    if(evacuationSitesLoaded){ return; }
+    evacuationSitesLoaded = true;
+
+    try{
+        const response = await fetch("/data/kumamoto_evacuation_sites.json");
+        const sites = await response.json();
+
+        sites.forEach(site => {
+            const hazardChips = EVACUATION_HAZARD_INFO
+                .filter((info, index) => site.h[index] === 1)
+                .map(info => `<span class="evacHazardChip">${info.emoji} ${info.label}</span>`)
+                .join("");
+
+            const marker = L.marker([site.lat, site.lon], { icon: evacuationIcon });
+            marker.bindPopup(`
+                <div class="popupCard">
+                    <div class="popupHeader"><b>🏃 ${escapeHtml(site.n)}</b></div>
+                    <div class="popupSection">${escapeHtml(site.a)}</div>
+                    <div class="evacHazardRow">${hazardChips || "対応災害種別の情報なし"}</div>
+                    <div class="popupFooter">
+                        <button onclick="startNavigation(${site.lat}, ${site.lon}, '${escapeHtml(site.n)}')">🧭 ここへナビ</button>
+                        <div class="popupUserId">出典：くまもとデータ連携基盤（CC-BY）・熊本市のみ収録</div>
+                    </div>
+                </div>
+            `);
+            marker.addTo(evacuationLayer);
+        });
+    }
+    catch(err){
+        console.error("避難場所データの取得に失敗しました:", err);
+        evacuationSitesLoaded = false;
+    }
+}
+
+map.on("overlayadd", e => {
+    if(e.layer === evacuationLayer){ loadEvacuationSites(); }
+});
 
 /* ==================================================
    雨雲レーダー（RainViewer）
@@ -2049,6 +2161,9 @@ L.control.layers(
         "👥 隊員": memberLayerGroup,
         "📍 登録地点": pointClusterGroup,
         "📷 ライブカメラ（熊本）": liveCameraLayer,
+        "🏃 避難場所（熊本市）": evacuationLayer,
+        "🌊 洪水浸水想定区域": floodHazardLayer,
+        "⛰️ 土砂災害警戒区域": sedimentHazardLayer,
         "🧭 UTMグリッド": utmGridLayer,
         "🚧 交通規制": trafficRegulationLayer,
         "🌧 雨雲レーダー": rainRadarLayer
