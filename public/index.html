@@ -725,6 +725,7 @@ input, select {
     text-decoration: none;
 }
 .locateButton:hover { background: #f4f4f4; }
+.fullscreenButton { border-top: 1px solid #ccc; font-size: 15px; }
 
 .utmCenterBox {
     background: rgba(255,255,255,.92);
@@ -1713,6 +1714,10 @@ const pointClusterGroup = L.markerClusterGroup({
 });
 map.addLayer(pointClusterGroup);
 
+// 隊員が増えても地図の見通しを保てるよう、レイヤーコントロールから表示/非表示を切り替えられるようにする
+const memberLayerGroup = L.layerGroup();
+map.addLayer(memberLayerGroup);
+
 const osm = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors"
 });
@@ -1890,6 +1895,8 @@ L.control.layers(
         "🚒 防災淡色地図": gsiPale
     },
     {
+        "👥 隊員": memberLayerGroup,
+        "📍 登録地点": pointClusterGroup,
         "🧭 UTMグリッド": utmGridLayer,
         "🚧 交通規制": trafficRegulationLayer,
         "🌧 雨雲レーダー": rainRadarLayer
@@ -1921,10 +1928,37 @@ locateControl.onAdd = function(){
         goToCurrentLocation();
     });
 
+    if(document.fullscreenEnabled || document.webkitFullscreenEnabled){
+        const fsLink = L.DomUtil.create("a", "locateButton fullscreenButton", container);
+        fsLink.href = "#";
+        fsLink.title = "全画面表示";
+        fsLink.innerHTML = "⛶";
+
+        L.DomEvent.on(fsLink, "click", e => {
+            L.DomEvent.preventDefault(e);
+            toggleMapFullscreen();
+        });
+
+        document.addEventListener("fullscreenchange", () => {
+            fsLink.innerHTML = document.fullscreenElement ? "✕" : "⛶";
+            fsLink.title = document.fullscreenElement ? "全画面表示を終了" : "全画面表示";
+        });
+    }
+
     return container;
 };
 
 locateControl.addTo(map);
+
+function toggleMapFullscreen(){
+    if(document.fullscreenElement){
+        document.exitFullscreen();
+    }
+    else{
+        const request = document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen;
+        request.call(document.documentElement).catch(err => console.error("全画面表示エラー:", err));
+    }
+}
 
 function goToCurrentLocation(){
     if(!("geolocation" in navigator)){
@@ -3082,7 +3116,7 @@ function renderUserMarker(userId, user){
         markers[userId] = L.marker(
             [lat, lon],
             { icon: createIcon(user.icon || user.iconType || "1") }
-        ).addTo(map);
+        ).addTo(memberLayerGroup);
     }
 
     markers[userId].setIcon(createIcon(user.icon || user.iconType || "1"));
@@ -3172,7 +3206,7 @@ socket.on("locations", data => {
     Object.keys(markers).forEach(userId => {
         if(!data[userId]){
             if(markers[userId]){
-                map.removeLayer(markers[userId]);
+                memberLayerGroup.removeLayer(markers[userId]);
             }
             delete markers[userId];
         }
