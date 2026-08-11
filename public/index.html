@@ -377,9 +377,9 @@ input, select {
 .navDistanceText { font-size: 22px; font-weight: bold; margin-top: 4px; }
 .navSummaryText { font-size: 12px; opacity: .85; margin-top: 2px; }
 
-.gpsButtonRow { display: flex; gap: 6px; margin-top: 7px; }
-.gpsButton, .reportButton, .arButton, .templateButton {
-    flex: 1;
+.gpsButtonRow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.gpsButton, .reportButton, .arButton, .templateButton, .handoverButton {
+    flex: 1 1 calc(50% - 6px);
     padding: 10px;
     border: none;
     border-radius: 6px;
@@ -389,6 +389,7 @@ input, select {
 .gpsButton { background: #388e3c; }
 .reportButton { background: #1976d2; }
 .templateButton { background: #00897b; }
+.handoverButton { background: #8d6e63; }
 .arButton { background: #6a1b9a; }
 #gpsStatus, #lastSend { text-align: center; padding: 4px; font-size: 13px; }
 
@@ -755,6 +756,40 @@ input, select {
 #registerStatus { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
 .templateReportOption { background: #546e7a; text-align: center; white-space: normal; }
 .templateReportEmergency { background: #d32f2f; }
+.handoverThreadBox {
+    max-width: 380px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+}
+.handoverThreadBox .reactionDetailTitle { text-align: center; }
+.handoverThreadList {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 45vh;
+    margin: 8px 0;
+    padding-right: 4px;
+}
+.handoverThreadEmpty { text-align: center; color: var(--text-muted); font-size: 13px; padding: 20px 0; }
+.handoverNoteItem { padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.handoverNoteHeader {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+}
+.handoverThreadInputRow { display: flex; gap: 6px; margin-bottom: 8px; }
+.handoverThreadInputRow input { flex: 1; margin-bottom: 0; }
+.handoverThreadInputRow button {
+    padding: 0 14px;
+    border: none;
+    border-radius: 6px;
+    background: #8d6e63;
+    color: white;
+}
 .inviteQrDesc { font-size: 13px; color: var(--text-muted); margin: 0 0 8px; }
 .inviteQrCode {
     display: flex;
@@ -1099,6 +1134,7 @@ input, select {
         <div class="gpsButtonRow">
             <button class="reportButton" onclick="openStatusReportPanel()">🔄 報告</button>
             <button class="templateButton" onclick="openTemplateReportPanel()">📋 定型文</button>
+            <button class="handoverButton" onclick="openHandoverThread()">📝 引き継ぎ</button>
             <button class="arButton" onclick="startAR()">📷 AR表示</button>
         </div>
         <div id="gpsStatus">🔴 GPS停止中</div>
@@ -1278,6 +1314,18 @@ input, select {
         <button class="settingsButton templateReportOption" onclick="sendTemplateReport(1)">⏸ 回答保留、確認して連絡する</button>
         <button class="settingsButton templateReportOption templateReportEmergency" onclick="sendTemplateReport(2)">🚨 緊急事態発生　応援を求む</button>
         <button class="confirmBtnCancel reactionDetailCloseButton" onclick="closeTemplateReportPanel()">キャンセル</button>
+    </div>
+</div>
+
+<div id="handoverThreadOverlay" class="confirmOverlay" onclick="closeHandoverThread()">
+    <div class="confirmBox handoverThreadBox" onclick="event.stopPropagation()">
+        <div class="reactionDetailTitle">📝 シフト引き継ぎメモ</div>
+        <div id="handoverThreadList" class="handoverThreadList"></div>
+        <div class="handoverThreadInputRow">
+            <input id="handoverThreadInput" placeholder="引き継ぎ内容を入力" onkeydown="if(event.key==='Enter'){sendHandoverNote();}">
+            <button onclick="sendHandoverNote()">送信</button>
+        </div>
+        <button class="confirmBtnCancel reactionDetailCloseButton" onclick="closeHandoverThread()">閉じる</button>
     </div>
 </div>
 
@@ -3069,6 +3117,82 @@ function sendTemplateReport(index){
 }
 
 /* ==================================================
+   シフト引き継ぎメモ（スレッド形式）
+   ・クロノロジーの1カテゴリとして保存し、既存の保存・削除・
+     リアルタイム同期の仕組みをそのまま利用する
+================================================== */
+
+const HANDOVER_CATEGORY = "引き継ぎ";
+
+function getHandoverNotes(){
+    return chronology.concat(olderChronology)
+        .filter(item => item.category === HANDOVER_CATEGORY)
+        .sort((a, b) => (a.id || 0) - (b.id || 0));
+}
+
+function renderHandoverThread(){
+    const listElement = document.getElementById("handoverThreadList");
+    if(!listElement){ return; }
+
+    const notes = getHandoverNotes();
+
+    if(notes.length === 0){
+        listElement.innerHTML = `<div class="handoverThreadEmpty">まだ引き継ぎメモはありません</div>`;
+        return;
+    }
+
+    listElement.innerHTML = notes.map(item => `
+        <div class="handoverNoteItem">
+            <div class="handoverNoteHeader">
+                <span>${escapeHtml(item.user || "-")}</span>
+                <span>${escapeHtml(item.time || "")}</span>
+            </div>
+            <div>${escapeHtml(item.message || "")}</div>
+        </div>
+    `).join("");
+
+    listElement.scrollTop = listElement.scrollHeight;
+}
+
+function openHandoverThread(){
+    if(!currentAuthUser){
+        alert("先にログインしてください");
+        return;
+    }
+
+    renderHandoverThread();
+
+    const overlay = document.getElementById("handoverThreadOverlay");
+    if(overlay){ overlay.classList.add("active"); }
+
+    setTimeout(() => {
+        const listElement = document.getElementById("handoverThreadList");
+        if(listElement){ listElement.scrollTop = listElement.scrollHeight; }
+    }, 50);
+}
+
+function closeHandoverThread(){
+    const overlay = document.getElementById("handoverThreadOverlay");
+    if(overlay){ overlay.classList.remove("active"); }
+}
+
+function sendHandoverNote(){
+    const input = document.getElementById("handoverThreadInput");
+    const message = input.value.trim();
+    if(!message){ return; }
+
+    socket.emit("addChronology", {
+        message: message,
+        user: document.getElementById("name").value,
+        category: HANDOVER_CATEGORY,
+        remarks: "",
+        photoUrl: ""
+    });
+
+    input.value = "";
+}
+
+/* ==================================================
    現在地1回取得
 ================================================== */
 
@@ -4498,6 +4622,7 @@ socket.on("pointDeleted", name => {
 socket.on("chronology", data => {
     chronology = Array.isArray(data) ? data : [];
     renderChronology();
+    renderHandoverThread();
 });
 
 /* ==================================================
@@ -4752,6 +4877,7 @@ socket.on("chronologyDeleted", chronologyId => {
     chronology = chronology.filter(item => item.id !== chronologyId);
     olderChronology = olderChronology.filter(item => item.id !== chronologyId);
     renderChronology();
+    renderHandoverThread();
 });
 
 function renderChronology(){
