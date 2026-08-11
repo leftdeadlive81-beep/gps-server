@@ -934,7 +934,14 @@ async function loadPoints() {
         const result = await pool.query("SELECT * FROM points ORDER BY created");
 
         result.rows.forEach(point => {
-            points[point.name] = point;
+            points[point.name] = {
+                name: point.name,
+                type: point.type,
+                lat: point.lat,
+                lon: point.lon,
+                created: point.created,
+                createdBy: point.created_by
+            };
         });
 
         console.log("地点復元:", Object.keys(points));
@@ -1648,25 +1655,28 @@ io.on("connection", socket => {
             console.log("地点受信:", point);
 
             const created = Date.now();
+            const createdBy = String(point.createdBy || "").trim() || "不明";
 
             await pool.query(
                 `
                 INSERT INTO points
-                (name, type, lat, lon, created)
-                VALUES ($1,$2,$3,$4,$5)
+                (name, type, lat, lon, created, created_by)
+                VALUES ($1,$2,$3,$4,$5,$6)
                 ON CONFLICT(name)
                 DO UPDATE SET
                     type=$2,
                     lat=$3,
                     lon=$4,
-                    created=$5
+                    created=$5,
+                    created_by=$6
                 `,
                 [
                     point.name,
                     point.type || "point",
                     point.lat,
                     point.lon,
-                    created
+                    created,
+                    createdBy
                 ]
             );
 
@@ -1675,7 +1685,8 @@ io.on("connection", socket => {
                 type: point.type || "point",
                 lat: point.lat,
                 lon: point.lon,
-                created: created
+                created: created,
+                createdBy: createdBy
             };
 
             io.emit("pointAdded", points[point.name]);
