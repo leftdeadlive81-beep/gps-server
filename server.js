@@ -1402,6 +1402,14 @@ async function processLocationUpdate(data, socket) {
         const heading = Number.isFinite(headingValue) && headingValue >= 0 ? headingValue : null;
 
         //================================================
+        // ⑧.3 バッテリー残量（対応端末のみ。取得できない場合はnull）
+        //================================================
+
+        const batteryValue = Number(data.battery);
+        const battery = Number.isFinite(batteryValue) && batteryValue >= 0 && batteryValue <= 100 ? batteryValue : null;
+        const batteryCharging = Boolean(data.batteryCharging);
+
+        //================================================
         // ⑧.5 経験値・LV（1km移動＝経験値1、サーバー側でのみ計算・ユーザー操作不可）
         //================================================
 
@@ -1452,6 +1460,8 @@ async function processLocationUpdate(data, socket) {
             utmN: utmN,
             speed: speed,
             heading: heading,
+            battery: battery,
+            batteryCharging: batteryCharging,
             movement: movement,
             destination: destination,
             water: water,

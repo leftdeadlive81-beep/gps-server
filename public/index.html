@@ -13,6 +13,35 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
 
 <style>
+:root {
+    --bg: #f2f4f7;
+    --text: #222831;
+    --text-muted: #667085;
+    --card-bg: #ffffff;
+    --border: #dddddd;
+    --input-bg: #ffffff;
+    --input-border: #aaaaaa;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg: #14171a;
+        --text: #e4e6eb;
+        --text-muted: #9aa1ab;
+        --card-bg: #1e2227;
+        --border: #33383e;
+        --input-bg: #262a2f;
+        --input-border: #454b52;
+    }
+}
+:root[data-theme="dark"] {
+    --bg: #14171a;
+    --text: #e4e6eb;
+    --text-muted: #9aa1ab;
+    --card-bg: #1e2227;
+    --border: #33383e;
+    --input-bg: #262a2f;
+    --input-border: #454b52;
+}
 * { box-sizing: border-box; }
 html, body {
     margin: 0;
@@ -20,7 +49,8 @@ html, body {
     width: 100%;
     height: 100%;
     font-family: "Yu Gothic", "Meiryo", sans-serif;
-    background: #f2f4f7;
+    background: var(--bg);
+    color: var(--text);
 }
 button, input, select { font-family: inherit; }
 button { cursor: pointer; }
@@ -42,14 +72,14 @@ button { cursor: pointer; }
     margin: 0 auto 8px;
     padding: 24px 20px;
     border-radius: 14px;
-    background: #ffffff;
+    background: var(--card-bg);
     box-shadow: 0 2px 10px rgba(0,0,0,.15);
 }
 .authBrand { text-align: center; }
 .authBrandTagline {
     font-size: 12px;
     font-weight: 600;
-    color: #8792a0;
+    color: var(--text-muted);
     letter-spacing: .04em;
     margin-bottom: 8px;
 }
@@ -65,23 +95,24 @@ button { cursor: pointer; }
     text-align: center;
     margin: 20px 0 14px;
     font-size: 15px;
-    color: #37424c;
+    color: var(--text);
 }
 .authBox input {
     width: 100%;
     padding: 12px 14px;
     margin-bottom: 10px;
-    border: 1px solid #d7dce2;
+    border: 1px solid var(--input-border);
     border-radius: 8px;
     font-size: 16px;
-    background: #fbfcfd;
+    background: var(--input-bg);
+    color: var(--text);
     transition: border-color .15s, box-shadow .15s;
 }
 .authBox input:focus {
     outline: none;
     border-color: #1976d2;
     box-shadow: 0 0 0 3px rgba(25,118,210,.12);
-    background: #fff;
+    background: var(--input-bg);
 }
 .authButtonPrimary, .authButtonSecondary {
     display: block;
@@ -101,13 +132,13 @@ button { cursor: pointer; }
     border: 1px solid #c7d7ea;
 }
 .authButtonSecondary:active { background: #f2f6fb; }
-.authDivider { height: 1px; background: #eceff2; margin: 18px 0 4px; }
+.authDivider { height: 1px; background: var(--border); margin: 18px 0 4px; }
 .authHint {
     margin: 12px 0 0;
     text-align: center;
     font-size: 12px;
     line-height: 1.6;
-    color: #8792a0;
+    color: var(--text-muted);
 }
 .authMessage {
     margin-top: 14px;
@@ -121,12 +152,12 @@ button { cursor: pointer; }
     margin: 0 auto;
     padding: 14px 16px;
     border-radius: 14px;
-    background: #f5f7fa;
-    border: 1px solid #d9dee5;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
     box-shadow: 0 1px 5px rgba(0,0,0,.08);
     font-size: 13px;
     line-height: 1.6;
-    color: #333;
+    color: var(--text);
 }
 .authInfoTitle {
     font-size: 16px;
@@ -203,7 +234,7 @@ button { cursor: pointer; }
 .tabContent.active { display: block; }
 
 .card {
-    background: white;
+    background: var(--card-bg);
     border-radius: 8px;
     padding: 10px;
     margin-bottom: 8px;
@@ -217,9 +248,11 @@ button { cursor: pointer; }
 input, select {
     width: 100%;
     padding: 9px;
-    border: 1px solid #aaa;
+    border: 1px solid var(--input-border);
     border-radius: 5px;
     font-size: 15px;
+    background: var(--input-bg);
+    color: var(--text);
 }
 .settingsButton {
     width: 100%;
@@ -457,7 +490,7 @@ input, select {
 
 .userHeader, .userRow {
     display: grid;
-    grid-template-columns: 48px minmax(80px, 1fr) 50px 55px 65px 64px;
+    grid-template-columns: 48px minmax(80px, 1fr) 55px 65px 64px;
     align-items: center;
     gap: 3px;
 }
@@ -470,12 +503,14 @@ input, select {
 }
 .userRow {
     min-height: 42px;
-    border-bottom: 1px solid #ddd;
-    background: white;
+    border-bottom: 1px solid var(--border);
+    background: var(--card-bg);
     font-size: 13px;
     text-align: center;
 }
 .userRow > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.batteryLow { color: #d32f2f; font-weight: bold; }
+.batteryMedium { color: #ef6c00; font-weight: bold; }
 .deleteButton { border: none; background: transparent; font-size: 18px; }
 .userActionsCell { display: flex; justify-content: center; gap: 2px; }
 .historyButton { border: none; background: transparent; font-size: 16px; }
@@ -491,7 +526,8 @@ input, select {
 }
 .confirmOverlay.active { display: flex; }
 .confirmBox {
-    background: white;
+    background: var(--card-bg);
+    color: var(--text);
     border-radius: 8px;
     padding: 20px;
     width: 80%;
@@ -511,7 +547,7 @@ input, select {
 .confirmBtnOk { background: #d32f2f; color: white; }
 
 .timelineItem {
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid var(--border);
     padding: 8px 3px;
     cursor: pointer;
 }
@@ -521,7 +557,7 @@ input, select {
     justify-content: space-between;
     gap: 8px;
     font-size: 11px;
-    color: #666;
+    color: var(--text-muted);
 }
 .timelineCategory {
     display: inline-block;
@@ -534,7 +570,7 @@ input, select {
     white-space: nowrap;
 }
 .timelineCategory.catUrgent { background: #c62828; }
-.timelineSender { font-weight: bold; color: #333; }
+.timelineSender { font-weight: bold; color: var(--text); }
 .timelineDeleteButton {
     border: none;
     background: transparent;
@@ -543,7 +579,7 @@ input, select {
     vertical-align: middle;
 }
 .timelineMessage { font-size: 14px; margin-top: 4px; }
-.timelineRemarks { font-size: 12px; color: #777; margin-top: 2px; }
+.timelineRemarks { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 .timelinePhoto {
     display: block;
     max-width: 200px;
@@ -605,7 +641,7 @@ input, select {
     gap: 4px;
     margin-top: 6px;
     padding-top: 6px;
-    border-top: 1px dashed #ddd;
+    border-top: 1px dashed var(--border);
 }
 .reactionPicker.open { display: flex; }
 .reactionButton {
@@ -629,18 +665,18 @@ input, select {
     align-items: flex-start;
     gap: 10px;
     padding: 6px 0;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--border);
     text-align: left;
 }
 .reactionDetailRow:last-child { border-bottom: none; }
 .reactionDetailEmoji { font-size: 18px; }
-.reactionDetailNames { font-size: 13px; color: #333; }
-.reactionDetailEmpty { text-align: center; color: #999; font-size: 13px; padding: 10px 0; }
+.reactionDetailNames { font-size: 13px; color: var(--text); }
+.reactionDetailEmpty { text-align: center; color: var(--text-muted); font-size: 13px; padding: 10px 0; }
 .reactionDetailCloseButton { width: 100%; margin-top: 12px; }
 .chronoLoadMoreDone {
     text-align: center;
     font-size: 12px;
-    color: #999;
+    color: var(--text-muted);
     padding: 12px 0;
 }
 #chronoLoadMoreButton { margin-top: 10px; }
@@ -694,12 +730,12 @@ input, select {
     margin: 10px 0;
     padding: 8px;
     font-size: 14px;
-    border: 1px solid #ccc;
+    border: 1px solid var(--input-border);
     border-radius: 6px;
 }
 .historyStatusText {
     font-size: 13px;
-    color: #555;
+    color: var(--text-muted);
     min-height: 18px;
     margin-bottom: 8px;
 }
@@ -1049,7 +1085,7 @@ input, select {
         <div class="card">
             <div class="sectionTitle">👥 接続ユーザー</div>
             <div class="userHeader">
-                <div>状態</div><div>名前</div><div>💧水</div><div>⛽燃料</div><div>最終</div><div>操作</div>
+                <div>状態</div><div>名前</div><div>🔋</div><div>最終</div><div>操作</div>
             </div>
             <div id="users"></div>
         </div>
@@ -1083,6 +1119,11 @@ input, select {
     </div>
 
     <div id="settingsTab" class="tabContent">
+
+        <div class="card settingsCard">
+            <div class="sectionTitle">🌙 表示設定</div>
+            <button id="darkModeToggleButton" class="settingsButton" onclick="toggleDarkMode()">🌙 ダークモードにする</button>
+        </div>
 
         <div class="card settingsCard">
             <div class="sectionTitle">👤 使用者情報</div>
@@ -1241,6 +1282,84 @@ let lastSendTime = 0;
 
 const SEND_INTERVAL = 30000;
 const MOVE_DISTANCE = 10;
+
+/* ==================================================
+   バッテリー残量の共有
+   ・Battery Status APIはChromium系ブラウザのみ対応（Safari/Firefoxは非対応）。
+     未対応環境ではcurrentBatteryLevelがnullのままとなり、一覧には「-」を表示する
+================================================== */
+
+let currentBatteryLevel = null;
+let currentBatteryCharging = false;
+const BATTERY_LOW_THRESHOLD = 15;
+let batteryLowWarned = false;
+
+async function initBatteryMonitoring(){
+    if(typeof navigator.getBattery !== "function"){ return; }
+
+    try{
+        const battery = await navigator.getBattery();
+
+        const update = () => {
+            currentBatteryLevel = Math.round(battery.level * 100);
+            currentBatteryCharging = battery.charging;
+
+            if(!currentBatteryCharging && currentBatteryLevel <= BATTERY_LOW_THRESHOLD){
+                if(!batteryLowWarned){
+                    batteryLowWarned = true;
+                    alert(`⚠️ バッテリー残量が${currentBatteryLevel}%です。充電をお願いします。`);
+                }
+            }
+            else{
+                batteryLowWarned = false;
+            }
+        };
+
+        update();
+        battery.addEventListener("levelchange", update);
+        battery.addEventListener("chargingchange", update);
+    }
+    catch(err){
+        console.error("バッテリー状態の取得に失敗しました:", err);
+    }
+}
+
+initBatteryMonitoring();
+
+/* ==================================================
+   ダークモード
+================================================== */
+
+function applyDarkModePreference(){
+    const saved = localStorage.getItem("puttan_theme");
+    if(saved === "dark" || saved === "light"){
+        document.documentElement.setAttribute("data-theme", saved);
+    }
+
+    updateDarkModeButtonLabel();
+}
+
+function isDarkModeActive(){
+    const saved = localStorage.getItem("puttan_theme");
+    if(saved === "dark"){ return true; }
+    if(saved === "light"){ return false; }
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+function updateDarkModeButtonLabel(){
+    const button = document.getElementById("darkModeToggleButton");
+    if(!button){ return; }
+    button.textContent = isDarkModeActive() ? "☀️ ライトモードにする" : "🌙 ダークモードにする";
+}
+
+function toggleDarkMode(){
+    const next = isDarkModeActive() ? "light" : "dark";
+    localStorage.setItem("puttan_theme", next);
+    document.documentElement.setAttribute("data-theme", next);
+    updateDarkModeButtonLabel();
+}
+
+applyDarkModePreference();
 
 /* ==================================================
    任意ログインID → Auth用メール
@@ -2698,7 +2817,9 @@ function sendLocation(lat, lon, speed, heading){
         iconType: iconType,
         device_id: getDeviceId(),
         speed: Number.isFinite(speed) ? speed : null,
-        heading: Number.isFinite(heading) ? heading : null
+        heading: Number.isFinite(heading) ? heading : null,
+        battery: currentBatteryLevel,
+        batteryCharging: currentBatteryCharging
     };
 
     console.log("GPS送信:", locationData);
@@ -3559,11 +3680,8 @@ function renderUsers(data){
                 <div onclick="focusUserById('${safeUserId}')">
                     ${safeName}
                 </div>
-                <div onclick="focusUserById('${safeUserId}')">
-                    ${user.water ?? 0}
-                </div>
-                <div onclick="focusUserById('${safeUserId}')">
-                    ${user.fuel ?? 0}
+                <div class="${batteryCellClass(user.battery)}" onclick="focusUserById('${safeUserId}')">
+                    ${formatBatteryLabel(user.battery, user.batteryCharging)}
                 </div>
                 <div onclick="focusUserById('${safeUserId}')">
                     ${timeAgo(user.lastUpdate)}
@@ -3826,6 +3944,22 @@ function getStatusBadge(user){
     }
 
     return { cls: "isOffline", label: "🔴 OFFLINE", shortLabel: "🔴OFF" };
+}
+
+/* ==================================================
+   バッテリー残量の表示
+================================================== */
+
+function formatBatteryLabel(battery, charging){
+    if(battery === null || battery === undefined){ return "-"; }
+    return `${Math.round(battery)}%${charging ? "⚡" : ""}`;
+}
+
+function batteryCellClass(battery){
+    if(battery === null || battery === undefined){ return ""; }
+    if(battery <= 15){ return "batteryLow"; }
+    if(battery <= 30){ return "batteryMedium"; }
+    return "";
 }
 
 /* ==================================================
