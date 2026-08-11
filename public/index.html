@@ -743,6 +743,21 @@ input, select {
     min-height: 18px;
     margin-bottom: 8px;
 }
+.inviteQrDesc { font-size: 13px; color: var(--text-muted); margin: 0 0 8px; }
+.inviteQrCode {
+    display: flex;
+    justify-content: center;
+    padding: 12px;
+    background: #fff;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+.inviteQrUrlText {
+    font-size: 12px;
+    color: var(--text-muted);
+    word-break: break-all;
+    margin-bottom: 10px;
+}
 .evacHazardRow {
     display: flex;
     flex-wrap: wrap;
@@ -963,6 +978,7 @@ input, select {
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 
 </head>
 <body>
@@ -1183,6 +1199,12 @@ input, select {
         </div>
 
         <div class="card settingsCard">
+            <div class="sectionTitle">🔗 招待QR</div>
+            <p class="inviteQrDesc">読み取ると新規登録画面が開くQRコードを表示します。新しく参加する隊員に見せてください。</p>
+            <button class="settingsButton" onclick="showInviteQr()">📱 招待QRを表示</button>
+        </div>
+
+        <div class="card settingsCard">
             <div class="sectionTitle">🔐 アカウント</div>
 
             <input type="password" id="newPassword" placeholder="新しいパスワード（6文字以上）" autocomplete="new-password">
@@ -1233,6 +1255,16 @@ input, select {
         <button class="settingsButton" onclick="loadUserHistory()">🔍 この日の経路を表示</button>
         <div id="historyStatusText" class="historyStatusText"></div>
         <button class="confirmBtnCancel reactionDetailCloseButton" onclick="closeHistoryViewer()">閉じる</button>
+    </div>
+</div>
+
+<div id="inviteQrOverlay" class="confirmOverlay" onclick="closeInviteQr()">
+    <div class="confirmBox" onclick="event.stopPropagation()">
+        <div class="reactionDetailTitle">📱 招待QR</div>
+        <div id="inviteQrCode" class="inviteQrCode"></div>
+        <div id="inviteQrUrlText" class="inviteQrUrlText"></div>
+        <button class="settingsButton" onclick="copyInviteUrl()">📋 URLをコピー</button>
+        <button class="confirmBtnCancel reactionDetailCloseButton" onclick="closeInviteQr()">閉じる</button>
     </div>
 </div>
 
@@ -1408,6 +1440,11 @@ function showAuth(){
     if(appScreen){ appScreen.style.display = "none"; }
     document.body.style.overflow = "";
     socket.emit("viewerInactive");
+
+    // 招待QR/URL（?invite=xxxx）からアクセスした場合は新規登録画面を初期表示する
+    if(new URLSearchParams(window.location.search).has("invite")){
+        showRegister();
+    }
 }
 
 function showApp(){
@@ -1948,6 +1985,52 @@ async function logoutUser(){
     catch(error){
         console.error("ログアウトエラー:", error);
         alert("ログアウトに失敗しました：" + error.message);
+    }
+}
+
+/* ==================================================
+   招待QR（読み取ると新規登録画面が開くURLをQR化する）
+================================================== */
+
+let inviteQrInstance = null;
+
+function getInviteUrl(){
+    return `${window.location.origin}/?invite=team`;
+}
+
+function showInviteQr(){
+    const container = document.getElementById("inviteQrCode");
+    const urlText = document.getElementById("inviteQrUrlText");
+    const url = getInviteUrl();
+
+    if(container){
+        container.innerHTML = "";
+        inviteQrInstance = new QRCode(container, {
+            text: url,
+            width: 200,
+            height: 200
+        });
+    }
+
+    if(urlText){ urlText.textContent = url; }
+
+    const overlay = document.getElementById("inviteQrOverlay");
+    if(overlay){ overlay.classList.add("active"); }
+}
+
+function closeInviteQr(){
+    const overlay = document.getElementById("inviteQrOverlay");
+    if(overlay){ overlay.classList.remove("active"); }
+}
+
+async function copyInviteUrl(){
+    try{
+        await navigator.clipboard.writeText(getInviteUrl());
+        alert("URLをコピーしました");
+    }
+    catch(error){
+        console.error("コピーエラー:", error);
+        alert("コピーに失敗しました。URLを長押しして手動でコピーしてください。");
     }
 }
 
