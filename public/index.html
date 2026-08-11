@@ -743,6 +743,15 @@ input, select {
     min-height: 18px;
     margin-bottom: 8px;
 }
+.statusReportBox {
+    max-width: 360px;
+    max-height: 85vh;
+    overflow-y: auto;
+    text-align: left;
+}
+.statusReportBox .reactionDetailTitle { text-align: center; }
+.statusReportBox .sectionTitle { margin-top: 12px; }
+#registerStatus { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
 .inviteQrDesc { font-size: 13px; color: var(--text-muted); margin: 0 0 8px; }
 .inviteQrCode {
     display: flex;
@@ -1085,7 +1094,7 @@ input, select {
         </div>
 
         <div class="gpsButtonRow">
-            <button class="reportButton" onclick="updateStatus(this)">🔄 現在地報告</button>
+            <button class="reportButton" onclick="openStatusReportPanel()">🔄 現在地報告</button>
             <button class="arButton" onclick="startAR()">📷 AR表示</button>
         </div>
         <div id="gpsStatus">🔴 GPS停止中</div>
@@ -1142,46 +1151,6 @@ input, select {
         <div class="card settingsCard">
             <div class="sectionTitle">🌙 表示設定</div>
             <button id="darkModeToggleButton" class="settingsButton" onclick="toggleDarkMode()">🌙 ダークモードにする</button>
-        </div>
-
-        <div class="card settingsCard">
-            <div class="sectionTitle">👤 使用者情報</div>
-            <div class="inputRow">
-                <input id="name" value="隊員A" placeholder="表示名">
-                <select id="iconType">
-                    <option value="1">👤 隊員</option>
-                    <option value="2">🚙 小型</option>
-                    <option value="3">🚚 中型</option>
-                    <option value="4">🚛 大型</option>
-                </select>
-            </div>
-            <button class="settingsButton" onclick="registerUser(this)">👤 ユーザー情報を保存</button>
-            <div id="registerStatus">未登録</div>
-        </div>
-
-        <div class="card settingsCard">
-            <div class="sectionTitle">📋 活動状況</div>
-            <input id="status" placeholder="📋 現在の活動内容">
-            <input id="destination" placeholder="📍次の目的地">
-            <input id="status_next" placeholder="⚠️ 懸念事項">
-            <button class="settingsButton" onclick="registerUser(this)">📋 活動状況を保存</button>
-        </div>
-
-        <div class="card settingsCard">
-            <div class="sectionTitle">📦 物資管理</div>
-            <div class="inputRow">
-                <input id="water" type="number" value="100" placeholder="💧水量">
-                <input id="fuel" type="number" value="100" placeholder="⛽燃料">
-            </div>
-            <div class="inputRow">
-                <input id="item_a" type="text" placeholder="📦 物資1">
-                <input id="item_b" type="text" placeholder="📦 物資2">
-            </div>
-            <div class="inputRow">
-                <input id="item_c" type="text" placeholder="📦 物資3">
-                <input id="item_d" type="text" placeholder="📦 物資4">
-            </div>
-            <button class="settingsButton" onclick="registerUser(this)">📦 物資情報を保存</button>
         </div>
 
         <div class="card settingsCard">
@@ -1255,6 +1224,46 @@ input, select {
         <button class="settingsButton" onclick="loadUserHistory()">🔍 この日の経路を表示</button>
         <div id="historyStatusText" class="historyStatusText"></div>
         <button class="confirmBtnCancel reactionDetailCloseButton" onclick="closeHistoryViewer()">閉じる</button>
+    </div>
+</div>
+
+<div id="statusReportOverlay" class="confirmOverlay" onclick="closeStatusReportPanel()">
+    <div class="confirmBox statusReportBox" onclick="event.stopPropagation()">
+        <div class="reactionDetailTitle">🔄 現在地報告</div>
+
+        <div class="sectionTitle">👤 使用者情報</div>
+        <div class="inputRow">
+            <input id="name" value="隊員A" placeholder="表示名">
+            <select id="iconType">
+                <option value="1">👤 隊員</option>
+                <option value="2">🚙 小型</option>
+                <option value="3">🚚 中型</option>
+                <option value="4">🚛 大型</option>
+            </select>
+        </div>
+        <div id="registerStatus">未登録</div>
+
+        <div class="sectionTitle">📋 活動状況</div>
+        <input id="status" placeholder="📋 現在の活動内容">
+        <input id="destination" placeholder="📍次の目的地">
+        <input id="status_next" placeholder="⚠️ 懸念事項">
+
+        <div class="sectionTitle">📦 物資管理</div>
+        <div class="inputRow">
+            <input id="water" type="number" value="100" placeholder="💧水量">
+            <input id="fuel" type="number" value="100" placeholder="⛽燃料">
+        </div>
+        <div class="inputRow">
+            <input id="item_a" type="text" placeholder="📦 物資1">
+            <input id="item_b" type="text" placeholder="📦 物資2">
+        </div>
+        <div class="inputRow">
+            <input id="item_c" type="text" placeholder="📦 物資3">
+            <input id="item_d" type="text" placeholder="📦 物資4">
+        </div>
+
+        <button id="statusReportSubmitButton" class="settingsButton" onclick="submitStatusReport(this)">🔄 報告する</button>
+        <button class="confirmBtnCancel reactionDetailCloseButton" onclick="closeStatusReportPanel()">閉じる</button>
     </div>
 </div>
 
@@ -1750,19 +1759,19 @@ async function resolveSocketUserId(){
 async function registerUser(button){
     if(!currentAuthUser){
         alert("先にログインしてください");
-        return;
+        return false;
     }
 
     const userId = await resolveSocketUserId();
     if(!userId){
         alert("ユーザーIDを取得できませんでした。再度ログインしてください。");
-        return;
+        return false;
     }
 
     const name = document.getElementById("name").value.trim();
     if(!name){
         alert("表示名を入力してください");
-        return;
+        return false;
     }
 
     const iconType = normalizeIconType(document.getElementById("iconType").value);
@@ -1806,10 +1815,12 @@ async function registerUser(button){
 
         await registerSocketUser();
         showButtonFeedback(button);
+        return true;
     }
     catch(error){
         console.error("ユーザー情報保存エラー:", error);
         alert("ユーザー情報の保存に失敗しました");
+        return false;
     }
 }
 
@@ -2974,32 +2985,31 @@ function getDeviceId(){
 
 /* ==================================================
    現在地報告
+   ・使用者情報／活動状況／物資管理をこの画面に集約し、
+     1回の送信で保存と位置報告をまとめて行う
 ================================================== */
 
-async function updateStatus(button){
+function openStatusReportPanel(){
     if(!currentAuthUser){
         alert("先にログインしてください");
         return;
     }
 
-    try{
-        const userId = await resolveSocketUserId();
-        if(!userId){
-            alert("ユーザーIDを取得できません。\n先にユーザー情報を保存してください。");
-            return;
-        }
+    const overlay = document.getElementById("statusReportOverlay");
+    if(overlay){ overlay.classList.add("active"); }
+}
 
-        socketUserId = userId;
+function closeStatusReportPanel(){
+    const overlay = document.getElementById("statusReportOverlay");
+    if(overlay){ overlay.classList.remove("active"); }
+}
 
-        if(!registered){
-            await registerSocketUser();
-        }
+async function submitStatusReport(button){
+    const saved = await registerUser(button);
+    if(!saved){ return; }
 
-        getCurrentPositionOnce(button);
-    }
-    catch(error){
-        console.error("現在地報告エラー:", error);
-    }
+    getCurrentPositionOnce(button);
+    closeStatusReportPanel();
 }
 
 /* ==================================================
