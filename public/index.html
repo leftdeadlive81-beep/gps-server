@@ -378,7 +378,7 @@ input, select {
 .navSummaryText { font-size: 12px; opacity: .85; margin-top: 2px; }
 
 .gpsButtonRow { display: flex; gap: 6px; margin-top: 7px; }
-.gpsButton, .reportButton, .arButton {
+.gpsButton, .reportButton, .arButton, .templateButton {
     flex: 1;
     padding: 10px;
     border: none;
@@ -388,6 +388,7 @@ input, select {
 }
 .gpsButton { background: #388e3c; }
 .reportButton { background: #1976d2; }
+.templateButton { background: #00897b; }
 .arButton { background: #6a1b9a; }
 #gpsStatus, #lastSend { text-align: center; padding: 4px; font-size: 13px; }
 
@@ -752,6 +753,8 @@ input, select {
 .statusReportBox .reactionDetailTitle { text-align: center; }
 .statusReportBox .sectionTitle { margin-top: 12px; }
 #registerStatus { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+.templateReportOption { background: #546e7a; text-align: center; white-space: normal; }
+.templateReportEmergency { background: #d32f2f; }
 .inviteQrDesc { font-size: 13px; color: var(--text-muted); margin: 0 0 8px; }
 .inviteQrCode {
     display: flex;
@@ -1095,6 +1098,7 @@ input, select {
 
         <div class="gpsButtonRow">
             <button class="reportButton" onclick="openStatusReportPanel()">🔄 報告</button>
+            <button class="templateButton" onclick="openTemplateReportPanel()">📋 定型文</button>
             <button class="arButton" onclick="startAR()">📷 AR表示</button>
         </div>
         <div id="gpsStatus">🔴 GPS停止中</div>
@@ -1264,6 +1268,16 @@ input, select {
 
         <button id="statusReportSubmitButton" class="settingsButton" onclick="submitStatusReport(this)">🔄 報告する</button>
         <button class="confirmBtnCancel reactionDetailCloseButton" onclick="closeStatusReportPanel()">閉じる</button>
+    </div>
+</div>
+
+<div id="templateReportOverlay" class="confirmOverlay" onclick="closeTemplateReportPanel()">
+    <div class="confirmBox" onclick="event.stopPropagation()">
+        <div class="reactionDetailTitle">📋 定型文報告</div>
+        <button class="settingsButton templateReportOption" onclick="sendTemplateReport(0)">✅ 人員・装備・車両等異状なし</button>
+        <button class="settingsButton templateReportOption" onclick="sendTemplateReport(1)">⏸ 回答保留、確認して連絡する</button>
+        <button class="settingsButton templateReportOption templateReportEmergency" onclick="sendTemplateReport(2)">🚨 緊急事態発生　応援を求む</button>
+        <button class="confirmBtnCancel reactionDetailCloseButton" onclick="closeTemplateReportPanel()">キャンセル</button>
     </div>
 </div>
 
@@ -3010,6 +3024,48 @@ async function submitStatusReport(button){
 
     getCurrentPositionOnce(button);
     closeStatusReportPanel();
+}
+
+/* ==================================================
+   定型文ワンタップ報告
+   ・緊急時に文字入力せず、選択式の定型メッセージを
+     クロノロジーへ即送信する
+================================================== */
+
+const REPORT_TEMPLATES = [
+    { category: "報告", message: "人員・装備・車両等異状なし" },
+    { category: "連絡", message: "回答保留、確認して連絡する" },
+    { category: "緊急", message: "緊急事態発生　応援を求む" }
+];
+
+function openTemplateReportPanel(){
+    if(!currentAuthUser){
+        alert("先にログインしてください");
+        return;
+    }
+
+    const overlay = document.getElementById("templateReportOverlay");
+    if(overlay){ overlay.classList.add("active"); }
+}
+
+function closeTemplateReportPanel(){
+    const overlay = document.getElementById("templateReportOverlay");
+    if(overlay){ overlay.classList.remove("active"); }
+}
+
+function sendTemplateReport(index){
+    const template = REPORT_TEMPLATES[index];
+    if(!template){ return; }
+
+    socket.emit("addChronology", {
+        message: template.message,
+        user: document.getElementById("name").value,
+        category: template.category,
+        remarks: "",
+        photoUrl: ""
+    });
+
+    closeTemplateReportPanel();
 }
 
 /* ==================================================
