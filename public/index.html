@@ -1626,6 +1626,18 @@ function calcSunEvent(lat, lon, date, isSunrise){
 
     const result = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
     result.setUTCMilliseconds(UT * 3600000);
+
+    // 経度によっては上記のUT(協定世界時)が日本時間で見て前後1日ずれることがあるため、
+    // 呼び出し元が意図した日本時間の暦日と一致する候補を選び直す
+    // （このズレにより、日中でも「翌日の夜明け」が返り常に夜明け表示になっていた）
+    const targetJstDate = date.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" });
+    const oneDayMs = 86400000;
+    for(const offset of [0, -oneDayMs, oneDayMs]){
+        const candidate = new Date(result.getTime() + offset);
+        if(candidate.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" }) === targetJstDate){
+            return candidate;
+        }
+    }
     return result;
 }
 
