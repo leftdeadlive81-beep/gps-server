@@ -1581,6 +1581,7 @@ async function processLocationUpdate(data, socket) {
             icon: iconType,
             iconType: iconType,
             online: true,
+            loggedOut: false,
             lastUpdate: now,
             experience: experience,
             level: level
@@ -2005,6 +2006,7 @@ io.on("connection", socket => {
 
                 movement: data.movement || oldUser?.movement || "",
                 online: true,
+                loggedOut: false,
                 lastUpdate: now,
 
                 water: Number(data.water) || 0,
@@ -2735,6 +2737,16 @@ io.on("connection", socket => {
 
     socket.on("userOffline", async userId => {
         await markUserOffline(userId);
+
+        // 自動オフライン判定（GPS途絶・切断）とは違い、本人の意思による
+        // 明示的なログアウトの時だけ、他端末の隊員一覧・地図から即座に隠す
+        // （プロフィール・物資・経験値等のデータはDB上に残ったままで、
+        // 次回ログイン時にそのまま復元される）
+        const user = users[userId];
+        if (user && !user.loggedOut) {
+            user.loggedOut = true;
+            broadcastUserUpdate(userId);
+        }
     });
 
     //====================================================

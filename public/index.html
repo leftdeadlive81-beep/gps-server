@@ -3966,7 +3966,7 @@ function renderAR(){
     Object.keys(latestUsersData || {}).forEach(userId => {
         if(userId === socketUserId){ return; }
         const u = latestUsersData[userId];
-        if(!u || u.lat == null || u.lon == null){ return; }
+        if(!u || u.loggedOut || u.lat == null || u.lon == null){ return; }
 
         const distance = getDistance(arMyLat, arMyLon, u.lat, u.lon);
         if(distance > AR_MAX_DISTANCE_M){ return; }
@@ -4360,6 +4360,15 @@ function stopNavigation(){
 
 function renderUserMarker(userId, user){
     if(!user){ return; }
+
+    if(user.loggedOut){
+        if(markers[userId]){
+            memberLayerGroup.removeLayer(markers[userId]);
+            delete markers[userId];
+        }
+        return;
+    }
+
     if(user.lat == null || user.lon == null){ return; }
 
     const lat = Number(user.lat);
@@ -4532,7 +4541,7 @@ function renderUsers(data){
 
     Object.keys(data).forEach(userId => {
         const user = data[userId];
-        if(!user){ return; }
+        if(!user || user.loggedOut){ return; }
 
         const safeUserId = escapeHtml(userId);
         const safeName = escapeHtml(user.display_name || user.name || userId);
