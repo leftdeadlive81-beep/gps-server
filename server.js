@@ -1241,15 +1241,33 @@ const socketCountByUserId = {};
 // （同じ端末の再接続・複数タブは device_id が同じなので許可される）
 const activeDeviceIdByUserId = {};
 
+// 1:1音声通話（WebRTC）中/呼び出し中のuserId -> 相手userId。
+// サーバーは発信・応答・ICE候補・終了の合図を中継するだけで、音声そのものは
+// 中継しない。このマップは同時多重発信の防止と、片方が切断した際に
+// 相手へ終了を通知するために使う
+const callPeerByUserId = {};
+
+function endCallPair(userId, reason) {
+    const peerId = callPeerByUserId[userId];
+    if (!peerId) { return; }
+
+    delete callPeerByUserId[userId];
+    delete callPeerByUserId[peerId];
+
+    io.to("user:" + peerId).emit("callEnd", { fromUserId: userId, reason: reason || "hangup" });
+}
+
 function associateSocketWithUser(socket, userId) {
     if (!userId || socket.userId === userId) { return; }
 
     if (socket.userId) {
         decrementSocketCount(socket.userId);
+        socket.leave("user:" + socket.userId);
     }
 
     socket.userId = userId;
     socketCountByUserId[userId] = (socketCountByUserId[userId] || 0) + 1;
+    socket.join("user:" + userId);
 }
 
 function decrementSocketCount(userId) {
@@ -2594,6 +2612,83 @@ io.on("connection", socket => {
     });
 
     //====================================================
+    // 1:1音声通話（WebRTCシグナリング中継）
+    // ・音声はP2Pで直接端末間に流れるため、ここでは
+    //   宛先ユーザーへ合図を転送するだけ
+    //====================================================
+
+    socket.on("callInvite", data => {
+        const toUserId = String((data && data.toUserId) || "").trim();
+        const fromUserId = socket.userId;
+
+        if (!fromUserId || !toUserId || toUserId === fromUserId || !users[toUserId]) { return; }
+
+        if (callPeerByUserId[fromUserId] || callPeerByUserId[toUserId]) {
+            socket.emit("callBusy", { fromUserId: toUserId });
+            return;
+        }
+
+        if (!socketCountByUserId[toUserId]) {
+            socket.emit("callFailed", { toUserId: toUserId, message: "相手はオフラインです" });
+            return;
+        }
+
+        callPeerByUserId[fromUserId] = toUserId;
+        callPeerByUserId[toUserId] = fromUserId;
+
+        io.to("user:" + toUserId).emit("callInvite", {
+            fromUserId: fromUserId,
+            fromName: String((data && data.fromName) || fromUserId),
+            sdp: data && data.sdp
+        });
+    });
+
+    socket.on("callAnswer", data => {
+        const toUserId = String((data && data.toUserId) || "").trim();
+        if (!socket.userId || !toUserId || callPeerByUserId[socket.userId] !== toUserId) { return; }
+
+        io.to("user:" + toUserId).emit("callAnswer", {
+            fromUserId: socket.userId,
+            sdp: data && data.sdp
+        });
+    });
+
+    socket.on("callIceCandidate", data => {
+        const toUserId = String((data && data.toUserId) || "").trim();
+        if (!socket.userId || !toUserId || callPeerByUserId[socket.userId] !== toUserId) { return; }
+
+        io.to("user:" + toUserId).emit("callIceCandidate", {
+            fromUserId: socket.userId,
+            candidate: data && data.candidate
+        });
+    });
+
+    socket.on("callBusy", data => {
+        const toUserId = String((data && data.toUserId) || "").trim();
+        if (!socket.userId || !toUserId) { return; }
+
+        delete callPeerByUserId[socket.userId];
+        delete callPeerByUserId[toUserId];
+
+        io.to("user:" + toUserId).emit("callBusy", { fromUserId: socket.userId });
+    });
+
+    socket.on("callReject", data => {
+        const toUserId = String((data && data.toUserId) || "").trim();
+        if (!socket.userId || !toUserId) { return; }
+
+        delete callPeerByUserId[socket.userId];
+        delete callPeerByUserId[toUserId];
+
+        io.to("user:" + toUserId).emit("callReject", { fromUserId: socket.userId });
+    });
+
+    socket.on("callEnd", () => {
+        if (!socket.userId) { return; }
+        endCallPair(socket.userId, "hangup");
+    });
+
+    //====================================================
     // ユーザー削除
     //====================================================
     //
@@ -2734,6 +2829,8 @@ io.on("connection", socket => {
         broadcastConnectionCounts();
 
         if (socket.userId) {
+            endCallPair(socket.userId, "disconnect");
+
             decrementSocketCount(socket.userId);
             if (!socketCountByUserId[socket.userId]) {
                 const user = users[socket.userId];

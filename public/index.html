@@ -414,7 +414,7 @@ input, select {
 .navSummaryText { font-size: 12px; opacity: .85; margin-top: 2px; }
 
 .gpsButtonRow { display: flex; gap: 6px; margin-top: 7px; }
-.gpsButton, .reportButton, .arButton, .templateButton, .handoverButton {
+.gpsButton, .reportButton, .callButton, .templateButton, .handoverButton {
     flex: 1;
     padding: 10px 4px;
     border: none;
@@ -426,7 +426,51 @@ input, select {
 .reportButton { background: #1976d2; }
 .templateButton { background: #00897b; }
 .handoverButton { background: #8d6e63; }
-.arButton { background: #6a1b9a; }
+.callButton { background: #2e7d32; }
+.arSettingsButton { background: #6a1b9a; }
+
+/* 1:1音声通話 */
+.callPanelList { max-height: 260px; overflow-y: auto; margin-bottom: 12px; }
+.callPanelRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--border);
+    font-size: 15px;
+}
+.callPanelRow:last-child { border-bottom: none; }
+.callPanelRow button {
+    border: none;
+    background: #2e7d32;
+    color: white;
+    border-radius: 5px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: bold;
+    flex-shrink: 0;
+}
+.callPanelEmpty { padding: 14px 4px; opacity: .7; font-size: 14px; text-align: center; }
+
+.callBox { max-width: 280px; }
+.callStatusText { font-size: 14px; opacity: .8; margin-bottom: 6px; }
+.callPeerName { font-size: 20px; font-weight: bold; margin-bottom: 4px; }
+.callDurationText { font-size: 15px; opacity: .85; margin-bottom: 16px; min-height: 20px; }
+.callButtonsRow { display: flex; gap: 10px; }
+.callButtonsRow button {
+    flex: 1;
+    border: none;
+    border-radius: 6px;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: bold;
+    color: white;
+}
+.callAcceptButton { background: #2e7d32; }
+.callRejectButton, .callHangupButton { background: #c62828; }
+.callMuteButton { background: #616161; }
+.callMuteButton.active { background: #ef6c00; }
 #lastSend { text-align: center; padding: 4px; font-size: 13px; }
 .gpsStatusRow {
     display: flex;
@@ -1210,7 +1254,7 @@ input, select {
             <button class="reportButton" onclick="openStatusReportPanel()">報告</button>
             <button class="templateButton" onclick="openTemplateReportPanel()">定型</button>
             <button class="handoverButton" onclick="openHandoverList()">引継</button>
-            <button class="arButton" onclick="startAR()">AR</button>
+            <button class="callButton" onclick="openCallPanel()">電話</button>
         </div>
         <div class="gpsStatusRow">
             <span id="currentAccountId" class="currentAccountId"></span>
@@ -1270,6 +1314,11 @@ input, select {
         <div class="card settingsCard">
             <div class="sectionTitle">🌙 表示設定</div>
             <button id="darkModeToggleButton" class="settingsButton" onclick="toggleDarkMode()">🌙 ダークモードにする</button>
+        </div>
+
+        <div class="card settingsCard">
+            <div class="sectionTitle">📷 AR表示</div>
+            <button class="settingsButton arSettingsButton" onclick="startAR()">📷 AR表示を開始</button>
         </div>
 
         <div class="card settingsCard">
@@ -1436,6 +1485,24 @@ input, select {
         <div id="inviteQrUrlText" class="inviteQrUrlText"></div>
         <button class="settingsButton" onclick="copyInviteUrl()">📋 URLをコピー</button>
         <button class="confirmBtnCancel reactionDetailCloseButton" onclick="closeInviteQr()">閉じる</button>
+    </div>
+</div>
+
+<div id="callPanelOverlay" class="confirmOverlay" onclick="closeCallPanel()">
+    <div class="confirmBox" onclick="event.stopPropagation()">
+        <div class="reactionDetailTitle">📞 通話する相手を選択</div>
+        <div id="callPanelList" class="callPanelList"></div>
+        <button class="confirmBtnCancel reactionDetailCloseButton" onclick="closeCallPanel()">閉じる</button>
+    </div>
+</div>
+
+<div id="callOverlay" class="confirmOverlay">
+    <div class="confirmBox callBox" onclick="event.stopPropagation()">
+        <div class="callStatusText" id="callStatusText"></div>
+        <div class="callPeerName" id="callPeerName">-</div>
+        <div class="callDurationText" id="callDurationText"></div>
+        <audio id="callRemoteAudio" autoplay playsinline></audio>
+        <div class="callButtonsRow" id="callButtonsRow"></div>
     </div>
 </div>
 
@@ -2337,6 +2404,10 @@ function showButtonFeedback(button){
 async function logoutUser(){
     if(!(await showConfirm("ログアウトしますか？"))){
         return;
+    }
+
+    if(callState !== "idle"){
+        hangUpCall();
     }
 
     stopGPS();
@@ -5451,6 +5522,363 @@ function loadMoreChronology(button){
 }
 
 /* ==================================================
+   1:1音声通話
+   ・シグナリング(発信・応答・ICE候補交換)はSocket.IO経由でサーバーが
+     宛先ユーザーへ中継するだけで、音声そのものはWebRTCで端末間に
+     直接流れる(サーバーを経由しない)
+   ・STUNのみ使用（TURN未設置）。双方が厳しいNAT配下のモバイル回線
+     同士だと接続できないことがある
+================================================== */
+
+const CALL_ICE_SERVERS = [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" }
+];
+
+let callState = "idle"; // idle | outgoing | incoming | connected
+let callPeerConnection = null;
+let callLocalStream = null;
+let callPeerUserId = null;
+let callPeerName = null;
+let callPendingOfferSdp = null;
+let callPendingIceCandidates = [];
+let callStartedAt = null;
+let callDurationTimer = null;
+let callMuted = false;
+
+function isCallSupported(){
+    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.RTCPeerConnection);
+}
+
+function openCallPanel(){
+    if(!currentAuthUser){
+        alert("先にログインしてください");
+        return;
+    }
+    if(!isCallSupported()){
+        alert("この端末・ブラウザは通話機能に対応していません");
+        return;
+    }
+    if(callState !== "idle"){
+        alert("既に通話中です");
+        return;
+    }
+
+    const list = document.getElementById("callPanelList");
+    if(!list){ return; }
+
+    const others = Object.keys(latestUsersData)
+        .filter(id => id !== socketUserId && latestUsersData[id] && latestUsersData[id].online);
+
+    if(others.length === 0){
+        list.innerHTML = `<div class="callPanelEmpty">現在オンラインの隊員がいません</div>`;
+    }
+    else{
+        list.innerHTML = others.map(id => {
+            const user = latestUsersData[id];
+            const name = escapeHtml(user.display_name || user.name || id);
+            return `<div class="callPanelRow"><span>${name}</span><button onclick="startOutgoingCall('${id}')">📞 発信</button></div>`;
+        }).join("");
+    }
+
+    document.getElementById("callPanelOverlay").classList.add("active");
+}
+
+function closeCallPanel(){
+    const overlay = document.getElementById("callPanelOverlay");
+    if(overlay){ overlay.classList.remove("active"); }
+}
+
+function renderCallButtons(){
+    const row = document.getElementById("callButtonsRow");
+    if(!row){ return; }
+
+    if(callState === "incoming"){
+        row.innerHTML = `
+            <button class="callRejectButton" onclick="rejectIncomingCall()">✕ 拒否</button>
+            <button class="callAcceptButton" onclick="acceptIncomingCall()">📞 応答</button>
+        `;
+    }
+    else if(callState === "outgoing"){
+        row.innerHTML = `<button class="callHangupButton" onclick="hangUpCall()">✕ 発信を取り消す</button>`;
+    }
+    else if(callState === "connected"){
+        row.innerHTML = `
+            <button class="callMuteButton${callMuted ? " active" : ""}" onclick="toggleCallMute()">${callMuted ? "🔇 ミュート中" : "🎤 ミュート"}</button>
+            <button class="callHangupButton" onclick="hangUpCall()">📴 終了</button>
+        `;
+    }
+    else{
+        row.innerHTML = "";
+    }
+}
+
+function updateCallStatusUi(){
+    const statusElement = document.getElementById("callStatusText");
+    const nameElement = document.getElementById("callPeerName");
+    if(nameElement){ nameElement.textContent = callPeerName || "-"; }
+
+    if(statusElement){
+        statusElement.textContent =
+            callState === "outgoing" ? "発信中…" :
+            callState === "incoming" ? "着信中…" :
+            callState === "connected" ? "通話中" : "";
+    }
+
+    renderCallButtons();
+}
+
+function setCallOverlayStatus(text){
+    const statusElement = document.getElementById("callStatusText");
+    if(statusElement){ statusElement.textContent = text; }
+    const row = document.getElementById("callButtonsRow");
+    if(row){ row.innerHTML = ""; }
+}
+
+function startCallDurationTimer(){
+    callStartedAt = Date.now();
+    const durationElement = document.getElementById("callDurationText");
+
+    const tick = () => {
+        if(!durationElement){ return; }
+        const sec = Math.floor((Date.now() - callStartedAt) / 1000);
+        const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+        const ss = String(sec % 60).padStart(2, "0");
+        durationElement.textContent = `${mm}:${ss}`;
+    };
+
+    tick();
+    callDurationTimer = setInterval(tick, 1000);
+}
+
+function stopCallDurationTimer(){
+    if(callDurationTimer){
+        clearInterval(callDurationTimer);
+        callDurationTimer = null;
+    }
+    const durationElement = document.getElementById("callDurationText");
+    if(durationElement){ durationElement.textContent = ""; }
+}
+
+function createCallPeerConnection(){
+    const pc = new RTCPeerConnection({ iceServers: CALL_ICE_SERVERS });
+
+    pc.onicecandidate = event => {
+        if(event.candidate && callPeerUserId){
+            socket.emit("callIceCandidate", { toUserId: callPeerUserId, candidate: event.candidate });
+        }
+    };
+
+    pc.ontrack = event => {
+        const audio = document.getElementById("callRemoteAudio");
+        if(audio){ audio.srcObject = event.streams[0]; }
+    };
+
+    pc.onconnectionstatechange = () => {
+        if(pc.connectionState === "connected" && callState !== "connected" && callState !== "idle"){
+            callState = "connected";
+            updateCallStatusUi();
+            startCallDurationTimer();
+        }
+        else if(["failed", "disconnected", "closed"].includes(pc.connectionState) && callState !== "idle"){
+            resetCallState();
+        }
+    };
+
+    return pc;
+}
+
+async function startOutgoingCall(targetUserId){
+    if(callState !== "idle"){ return; }
+
+    closeCallPanel();
+
+    let stream;
+    try{
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    }
+    catch(error){
+        alert("マイクを起動できませんでした：" + error.message);
+        return;
+    }
+
+    callLocalStream = stream;
+    callPeerUserId = targetUserId;
+    callPeerName = (latestUsersData[targetUserId] && (latestUsersData[targetUserId].display_name || latestUsersData[targetUserId].name)) || targetUserId;
+    callState = "outgoing";
+    callMuted = false;
+
+    const overlay = document.getElementById("callOverlay");
+    if(overlay){ overlay.classList.add("active"); }
+    updateCallStatusUi();
+
+    callPeerConnection = createCallPeerConnection();
+    callLocalStream.getTracks().forEach(track => callPeerConnection.addTrack(track, callLocalStream));
+
+    const offer = await callPeerConnection.createOffer();
+    await callPeerConnection.setLocalDescription(offer);
+
+    socket.emit("callInvite", {
+        toUserId: targetUserId,
+        fromName: (currentProfile && currentProfile.display_name) || socketUserId,
+        sdp: offer
+    });
+}
+
+socket.on("callInvite", data => {
+    if(!data || !data.fromUserId){ return; }
+
+    if(callState !== "idle" || !isCallSupported()){
+        socket.emit("callBusy", { toUserId: data.fromUserId });
+        return;
+    }
+
+    callPeerUserId = data.fromUserId;
+    callPeerName = data.fromName || data.fromUserId;
+    callPendingOfferSdp = data.sdp;
+    callPendingIceCandidates = [];
+    callState = "incoming";
+    callMuted = false;
+
+    const overlay = document.getElementById("callOverlay");
+    if(overlay){ overlay.classList.add("active"); }
+    updateCallStatusUi();
+});
+
+async function acceptIncomingCall(){
+    if(callState !== "incoming" || !callPendingOfferSdp){ return; }
+
+    let stream;
+    try{
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    }
+    catch(error){
+        alert("マイクを起動できませんでした：" + error.message);
+        rejectIncomingCall();
+        return;
+    }
+
+    callLocalStream = stream;
+    callPeerConnection = createCallPeerConnection();
+    callLocalStream.getTracks().forEach(track => callPeerConnection.addTrack(track, callLocalStream));
+
+    await callPeerConnection.setRemoteDescription(new RTCSessionDescription(callPendingOfferSdp));
+    callPendingOfferSdp = null;
+
+    for(const candidate of callPendingIceCandidates){
+        try{ await callPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)); }
+        catch(error){ console.error("ICE candidate追加エラー:", error); }
+    }
+    callPendingIceCandidates = [];
+
+    const answer = await callPeerConnection.createAnswer();
+    await callPeerConnection.setLocalDescription(answer);
+
+    socket.emit("callAnswer", { toUserId: callPeerUserId, sdp: answer });
+
+    updateCallStatusUi();
+}
+
+function rejectIncomingCall(){
+    if(callPeerUserId){
+        socket.emit("callReject", { toUserId: callPeerUserId });
+    }
+    resetCallState();
+}
+
+socket.on("callAnswer", async data => {
+    if(callState !== "outgoing" || !callPeerConnection || !data || data.fromUserId !== callPeerUserId){ return; }
+
+    await callPeerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+
+    for(const candidate of callPendingIceCandidates){
+        try{ await callPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)); }
+        catch(error){ console.error("ICE candidate追加エラー:", error); }
+    }
+    callPendingIceCandidates = [];
+});
+
+socket.on("callIceCandidate", async data => {
+    if(!data || !data.candidate || data.fromUserId !== callPeerUserId){ return; }
+
+    if(callPeerConnection && callPeerConnection.remoteDescription){
+        try{ await callPeerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)); }
+        catch(error){ console.error("ICE candidate追加エラー:", error); }
+    }
+    else{
+        callPendingIceCandidates.push(data.candidate);
+    }
+});
+
+socket.on("callReject", data => {
+    if(callState === "idle" || !data || data.fromUserId !== callPeerUserId){ return; }
+    setCallOverlayStatus("相手が応答しませんでした");
+    setTimeout(resetCallState, 1500);
+});
+
+socket.on("callBusy", data => {
+    if(callState === "idle" || !data || data.fromUserId !== callPeerUserId){ return; }
+    setCallOverlayStatus("相手は通話中です");
+    setTimeout(resetCallState, 1500);
+});
+
+socket.on("callFailed", data => {
+    if(callState === "idle" || !data || data.toUserId !== callPeerUserId){ return; }
+    setCallOverlayStatus(data.message || "発信できませんでした");
+    setTimeout(resetCallState, 1500);
+});
+
+socket.on("callEnd", data => {
+    if(callState === "idle"){ return; }
+    if(data && data.fromUserId && data.fromUserId !== callPeerUserId){ return; }
+    resetCallState();
+});
+
+function hangUpCall(){
+    if(callPeerUserId && callState !== "idle"){
+        socket.emit("callEnd", { toUserId: callPeerUserId });
+    }
+    resetCallState();
+}
+
+function toggleCallMute(){
+    if(!callLocalStream){ return; }
+    callMuted = !callMuted;
+    callLocalStream.getAudioTracks().forEach(track => { track.enabled = !callMuted; });
+    renderCallButtons();
+}
+
+function resetCallState(){
+    stopCallDurationTimer();
+
+    if(callPeerConnection){
+        callPeerConnection.onicecandidate = null;
+        callPeerConnection.ontrack = null;
+        callPeerConnection.onconnectionstatechange = null;
+        callPeerConnection.close();
+        callPeerConnection = null;
+    }
+
+    if(callLocalStream){
+        callLocalStream.getTracks().forEach(track => track.stop());
+        callLocalStream = null;
+    }
+
+    const audio = document.getElementById("callRemoteAudio");
+    if(audio){ audio.srcObject = null; }
+
+    callState = "idle";
+    callPeerUserId = null;
+    callPeerName = null;
+    callPendingOfferSdp = null;
+    callPendingIceCandidates = [];
+    callMuted = false;
+
+    const overlay = document.getElementById("callOverlay");
+    if(overlay){ overlay.classList.remove("active"); }
+}
+
+/* ==================================================
    Enterキー
 ================================================== */
 
@@ -5495,6 +5923,10 @@ socket.on("disconnect", () => {
     const gpsStatus = document.getElementById("gpsStatus");
     if(gpsStatus){
         gpsStatus.innerHTML = "🔴 サーバー切断";
+    }
+
+    if(callState !== "idle"){
+        resetCallState();
     }
 });
 
