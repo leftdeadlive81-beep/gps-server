@@ -2268,6 +2268,13 @@ io.on("connection", socket => {
                 [item.user, item.message, item.category, item.remarks, item.photoUrl || null, now]
             );
             item.id = result.rows[0].id;
+
+            // attachReactions()と同じ理由: chronologyReactionsマップ側の
+            // オブジェクトをそのままitem.reactionsに参照させることで、
+            // 直後にtoggleReactionが同じオブジェクトを書き換えても
+            // キャッシュ済みchronology配列側に反映されるようにする
+            if (!chronologyReactions[item.id]) { chronologyReactions[item.id] = {}; }
+            item.reactions = chronologyReactions[item.id];
         }
         catch (err) {
             console.error("クロノロジー保存エラー", err);
