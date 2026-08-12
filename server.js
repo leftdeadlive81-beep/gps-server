@@ -316,7 +316,15 @@ async function loadChronologyReactions() {
 }
 
 function attachReactions(item) {
-    return { ...item, reactions: chronologyReactions[item.id] || {} };
+    // chronologyReactions[item.id]をここで確定させ、その同じオブジェクトを
+    // 参照させることで、後からtoggleReactionが同じオブジェクトを書き換えた際に
+    // 既にキャッシュ済みのchronology配列側にも反映されるようにする。
+    // （||{} で毎回新しい空オブジェクトを返していると、リアクションが1件も
+    // 無い投稿を読み込んだ後に初めてリアクションが付いた瞬間、キャッシュ側の
+    // reactionsがそれと繋がらない別オブジェクトのまま取り残され、次回接続時に
+    // 送られる初期同期データでリアクションが消えて見えるバグになっていた）
+    if (!chronologyReactions[item.id]) { chronologyReactions[item.id] = {}; }
+    return { ...item, reactions: chronologyReactions[item.id] };
 }
 
 //============================================================
