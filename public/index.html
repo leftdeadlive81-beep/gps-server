@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Puttan Version 2.69</title>
 
 <link rel="icon" type="image/png" href="/icon.png">
@@ -62,9 +62,10 @@ button { cursor: pointer; }
     flex-direction: column;
     justify-content: flex-start;
     align-items: center;
-    padding: 20px 12px 12px;
+    padding: calc(20px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom));
     background: #4444;
     z-index: 9999;
+    box-sizing: border-box;
 }
 .authBox {
     width: 100%;
@@ -178,7 +179,25 @@ button { cursor: pointer; }
     text-align: center;
     font-weight: bold;
 }
-#appScreen { display: none; width: 100%; min-height: 100vh; }
+#appScreen {
+    /* ヘッダー(接続数バー・タブバー)を固定し、その下の1画面分の
+       領域をタブごとの中身に割り当てるflexシェル構成。
+       以前は#mapTabの下の操作ボタン列がヘッダー+フッターの合計高さの
+       決め打ち(100dvh - 170px)に収まる前提で地図の高さを計算していたが、
+       端末やフォントの違いでヘッダーの実高さがずれると画面外にはみ出して
+       いた。flex:1で余り領域を自動計算させることでこれを解消する */
+    display: none;
+    flex-direction: column;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    /* ノッチ/ステータスバーやジェスチャーナビゲーションバーに
+       コンテンツ上下端が隠れないよう余白を確保 */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    box-sizing: border-box;
+}
 
 .statsBar {
     background: #263238;
@@ -187,8 +206,7 @@ button { cursor: pointer; }
     text-align: center;
     height: 20px;
     line-height: 20px;
-    position: sticky;
-    top: 0;
+    flex-shrink: 0;
     z-index: 1002;
     overflow: hidden;
     white-space: nowrap;
@@ -205,7 +223,7 @@ button { cursor: pointer; }
     height: 30px;
     line-height: 30px;
     position: fixed;
-    top: 20px;
+    top: calc(20px + env(safe-area-inset-top));
     left: 0;
     right: 0;
     z-index: 1001;
@@ -230,8 +248,7 @@ button { cursor: pointer; }
     grid-template-columns: repeat(4, 1fr);
     gap: 2px;
     background: #263238;
-    position: sticky;
-    top: 20px;
+    flex-shrink: 0;
     z-index: 1000;
 }
 .tabButton {
@@ -246,7 +263,7 @@ button { cursor: pointer; }
 .tabText { display: block; }
 
 .tabContent { display: none; padding: 8px; }
-.tabContent.active { display: block; }
+.tabContent.active { display: block; flex: 1; min-height: 0; overflow-y: auto; }
 
 .card {
     background: var(--card-bg);
@@ -291,6 +308,26 @@ input, select {
 
 .logoutButton { background: #f57c00; }
 .gpsStopSettingsButton { background: #c62828; }
+.backgroundGpsWarning {
+    margin-top: 10px;
+    padding: 10px;
+    background: #fff3e0;
+    border: 1px solid #ff9800;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #e65100;
+}
+.linkButton {
+    display: block;
+    margin-top: 8px;
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ff9800;
+    border-radius: 5px;
+    background: white;
+    color: #e65100;
+    font-weight: bold;
+}
 
 .navSettingRow {
     display: flex;
@@ -302,11 +339,19 @@ input, select {
 
 #mapTab { position: relative; }
 
+/* 地図タブだけは中身をスクロールさせず(Leafletのタッチ操作と競合するため)、
+   #mapを残り領域いっぱいに広げ、その下の操作ボタン列は内容分の高さのまま
+   下端に収まるようにする */
+#mapTab.active {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
 #map {
     width: 100%;
-    height: calc(100vh - 170px);
-    height: calc(100dvh - 170px);
-    min-height: 300px;
+    flex: 1;
+    min-height: 200px;
     border-radius: 6px;
     overflow: hidden;
 }
@@ -1116,7 +1161,9 @@ input, select {
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="/socket.io/socket.io.js"></script>
+<!-- Puttan Mobile(Capacitor)アプリはこのファイルをwww/にバンドルして表示するため、
+     gps-serverが自動配信する/socket.io/socket.io.jsに頼らず同梱版を使う -->
+<script src="/socket.io.vendor.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
@@ -1192,7 +1239,7 @@ input, select {
             <span class="tabIcon">📋</span><span class="tabText">クロノロ</span>
         </button>
         <button class="tabButton" onclick="showTab('settingsTab',this)">
-            <span class="tabIcon">⚙️</span><span class="tabText">登録・設定</span>
+            <span class="tabIcon">⚙️</span><span class="tabText">設定</span>
         </button>
     </div>
 
@@ -1317,6 +1364,11 @@ input, select {
 
             <button class="settingsButton gpsButton" onclick="startGPS()">📡 GPS開始</button>
             <button class="settingsButton gpsStopSettingsButton" onclick="stopGPS()">🛑 GPS停止</button>
+
+            <div id="backgroundGpsWarning" class="backgroundGpsWarning" style="display:none;">
+                ⚠️ バックグラウンド位置情報の許可が完了していません。画面OFF・アプリ切り替え中はGPSが止まる可能性があります。
+                <button class="linkButton" onclick="openAppSettings()">端末の設定を開く</button>
+            </div>
             <button class="settingsButton logoutButton" onclick="logoutUser()">🚪 ログアウト</button>
         </div>
 
@@ -1476,6 +1528,20 @@ input, select {
 <script>
 
 /* ==================================================
+   Puttan Mobile(Capacitor)対応
+   ・このindex.htmlはWeb版としてgps-serverから配信される場合と、
+     Puttan Mobileアプリがwww/にバンドルして表示する場合の両方で
+     使われる。バンドル時はページ自体がこのサーバーと別オリジン
+     （Capacitorのローカル仮想オリジン）から配信されるため、
+     相対パスでのSocket接続・API呼び出しが届かない。
+   ・window.Capacitorはアプリ内実行時のみ自動的に注入されるため、
+     これで判定しサーバーの絶対URLを使うかどうかを切り替える
+================================================== */
+
+const isNativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const SERVER_ORIGIN = isNativeApp ? "https://gps-server-p5ob.onrender.com" : "";
+
+/* ==================================================
    Supabase
 ================================================== */
 
@@ -1488,7 +1554,7 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_
    Socket.IO
 ================================================== */
 
-const socket = io({
+const socket = io(SERVER_ORIGIN || undefined, {
     transports: ["polling", "websocket"],
     upgrade: true,
     reconnection: true,
@@ -1512,6 +1578,7 @@ let chronology = [];
 let olderChronology = [];
 let chronologyExhausted = false;
 let watchID = null;
+let pushNotificationsInitialized = false;
 
 let navRouteLine = null;
 let navRoute = null;
@@ -1835,7 +1902,7 @@ function showApp(){
     const authScreen = document.getElementById("authScreen");
     const appScreen = document.getElementById("appScreen");
     if(authScreen){ authScreen.style.display = "none"; }
-    if(appScreen){ appScreen.style.display = "block"; }
+    if(appScreen){ appScreen.style.display = "flex"; }
     window.scrollTo(0, 0);
     document.body.style.overflow = "hidden";
     socket.emit("viewerActive");
@@ -1899,7 +1966,7 @@ async function registerAuthUser(){
     message.textContent = "確認中...";
 
     try{
-        const passcodeResponse = await fetch("/api/verify-passcode", {
+        const passcodeResponse = await fetch(SERVER_ORIGIN + "/api/verify-passcode", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ code: passcode })
@@ -2280,6 +2347,7 @@ function registerSocketUser(){
             registered = true;
             localStorage.setItem("puttan_registered_done", "true");
             updateRegisterStatus(name);
+            initPushNotifications();
             resolve(true);
         }, 5000);
 
@@ -2291,6 +2359,7 @@ function registerSocketUser(){
                 registered = true;
                 localStorage.setItem("puttan_registered_done", "true");
                 updateRegisterStatus(name);
+                initPushNotifications();
                 console.log("Socketユーザー登録成功:", socketUserId);
                 resolve(true);
             }
@@ -3060,7 +3129,7 @@ async function searchAddress(){
     resultsBox.innerHTML = `<div class="addressSearchResultRow">検索中...</div>`;
 
     try{
-        const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
+        const response = await fetch(`${SERVER_ORIGIN}/api/geocode?q=${encodeURIComponent(query)}`);
         const data = await response.json();
 
         const results = Array.isArray(data.results) ? data.results : [];
@@ -3221,11 +3290,25 @@ async function startGPS(){
 
 /* ==================================================
    GPS本体開始
+   ・Puttan Mobile(Capacitor)アプリ内で、かつBackgroundGeolocation
+     プラグインが使える場合はネイティブのバックグラウンド位置情報を
+     使う（画面OFF・アプリ切り替え中でも送信を継続するため）。
+     それ以外（通常のブラウザ）はブラウザ標準のnavigator.geolocation
+     を使う（画面が開いている間のみ動作、ブラウザの仕様上の制約）
 ================================================== */
 
 function startGPSCore(){
     localStorage.setItem("gpsRunning", "true");
 
+    if(getBackgroundGeolocationPlugin()){
+        startBackgroundGPSTracking();
+        return;
+    }
+
+    startForegroundGPSTracking();
+}
+
+function startForegroundGPSTracking(){
     if(watchID !== null){
         return;
     }
@@ -3291,6 +3374,228 @@ function startGPSCore(){
 }
 
 /* ==================================================
+   バックグラウンド位置情報（Puttan Mobileアプリ内のみ）
+   ・@transistorsoft/capacitor-background-geolocation
+   ・バンドラーを使っていないため、Capacitorが自動注入するネイティブ
+     ブリッジ window.Capacitor.Plugins.BackgroundGeolocation を直接呼ぶ
+================================================== */
+
+let bgLocationListener = null;
+let bgMotionChangeListener = null;
+let bgHeartbeatListener = null;
+let bgProviderChangeListener = null;
+
+function getBackgroundGeolocationPlugin(){
+    return isNativeApp && window.Capacitor.Plugins && window.Capacitor.Plugins.BackgroundGeolocation;
+}
+
+async function startBackgroundGPSTracking(){
+    const plugin = getBackgroundGeolocationPlugin();
+    if(!plugin){
+        startForegroundGPSTracking();
+        return;
+    }
+
+    try{
+        bgLocationListener = await plugin.addListener("location", location => {
+            const coords = location && location.coords;
+            if(coords){
+                sendLocation(coords.latitude, coords.longitude, coords.speed, coords.heading);
+            }
+        });
+
+        // 静止中は distanceFilter 未達で "location" イベントが発火しないため、
+        // motionchange(静止⇔移動の切り替わり)とheartbeat(静止中の定期通知)でも送信する
+        bgMotionChangeListener = await plugin.addListener("motionchange", event => {
+            const coords = event && event.location && event.location.coords;
+            if(coords){
+                sendLocation(coords.latitude, coords.longitude, coords.speed, coords.heading);
+            }
+        });
+
+        bgHeartbeatListener = await plugin.addListener("heartbeat", event => {
+            const coords = event && event.location && event.location.coords;
+            if(coords){
+                sendLocation(coords.latitude, coords.longitude, coords.speed, coords.heading);
+            }
+        });
+
+        bgProviderChangeListener = await plugin.addListener("providerchange", () => {
+            checkBackgroundGpsPermission();
+        });
+
+        const name = document.getElementById("name").value.trim();
+
+        // ネイティブ側は call.getObject("options") で設定を取り出す実装のため、
+        // 素のオブジェクトではなく { options: {...} } でラップして渡す必要がある
+        await plugin.ready({
+            options: {
+                reset: true,
+                desiredAccuracy: -1, // DesiredAccuracy.High
+                distanceFilter: MOVE_DISTANCE,
+                stopOnTerminate: false,
+                startOnBoot: true,
+                locationAuthorizationRequest: "Always",
+                heartbeatInterval: SEND_INTERVAL / 1000,
+                disableStopDetection: true, // 静止してもGPS取得を止めない
+                allowIdenticalLocations: true, // 移動していなくても定期取得した位置を送信対象にする
+                locationUpdateInterval: SEND_INTERVAL,
+                // 画面OFF中はWebView(JS)が休止しSocket.IO送信が止まるため、
+                // ネイティブ側から直接サーバーへPOSTする(WebViewの状態に依存しない)
+                url: SERVER_ORIGIN + "/api/mobile-location",
+                method: "POST",
+                autoSync: true,
+                extras: {
+                    user_id: socketUserId,
+                    display_name: name,
+                    device_id: getDeviceId()
+                },
+                notification: {
+                    title: "Puttan",
+                    text: "位置情報を送信中です"
+                }
+            }
+        });
+
+        await plugin.start();
+
+        const status = document.getElementById("gpsStatus");
+        if(status){ status.innerHTML = "🟢 GPS稼働中（バックグラウンド）"; }
+
+        checkBackgroundGpsPermission();
+        requestBatteryOptimizationExemption();
+    }
+    catch(error){
+        console.error("バックグラウンド位置情報の開始に失敗:", error);
+        startForegroundGPSTracking();
+    }
+}
+
+async function stopBackgroundGPSTracking(){
+    const plugin = getBackgroundGeolocationPlugin();
+    if(!plugin){ return; }
+
+    try{
+        await plugin.stop();
+    }
+    catch(error){
+        console.error("バックグラウンド位置情報の停止に失敗:", error);
+    }
+
+    if(bgLocationListener){ bgLocationListener.remove(); bgLocationListener = null; }
+    if(bgMotionChangeListener){ bgMotionChangeListener.remove(); bgMotionChangeListener = null; }
+    if(bgHeartbeatListener){ bgHeartbeatListener.remove(); bgHeartbeatListener = null; }
+    if(bgProviderChangeListener){ bgProviderChangeListener.remove(); bgProviderChangeListener = null; }
+}
+
+// 端末のバッテリー最適化が有効なままだと、画面OFF中にOSが位置情報の
+// 取得自体を間引いてしまい、GPS送信が止まる。初回のみ、除外を許可する
+// システムダイアログをユーザーに直接表示する
+async function requestBatteryOptimizationExemption(){
+    const plugin = isNativeApp && window.Capacitor.Plugins && window.Capacitor.Plugins.BatteryOptimization;
+    if(!plugin){ return; }
+
+    if(localStorage.getItem("puttan_battery_opt_prompted") === "true"){
+        return;
+    }
+
+    try{
+        const state = await plugin.isIgnoringBatteryOptimizations();
+        if(state && state.ignoring){
+            localStorage.setItem("puttan_battery_opt_prompted", "true");
+            return;
+        }
+
+        alert("画面OFF中も位置情報を送信し続けるため、次の画面で「許可」を選んでください。\n(バッテリー最適化の対象から外します)");
+        await plugin.requestIgnoreBatteryOptimizations();
+        localStorage.setItem("puttan_battery_opt_prompted", "true");
+    }
+    catch(error){
+        console.error("バッテリー最適化除外リクエストに失敗:", error);
+    }
+}
+
+async function checkBackgroundGpsPermission(){
+    const plugin = getBackgroundGeolocationPlugin();
+    const warning = document.getElementById("backgroundGpsWarning");
+    if(!plugin || !warning){ return; }
+
+    try{
+        const state = await plugin.getState();
+        // AuthorizationStatus: NotDetermined:0, Restricted:1, Denied:2, Always:3, WhenInUse:4
+        const isAlways = state && state.authorizationStatus === 3;
+        warning.style.display = isAlways ? "none" : "block";
+    }
+    catch(error){
+        console.error("権限状態の取得に失敗:", error);
+    }
+}
+
+function openAppSettings(){
+    if(isNativeApp && window.Capacitor.Plugins.App && window.Capacitor.Plugins.App.openSettings){
+        window.Capacitor.Plugins.App.openSettings();
+    }
+    else{
+        alert("端末の設定アプリからPuttanの位置情報権限を「常に許可」に変更してください。");
+    }
+}
+
+/* ==================================================
+   プッシュ通知（Puttan Mobileアプリ内のみ）
+   ・@capacitor/push-notifications + Firebase Cloud Messaging
+   ・画面OFF・アプリ終了中でもFCMのnotificationペイロードは
+     OSが自動でバナー表示するため、アプリ側は端末トークンを
+     取得してサーバーへ送るだけでよい
+================================================== */
+
+async function initPushNotifications(){
+    if(pushNotificationsInitialized){ return; }
+
+    const plugin = isNativeApp && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications;
+    if(!plugin){ return; }
+
+    pushNotificationsInitialized = true;
+
+    try{
+        // requestPermissions()/register() が呼ばれた時点で既に権限許可済みだと
+        // ネイティブ側がその場でregistrationイベントを発火することがあるため、
+        // リスナーは必ず先に登録しておく
+        await plugin.addListener("registration", token => {
+            if(socketUserId && token && token.value){
+                socket.emit("registerPushToken", { user_id: socketUserId, token: token.value });
+            }
+        });
+
+        await plugin.addListener("registrationError", error => {
+            console.error("プッシュ通知登録エラー:", error);
+        });
+
+        const permStatus = await plugin.requestPermissions();
+        if(permStatus.receive !== "granted"){
+            console.warn("プッシュ通知の権限が許可されませんでした");
+            return;
+        }
+
+        // デフォルトチャンネルは重要度が低く、画面ロック中はバナー表示されず
+        // 通知トレイのアイコンだけになるため、高重要度の専用チャンネルを作る
+        await plugin.createChannel({
+            id: "chronology",
+            name: "クロノロジー通知",
+            description: "クロノロジー投稿の通知",
+            importance: 5,
+            visibility: 1,
+            vibration: true
+        });
+
+        await plugin.register();
+    }
+    catch(error){
+        console.error("プッシュ通知の初期化に失敗:", error);
+        pushNotificationsInitialized = false;
+    }
+}
+
+/* ==================================================
    GPS停止
 ================================================== */
 
@@ -3302,6 +3607,10 @@ function stopGPS(){
     if(gpsTimer !== null){
         clearInterval(gpsTimer);
         gpsTimer = null;
+    }
+
+    if(getBackgroundGeolocationPlugin()){
+        stopBackgroundGPSTracking();
     }
 
     lastLat = 0;
@@ -4486,7 +4795,7 @@ function getMemberPlaceName(lat, lon){
     if(!placeNameInFlight.has(key)){
         placeNameInFlight.add(key);
 
-        fetch(`/api/reverse-geocode?lat=${lat}&lon=${lon}`)
+        fetch(`${SERVER_ORIGIN}/api/reverse-geocode?lat=${lat}&lon=${lon}`)
             .then(response => response.json())
             .then(data => {
                 placeNameCache[key] = data.name || "地名不明";
