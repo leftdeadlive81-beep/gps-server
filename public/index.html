@@ -1055,6 +1055,17 @@ input, select {
 .popupFooter button { width: 100%; margin-top: 4px; }
 .popupUserId { font-size: 10px; color: #aaa; margin-top: 5px; word-break: break-all; }
 
+/* アプリ版のみ: 地図の隊員ポップアップ・地名表示ボックスを少し小さくする
+   （隊員一覧の「詳細」ボトムシートは対象外なので.leaflet-popup-content配下に限定） */
+html.native-app .leaflet-popup-content .popupCard { font-size: 11px; min-width: 180px; }
+html.native-app .leaflet-popup-content .popupHeader b { font-size: 13px; }
+html.native-app .leaflet-popup-content .popupOnline { font-size: 10px; }
+html.native-app .leaflet-popup-content .popupLabel { font-size: 11px; }
+html.native-app .leaflet-popup-content .popupLocation { font-size: 10px; }
+html.native-app .leaflet-popup-content .popupUserId { font-size: 9px; }
+html.native-app .utmCenterBox { font-size: 10px; padding: 3px 6px; }
+html.native-app #placeNameText { font-size: 11px; }
+
 /* 隊員一覧の「詳細」ボトムシート */
 .memberDetailOverlay { align-items: flex-end; }
 .memberDetailSheet {
@@ -1596,6 +1607,12 @@ input, select {
 
 const isNativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 const SERVER_ORIGIN = isNativeApp ? "https://gps-server-p5ob.onrender.com" : "";
+
+// アプリ版だけの見た目調整（地図の隊員ポップアップ・地名表示ボックスの
+// 縮小など）はこのクラスを起点にCSSを分岐させる
+if(isNativeApp){
+    document.documentElement.classList.add("native-app");
+}
 
 /* ==================================================
    Supabase
