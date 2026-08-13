@@ -607,7 +607,7 @@ input, select {
 
 .userHeader, .userRow {
     display: grid;
-    grid-template-columns: 48px minmax(70px, 1fr) minmax(70px, 1fr) 55px 65px 64px;
+    grid-template-columns: 48px minmax(70px, 1fr) minmax(70px, 1fr) 55px 65px 92px;
     align-items: center;
     gap: 3px;
 }
@@ -631,6 +631,7 @@ input, select {
 .deleteButton { border: none; background: transparent; font-size: 18px; }
 .userActionsCell { display: flex; justify-content: center; gap: 2px; }
 .historyButton { border: none; background: transparent; font-size: 16px; }
+.detailButton { border: none; background: transparent; font-size: 16px; }
 
 .confirmOverlay {
     display: none;
@@ -1027,6 +1028,29 @@ input, select {
 .popupFooter button { width: 100%; margin-top: 4px; }
 .popupUserId { font-size: 10px; color: #aaa; margin-top: 5px; word-break: break-all; }
 
+/* 隊員一覧の「詳細」ボトムシート */
+.memberDetailOverlay { align-items: flex-end; }
+.memberDetailSheet {
+    background: var(--card-bg);
+    color: var(--text);
+    width: 100%;
+    max-width: 480px;
+    max-height: 75vh;
+    overflow-y: auto;
+    border-radius: 16px 16px 0 0;
+    padding: 10px 20px 20px;
+    box-sizing: border-box;
+}
+.memberDetailHandle {
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    margin: 0 auto 12px;
+}
+#memberDetailBody .popupCard { font-size: 14px; min-width: 0; }
+#memberDetailBody .popupHeader b { font-size: 17px; }
+
 .trafficIcon {
     background: #ff9800;
     border: 3px solid #e65100;
@@ -1401,6 +1425,14 @@ input, select {
 <div id="photoLightboxOverlay" class="confirmOverlay photoLightboxOverlay" onclick="closePhotoLightbox()">
     <img id="photoLightboxImg" class="photoLightboxImg" src="" onclick="event.stopPropagation()">
     <button class="photoLightboxCloseButton" onclick="closePhotoLightbox()">✕</button>
+</div>
+
+<div id="memberDetailOverlay" class="confirmOverlay memberDetailOverlay" onclick="closeMemberDetail()">
+    <div class="memberDetailSheet" onclick="event.stopPropagation()">
+        <div class="memberDetailHandle"></div>
+        <div id="memberDetailBody"></div>
+        <button class="confirmBtnCancel reactionDetailCloseButton" onclick="closeMemberDetail()">閉じる</button>
+    </div>
 </div>
 
 <div id="historyOverlay" class="confirmOverlay" onclick="closeHistoryViewer()">
@@ -4845,6 +4877,7 @@ function renderUsers(data){
                     ${timeAgo(user.lastUpdate)}
                 </div>
                 <div class="userActionsCell">
+                    <button class="detailButton" onclick="event.stopPropagation(); openMemberDetail('${safeUserId}')">📋</button>
                     <button class="historyButton" onclick="event.stopPropagation(); openHistoryViewer('${safeUserId}', '${safeName}')">🕒</button>
                     <button class="deleteButton" onclick="event.stopPropagation(); deleteUserById('${safeUserId}', '${safeName}')">🗑</button>
                 </div>
@@ -4913,6 +4946,99 @@ let historyRouteLayer = null;
 
 function jstDateString(date){
     return date.toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
+}
+
+/* ==================================================
+   隊員一覧の「詳細」ボトムシート
+   ・地図ポップアップと同じ内容を、地図タブに切り替えなくても
+     隊員一覧タブから一目で確認できるようにする
+================================================== */
+
+function openMemberDetail(userId){
+    const user = latestUsersData[userId];
+    if(!user){ return; }
+
+    const body = document.getElementById("memberDetailBody");
+    if(!body){ return; }
+
+    const displayName = escapeHtml(user.display_name || user.name || userId);
+    const statusBadge = getStatusBadge(user);
+    const placeName = escapeHtml(getMemberPlaceName(user.lat, user.lon));
+
+    const concernRow = user.status_next
+        ? `
+            <div class="popupRow popupConcern">
+                <span class="popupLabel">⚠️ 懸念事項</span>
+                <span class="popupValue">${escapeHtml(user.status_next)}</span>
+            </div>
+          `
+        : "";
+
+    const navButton = (user.lat != null && user.lon != null)
+        ? `<button onclick="closeMemberDetail(); navigateToMemberFromDetail(${Number(user.lat)}, ${Number(user.lon)}, '${displayName}')">🧭 ここへナビ</button>`
+        : "";
+
+    body.innerHTML = `
+        <div class="popupCard">
+            <div class="popupHeader">
+                <b><span class="markerLevelBadge">Lv.${user.level ?? 1}</span> ${displayName}</b>
+                <span class="popupOnline ${statusBadge.cls}">${statusBadge.label}</span>
+            </div>
+
+            <div class="popupSection">
+                <div class="popupRow">
+                    <span class="popupLabel">📍 現在地</span>
+                    <span class="popupValue">${placeName}</span>
+                </div>
+                <div class="popupRow">
+                    <span class="popupLabel">🔋 バッテリー</span>
+                    <span class="popupValue">${formatBatteryLabel(user.battery, user.batteryCharging)}</span>
+                </div>
+                <div class="popupRow">
+                    <span class="popupLabel">🎖 経験値</span>
+                    <span class="popupValue">${Math.round(user.experience ?? 0)}</span>
+                </div>
+                <div class="popupRow">
+                    <span class="popupLabel">📋 活動内容</span>
+                    <span class="popupValue">${escapeHtml(user.status || "-")}</span>
+                </div>
+                <div class="popupRow">
+                    <span class="popupLabel">📍 目的地</span>
+                    <span class="popupValue">${escapeHtml(user.destination || "-")}</span>
+                </div>
+                ${concernRow}
+            </div>
+
+            <div class="popupSection popupGrid">
+                <div>💧水：${user.water ?? 0}</div>
+                <div>⛽燃料：${user.fuel ?? 0}</div>
+                <div>📦物資1：${escapeHtml(user.item_a || "-")}</div>
+                <div>📦物資2：${escapeHtml(user.item_b || "-")}</div>
+                <div>📦物資3：${escapeHtml(user.item_c || "-")}</div>
+                <div>📦物資4：${escapeHtml(user.item_d || "-")}</div>
+            </div>
+
+            <div class="popupFooter">
+                最終更新：${timeAgo(user.lastUpdate)}
+                ${navButton}
+                <div class="popupUserId">ID：${escapeHtml(userId)}</div>
+            </div>
+        </div>
+    `;
+
+    const overlay = document.getElementById("memberDetailOverlay");
+    if(overlay){ overlay.classList.add("active"); }
+}
+
+function closeMemberDetail(){
+    const overlay = document.getElementById("memberDetailOverlay");
+    if(overlay){ overlay.classList.remove("active"); }
+}
+
+function navigateToMemberFromDetail(lat, lon, name){
+    const mapButton = document.querySelector('.tabButton[onclick*="mapTab"]');
+    showTab("mapTab", mapButton);
+    startNavigation(lat, lon, name);
 }
 
 function openHistoryViewer(userId, name){
