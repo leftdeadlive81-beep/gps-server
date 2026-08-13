@@ -5987,6 +5987,59 @@ let callHasVideo = false;
 let callIncomingHasVideo = false;
 let callCameraOff = false;
 
+let incomingCallAudioCtx = null;
+let incomingCallAlertTimer = null;
+
+function playIncomingCallTone(){
+    try{
+        if(!incomingCallAudioCtx){
+            incomingCallAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        const ctx = incomingCallAudioCtx;
+        if(ctx.state === "suspended"){ ctx.resume(); }
+
+        const now = ctx.currentTime;
+
+        // 「プルルル」を模した2連ビープ
+        [0, 0.35].forEach(offset => {
+            const oscillator = ctx.createOscillator();
+            const gain = ctx.createGain();
+            oscillator.type = "sine";
+            oscillator.frequency.value = 880;
+            gain.gain.setValueAtTime(0.0001, now + offset);
+            gain.gain.exponentialRampToValueAtTime(0.3, now + offset + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.3);
+            oscillator.connect(gain);
+            gain.connect(ctx.destination);
+            oscillator.start(now + offset);
+            oscillator.stop(now + offset + 0.32);
+        });
+    }
+    catch(error){
+        console.error("着信音再生エラー:", error);
+    }
+}
+
+function startIncomingCallAlert(){
+    stopIncomingCallAlert();
+
+    playIncomingCallTone();
+    if(navigator.vibrate){ navigator.vibrate([500, 300, 500, 300]); }
+
+    incomingCallAlertTimer = setInterval(() => {
+        playIncomingCallTone();
+        if(navigator.vibrate){ navigator.vibrate([500, 300, 500, 300]); }
+    }, 2000);
+}
+
+function stopIncomingCallAlert(){
+    if(incomingCallAlertTimer){
+        clearInterval(incomingCallAlertTimer);
+        incomingCallAlertTimer = null;
+    }
+    if(navigator.vibrate){ navigator.vibrate(0); }
+}
+
 function isCallSupported(){
     return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.RTCPeerConnection);
 }
@@ -6230,10 +6283,13 @@ socket.on("callInvite", data => {
     const overlay = document.getElementById("callOverlay");
     if(overlay){ overlay.classList.add("active"); }
     updateCallStatusUi();
+    startIncomingCallAlert();
 });
 
 async function acceptIncomingCall(){
     if(callState !== "incoming" || !callPendingOfferSdp){ return; }
+
+    stopIncomingCallAlert();
 
     let stream;
     let hasVideo = callIncomingHasVideo;
@@ -6365,6 +6421,7 @@ function toggleCallCamera(){
 
 function resetCallState(){
     stopCallDurationTimer();
+    stopIncomingCallAlert();
 
     if(callPeerConnection){
         callPeerConnection.onicecandidate = null;
