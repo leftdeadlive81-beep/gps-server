@@ -497,22 +497,25 @@ input, select {
     object-fit: cover;
     background: #222;
 }
-.callButtonsRow { display: flex; gap: 10px; }
+.callButtonsRow { display: flex; flex-wrap: wrap; gap: 8px; }
 .callButtonsRow button {
-    flex: 1;
+    flex: 1 1 40%;
     border: none;
     border-radius: 6px;
-    padding: 12px;
-    font-size: 14px;
+    padding: 12px 6px;
+    font-size: 13px;
     font-weight: bold;
     color: white;
 }
 .callAcceptButton { background: #2e7d32; }
 .callRejectButton, .callHangupButton { background: #c62828; }
+.callButtonsRow button.callHangupButton { flex-basis: 100%; }
 .callMuteButton { background: #616161; }
 .callMuteButton.active { background: #ef6c00; }
 .callCameraButton { background: #616161; }
 .callCameraButton.active { background: #ef6c00; }
+.callSwitchCameraButton { background: #1976d2; }
+.callCaptureButton { background: #00897b; }
 #lastSend { text-align: center; padding: 4px; font-size: 13px; }
 .gpsStatusRow {
     display: flex;
@@ -5986,6 +5989,7 @@ let callMuted = false;
 let callHasVideo = false;
 let callIncomingHasVideo = false;
 let callCameraOff = false;
+let callFacingMode = "user";
 
 let incomingCallAudioCtx = null;
 let incomingCallAlertTimer = null;
@@ -6105,12 +6109,16 @@ function renderCallButtons(){
         row.innerHTML = `<button class="callHangupButton" onclick="hangUpCall()">✕ 発信を取り消す</button>`;
     }
     else if(callState === "connected"){
-        const cameraButton = callHasVideo
-            ? `<button class="callCameraButton${callCameraOff ? " active" : ""}" onclick="toggleCallCamera()">${callCameraOff ? "📷 カメラOFF" : "📹 カメラON"}</button>`
+        const videoButtons = callHasVideo
+            ? `
+                <button class="callCameraButton${callCameraOff ? " active" : ""}" onclick="toggleCallCamera()">${callCameraOff ? "📷 カメラOFF" : "📹 カメラON"}</button>
+                <button class="callSwitchCameraButton" onclick="switchCallCamera()">🔄 切替</button>
+                <button class="callCaptureButton" onclick="captureCallVideoToChronology()">📸 記録</button>
+              `
             : "";
         row.innerHTML = `
             <button class="callMuteButton${callMuted ? " active" : ""}" onclick="toggleCallMute()">${callMuted ? "🔇 ミュート中" : "🎤 ミュート"}</button>
-            ${cameraButton}
+            ${videoButtons}
             <button class="callHangupButton" onclick="hangUpCall()">📴 終了</button>
         `;
     }
@@ -6211,12 +6219,14 @@ async function startOutgoingCall(targetUserId, withVideo){
 
     closeCallPanel();
 
+    callFacingMode = "user";
+
     let stream;
     let hasVideo = !!withVideo;
     try{
         stream = await navigator.mediaDevices.getUserMedia({
             audio: true,
-            video: hasVideo ? { facingMode: "user" } : false
+            video: hasVideo ? { facingMode: callFacingMode } : false
         });
     }
     catch(error){
@@ -6290,13 +6300,14 @@ async function acceptIncomingCall(){
     if(callState !== "incoming" || !callPendingOfferSdp){ return; }
 
     stopIncomingCallAlert();
+    callFacingMode = "user";
 
     let stream;
     let hasVideo = callIncomingHasVideo;
     try{
         stream = await navigator.mediaDevices.getUserMedia({
             audio: true,
-            video: hasVideo ? { facingMode: "user" } : false
+            video: hasVideo ? { facingMode: callFacingMode } : false
         });
     }
     catch(error){
@@ -6419,6 +6430,104 @@ function toggleCallCamera(){
     renderCallButtons();
 }
 
+/* ==================================================
+   ビデオ通話：イン/アウトカメラ切り替え
+   ・接続済みのRTCPeerConnectionにトラックを差し替えるだけなので
+     再ネゴシエーション（再度のofferSDP交換）は不要
+================================================== */
+
+async function switchCallCamera(){
+    if(!callLocalStream || !callHasVideo || !callPeerConnection){ return; }
+
+    const newFacingMode = callFacingMode === "user" ? "environment" : "user";
+
+    let newStream;
+    try{
+        newStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: newFacingMode }
+        });
+    }
+    catch(error){
+        console.error("カメラ切り替えエラー:", error);
+        alert("カメラを切り替えられませんでした：" + error.message);
+        return;
+    }
+
+    const newVideoTrack = newStream.getVideoTracks()[0];
+    if(!newVideoTrack){ return; }
+
+    const sender = callPeerConnection.getSenders().find(s => s.track && s.track.kind === "video");
+    if(sender){
+        try{ await sender.replaceTrack(newVideoTrack); }
+        catch(error){
+            console.error("映像トラック差し替えエラー:", error);
+            newVideoTrack.stop();
+            return;
+        }
+    }
+
+    const oldVideoTrack = callLocalStream.getVideoTracks()[0];
+    if(oldVideoTrack){
+        callLocalStream.removeTrack(oldVideoTrack);
+        oldVideoTrack.stop();
+    }
+
+    callLocalStream.addTrack(newVideoTrack);
+    newVideoTrack.enabled = !callCameraOff;
+    callFacingMode = newFacingMode;
+
+    const localVideo = document.getElementById("callLocalVideo");
+    if(localVideo){ localVideo.srcObject = callLocalStream; }
+}
+
+/* ==================================================
+   ビデオ通話：映っている映像をクロノロジーへ記録
+   ・相手側の映像（大きく表示されている方）を1枚キャプチャし、
+     既存のクロノロジー写真アップロードの仕組みにそのまま乗せる
+   ・本文には投稿者自身の現在のUTM座標を入れる
+================================================== */
+
+async function captureCallVideoToChronology(){
+    const video = document.getElementById("callRemoteVideo");
+    if(!video || !video.videoWidth){
+        alert("映像を取得できませんでした");
+        return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob(async blob => {
+        if(!blob){
+            alert("画像の生成に失敗しました");
+            return;
+        }
+
+        const me = latestUsersData[socketUserId];
+        const utmText = (me && me.utmE != null && me.utmN != null)
+            ? `UTM ${me.utmZone || "52S"} E:${me.utmE} N:${me.utmN}`
+            : "UTM座標不明";
+
+        try{
+            const photoUrl = await uploadChronoPhoto(blob);
+
+            socket.emit("addChronology", {
+                message: utmText,
+                user: document.getElementById("name").value,
+                category: "報告",
+                remarks: "通話中のビデオより撮影",
+                photoUrl: photoUrl
+            });
+        }
+        catch(error){
+            console.error("通話映像の記録エラー:", error);
+            alert("クロノロジーへの投稿に失敗しました：" + error.message);
+        }
+    }, "image/jpeg", 0.85);
+}
+
 function resetCallState(){
     stopCallDurationTimer();
     stopIncomingCallAlert();
@@ -6455,6 +6564,7 @@ function resetCallState(){
     callHasVideo = false;
     callIncomingHasVideo = false;
     callCameraOff = false;
+    callFacingMode = "user";
 
     const overlay = document.getElementById("callOverlay");
     if(overlay){ overlay.classList.remove("active"); }
