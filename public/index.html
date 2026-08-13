@@ -307,7 +307,6 @@ input, select {
 }
 
 .logoutButton { background: #f57c00; }
-.gpsStopSettingsButton { background: #c62828; }
 .backgroundGpsWarning {
     margin-top: 10px;
     padding: 10px;
@@ -439,7 +438,7 @@ input, select {
 .navSummaryText { font-size: 12px; opacity: .85; margin-top: 2px; }
 
 .gpsButtonRow { display: flex; gap: 6px; margin-top: 7px; }
-.gpsButton, .reportButton, .callButton, .gpsToggleMapButton, .handoverButton {
+.reportButton, .callButton, .gpsToggleMapButton, .handoverButton {
     flex: 1;
     padding: 10px 4px;
     border: none;
@@ -447,7 +446,6 @@ input, select {
     color: white;
     font-size: 14px;
 }
-.gpsButton { background: #388e3c; }
 .reportButton { background: #1976d2; }
 .handoverButton { background: #8d6e63; }
 .callButton { background: #2e7d32; }
@@ -1326,6 +1324,10 @@ input, select {
     <div id="settingsTab" class="tabContent">
 
         <div class="card settingsCard">
+            <button class="settingsButton logoutButton" onclick="logoutUser()">🚪 ログアウト</button>
+        </div>
+
+        <div class="card settingsCard">
             <div class="sectionTitle">🌙 表示設定</div>
             <button id="darkModeToggleButton" class="settingsButton" onclick="toggleDarkMode()">🌙 ダークモードにする</button>
         </div>
@@ -1363,14 +1365,10 @@ input, select {
             <button class="settingsButton" onclick="changePassword(this)">🔑 パスワードを変更</button>
             <div id="changePasswordStatus"></div>
 
-            <button class="settingsButton gpsButton" onclick="startGPS()">📡 GPS開始</button>
-            <button class="settingsButton gpsStopSettingsButton" onclick="stopGPS()">🛑 GPS停止</button>
-
             <div id="backgroundGpsWarning" class="backgroundGpsWarning" style="display:none;">
                 ⚠️ バックグラウンド位置情報の許可が完了していません。画面OFF・アプリ切り替え中はGPSが止まる可能性があります。
                 <button class="linkButton" onclick="openAppSettings()">端末の設定を開く</button>
             </div>
-            <button class="settingsButton logoutButton" onclick="logoutUser()">🚪 ログアウト</button>
         </div>
 
         <div class="card settingsCard">
