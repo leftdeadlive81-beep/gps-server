@@ -893,17 +893,23 @@ input, select {
 .templateReportOption { background: #546e7a; text-align: center; white-space: normal; }
 .templateReportEmergency { background: #d32f2f; }
 .handoverThreadBox {
-    max-width: 380px;
-    max-height: 85vh;
+    /* 視認性のため画面いっぱいに表示する */
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
     display: flex;
     flex-direction: column;
     text-align: left;
+    border-radius: 0;
+    box-sizing: border-box;
+    padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
 }
 .handoverThreadBox .reactionDetailTitle { text-align: center; }
 .handoverThreadList {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
-    max-height: 45vh;
     margin: 8px 0;
     padding-right: 4px;
 }
