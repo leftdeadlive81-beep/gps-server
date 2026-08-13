@@ -2657,6 +2657,7 @@ io.on("connection", socket => {
         io.to("user:" + toUserId).emit("callInvite", {
             fromUserId: fromUserId,
             fromName: String((data && data.fromName) || fromUserId),
+            video: !!(data && data.video),
             sdp: data && data.sdp
         });
     });
