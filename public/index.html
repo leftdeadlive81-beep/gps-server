@@ -4563,8 +4563,8 @@ function applyNavRoute(startLat, startLon, isReroute){
 
         const totalKm = (route.summary.totalDistance / 1000).toFixed(1);
         // ルーティングエンジンの所要時間は車移動前提のため、徒歩・現場条件を
-        // 見込んで常に3倍した時間を表示する
-        const totalMin = Math.round(route.summary.totalTime / 60 * 3);
+        // 見込んで割増した時間を表示する（元は3倍していたが、長すぎたため半分の1.5倍に調整）
+        const totalMin = Math.round(route.summary.totalTime / 60 * 1.5);
 
         const highwayWarning = isAvoidHighwaysEnabled() && usesHighway;
 
