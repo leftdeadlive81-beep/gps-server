@@ -1,5 +1,5 @@
 //============================================================
-// Puttan Version 2.69
+// Puttan Version 2.70
 // server.js
 //
 // ・PostgreSQL / Supabase
