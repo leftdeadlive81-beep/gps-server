@@ -3088,7 +3088,7 @@ async function updatePlaceName(){
 
     try{
         const response = await fetch(
-            `/api/reverse-geocode?lat=${center.lat}&lon=${center.lng}`
+            `${SERVER_ORIGIN}/api/reverse-geocode?lat=${center.lat}&lon=${center.lng}`
         );
         const data = await response.json();
 

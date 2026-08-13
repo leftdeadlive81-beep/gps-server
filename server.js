@@ -87,6 +87,16 @@ const io = new Server(server, {
 app.use(express.static("public"));
 app.use(express.json());
 
+// Puttanモバイル(Capacitor)アプリなど別オリジンからの/api/*呼び出しを許可
+// （Socket.IOは上のcors設定で既に許可済みだが、こちらはExpressの
+// 通常のHTTPルート用に別途必要）
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET, POST");
+    res.header("Access-Control-Allow-Headers", "Content-Type");
+    next();
+});
+
 //============================================================
 // 新規アカウント登録の合言葉チェック
 // ・部外者がアカウントを作れないようにする簡易的な防御。
