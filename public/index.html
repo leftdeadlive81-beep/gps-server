@@ -4514,7 +4514,9 @@ function applyNavRoute(startLat, startLon, isReroute){
         drawNavRouteLine(route);
 
         const totalKm = (route.summary.totalDistance / 1000).toFixed(1);
-        const totalMin = Math.round(route.summary.totalTime / 60);
+        // ルーティングエンジンの所要時間は車移動前提のため、徒歩・現場条件を
+        // 見込んで常に3倍した時間を表示する
+        const totalMin = Math.round(route.summary.totalTime / 60 * 3);
 
         const highwayWarning = isAvoidHighwaysEnabled() && usesHighway;
 
