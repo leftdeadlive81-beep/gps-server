@@ -1500,6 +1500,12 @@ html.native-app #placeNameText { font-size: 11px; }
                 <option value="2">🚙 小型</option>
                 <option value="3">🚚 中型</option>
                 <option value="4">🚛 大型</option>
+                <option value="5">🟢 スライム</option>
+                <option value="6">⚪ はぐれメタル</option>
+                <option value="7">🦇 ドラキー</option>
+                <option value="8">👹 シドー</option>
+                <option value="9">🩷 カービィ</option>
+                <option value="10">🐉 マオロア</option>
             </select>
         </div>
         <div id="registerStatus">未登録</div>
@@ -5377,7 +5383,7 @@ function normalizeIconType(type){
 
     if(type === "person"){ return "1"; }
     if(type === "vehicle"){ return "2"; }
-    if(["1", "2", "3", "4"].includes(type)){ return type; }
+    if(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"].includes(type)){ return type; }
 
     return "1";
 }
@@ -5385,11 +5391,20 @@ function normalizeIconType(type){
 // 画像本来の横x縦（px）。正方形に押し込むと縦横比が崩れるため、
 // 高さ60pxに揃え、幅はこの比率から計算する
 const ICON_NATIVE_SIZE = {
-    "1": [100, 133], // person.png
-    "2": [100, 58],  // vehicle_small.png
-    "3": [110, 73],  // vehicle_medium.png
-    "4": [120, 69]   // vehicle_large.png
+    "1": [100, 133],  // person.png
+    "2": [100, 58],   // vehicle_small.png
+    "3": [110, 73],   // vehicle_medium.png
+    "4": [120, 69],   // vehicle_large.png
+    "5": [130, 127],  // slimekun.png
+    "6": [140, 98],   // haguremetal.png
+    "7": [140, 95],   // draky.png
+    "8": [200, 222],  // sidoo.png
+    "9": [130, 145],  // kirby.png
+    "10": [130, 130]  // maoroa.png
 };
+
+// 「人」枠と同じ大きさで表示するアイコン種別（車両より一回り小さい）
+const PERSON_SCALE_ICON_TYPES = ["1", "5", "6", "7", "8", "9", "10"];
 
 function createIcon(type){
     type = normalizeIconType(type);
@@ -5400,12 +5415,18 @@ function createIcon(type){
         case "2": image = "/icon/vehicle_small.png"; break;
         case "3": image = "/icon/vehicle_medium.png"; break;
         case "4": image = "/icon/vehicle_large.png"; break;
+        case "5": image = "/icon/slimekun.png"; break;
+        case "6": image = "/icon/haguremetal.png"; break;
+        case "7": image = "/icon/draky.png"; break;
+        case "8": image = "/icon/sidoo.png"; break;
+        case "9": image = "/icon/kirby.png"; break;
+        case "10": image = "/icon/maoroa.png"; break;
         default: image = "/icon/person.png"; break;
     }
 
     // 縦横どちらが長くても、長い方の辺を基準サイズに収める
     // 車両アイコンは人アイコンより一回り大きく見せる
-    const targetMax = (type === "1") ? 56 : 62;
+    const targetMax = PERSON_SCALE_ICON_TYPES.includes(type) ? 56 : 62;
     const [nativeWidth, nativeHeight] = ICON_NATIVE_SIZE[type] || ICON_NATIVE_SIZE["1"];
     const scale = targetMax / Math.max(nativeWidth, nativeHeight);
     const width = Math.round(nativeWidth * scale);
