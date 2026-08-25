@@ -112,7 +112,7 @@ const passcodeAttemptsByIp = new Map();
 const PASSCODE_MAX_ATTEMPTS = 10;
 const PASSCODE_WINDOW_MS = 15 * 60 * 1000;
 
-app.post("/api/verify-passcode", (req, res) => {
+app.post("/api/verify-passcode", async (req, res) => {
     const ip = req.ip || "unknown";
     const now = Date.now();
 
@@ -129,17 +129,34 @@ app.post("/api/verify-passcode", (req, res) => {
         return;
     }
 
-    const expected = process.env.REGISTRATION_PASSCODE;
-    if (!expected) {
-        console.warn("REGISTRATION_PASSCODE未設定のため、新規登録を拒否しました");
-        res.json({ valid: false, message: "現在、新規登録は無効化されています" });
+    const submitted = String((req.body && req.body.code) || "").trim();
+
+    if (submitted === "") {
+        res.json({ valid: false, message: "合言葉を入力してください" });
         return;
     }
 
-    const submitted = String((req.body && req.body.code) || "").trim();
-    const valid = submitted.length > 0 && submitted === expected;
+    // 合言葉(招待コード)はグループごとにgroupsテーブルへ登録する。
+    // ここでの結果は登録画面の先出しUI確認用に過ぎず、実際にどのグループへ
+    // 所属させるかはregisterUserハンドラ側でサーバーが改めてinvite_codeから
+    // 解決する（クライアントが申告するgroup_idは一切信用しない）
+    try {
+        const result = await pool.query(
+            "SELECT id, name FROM groups WHERE invite_code = $1",
+            [submitted]
+        );
 
-    res.json({ valid: valid });
+        if (result.rows.length === 0) {
+            res.json({ valid: false, message: "合言葉が違います" });
+            return;
+        }
+
+        res.json({ valid: true, groupName: result.rows[0].name });
+    }
+    catch (err) {
+        console.error("合言葉(招待コード)確認エラー:", err);
+        res.status(500).json({ valid: false, message: "確認処理に失敗しました" });
+    }
 });
 
 //============================================================
@@ -305,6 +322,92 @@ const REACTION_EMOJIS = ["👍", "🙇‍♂️", "🙆‍♂️", "🙅‍♂�
 
 // { [chronologyId]: { [emoji]: [user_id, ...] } }
 let chronologyReactions = {};
+
+//============================================================
+// グループ分離
+// ・全ユーザーは必ずいずれか1つのグループ(group_id)に所属する
+// ・GPS位置・地点・クロノロジー・引き継ぎスレッド・通話は同じ
+//   グループのユーザー同士でのみ共有される
+// ・role="admin"のユーザーだけは全グループを横断して閲覧できる
+//   （adminへの昇格はDBを直接操作してのみ行う。クライアントから
+//   送られてきたroleは絶対に信用しない＝registerUserハンドラ参照）
+//============================================================
+
+function isAdminUser(user) {
+    return !!user && user.role === "admin";
+}
+
+function groupRoomName(groupId) {
+    return "group:" + groupId;
+}
+
+// グループ内の全端末 + 全admin端末へ配信する
+// （管理者は自分のグループ以外のイベントも横断して受け取れる）
+function emitToGroup(groupId, event, payload) {
+    io.to(groupRoomName(groupId)).to("admins").emit(event, payload);
+}
+
+// このソケットを、紐づくユーザーのグループ専用ルームへ加入させる。
+// ユーザーのグループが変わることは想定していないが、再接続のたびに
+// 呼ばれても安全なよう、既に入っているルームと違う場合だけ入れ替える
+function joinGroupRoom(socket, user) {
+    if (!user) { return; }
+
+    const room = groupRoomName(user.group_id);
+    if (socket.groupRoom !== room) {
+        if (socket.groupRoom) { socket.leave(socket.groupRoom); }
+        socket.join(room);
+        socket.groupRoom = room;
+    }
+
+    if (isAdminUser(user)) {
+        socket.join("admins");
+    }
+    else if (socket.rooms && socket.rooms.has("admins")) {
+        socket.leave("admins");
+    }
+}
+
+// adminなら全件、それ以外は自分と同じgroup_idのものだけを残す
+function filterByGroup(items, user, getGroupId) {
+    if (isAdminUser(user)) { return items; }
+    return items.filter(item => getGroupId(item) === user.group_id);
+}
+
+function usersVisibleTo(user) {
+    if (isAdminUser(user)) { return users; }
+
+    const filtered = {};
+    for (const [id, u] of Object.entries(users)) {
+        if (u.group_id === user.group_id) { filtered[id] = u; }
+    }
+    return filtered;
+}
+
+// pointsは内部的に "groupId::name" をキーにしているため（同名地点が
+// 複数グループで衝突しないように）、クライアントへ送る際は name だけの
+// キーに戻す。1グループ内では name がユニークなので衝突しない
+function pointsVisibleTo(user) {
+    const filtered = {};
+    for (const p of Object.values(points)) {
+        if (isAdminUser(user) || p.group_id === user.group_id) {
+            filtered[p.name] = p;
+        }
+    }
+    return filtered;
+}
+
+function chronologyVisibleTo(user) {
+    return filterByGroup(chronology, user, item => item.group_id);
+}
+
+// 新規投稿・削除のたびにクロノロジー全量を再送する既存方式を維持しつつ、
+// 投稿されたグループのメンバーには自グループ分だけ、adminには全グループ分を
+// 送る（1回のio.to(...).emit(...)では相手ごとに内容を変えられないため分ける）
+function broadcastChronologySnapshot(groupId) {
+    io.to(groupRoomName(groupId)).emit("chronology", chronology.filter(i => i.group_id === groupId));
+    io.to("admins").emit("chronology", chronology);
+}
 
 async function loadChronologyReactions() {
     try {
@@ -1034,13 +1137,14 @@ async function loadPoints() {
         const result = await pool.query("SELECT * FROM points ORDER BY created");
 
         result.rows.forEach(point => {
-            points[point.name] = {
+            points[point.group_id + "::" + point.name] = {
                 name: point.name,
                 type: point.type,
                 lat: point.lat,
                 lon: point.lon,
                 created: point.created,
-                createdBy: point.created_by
+                createdBy: point.created_by,
+                group_id: point.group_id
             };
         });
 
@@ -1069,7 +1173,8 @@ async function loadChronology() {
             message: row.message || "",
             category: row.category || "その他",
             remarks: row.remarks || "",
-            photoUrl: row.photo_url || ""
+            photoUrl: row.photo_url || "",
+            group_id: row.group_id
         }));
 
         console.log("クロノロジー復元:", chronology.length);
@@ -1093,6 +1198,7 @@ async function loadUsers() {
                 display_name: user.display_name,
                 account_name: user.account_name,
                 role: user.role || "user",
+                group_id: user.group_id,
                 unit: user.unit || "",
                 rank: user.rank || "",
                 vehicle: user.vehicle || "",
@@ -1298,7 +1404,7 @@ function broadcastUserUpdate(userId) {
     const user = users[userId];
     if (!user) { return; }
 
-    io.emit("locationUpdate", { userId, user });
+    emitToGroup(user.group_id, "locationUpdate", { userId, user });
 }
 
 async function markUserOffline(userId) {
@@ -1352,7 +1458,11 @@ async function sendChronologyPushNotifications(item, excludeUserId) {
     if (!firebaseMessaging) { return; }
 
     const tokens = Object.values(users)
-        .filter(user => user.user_id !== excludeUserId && typeof user.pushToken === "string" && user.pushToken)
+        .filter(user =>
+            user.user_id !== excludeUserId
+            && user.group_id === item.group_id
+            && typeof user.pushToken === "string" && user.pushToken
+        )
         .map(user => user.pushToken);
 
     if (tokens.length === 0) { return; }
@@ -1459,6 +1569,7 @@ async function processLocationUpdate(data, socket) {
 
         if (socket) {
             associateSocketWithUser(socket, userId);
+            joinGroupRoom(socket, oldUser);
         }
 
         //================================================
@@ -1730,10 +1841,10 @@ async function processLocationUpdate(data, socket) {
         await pool.query(
             `
             INSERT INTO location_history
-            (name, lat, lon, water, fuel, destination, created, user_id)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+            (name, lat, lon, water, fuel, destination, created, user_id, group_id)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
             `,
-            [displayName, lat, lon, water, fuel, destination, now, userId]
+            [displayName, lat, lon, water, fuel, destination, now, userId, oldUser.group_id]
         );
 
         //================================================
@@ -1801,11 +1912,12 @@ io.on("connection", socket => {
 
     //====================================================
     // 初期データ
+    // ・locations/points/chronologyはグループごとに内容が異なるため、
+    //   ユーザーが判明する(=registerUser成功後)まで送らない
+    // ・trafficRegulations/announcementは全グループ共通のため、
+    //   未登録の接続直後でも送ってよい
     //====================================================
 
-    socket.emit("locations", users);
-    socket.emit("points", points);
-    socket.emit("chronology", chronology);
     socket.emit("trafficRegulations", trafficRegulations);
     socket.emit("announcement", announcementText);
 
@@ -1815,17 +1927,24 @@ io.on("connection", socket => {
 
     socket.on("addPoint", async point => {
         try {
+            const requester = users[socket.userId];
+            if (!requester) {
+                console.log("地点登録拒否: 未登録ソケット");
+                return;
+            }
+
             console.log("地点受信:", point);
 
+            const groupId = requester.group_id;
             const created = Date.now();
             const createdBy = String(point.createdBy || "").trim() || "不明";
 
             await pool.query(
                 `
                 INSERT INTO points
-                (name, type, lat, lon, created, created_by)
-                VALUES ($1,$2,$3,$4,$5,$6)
-                ON CONFLICT(name)
+                (name, type, lat, lon, created, created_by, group_id)
+                VALUES ($1,$2,$3,$4,$5,$6,$7)
+                ON CONFLICT(group_id, name)
                 DO UPDATE SET
                     type=$2,
                     lat=$3,
@@ -1839,20 +1958,24 @@ io.on("connection", socket => {
                     point.lat,
                     point.lon,
                     created,
-                    createdBy
+                    createdBy,
+                    groupId
                 ]
             );
 
-            points[point.name] = {
+            const key = groupId + "::" + point.name;
+
+            points[key] = {
                 name: point.name,
                 type: point.type || "point",
                 lat: point.lat,
                 lon: point.lon,
                 created: created,
-                createdBy: createdBy
+                createdBy: createdBy,
+                group_id: groupId
             };
 
-            io.emit("pointAdded", points[point.name]);
+            emitToGroup(groupId, "pointAdded", points[key]);
 
             console.log("地点登録:", point.name);
         }
@@ -1976,6 +2099,59 @@ io.on("connection", socket => {
             const oldUser = users[userId];
 
             //================================================
+            // グループ（招待コードから解決。既存ユーザーはDB保存済みの
+            // group_idを維持し、invite_codeは無視する＝クライアントから
+            // group_idを直接受け取ることは絶対にしない）
+            //================================================
+
+            let groupId = oldUser?.group_id ?? null;
+
+            if (groupId == null) {
+                const inviteCode = String(data.invite_code || "").trim();
+
+                if (!inviteCode) {
+                    console.log("ユーザー登録拒否: invite_codeなし");
+
+                    socket.emit("registerUserResult", {
+                        success: false,
+                        message: "招待コードを入力してください"
+                    });
+
+                    return;
+                }
+
+                try {
+                    const groupResult = await pool.query(
+                        "SELECT id FROM groups WHERE invite_code = $1",
+                        [inviteCode]
+                    );
+
+                    if (groupResult.rows.length === 0) {
+                        console.log("ユーザー登録拒否: invite_code不正");
+
+                        socket.emit("registerUserResult", {
+                            success: false,
+                            message: "招待コードが正しくありません"
+                        });
+
+                        return;
+                    }
+
+                    groupId = groupResult.rows[0].id;
+                }
+                catch (err) {
+                    console.error("グループ解決エラー:", err);
+
+                    socket.emit("registerUserResult", {
+                        success: false,
+                        message: "グループの確認に失敗しました"
+                    });
+
+                    return;
+                }
+            }
+
+            //================================================
             // account_name重複確認
             //================================================
 
@@ -2002,7 +2178,10 @@ io.on("connection", socket => {
                 user_id: userId,
                 display_name: displayName,
                 account_name: accountName,
-                role: String(data.role || oldUser?.role || "user"),
+                // roleはクライアントの申告を一切信用しない。DB保存済みの値のみを
+                // 引き継ぐ（未設定なら"user"）。admin昇格は運用者がDBを直接操作する
+                role: oldUser?.role || "user",
+                group_id: groupId,
                 unit: String(data.unit || oldUser?.unit || ""),
                 rank: String(data.rank || oldUser?.rank || ""),
                 vehicle: String(data.vehicle || oldUser?.vehicle || ""),
@@ -2049,17 +2228,18 @@ io.on("connection", socket => {
                 `
                 INSERT INTO users
                 (
-                    user_id, display_name, account_name, role, unit, rank,
+                    user_id, display_name, account_name, role, group_id, unit, rank,
                     vehicle, vehicle_type, icon, phone, status, status_next,
                     health, destination, created_at, updated_at
                 )
                 VALUES
-                ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+                ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
                 ON CONFLICT(user_id)
                 DO UPDATE SET
                     display_name = EXCLUDED.display_name,
                     account_name = EXCLUDED.account_name,
                     role = EXCLUDED.role,
+                    group_id = EXCLUDED.group_id,
                     unit = EXCLUDED.unit,
                     rank = EXCLUDED.rank,
                     vehicle = EXCLUDED.vehicle,
@@ -2077,6 +2257,7 @@ io.on("connection", socket => {
                     user.display_name,
                     user.account_name,
                     user.role,
+                    user.group_id,
                     user.unit,
                     user.rank,
                     user.vehicle,
@@ -2185,7 +2366,18 @@ io.on("connection", socket => {
             console.log("================================");
 
             //================================================
-            // 全端末へ配信
+            // このソケットを自分のグループのルームへ加入させ、
+            // 初回の位置・地点・クロノロジーをグループ限定で送る
+            //================================================
+
+            joinGroupRoom(socket, users[userId]);
+
+            socket.emit("locations", usersVisibleTo(users[userId]));
+            socket.emit("points", pointsVisibleTo(users[userId]));
+            socket.emit("chronology", chronologyVisibleTo(users[userId]));
+
+            //================================================
+            // グループ内の全端末へ配信
             //================================================
 
             broadcastUserUpdate(userId);
@@ -2237,11 +2429,18 @@ io.on("connection", socket => {
     //====================================================
 
     socket.on("getLocationHistory", async (params, callback) => {
+        const requester = users[socket.userId];
         const userId = String((params && params.userId) || "").trim();
         const dateStr = String((params && params.date) || "").trim();
 
-        if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        if (!requester || !userId || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
             if (typeof callback === "function") { callback({ success: false, message: "パラメータが不正です" }); }
+            return;
+        }
+
+        const targetUser = users[userId];
+        if (!targetUser || (!isAdminUser(requester) && targetUser.group_id !== requester.group_id)) {
+            if (typeof callback === "function") { callback({ success: false, message: "対象ユーザーが見つかりません" }); }
             return;
         }
 
@@ -2277,11 +2476,13 @@ io.on("connection", socket => {
     //====================================================
 
     socket.on("addChronology", async data => {
-        if (!data || !String(data.message || "").trim()) {
+        const requester = users[socket.userId];
+        if (!requester || !data || !String(data.message || "").trim()) {
             return;
         }
 
         const now = Date.now();
+        const groupId = requester.group_id;
 
         const item = {
             id: null,
@@ -2291,17 +2492,18 @@ io.on("connection", socket => {
             category: String(data.category || "その他").trim(),
             remarks: String(data.remarks || "").trim(),
             photoUrl: String(data.photoUrl || "").trim(),
+            group_id: groupId,
             reactions: {}
         };
 
         try {
             const result = await pool.query(
                 `
-                INSERT INTO chronology (user_name, message, category, remarks, photo_url, created)
-                VALUES ($1,$2,$3,$4,$5,$6)
+                INSERT INTO chronology (user_name, message, category, remarks, photo_url, created, group_id)
+                VALUES ($1,$2,$3,$4,$5,$6,$7)
                 RETURNING id
                 `,
-                [item.user, item.message, item.category, item.remarks, item.photoUrl || null, now]
+                [item.user, item.message, item.category, item.remarks, item.photoUrl || null, now, groupId]
             );
             item.id = result.rows[0].id;
 
@@ -2322,7 +2524,7 @@ io.on("connection", socket => {
             chronology.pop();
         }
 
-        io.emit("chronology", chronology);
+        broadcastChronologySnapshot(groupId);
 
         await sendChronologyPushNotifications(item, socket.userId);
     });
@@ -2334,6 +2536,9 @@ io.on("connection", socket => {
     socket.on("deleteChronology", async chronologyId => {
         const id = Number(chronologyId);
         if (!Number.isFinite(id)) { return; }
+
+        const target = chronology.find(item => item.id === id);
+        const groupId = target ? target.group_id : null;
 
         try {
             await pool.query("DELETE FROM chronology_reactions WHERE chronology_id=$1", [id]);
@@ -2347,7 +2552,7 @@ io.on("connection", socket => {
         chronology = chronology.filter(item => item.id !== id);
         delete chronologyReactions[id];
 
-        io.emit("chronologyDeleted", id);
+        emitToGroup(groupId, "chronologyDeleted", id);
     });
 
     //====================================================
@@ -2356,10 +2561,21 @@ io.on("connection", socket => {
     //====================================================
 
     socket.on("getHandoverThreads", async (params, callback) => {
+        const requester = users[socket.userId];
+        if (!requester) {
+            if (typeof callback === "function") { callback({ success: false, message: "ログインしてください" }); }
+            return;
+        }
+
         try {
-            const result = await pool.query(
-                "SELECT id, title, created_by, last_activity, reply_count FROM handover_threads ORDER BY last_activity DESC LIMIT 200"
-            );
+            const result = isAdminUser(requester)
+                ? await pool.query(
+                    "SELECT id, title, created_by, last_activity, reply_count FROM handover_threads ORDER BY last_activity DESC LIMIT 200"
+                  )
+                : await pool.query(
+                    "SELECT id, title, created_by, last_activity, reply_count FROM handover_threads WHERE group_id=$1 ORDER BY last_activity DESC LIMIT 200",
+                    [requester.group_id]
+                  );
 
             const threads = result.rows.map(row => ({
                 id: row.id,
@@ -2378,9 +2594,15 @@ io.on("connection", socket => {
     });
 
     socket.on("createHandoverThread", async (data, callback) => {
+        const requester = users[socket.userId];
         const title = String((data && data.title) || "").trim().slice(0, 200);
         const body = String((data && data.body) || "").trim();
         const createdBy = String((data && data.user) || "").trim() || "不明";
+
+        if (!requester) {
+            if (typeof callback === "function") { callback({ success: false, message: "ログインしてください" }); }
+            return;
+        }
 
         if (!title || !body) {
             if (typeof callback === "function") { callback({ success: false, message: "題名と内容を入力してください" }); }
@@ -2388,15 +2610,16 @@ io.on("connection", socket => {
         }
 
         const now = Date.now();
+        const groupId = requester.group_id;
 
         try {
             const result = await pool.query(
                 `
-                INSERT INTO handover_threads (title, body, created_by, created, last_activity, reply_count)
-                VALUES ($1,$2,$3,$4,$4,0)
+                INSERT INTO handover_threads (title, body, created_by, created, last_activity, reply_count, group_id)
+                VALUES ($1,$2,$3,$4,$4,0,$5)
                 RETURNING id
                 `,
-                [title, body, createdBy, now]
+                [title, body, createdBy, now, groupId]
             );
 
             const thread = {
@@ -2407,7 +2630,7 @@ io.on("connection", socket => {
                 lastActivityText: formatJstDateTime(now)
             };
 
-            io.emit("handoverThreadAdded", thread);
+            emitToGroup(groupId, "handoverThreadAdded", thread);
 
             if (typeof callback === "function") { callback({ success: true, threadId: thread.id }); }
         }
@@ -2418,20 +2641,22 @@ io.on("connection", socket => {
     });
 
     socket.on("getHandoverReplies", async (params, callback) => {
+        const requester = users[socket.userId];
         const threadId = Number(params && params.threadId);
 
-        if (!Number.isFinite(threadId)) {
+        if (!requester || !Number.isFinite(threadId)) {
             if (typeof callback === "function") { callback({ success: false, message: "不正なスレッドIDです" }); }
             return;
         }
 
         try {
             const threadResult = await pool.query(
-                "SELECT id, title, body, created_by, created FROM handover_threads WHERE id=$1",
+                "SELECT id, title, body, created_by, created, group_id FROM handover_threads WHERE id=$1",
                 [threadId]
             );
 
-            if (threadResult.rows.length === 0) {
+            if (threadResult.rows.length === 0
+                || (!isAdminUser(requester) && threadResult.rows[0].group_id !== requester.group_id)) {
                 if (typeof callback === "function") { callback({ success: false, message: "スレッドが見つかりません" }); }
                 return;
             }
@@ -2466,11 +2691,12 @@ io.on("connection", socket => {
     });
 
     socket.on("addHandoverReply", async (data, callback) => {
+        const requester = users[socket.userId];
         const threadId = Number(data && data.threadId);
         const message = String((data && data.message) || "").trim();
         const createdBy = String((data && data.user) || "").trim() || "不明";
 
-        if (!Number.isFinite(threadId) || !message) {
+        if (!requester || !Number.isFinite(threadId) || !message) {
             if (typeof callback === "function") { callback({ success: false, message: "パラメータが不正です" }); }
             return;
         }
@@ -2478,6 +2704,19 @@ io.on("connection", socket => {
         const now = Date.now();
 
         try {
+            const threadResult = await pool.query(
+                "SELECT group_id FROM handover_threads WHERE id=$1",
+                [threadId]
+            );
+
+            if (threadResult.rows.length === 0
+                || (!isAdminUser(requester) && threadResult.rows[0].group_id !== requester.group_id)) {
+                if (typeof callback === "function") { callback({ success: false, message: "スレッドが見つかりません" }); }
+                return;
+            }
+
+            const groupId = threadResult.rows[0].group_id;
+
             const insertResult = await pool.query(
                 `
                 INSERT INTO handover_replies (thread_id, message, created_by, created)
@@ -2509,7 +2748,7 @@ io.on("connection", socket => {
                 createdText: formatJstDateTime(now)
             };
 
-            io.emit("handoverReplyAdded", {
+            emitToGroup(groupId, "handoverReplyAdded", {
                 threadId: threadId,
                 reply: reply,
                 replyCount: updateResult.rows[0].reply_count,
@@ -2529,20 +2768,36 @@ io.on("connection", socket => {
     //====================================================
 
     socket.on("loadMoreChronology", async (params, callback) => {
+        const requester = users[socket.userId];
         const beforeId = params && Number.isFinite(Number(params.beforeId))
             ? Number(params.beforeId)
             : null;
 
+        if (!requester) {
+            if (typeof callback === "function") { callback({ success: false, message: "ログインしてください" }); }
+            return;
+        }
+
         try {
-            const result = beforeId
-                ? await pool.query(
-                    "SELECT * FROM chronology WHERE id < $1 ORDER BY id DESC LIMIT $2",
-                    [beforeId, CHRONOLOGY_PAGE_SIZE]
-                  )
-                : await pool.query(
-                    "SELECT * FROM chronology ORDER BY id DESC LIMIT $1",
-                    [CHRONOLOGY_PAGE_SIZE]
-                  );
+            const result = isAdminUser(requester)
+                ? (beforeId
+                    ? await pool.query(
+                        "SELECT * FROM chronology WHERE id < $1 ORDER BY id DESC LIMIT $2",
+                        [beforeId, CHRONOLOGY_PAGE_SIZE]
+                      )
+                    : await pool.query(
+                        "SELECT * FROM chronology ORDER BY id DESC LIMIT $1",
+                        [CHRONOLOGY_PAGE_SIZE]
+                      ))
+                : (beforeId
+                    ? await pool.query(
+                        "SELECT * FROM chronology WHERE id < $1 AND group_id=$2 ORDER BY id DESC LIMIT $3",
+                        [beforeId, requester.group_id, CHRONOLOGY_PAGE_SIZE]
+                      )
+                    : await pool.query(
+                        "SELECT * FROM chronology WHERE group_id=$1 ORDER BY id DESC LIMIT $2",
+                        [requester.group_id, CHRONOLOGY_PAGE_SIZE]
+                      ));
 
             const items = result.rows.map(row => attachReactions({
                 id: row.id,
@@ -2551,7 +2806,8 @@ io.on("connection", socket => {
                 message: row.message || "",
                 category: row.category || "その他",
                 remarks: row.remarks || "",
-                photoUrl: row.photo_url || ""
+                photoUrl: row.photo_url || "",
+                group_id: row.group_id
             }));
 
             if (typeof callback === "function") {
@@ -2571,11 +2827,17 @@ io.on("connection", socket => {
     //====================================================
 
     socket.on("toggleReaction", async data => {
+        const requester = users[socket.userId];
         const chronologyId = data && Number.isFinite(Number(data.chronologyId)) ? Number(data.chronologyId) : null;
         const emoji = data && String(data.emoji || "");
         const userId = data && String(data.userId || "").trim();
 
-        if (!chronologyId || !userId || !REACTION_EMOJIS.includes(emoji)) {
+        if (!requester || !chronologyId || !userId || !REACTION_EMOJIS.includes(emoji)) {
+            return;
+        }
+
+        const target = chronology.find(item => item.id === chronologyId);
+        if (!target || (!isAdminUser(requester) && target.group_id !== requester.group_id)) {
             return;
         }
 
@@ -2611,7 +2873,7 @@ io.on("connection", socket => {
             console.error("リアクション更新エラー", err);
         }
 
-        io.emit("chronologyReactionUpdate", {
+        emitToGroup(target.group_id, "chronologyReactionUpdate", {
             chronologyId: chronologyId,
             reactions: chronologyReactions[chronologyId]
         });
@@ -2628,6 +2890,13 @@ io.on("connection", socket => {
         const fromUserId = socket.userId;
 
         if (!fromUserId || !toUserId || toUserId === fromUserId || !users[toUserId]) { return; }
+
+        const fromUser = users[fromUserId];
+        const toUser = users[toUserId];
+
+        if (!isAdminUser(fromUser) && !isAdminUser(toUser) && fromUser.group_id !== toUser.group_id) {
+            return;
+        }
 
         if (callPeerByUserId[fromUserId] || callPeerByUserId[toUserId]) {
             socket.emit("callBusy", { fromUserId: toUserId });
@@ -2708,6 +2977,15 @@ io.on("connection", socket => {
     //====================================================
 
     socket.on("deleteUser", async userId => {
+        const requester = users[socket.userId];
+        if (!isAdminUser(requester)) {
+            console.log("ユーザー削除拒否: admin権限がありません", socket.userId);
+            return;
+        }
+
+        const target = users[userId];
+        const groupId = target ? target.group_id : null;
+
         delete users[userId];
 
         try {
@@ -2724,10 +3002,17 @@ io.on("connection", socket => {
             console.error("削除エラー:", userId, err);
         }
 
-        io.emit("locations", users);
+        if (groupId != null) {
+            const groupUsers = {};
+            for (const [id, u] of Object.entries(users)) {
+                if (u.group_id === groupId) { groupUsers[id] = u; }
+            }
+            io.to(groupRoomName(groupId)).emit("locations", groupUsers);
+        }
+        io.to("admins").emit("locations", users);
 
         // 削除された本人が接続中の場合も通知する（自動再登録を止めるため）
-        io.emit("userDeleted", userId);
+        emitToGroup(groupId, "userDeleted", userId);
     });
 
     //====================================================
@@ -2779,16 +3064,20 @@ io.on("connection", socket => {
     //====================================================
 
     socket.on("deletePoint", async name => {
-        delete points[name];
+        const requester = users[socket.userId];
+        if (!requester) { return; }
+
+        const groupId = requester.group_id;
+        delete points[groupId + "::" + name];
 
         try {
-            await pool.query("DELETE FROM points WHERE name=$1", [name]);
+            await pool.query("DELETE FROM points WHERE group_id=$1 AND name=$2", [groupId, name]);
         }
         catch (err) {
             console.error("地点削除エラー", err);
         }
 
-        io.emit("pointDeleted", name);
+        emitToGroup(groupId, "pointDeleted", name);
 
         console.log("地点削除:", name);
     });
@@ -2798,6 +3087,11 @@ io.on("connection", socket => {
     //====================================================
 
     socket.on("updateTrafficRegulations", regulations => {
+        if (!isAdminUser(users[socket.userId])) {
+            console.log("交通規制更新拒否: admin権限がありません", socket.userId);
+            return;
+        }
+
         if (!Array.isArray(regulations)) {
             console.log("交通規制データが配列ではありません");
             return;
@@ -2815,6 +3109,11 @@ io.on("connection", socket => {
     //====================================================
 
     socket.on("updateAnnouncement", text => {
+        if (!isAdminUser(users[socket.userId])) {
+            console.log("周知情報更新拒否: admin権限がありません", socket.userId);
+            return;
+        }
+
         announcementText = String(text || "").slice(0, 300).trim();
 
         io.emit("announcement", announcementText);

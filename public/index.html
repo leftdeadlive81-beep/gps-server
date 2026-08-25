@@ -2046,6 +2046,10 @@ async function registerAuthUser(){
             message.textContent = passcodeResult.message || "合言葉が違います";
             return;
         }
+
+        // 合言葉(招待コード)は実際のグループ割り当てにも使うため、
+        // 後でSocket側のユーザー登録(registerUser)時に送れるよう保持しておく
+        localStorage.setItem("puttan_invite_code", passcode);
     }
     catch(error){
         console.error("合言葉確認エラー:", error);
@@ -2447,6 +2451,9 @@ function registerSocketUser(){
             display_name: name,
             account_name: await getCurrentLoginId(),
             device_id: getDeviceId(),
+            // 初回登録時のみサーバー側でグループ判定に使う。
+            // 2回目以降（既にDBに登録済み）はサーバー側で無視される
+            invite_code: localStorage.getItem("puttan_invite_code") || "",
             icon: iconType,
             water: water,
             fuel: fuel,
