@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>P.U.T.T.A.N. Version 2.72 操作マニュアル</title>
+<title>P.U.T.T.A.N. Version 2.73 操作マニュアル</title>
 <style>
 
 /* =========================================================
@@ -175,7 +175,7 @@ footer { text-align: center; color: #666; font-size: 12px; padding: 20px 10px 30
 
 <header>
     <h1>🐈 P.U.T.T.A.N.</h1>
-    <p>野外活動支援ツール　Version 2.72 操作マニュアル</p>
+    <p>野外活動支援ツール　Version 2.73 操作マニュアル</p>
 </header>
 
 <div class="container">
@@ -229,7 +229,11 @@ footer { text-align: center; color: #666; font-size: 12px; padding: 20px 10px 30
     <li>登録が成功すると自動的にログインするか、ログイン画面に戻るのでログインする</li>
 </ol>
 <div class="notice">
-    第三者が勝手にアカウントを作れないよう、新規登録には合言葉の入力が必要です。合言葉は管理者に確認してください。
+    第三者が勝手にアカウントを作れないよう、新規登録には合言葉の入力が必要です。合言葉は管理者に確認してください。<br>
+    この合言葉は「どのグループに参加するか」も同時に決めます。グループが異なると、位置情報・地点・クロノロジー・
+    引き継ぎメモ・通話などのデータはお互いに一切共有されません。別のグループに参加したい場合は、
+    そのグループ用の合言葉を管理者に確認し、一度ログアウトしてから新規登録してください
+    （ログインしたままだと今のアカウント・グループのまま扱われます）。
 </div>
 
 <h3>次回以降</h3>
@@ -469,7 +473,7 @@ footer { text-align: center; color: #666; font-size: 12px; padding: 20px 10px 30
     クロノロジー投稿のプッシュ通知にも対応しています。
 </p>
 <p style="text-align:center;">
-    <a href="https://github.com/leftdeadlive81-beep/puttan-app/releases/download/2.72/puttan272.apk"
+    <a href="https://github.com/leftdeadlive81-beep/puttan-app/releases/download/2.73/puttan273.apk"
        style="display:inline-block; padding:11px 22px; background:#1f4e79; color:white; text-decoration:none; border-radius:8px; font-weight:bold;">
         ⬇️ Puttan Mobile（Android）をダウンロード
     </a>
@@ -509,6 +513,12 @@ footer { text-align: center; color: #666; font-size: 12px; padding: 20px 10px 30
     クロノロジー・交通規制情報などをリアルタイムに共有します。ある端末で情報が更新されると、
     接続中の他の端末にも自動的に反映されます。
 </p>
+<div class="notice">
+    位置情報・地点・クロノロジー・引き継ぎメモ・通話は、同じグループに参加しているメンバー同士でのみ
+    共有されます。異なるグループのメンバーには一切表示されません。全体周知バーと交通規制情報のみ、
+    グループに関わらず全員で共有されます。今どのグループに入っているかは、地図タブ下部の「最終送信」の
+    横に表示されます。
+</div>
 <p>
     ユーザー情報・位置履歴・登録地点・クロノロジーなどは、Supabase上のPostgreSQLデータベースに保存されます。
 </p>
@@ -632,6 +642,12 @@ footer { text-align: center; color: #666; font-size: 12px; padding: 20px 10px 30
         アプリ内でナビの音声案内が出ない不具合を修正（Android WebViewの制限のため、アプリ内はネイティブTTSに切り替え）<br>
         Version 2.72に更新
     </td></tr>
+    <tr><td>8月25日</td><td>
+        グループ機能を追加（合言葉ごとに参加グループが決まり、位置情報・地点・クロノロジー・
+        引き継ぎメモ・通話は同じグループのメンバーとしか共有されないように変更）<br>
+        地図タブ「最終送信」の横に、現在参加中のグループ名を表示<br>
+        Version 2.73に更新
+    </td></tr>
 </table>
 </div>
 
@@ -642,7 +658,7 @@ footer { text-align: center; color: #666; font-size: 12px; padding: 20px 10px 30
 </div>
 
 <footer>
-    P.U.T.T.A.N. Version 2.72<br>
+    P.U.T.T.A.N. Version 2.73<br>
     © 2026
 </footer>
 
