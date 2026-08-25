@@ -2152,6 +2152,23 @@ io.on("connection", socket => {
             }
 
             //================================================
+            // グループ名（表示用。登録結果と一緒にクライアントへ返す）
+            //================================================
+
+            let groupName = "";
+
+            try {
+                const groupNameResult = await pool.query(
+                    "SELECT name FROM groups WHERE id = $1",
+                    [groupId]
+                );
+                groupName = groupNameResult.rows[0]?.name || "";
+            }
+            catch (err) {
+                console.error("グループ名取得エラー:", err);
+            }
+
+            //================================================
             // account_name重複確認
             //================================================
 
@@ -2390,7 +2407,8 @@ io.on("connection", socket => {
                 success: true,
                 user_id: user.user_id,
                 display_name: user.display_name,
-                account_name: user.account_name
+                account_name: user.account_name,
+                group_name: groupName
             });
         }
         catch (err) {

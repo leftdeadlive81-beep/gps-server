@@ -1335,7 +1335,7 @@ html.native-app #placeNameText { font-size: 11px; }
             <span id="gpsStatus">🔴 GPS停止中</span>
             <span id="moonAgeText" class="currentAccountId"></span>
         </div>
-        <div id="lastSend">最終送信：-</div>
+        <div id="lastSend"><span id="lastSendText">最終送信：-</span> <span id="currentGroupName" class="currentAccountId"></span></div>
     </div>
 
     <div id="arOverlay" class="arOverlay" style="display:none;">
@@ -2437,6 +2437,12 @@ function registerSocketUser(){
                 localStorage.setItem("puttan_registered_done", "true");
                 updateRegisterStatus(name);
                 initPushNotifications();
+
+                const groupNameEl = document.getElementById("currentGroupName");
+                if(groupNameEl){
+                    groupNameEl.textContent = result.group_name ? `（${result.group_name}）` : "";
+                }
+
                 console.log("Socketユーザー登録成功:", socketUserId);
                 resolve(true);
             }
@@ -3770,9 +3776,9 @@ function sendLocation(lat, lon, speed, heading){
     const gpsStatus = document.getElementById("gpsStatus");
     if(gpsStatus){ gpsStatus.innerHTML = "🟢 GPS稼働中"; }
 
-    const lastSend = document.getElementById("lastSend");
-    if(lastSend){
-        lastSend.innerHTML = "最終送信：" + new Date().toLocaleTimeString();
+    const lastSendText = document.getElementById("lastSendText");
+    if(lastSendText){
+        lastSendText.textContent = "最終送信：" + new Date().toLocaleTimeString();
     }
 
     const locationData = {
