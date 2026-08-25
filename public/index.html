@@ -2275,24 +2275,28 @@ async function getCurrentLoginId(){
 
 async function resolveSocketUserId(){
 
-    /* ① メモリ上のuser_id */
+    /* ① ログイン中のSupabase Authセッションがあれば必ずそちらを優先する。
+       （ログアウトせずに別アカウントへ切り替えた場合、②③のキャッシュには
+       前のアカウントのuser_idが残ったままになるため、キャッシュより常に
+       現在ログイン中のセッションを信用する。キャッシュ自体もここで
+       最新の値に上書きし、次回以降の食い違いを防ぐ） */
+    if(currentAuthUser && currentAuthUser.id){
+        const userId = currentAuthUser.id;
+        socketUserId = userId;
+        localStorage.setItem("puttan_user_id", userId);
+        return userId;
+    }
+
+    /* ② メモリ上のuser_id（Authセッション未確立時のフォールバック） */
     if(socketUserId){
         return socketUserId;
     }
 
-    /* ② localStorage */
+    /* ③ localStorage（同上） */
     const localUserId = localStorage.getItem("puttan_user_id");
     if(localUserId){
         socketUserId = localUserId;
         return localUserId;
-    }
-
-    /* ③ ログイン中のSupabase Auth UUIDを使用 */
-    if(currentAuthUser && currentAuthUser.id){
-        const userId = currentAuthUser.id;
-        localStorage.setItem("puttan_user_id", userId);
-        socketUserId = userId;
-        return userId;
     }
 
     return null;
