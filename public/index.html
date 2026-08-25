@@ -6807,6 +6807,15 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
         showAuth();
         showLogin();
     }
+    // SIGNED_IN・TOKEN_REFRESHED・USER_UPDATED等、Supabase側の実際の
+    // セッションが変わった時はcurrentAuthUserを必ず追随させる。
+    // ここを怠ると、ページをリロードせずに複数アカウントを切り替えた際、
+    // アプリ側は古いアカウントのままなのに実際の認証セッションは新しい
+    // アカウントに切り替わっている、というズレが起きる（RLSにより
+    // profiles等の取得がエラーも出さず0件になるバグの原因になっていた）
+    else if(session && session.user && (!currentAuthUser || currentAuthUser.id !== session.user.id)){
+        currentAuthUser = session.user;
+    }
 });
 
 /* ==================================================
