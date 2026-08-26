@@ -244,6 +244,9 @@ button { cursor: pointer; }
 }
 
 .newsBar {
+    /* announcementBarのような固定オーバーレイにせず、statsBarとtabBarの
+       間に収まる通常のレイアウト要素にする。これにより重なりを気にする
+       必要が無くなり、隙間にそのままフィットする */
     display: none;
     background: #1565c0;
     color: white;
@@ -251,15 +254,7 @@ button { cursor: pointer; }
     white-space: nowrap;
     height: 26px;
     line-height: 26px;
-    position: fixed;
-    top: calc(20px + env(safe-area-inset-top));
-    left: 0;
-    right: 0;
-    /* #appScreenはflexコンテナのため、直接の子要素はposition:staticでも
-       z-indexが効く。.tabBar(z-index:1000)より後のDOM順にあるため、
-       同値の1000のままだと.tabBarに隠されてしまう。それより高くする */
-    z-index: 1001;
-    box-shadow: 0 2px 6px rgba(0,0,0,.4);
+    flex-shrink: 0;
 }
 .newsBar.active { display: block; }
 .newsTrack {
@@ -289,7 +284,6 @@ button { cursor: pointer; }
     font-size: 13px;
 }
 .tabButton.active { background: #1976d2; font-weight: bold; }
-.tabIcon { display: block; font-size: 20px; }
 .tabText { display: block; }
 
 .tabContent { display: none; padding: 8px; }
@@ -1327,16 +1321,16 @@ html.native-app #placeNameText { font-size: 11px; }
 
     <div class="tabBar">
         <button class="tabButton active" onclick="showTab('mapTab',this)">
-            <span class="tabIcon">🗺️</span><span class="tabText">地図</span>
+            <span class="tabText">地図</span>
         </button>
         <button class="tabButton" onclick="showTab('usersTab',this)">
-            <span class="tabIcon">👥</span><span class="tabText">隊員一覧</span>
+            <span class="tabText">隊員一覧</span>
         </button>
         <button class="tabButton" onclick="showTab('chronoTab',this)">
-            <span class="tabIcon">📋</span><span class="tabText">クロノロ</span>
+            <span class="tabText">クロノロ</span>
         </button>
         <button class="tabButton" onclick="showTab('settingsTab',this)">
-            <span class="tabIcon">⚙️</span><span class="tabText">設定</span>
+            <span class="tabText">設定</span>
         </button>
     </div>
 
@@ -3325,31 +3319,16 @@ socket.on("announcement", text => {
             bar.classList.remove("active");
         }
     }
-
-    updateNewsBarPosition();
 });
 
 function dismissAnnouncement(){
     const bar = document.getElementById("announcementBar");
     if(bar){ bar.classList.remove("active"); }
-    updateNewsBarPosition();
 }
 
 /* ==================================================
    トップニュース受信（画面上部のテロップ）
 ================================================== */
-
-// お知らせバー（announcementBar）が表示中はその下に、非表示なら
-// statsBarのすぐ下に来るよう、ニュースバーの縦位置を動的に調整する
-function updateNewsBarPosition(){
-    const announcementBar = document.getElementById("announcementBar");
-    const newsBar = document.getElementById("newsBar");
-    if(!newsBar){ return; }
-
-    const announcementActive = announcementBar && announcementBar.classList.contains("active");
-    const offset = announcementActive ? 50 : 20; // 20=statsBar高さ, +30=announcementBar高さ
-    newsBar.style.top = `calc(${offset}px + env(safe-area-inset-top))`;
-}
 
 socket.on("topNews", titles => {
     const bar = document.getElementById("newsBar");
@@ -3363,8 +3342,6 @@ socket.on("topNews", titles => {
     else{
         bar.classList.remove("active");
     }
-
-    updateNewsBarPosition();
 });
 
 /* ==================================================
