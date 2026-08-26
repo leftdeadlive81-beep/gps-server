@@ -255,7 +255,10 @@ button { cursor: pointer; }
     top: calc(20px + env(safe-area-inset-top));
     left: 0;
     right: 0;
-    z-index: 1000;
+    /* #appScreenはflexコンテナのため、直接の子要素はposition:staticでも
+       z-indexが効く。.tabBar(z-index:1000)より後のDOM順にあるため、
+       同値の1000のままだと.tabBarに隠されてしまう。それより高くする */
+    z-index: 1001;
     box-shadow: 0 2px 6px rgba(0,0,0,.4);
 }
 .newsBar.active { display: block; }
