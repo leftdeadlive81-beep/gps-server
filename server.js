@@ -310,6 +310,7 @@ let points = {};
 let chronology = [];
 let trafficRegulations = [];
 let announcementText = "";
+let topNews = [];
 
 // クロノロジーをメモリ保持・全端末配信する件数の上限（この1箇所を変えれば全体に反映される）
 const CHRONOLOGY_LIVE_LIMIT = 100;
@@ -1129,6 +1130,74 @@ async function updateTrafficRegulations() {
 }
 
 //============================================================
+// トップニュース（画面上部のテロップ）
+// ・NHK NEWS WEBの主要ニュースRSSを定期取得し、全端末へ配信する
+// ・グループに関わらず全員共通（交通規制・全体周知と同じ扱い）
+//============================================================
+
+const TOP_NEWS_URL = "https://www3.nhk.or.jp/rss/news/cat0.xml";
+const TOP_NEWS_REFRESH_MS = 5 * 60 * 1000; // 5分ごと
+const TOP_NEWS_LIMIT = 10;
+
+// RSS(XML)を正規表現で簡易パースする。adm-zip不使用の方針に合わせ、
+// このためだけにXMLパーサ依存を追加しない
+function parseRssTitles(xml, limit) {
+    const items = xml.match(/<item\b[\s\S]*?<\/item>/g) || [];
+    const titles = [];
+
+    for (const item of items) {
+        const match = item.match(/<title>([\s\S]*?)<\/title>/);
+        if (!match) { continue; }
+
+        let title = match[1].trim();
+
+        const cdataMatch = title.match(/^<!\[CDATA\[([\s\S]*?)\]\]>$/);
+        if (cdataMatch) { title = cdataMatch[1].trim(); }
+
+        title = title
+            .replace(/&amp;/g, "&")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
+            .replace(/&quot;/g, "\"")
+            .replace(/&#39;/g, "'");
+
+        if (title) { titles.push(title); }
+
+        if (titles.length >= limit) { break; }
+    }
+
+    return titles;
+}
+
+async function updateTopNews() {
+    try {
+        const response = await fetch(TOP_NEWS_URL, {
+            headers: { "User-Agent": "Puttan/2.75 news ticker client" }
+        });
+
+        if (!response.ok) {
+            throw new Error("HTTP " + response.status + " " + response.statusText);
+        }
+
+        const xml = await response.text();
+        const titles = parseRssTitles(xml, TOP_NEWS_LIMIT);
+
+        if (titles.length === 0) {
+            console.warn("トップニュース: 0件のため今回の更新をスキップ");
+            return;
+        }
+
+        topNews = titles;
+        io.emit("topNews", topNews);
+
+        console.log("トップニュース更新:", topNews.length, "件");
+    }
+    catch (err) {
+        console.error("トップニュース取得エラー:", err);
+    }
+}
+
+//============================================================
 // 地点復元
 //============================================================
 
@@ -1914,12 +1983,13 @@ io.on("connection", socket => {
     // 初期データ
     // ・locations/points/chronologyはグループごとに内容が異なるため、
     //   ユーザーが判明する(=registerUser成功後)まで送らない
-    // ・trafficRegulations/announcementは全グループ共通のため、
+    // ・trafficRegulations/announcement/topNewsは全グループ共通のため、
     //   未登録の接続直後でも送ってよい
     //====================================================
 
     socket.emit("trafficRegulations", trafficRegulations);
     socket.emit("announcement", announcementText);
+    socket.emit("topNews", topNews);
 
     //====================================================
     // 地点登録
@@ -3209,12 +3279,14 @@ async function startServer() {
         //================================================
 
         await updateTrafficRegulations();
+        await updateTopNews();
 
         //================================================
-        // 3日ごとに更新
+        // 定期更新（交通規制は3日ごと、トップニュースは5分ごと）
         //================================================
 
         setInterval(updateTrafficRegulations, TRAFFIC_UPDATE_INTERVAL);
+        setInterval(updateTopNews, TOP_NEWS_REFRESH_MS);
     });
 }
 

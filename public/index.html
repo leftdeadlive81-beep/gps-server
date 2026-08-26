@@ -243,6 +243,33 @@ button { cursor: pointer; }
     to { transform: translateX(-100%); }
 }
 
+.newsBar {
+    display: none;
+    background: #1565c0;
+    color: white;
+    overflow: hidden;
+    white-space: nowrap;
+    height: 26px;
+    line-height: 26px;
+    position: fixed;
+    top: calc(20px + env(safe-area-inset-top));
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    box-shadow: 0 2px 6px rgba(0,0,0,.4);
+}
+.newsBar.active { display: block; }
+.newsTrack {
+    display: inline-block;
+    padding-left: 100%;
+    font-size: 12px;
+    animation: newsScroll 40s linear infinite;
+}
+@keyframes newsScroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-100%); }
+}
+
 .tabBar {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -1286,6 +1313,12 @@ html.native-app #placeNameText { font-size: 11px; }
     <div id="announcementBar" class="announcementBar" onclick="dismissAnnouncement()">
         <div class="announcementTrack">
             <span id="announcementText"></span>
+        </div>
+    </div>
+
+    <div id="newsBar" class="newsBar">
+        <div class="newsTrack">
+            <span id="newsText"></span>
         </div>
     </div>
 
@@ -3289,12 +3322,47 @@ socket.on("announcement", text => {
             bar.classList.remove("active");
         }
     }
+
+    updateNewsBarPosition();
 });
 
 function dismissAnnouncement(){
     const bar = document.getElementById("announcementBar");
     if(bar){ bar.classList.remove("active"); }
+    updateNewsBarPosition();
 }
+
+/* ==================================================
+   トップニュース受信（画面上部のテロップ）
+================================================== */
+
+// お知らせバー（announcementBar）が表示中はその下に、非表示なら
+// statsBarのすぐ下に来るよう、ニュースバーの縦位置を動的に調整する
+function updateNewsBarPosition(){
+    const announcementBar = document.getElementById("announcementBar");
+    const newsBar = document.getElementById("newsBar");
+    if(!newsBar){ return; }
+
+    const announcementActive = announcementBar && announcementBar.classList.contains("active");
+    const offset = announcementActive ? 50 : 20; // 20=statsBar高さ, +30=announcementBar高さ
+    newsBar.style.top = `calc(${offset}px + env(safe-area-inset-top))`;
+}
+
+socket.on("topNews", titles => {
+    const bar = document.getElementById("newsBar");
+    const textElement = document.getElementById("newsText");
+    if(!bar || !textElement){ return; }
+
+    if(Array.isArray(titles) && titles.length > 0){
+        textElement.textContent = "📰 " + titles.join("　/　");
+        bar.classList.add("active");
+    }
+    else{
+        bar.classList.remove("active");
+    }
+
+    updateNewsBarPosition();
+});
 
 /* ==================================================
    交通規制受信
