@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>P.U.T.T.A.N. Version 2.75 操作マニュアル</title>
+<title>P.U.T.T.A.N. Version 2.76 操作マニュアル</title>
 <style>
 
 /* =========================================================
@@ -175,7 +175,7 @@ footer { text-align: center; color: #666; font-size: 12px; padding: 20px 10px 30
 
 <header>
     <h1>🐈 P.U.T.T.A.N.</h1>
-    <p>野外活動支援ツール　Version 2.75 操作マニュアル</p>
+    <p>野外活動支援ツール　Version 2.76 操作マニュアル</p>
 </header>
 
 <div class="container">
@@ -258,6 +258,10 @@ footer { text-align: center; color: #666; font-size: 12px; padding: 20px 10px 30
     「🔌 接続数」「👀 閲覧中」の右側に、現在地（GPS未取得の場合は熊本県庁付近を仮の基準地点として）を基にした
     日没・夜明けの時刻が表示されます。日中は次の日没時刻、日没後は次の夜明け（日の出）時刻に自動的に切り替わります。
 </p>
+<p>
+    その下には、NHK NEWS WEBの主要ニュース見出しが5分ごとに自動更新されるテロップが流れます
+    （グループに関わらず全員共通）。管理者が全体周知を設定している間は、そちらが優先して表示されます。
+</p>
 
 <h3>GPSの開始</h3>
 <p>
@@ -266,8 +270,9 @@ footer { text-align: center; color: #666; font-size: 12px; padding: 20px 10px 30
     位置情報が自動的に更新されます。
 </p>
 <p>
-    地図タブ左端の「📡 GPS OFF／📡 GPS ON」ボタンでいつでも手動でON/OFFを切り替えられます
-    （ログアウトはせず、位置情報の送信だけを止めます）。
+    画面下部の「📡 GPS OFF／📡 GPS ON」ボタンでいつでも手動でON/OFFを切り替えられます
+    （ログアウトはせず、位置情報の送信だけを止めます）。GPS・報告・引継・電話のボタンと
+    その下の状態表示は、どのタブを開いていても画面最下部に常に表示されます。
 </p>
 <p>
     GPS状態表示の左側には、現在ログイン中のアカウントID（ログインID）が表示されます。複数端末を使い分ける際の確認に使えます。
@@ -473,7 +478,7 @@ footer { text-align: center; color: #666; font-size: 12px; padding: 20px 10px 30
     クロノロジー投稿のプッシュ通知にも対応しています。
 </p>
 <p style="text-align:center;">
-    <a href="https://github.com/leftdeadlive81-beep/puttan-app/releases/download/2.75/puttan275.apk"
+    <a href="https://github.com/leftdeadlive81-beep/puttan-app/releases/download/2.76/puttan276.apk"
        style="display:inline-block; padding:11px 22px; background:#1f4e79; color:white; text-decoration:none; border-radius:8px; font-weight:bold;">
         ⬇️ Puttan Mobile（Android）をダウンロード
     </a>
@@ -516,7 +521,7 @@ footer { text-align: center; color: #666; font-size: 12px; padding: 20px 10px 30
 <div class="notice">
     位置情報・地点・クロノロジー・引き継ぎメモ・通話は、同じグループに参加しているメンバー同士でのみ
     共有されます。異なるグループのメンバーには一切表示されません。全体周知バーと交通規制情報のみ、
-    グループに関わらず全員で共有されます。今どのグループに入っているかは、地図タブ下部の「最終送信」の
+    グループに関わらず全員で共有されます。今どのグループに入っているかは、画面下部の「最終送信」の
     横に表示されます。
 </div>
 <p>
@@ -655,6 +660,13 @@ footer { text-align: center; color: #666; font-size: 12px; padding: 20px 10px 30
         アイコン名の誤記を修正（マオロア → マホロア）<br>
         Version 2.75に更新
     </td></tr>
+    <tr><td>8月26日</td><td>
+        画面上部にNHK NEWS WEBの主要ニュースを流すテロップを追加（5分ごと自動更新）<br>
+        地図・隊員一覧・クロノロ・設定のタブバーを画面上部から下部へ移動<br>
+        GPS ON/OFF・報告・引継・電話のボタンと状態表示を、地図タブ限定から全タブ共通の
+        画面最下部表示に変更<br>
+        Version 2.76に更新
+    </td></tr>
 </table>
 </div>
 
@@ -665,7 +677,7 @@ footer { text-align: center; color: #666; font-size: 12px; padding: 20px 10px 30
 </div>
 
 <footer>
-    P.U.T.T.A.N. Version 2.75<br>
+    P.U.T.T.A.N. Version 2.76<br>
     © 2026
 </footer>
 
