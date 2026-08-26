@@ -461,7 +461,7 @@ input, select {
 .navDistanceText { font-size: 22px; font-weight: bold; margin-top: 4px; }
 .navSummaryText { font-size: 12px; opacity: .85; margin-top: 2px; }
 
-.gpsButtonRow { display: flex; gap: 6px; margin-top: 7px; }
+.gpsButtonRow { display: flex; gap: 6px; margin-top: 7px; flex-shrink: 0; }
 .reportButton, .callButton, .gpsToggleMapButton, .handoverButton {
     flex: 1;
     padding: 10px 4px;
@@ -540,7 +540,7 @@ input, select {
 .callCameraButton.active { background: #ef6c00; }
 .callSwitchCameraButton { background: #1976d2; }
 .callCaptureButton { background: #00897b; }
-#lastSend { text-align: center; padding: 4px; font-size: 13px; }
+#lastSend { text-align: center; padding: 4px; font-size: 13px; flex-shrink: 0; }
 .gpsStatusRow {
     display: flex;
     flex-wrap: wrap;
@@ -549,6 +549,7 @@ input, select {
     gap: 4px 8px;
     padding: 4px;
     font-size: 13px;
+    flex-shrink: 0;
 }
 .currentAccountId { color: var(--text-muted); }
 
@@ -1319,21 +1320,6 @@ html.native-app #placeNameText { font-size: 11px; }
         </div>
     </div>
 
-    <div class="tabBar">
-        <button class="tabButton active" onclick="showTab('mapTab',this)">
-            <span class="tabText">地図</span>
-        </button>
-        <button class="tabButton" onclick="showTab('usersTab',this)">
-            <span class="tabText">隊員一覧</span>
-        </button>
-        <button class="tabButton" onclick="showTab('chronoTab',this)">
-            <span class="tabText">クロノロ</span>
-        </button>
-        <button class="tabButton" onclick="showTab('settingsTab',this)">
-            <span class="tabText">設定</span>
-        </button>
-    </div>
-
     <div id="mapTab" class="tabContent active">
         <div id="map"></div>
 
@@ -1353,19 +1339,6 @@ html.native-app #placeNameText { font-size: 11px; }
             <div id="navDistanceText" class="navDistanceText">-</div>
             <div id="navSummary" class="navSummaryText">-</div>
         </div>
-
-        <div class="gpsButtonRow">
-            <button id="gpsToggleMapButton" class="gpsToggleMapButton" onclick="toggleGpsFromMap()">📡 GPS OFF</button>
-            <button class="reportButton" onclick="openStatusReportPanel()">報告</button>
-            <button class="handoverButton" onclick="openHandoverList()">引継</button>
-            <button class="callButton" onclick="openCallPanel()">電話</button>
-        </div>
-        <div class="gpsStatusRow">
-            <span id="currentAccountId" class="currentAccountId"></span>
-            <span id="gpsStatus">🔴 GPS停止中</span>
-            <span id="moonAgeText" class="currentAccountId"></span>
-        </div>
-        <div id="lastSend"><span id="lastSendText">最終送信：-</span> <span id="currentGroupName" class="currentAccountId"></span></div>
     </div>
 
     <div id="arOverlay" class="arOverlay" style="display:none;">
@@ -1469,6 +1442,33 @@ html.native-app #placeNameText { font-size: 11px; }
 
     </div>
 
+    <div class="tabBar">
+        <button class="tabButton active" onclick="showTab('mapTab',this)">
+            <span class="tabText">地図</span>
+        </button>
+        <button class="tabButton" onclick="showTab('usersTab',this)">
+            <span class="tabText">隊員一覧</span>
+        </button>
+        <button class="tabButton" onclick="showTab('chronoTab',this)">
+            <span class="tabText">クロノロ</span>
+        </button>
+        <button class="tabButton" onclick="showTab('settingsTab',this)">
+            <span class="tabText">設定</span>
+        </button>
+    </div>
+
+    <div class="gpsButtonRow">
+        <button id="gpsToggleMapButton" class="gpsToggleMapButton" onclick="toggleGpsFromMap()">📡 GPS OFF</button>
+        <button class="reportButton" onclick="openStatusReportPanel()">報告</button>
+        <button class="handoverButton" onclick="openHandoverList()">引継</button>
+        <button class="callButton" onclick="openCallPanel()">電話</button>
+    </div>
+    <div class="gpsStatusRow">
+        <span id="currentAccountId" class="currentAccountId"></span>
+        <span id="gpsStatus">🔴 GPS停止中</span>
+        <span id="moonAgeText" class="currentAccountId"></span>
+    </div>
+    <div id="lastSend"><span id="lastSendText">最終送信：-</span> <span id="currentGroupName" class="currentAccountId"></span></div>
 
 </div>
 
