@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Puttan Version 2.78</title>
+<title>Puttan Version 2.79</title>
 
 <link rel="icon" type="image/png" href="/icon.png">
 <link rel="apple-touch-icon" href="/icon.png">
@@ -2970,6 +2970,48 @@ function utmProjString(lat, lon){
 }
 
 /* ==================================================
+   MGRS（軍が使う座標系）変換
+   ・UTMのゾーン・東距・北距から、100kmグリッド識別文字を
+     算出して組み立てる。npm版mgrsライブラリの出力と全ケース
+     一致することを確認済みのアルゴリズム
+================================================== */
+
+// 緯度帯文字（8度刻み、C〜X。I・Oは1・0と紛らわしいため使わない）
+function mgrsLatBandLetter(lat){
+    const letters = "CDEFGHJKLMNPQRSTUVWX";
+    let index = Math.floor((lat + 80) / 8);
+    if(index < 0){ index = 0; }
+    if(index > 19){ index = 19; }
+    return letters[index];
+}
+
+// 100kmグリッド識別文字（東西:ゾーン番号で3パターンを巡回、南北:20文字を巡回）
+const MGRS_COLUMN_SETS = ["ABCDEFGH", "JKLMNPQR", "STUVWXYZ"];
+const MGRS_ROW_LETTERS = "ABCDEFGHJKLMNPQRSTUV";
+
+function latLonToMgrs(lat, lon, digits){
+    digits = digits || 5;
+
+    const zone = utmZoneNumber(lon);
+    const band = mgrsLatBandLetter(lat);
+    const [easting, northing] = proj4("EPSG:4326", utmProjString(lat, lon), [lon, lat]);
+
+    const e100k = Math.floor(easting / 100000);
+    const colLetter = MGRS_COLUMN_SETS[(zone - 1) % 3][e100k - 1];
+
+    let n100k = Math.floor(northing / 100000) % 20;
+    if(n100k < 0){ n100k += 20; }
+    const rowOffset = (zone % 2 === 0) ? 5 : 0;
+    const rowLetter = MGRS_ROW_LETTERS[(n100k + rowOffset) % 20];
+
+    const scale = Math.pow(10, 5 - digits);
+    const eDigits = String(Math.floor((easting % 100000) / scale)).padStart(digits, "0");
+    const nDigits = String(Math.floor((northing % 100000) / scale)).padStart(digits, "0");
+
+    return `${zone}${band} ${colLetter}${rowLetter} ${eDigits} ${nDigits}`;
+}
+
+/* ==================================================
    UTMグリッド（デフォルトON）
 ================================================== */
 
@@ -3162,7 +3204,7 @@ utmCenterControl.onAdd = function(){
     const div = L.DomUtil.create("div", "utmCenterBox");
     div.innerHTML = `
         <div id="placeNameText">取得中...</div>
-        <div id="utmCenterText">UTM -<br>E: -　N: -</div>
+        <div id="utmCenterText">MGRS -</div>
     `;
     L.DomEvent.disableClickPropagation(div);
     return div;
@@ -3173,15 +3215,9 @@ utmCenterControl.addTo(map);
 function updateUtmCenterDisplay(){
     const center = map.getCenter();
 
-    const utm = proj4(
-        "EPSG:4326",
-        utmProjString(center.lat, center.lng),
-        [center.lng, center.lat]
-    );
-
     const utmText = document.getElementById("utmCenterText");
     if(utmText){
-        utmText.innerHTML = `UTM ${utmZoneLabel(center.lat, center.lng)}<br>E: ${Math.round(utm[0])}　N: ${Math.round(utm[1])}`;
+        utmText.innerHTML = `MGRS ${latLonToMgrs(center.lat, center.lng)}`;
     }
 }
 
@@ -4946,7 +4982,7 @@ function renderUserMarker(userId, user){
 
             <div class="popupSection popupLocation">
                 緯度経度：${lat.toFixed(6)}, ${lon.toFixed(6)}<br>
-                UTM ${escapeHtml(user.utmZone || "52S")}　E：${user.utmE ?? "-"}　N：${user.utmN ?? "-"}<br>
+                MGRS ${latLonToMgrs(lat, lon)}<br>
                 ${formatMovement(user.speed, user.heading)}
             </div>
 
@@ -5687,14 +5723,13 @@ function renderPointMarker(name, p){
 
     const pLat = Number(p.lat);
     const pLon = Number(p.lon);
-    const utm = proj4("EPSG:4326", utmProjString(pLat, pLon), [pLon, pLat]);
 
     marker.bindPopup(`
         <b>${typeInfo.emoji} ${escapeHtml(name)}</b>
         <br>
         <span style="color:#666;">${typeInfo.label}</span>
         <br>
-        UTM ${utmZoneLabel(pLat, pLon)}　E：${Math.round(utm[0])}　N：${Math.round(utm[1])}
+        MGRS ${latLonToMgrs(pLat, pLon)}
         <br>
         <span style="color:#666; font-size:12px;">👤 登録：${registeredInfo}</span>
         <br>
@@ -6665,7 +6700,7 @@ async function switchCallCamera(){
    ビデオ通話：映っている映像をクロノロジーへ記録
    ・相手側の映像（大きく表示されている方）を1枚キャプチャし、
      既存のクロノロジー写真アップロードの仕組みにそのまま乗せる
-   ・本文には投稿者自身の現在のUTM座標を入れる
+   ・本文には投稿者自身の現在のMGRS座標を入れる
 ================================================== */
 
 async function captureCallVideoToChronology(){
@@ -6687,15 +6722,15 @@ async function captureCallVideoToChronology(){
         }
 
         const me = latestUsersData[socketUserId];
-        const utmText = (me && me.utmE != null && me.utmN != null)
-            ? `UTM ${me.utmZone || "52S"} E:${me.utmE} N:${me.utmN}`
-            : "UTM座標不明";
+        const mgrsText = (me && me.lat != null && me.lon != null)
+            ? `MGRS ${latLonToMgrs(Number(me.lat), Number(me.lon))}`
+            : "MGRS座標不明";
 
         try{
             const photoUrl = await uploadChronoPhoto(blob);
 
             socket.emit("addChronology", {
-                message: utmText,
+                message: mgrsText,
                 user: document.getElementById("name").value,
                 category: "報告",
                 remarks: "通話中のビデオより撮影",
@@ -6834,7 +6869,7 @@ function showTab(tabId, button){
 ================================================== */
 
 window.addEventListener("load", async () => {
-    console.log("Version 2.78 起動");
+    console.log("Version 2.79 起動");
 
     try{
         const { data, error } = await supabaseClient.auth.getSession();
