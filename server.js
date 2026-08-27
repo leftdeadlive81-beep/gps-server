@@ -1,5 +1,5 @@
 //============================================================
-// Puttan Version 2.80
+// Puttan Version 2.81
 // server.js
 //
 // ・PostgreSQL / Supabase
@@ -1174,7 +1174,7 @@ function parseRssTitles(xml, limit) {
 async function updateTopNews() {
     try {
         const response = await fetch(TOP_NEWS_URL, {
-            headers: { "User-Agent": "Puttan/2.80 news ticker client" }
+            headers: { "User-Agent": "Puttan/2.81 news ticker client" }
         });
 
         if (!response.ok) {

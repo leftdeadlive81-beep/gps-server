@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>P.U.T.T.A.N. Version 2.80 操作マニュアル</title>
+<title>P.U.T.T.A.N. Version 2.81 操作マニュアル</title>
 <style>
 
 /* =========================================================
@@ -175,7 +175,7 @@ footer { text-align: center; color: #666; font-size: 12px; padding: 20px 10px 30
 
 <header>
     <h1>🐈 P.U.T.T.A.N.</h1>
-    <p>野外活動支援ツール　Version 2.80 操作マニュアル</p>
+    <p>野外活動支援ツール　Version 2.81 操作マニュアル</p>
 </header>
 
 <div class="container">
@@ -341,17 +341,23 @@ footer { text-align: center; color: #666; font-size: 12px; padding: 20px 10px 30
 </p>
 
 <h3>🗺 地図の切り替え・レイヤー</h3>
-<p>地図右上のレイヤーアイコンから、以下を切り替えられます。</p>
+<p>
+    地図右上の「🗂 レイヤー」ボタンから、地図の種類とレイヤー表示をカテゴリ分けして切り替えられます。
+</p>
 <ul>
-    <li>🗺 標準地図／🛰 航空写真／⛰ 地形図／🇯🇵 国土地理院／🚒 防災淡色地図</li>
-    <li><strong>👥 隊員／📍 登録地点</strong>：地図が混み合うときに非表示にできます</li>
-    <li><strong>📷 ライブカメラ（九州・沖縄）</strong>：国土交通省 九州地方整備局・沖縄総合事務局の道路・河川・火山カメラの
+    <li><strong>地図の種類</strong>：🗺 標準地図／🛰 航空写真／⛰ 地形図／🇯🇵 国土地理院／🚒 防災淡色地図（いずれか1つを選択）</li>
+    <li><strong>表示</strong>：👥 隊員／📍 登録地点（地図が混み合うときに非表示にできます）</li>
+    <li><strong>防災情報</strong>：
+        <ul>
+            <li>🏃 避難場所（熊本市）：指定緊急避難場所を表示。ポップアップで対応する災害種別とナビ開始ができます</li>
+            <li>🌊 洪水浸水想定区域／⛰ 土砂災害警戒区域：ハザードマップポータルサイト（国土交通省）のハザードマップ</li>
+            <li>🚧 交通規制：国土交通省GISデータをもとにした熊本県内の交通規制情報（3日ごとに自動更新）</li>
+            <li>🌧 雨雲レーダー：RainViewerによる雨雲の表示</li>
+        </ul>
+    </li>
+    <li><strong>カメラ</strong>：📷 ライブカメラ（九州・沖縄）：国土交通省 九州地方整備局・沖縄総合事務局の道路・河川・火山カメラの
         最新静止画をピン表示（座標は概算。沖縄は道路カメラのみ収録）</li>
-    <li><strong>🏃 避難場所（熊本市）</strong>：指定緊急避難場所を表示。ポップアップで対応する災害種別とナビ開始ができます</li>
-    <li><strong>🌊 洪水浸水想定区域／⛰ 土砂災害警戒区域</strong>：ハザードマップポータルサイト（国土交通省）のハザードマップ</li>
-    <li><strong>🧭 UTMグリッド</strong>：UTM座標のグリッド線</li>
-    <li><strong>🚧 交通規制</strong>：国土交通省GISデータをもとにした熊本県内の交通規制情報（3日ごとに自動更新）</li>
-    <li><strong>🌧 雨雲レーダー</strong>：RainViewerによる雨雲の表示</li>
+    <li><strong>グリッド</strong>：🧭 UTMグリッド（UTM座標のグリッド線）</li>
 </ul>
 <p>地図左上の📍ボタンで現在地へ戻る、⛶ボタンで全画面表示に切り替えられます。</p>
 
@@ -480,7 +486,7 @@ footer { text-align: center; color: #666; font-size: 12px; padding: 20px 10px 30
     クロノロジー投稿のプッシュ通知にも対応しています。
 </p>
 <p style="text-align:center;">
-    <a href="https://github.com/leftdeadlive81-beep/puttan-app/releases/download/2.80/puttan280.apk"
+    <a href="https://github.com/leftdeadlive81-beep/puttan-app/releases/download/2.81/puttan281.apk"
        style="display:inline-block; padding:11px 22px; background:#1f4e79; color:white; text-decoration:none; border-radius:8px; font-weight:bold;">
         ⬇️ Puttan Mobile（Android）をダウンロード
     </a>
@@ -678,7 +684,10 @@ footer { text-align: center; color: #666; font-size: 12px; padding: 20px 10px 30
         地点ポップアップ・通話中の写真記録に反映）<br>
         Version 2.79に更新<br>
         ライブカメラを熊本県のみから九州7県・沖縄全域（計74件）へ拡大、火山カメラ種別を追加<br>
-        Version 2.80に更新
+        Version 2.80に更新<br>
+        地図レイヤーの選択パネルを「地図の種類」「表示」「防災情報」「カメラ」「グリッド」の
+        カテゴリ分け表示に変更（レイヤー数増加により選びづらくなっていたため）<br>
+        Version 2.81に更新
     </td></tr>
 </table>
 </div>
@@ -690,7 +699,7 @@ footer { text-align: center; color: #666; font-size: 12px; padding: 20px 10px 30
 </div>
 
 <footer>
-    P.U.T.T.A.N. Version 2.80<br>
+    P.U.T.T.A.N. Version 2.81<br>
     © 2026
 </footer>
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Puttan Version 2.80</title>
+<title>Puttan Version 2.81</title>
 
 <link rel="icon" type="image/png" href="/icon.png">
 <link rel="apple-touch-icon" href="/icon.png">
@@ -1089,6 +1089,8 @@ html.native-app .leaflet-popup-content .popupLabel { font-size: 11px; }
 html.native-app .leaflet-popup-content .popupLocation { font-size: 10px; }
 html.native-app .leaflet-popup-content .popupUserId { font-size: 9px; }
 html.native-app .utmCenterBox { font-size: 10px; padding: 3px 6px; }
+html.native-app .layerPanelToggle,
+html.native-app .layerPanelRow { font-size: 11px; }
 html.native-app #placeNameText { font-size: 11px; }
 
 /* 隊員一覧の「詳細」ボトムシート */
@@ -1166,6 +1168,53 @@ html.native-app #placeNameText { font-size: 11px; }
     box-shadow: 0 1px 4px rgba(0,0,0,.3);
     text-align: center;
 }
+
+/* レイヤーパネル（カテゴリ見出し付きの地図レイヤー選択） */
+.layerPanelControl {
+    background: rgba(255,255,255,.95);
+    border: 1px solid #555;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.3);
+    color: #111;
+    font-size: 13px;
+}
+.layerPanelToggle {
+    display: block;
+    width: 100%;
+    border: none;
+    background: none;
+    padding: 6px 10px;
+    font-size: 13px;
+    font-weight: bold;
+    text-align: left;
+    color: #111;
+}
+.layerPanelBody {
+    display: none;
+    max-height: 60vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 8px 6px;
+    min-width: 170px;
+    max-width: min(80vw, 260px);
+}
+.layerPanelControl.expanded .layerPanelBody { display: block; }
+.layerCategoryTitle {
+    font-size: 11px;
+    font-weight: bold;
+    color: #666;
+    margin: 8px 0 2px;
+    padding-top: 6px;
+    border-top: 1px solid #ddd;
+}
+.layerCategoryTitle:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+.layerPanelRow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 0;
+    cursor: pointer;
+}
 #placeNameText {
     font-family: "Yu Gothic", "Meiryo", sans-serif;
     font-weight: bold;
@@ -1185,61 +1234,6 @@ html.native-app #placeNameText { font-size: 11px; }
     padding: 2px 6px !important;
     box-shadow: 0 1px 4px rgba(0,0,0,.3);
 }
-/* ==================================================
-   レイヤー選択パネル
-================================================== */
-
-.leaflet-control-layers {
-    border-radius: 8px !important;
-    border: 1px solid #555 !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,.35) !important;
-}
-.leaflet-control-layers-toggle {
-    width: 40px !important;
-    height: 40px !important;
-}
-.leaflet-control-layers-expanded {
-    padding: 10px 14px 12px !important;
-    background: rgba(255,255,255,.97) !important;
-    max-height: min(65vh, 480px);
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-}
-.leaflet-control-layers-base,
-.leaflet-control-layers-overlays {
-    display: flex;
-    flex-direction: column;
-}
-.leaflet-control-layers-base::before,
-.leaflet-control-layers-overlays::before {
-    display: block;
-    font-weight: bold;
-    font-size: 12px;
-    color: #1976d2;
-    margin-bottom: 4px;
-}
-.leaflet-control-layers-base::before { content: "🗺 ベースマップ"; }
-.leaflet-control-layers-overlays::before {
-    content: "📌 重ね合わせ表示";
-    margin-top: 2px;
-}
-.leaflet-control-layers label {
-    display: flex;
-    align-items: center;
-    padding: 5px 2px;
-    font-size: 14px;
-    white-space: nowrap;
-}
-.leaflet-control-layers-selector {
-    width: 17px;
-    height: 17px;
-    margin-right: 8px;
-}
-.leaflet-control-layers-separator {
-    margin: 6px 0;
-    border-top: 1px solid #ddd;
-}
-
 @media (max-width: 600px) {
     #authScreen { padding: 10px 10px 12px; }
     .authBox { padding: 16px; margin-bottom: 6px; }
@@ -3173,27 +3167,121 @@ function drawUtmGrid(){
 map.on("moveend", drawUtmGrid);
 drawUtmGrid();
 
-L.control.layers(
+/* ==================================================
+   レイヤーパネル（グループ分けした独自コントロール）
+   ・Leaflet標準のL.control.layers()はフラットな一覧しか
+     出せず、地点種別が増えるほど選びづらくなっていたため、
+     カテゴリ見出し付きの自作パネルに置き換えた
+================================================== */
+
+const BASE_LAYERS = [
+    { label: "🗺 標準地図", layer: osm },
+    { label: "🛰 航空写真", layer: satellite },
+    { label: "⛰ 地形図", layer: terrain },
+    { label: "🇯🇵 国土地理院", layer: gsi },
+    { label: "🚒 防災淡色地図", layer: gsiPale }
+];
+
+const OVERLAY_GROUPS = [
     {
-        "🗺 標準地図": osm,
-        "🛰 航空写真": satellite,
-        "⛰ 地形図": terrain,
-        "🇯🇵 国土地理院": gsi,
-        "🚒 防災淡色地図": gsiPale
+        title: "表示",
+        items: [
+            { label: "👥 隊員", layer: memberLayerGroup },
+            { label: "📍 登録地点", layer: pointClusterGroup }
+        ]
     },
     {
-        "👥 隊員": memberLayerGroup,
-        "📍 登録地点": pointClusterGroup,
-        "📷 ライブカメラ（九州・沖縄）": liveCameraLayer,
-        "🏃 避難場所（熊本市）": evacuationLayer,
-        "🌊 洪水浸水想定区域": floodHazardLayer,
-        "⛰️ 土砂災害警戒区域": sedimentHazardLayer,
-        "🧭 UTMグリッド": utmGridLayer,
-        "🚧 交通規制": trafficRegulationLayer,
-        "🌧 雨雲レーダー": rainRadarLayer
+        title: "防災情報",
+        items: [
+            { label: "🏃 避難場所（熊本市）", layer: evacuationLayer },
+            { label: "🌊 洪水浸水想定区域", layer: floodHazardLayer },
+            { label: "⛰️ 土砂災害警戒区域", layer: sedimentHazardLayer },
+            { label: "🚧 交通規制", layer: trafficRegulationLayer },
+            { label: "🌧 雨雲レーダー", layer: rainRadarLayer }
+        ]
     },
-    { collapsed: true }
-).addTo(map);
+    {
+        title: "カメラ",
+        items: [
+            { label: "📷 ライブカメラ（九州・沖縄）", layer: liveCameraLayer }
+        ]
+    },
+    {
+        title: "グリッド",
+        items: [
+            { label: "🧭 UTMグリッド", layer: utmGridLayer }
+        ]
+    }
+];
+
+// トグル処理でindex参照するためのフラットな一覧（表示上はグループ分けする）
+const OVERLAY_ITEMS = OVERLAY_GROUPS.flatMap(group => group.items);
+
+function switchBaseLayer(index){
+    BASE_LAYERS.forEach(item => map.removeLayer(item.layer));
+    map.addLayer(BASE_LAYERS[index].layer);
+}
+
+function toggleOverlayLayer(checkbox, index){
+    const layer = OVERLAY_ITEMS[index].layer;
+    if(checkbox.checked){
+        map.addLayer(layer);
+    }
+    else{
+        map.removeLayer(layer);
+    }
+}
+
+function toggleLayerPanel(){
+    const panel = document.getElementById("layerPanelControl");
+    if(panel){ panel.classList.toggle("expanded"); }
+}
+
+const layerPanelControl = L.control({ position: "topright" });
+
+layerPanelControl.onAdd = function(){
+    const container = L.DomUtil.create("div", "layerPanelControl");
+    container.id = "layerPanelControl";
+
+    const baseLayersHtml = BASE_LAYERS.map((item, index) => `
+        <label class="layerPanelRow">
+            <input type="radio" name="baseLayerRadio" ${map.hasLayer(item.layer) ? "checked" : ""} onchange="switchBaseLayer(${index})">
+            ${item.label}
+        </label>
+    `).join("");
+
+    let itemIndex = 0;
+    const overlayGroupsHtml = OVERLAY_GROUPS.map(group => {
+        const rowsHtml = group.items.map(item => {
+            const html = `
+                <label class="layerPanelRow">
+                    <input type="checkbox" ${map.hasLayer(item.layer) ? "checked" : ""} onchange="toggleOverlayLayer(this, ${itemIndex})">
+                    ${item.label}
+                </label>
+            `;
+            itemIndex++;
+            return html;
+        }).join("");
+
+        return `<div class="layerCategoryTitle">${group.title}</div>${rowsHtml}`;
+    }).join("");
+
+    container.innerHTML = `
+        <button type="button" class="layerPanelToggle" onclick="toggleLayerPanel()">🗂 レイヤー</button>
+        <div class="layerPanelBody">
+            <div class="layerCategoryTitle">地図の種類</div>
+            ${baseLayersHtml}
+            ${overlayGroupsHtml}
+        </div>
+    `;
+
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+
+    return container;
+};
+
+layerPanelControl.addTo(map);
 
 L.control.scale({
     metric: true,
@@ -6949,7 +7037,7 @@ function showTab(tabId, button){
 ================================================== */
 
 window.addEventListener("load", async () => {
-    console.log("Version 2.80 起動");
+    console.log("Version 2.81 起動");
 
     try{
         const { data, error } = await supabaseClient.auth.getSession();
