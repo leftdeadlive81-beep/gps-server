@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Puttan Version 2.89</title>
+<title>Puttan Version 2.90</title>
 
 <link rel="icon" type="image/png" href="/icon.png">
 <link rel="apple-touch-icon" href="/icon.png">
@@ -390,6 +390,34 @@ input, select {
 
 .map3dButton { border-top: 1px solid #ccc; font-size: 15px; }
 .map3dButton.active { background: #1976d2; color: #fff; }
+
+.map3dErrorBanner {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    z-index: 20;
+    background: rgba(0,0,0,0.75);
+    color: #ffdddd;
+    font-size: 12px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    max-height: 30vh;
+    overflow-y: auto;
+    word-break: break-all;
+}
+
+.map3dFatalMessage {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 20px;
+    text-align: center;
+    color: #333;
+    background: #eee;
+    font-size: 14px;
+}
 
 .addressSearchBox {
     position: absolute;
@@ -3930,6 +3958,46 @@ let map3d = null;
 let map3dOverlay = null;
 let is3DActive = false;
 let gsiDemProtocolRegistered = false;
+let map3dErrorLog = [];
+
+function webgl2Supported(){
+    try{
+        const canvas = document.createElement("canvas");
+        return !!(window.WebGL2RenderingContext && canvas.getContext("webgl2"));
+    }
+    catch(e){
+        return false;
+    }
+}
+
+// 3D表示画面は真っ黒のまま失敗すると原因が分からないため、
+// エラーを画面上のバナーに直接表示してユーザーが内容を確認・報告できるようにする
+function log3DError(context, err){
+    const message = context + "：" + (err && err.message ? err.message : String(err));
+    console.error(message);
+    map3dErrorLog.push(message);
+    render3DErrorBanner();
+}
+
+function render3DErrorBanner(){
+    const map3dDiv = document.getElementById("map3d");
+    if(!map3dDiv){ return; }
+
+    let banner = document.getElementById("map3dErrorBanner");
+    if(!banner){
+        banner = document.createElement("div");
+        banner.id = "map3dErrorBanner";
+        banner.className = "map3dErrorBanner";
+        map3dDiv.appendChild(banner);
+    }
+    banner.innerHTML = map3dErrorLog.slice(-4).map(m => `<div>${m}</div>`).join("");
+}
+
+function show3DFatalError(message){
+    const map3dDiv = document.getElementById("map3d");
+    if(!map3dDiv){ return; }
+    map3dDiv.innerHTML = `<div class="map3dFatalMessage">⚠ 3D表示を利用できません<br>${message}</div>`;
+}
 
 // 地理院標高タイル(dem_png)の1画素(R,G,B)を、MapLibreのraster-demが
 // 読めるMapbox Terrain-RGB形式の(R,G,B)に変換する
@@ -3993,57 +4061,89 @@ function registerGsiDemProtocol(){
 function init3DMap(){
     if(map3d){ return; }
 
+    map3dErrorLog = [];
+
+    if(typeof maplibregl === "undefined"){
+        show3DFatalError("MapLibre GL JSの読み込みに失敗しました。通信環境を確認してください。");
+        return;
+    }
+
+    if(!webgl2Supported()){
+        show3DFatalError("この端末・ブラウザはWebGL2に対応していないため、3D表示を利用できません。");
+        return;
+    }
+
     registerGsiDemProtocol();
 
     const center = map.getCenter();
 
-    map3d = new maplibregl.Map({
-        container: "map3d",
-        style: {
-            version: 8,
-            sources: {
-                gsiPale3d: {
-                    type: "raster",
-                    tiles: ["https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png"],
-                    tileSize: 256,
-                    attribution: "地理院タイル（国土地理院）"
+    try{
+        map3d = new maplibregl.Map({
+            container: "map3d",
+            style: {
+                version: 8,
+                sources: {
+                    gsiPale3d: {
+                        type: "raster",
+                        tiles: ["https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png"],
+                        tileSize: 256,
+                        attribution: "地理院タイル（国土地理院）"
+                    },
+                    gsidem: {
+                        type: "raster-dem",
+                        tiles: ["gsidem://https://cyberjapandata.gsi.go.jp/xyz/dem_png/{z}/{x}/{y}.png"],
+                        tileSize: 256,
+                        encoding: "mapbox"
+                    }
                 },
-                gsidem: {
-                    type: "raster-dem",
-                    tiles: ["gsidem://https://cyberjapandata.gsi.go.jp/xyz/dem_png/{z}/{x}/{y}.png"],
-                    tileSize: 256,
-                    encoding: "mapbox"
-                }
+                layers: [
+                    { id: "gsiPale3dLayer", type: "raster", source: "gsiPale3d" }
+                ],
+                terrain: { source: "gsidem", exaggeration: 1.3 }
             },
-            layers: [
-                { id: "gsiPale3dLayer", type: "raster", source: "gsiPale3d" }
-            ],
-            terrain: { source: "gsidem", exaggeration: 1.3 }
-        },
-        center: [center.lng, center.lat],
-        zoom: Math.max(map.getZoom(), 12),
-        pitch: 60,
-        maxPitch: 85
-    });
+            center: [center.lng, center.lat],
+            zoom: Math.max(map.getZoom(), 12),
+            pitch: 60,
+            maxPitch: 85
+        });
+    }
+    catch(err){
+        log3DError("初期化エラー", err);
+        map3d = null;
+        return;
+    }
+
+    map3d.on("error", e => log3DError("表示エラー", e.error));
 
     map3d.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
 
     map3d.on("load", () => {
-        map3d.setSky({
-            "sky-color": "#8ecbf0",
-            "horizon-color": "#ffffff",
-            "fog-color": "#ffffff",
-            "sky-horizon-blend": 0.5
-        });
+        try{
+            map3d.setSky({
+                "sky-color": "#8ecbf0",
+                "horizon-color": "#ffffff",
+                "fog-color": "#ffffff",
+                "sky-horizon-blend": 0.5
+            });
+        }
+        catch(err){
+            log3DError("空の表示エラー", err);
+        }
 
-        map3dOverlay = new deck.MapboxOverlay({
-            interleaved: true,
-            layers: KUMAMOTO_BLDG_TILESETS.map((url, idx) => new deck.Tile3DLayer({
-                id: "plateau-bldg-" + idx,
-                data: url
-            }))
-        });
-        map3d.addControl(map3dOverlay);
+        try{
+            map3dOverlay = new deck.MapboxOverlay({
+                interleaved: true,
+                layers: KUMAMOTO_BLDG_TILESETS.map((url, idx) => new deck.Tile3DLayer({
+                    id: "plateau-bldg-" + idx,
+                    data: url,
+                    onTileError: err => log3DError("建物データ読込エラー", err)
+                }))
+            });
+            map3d.addControl(map3dOverlay);
+        }
+        catch(err){
+            log3DError("建物レイヤー初期化エラー", err);
+        }
     });
 }
 
@@ -7782,7 +7882,7 @@ function showTab(tabId, button){
 ================================================== */
 
 window.addEventListener("load", async () => {
-    console.log("Version 2.89 起動");
+    console.log("Version 2.90 起動");
 
     try{
         const { data, error } = await supabaseClient.auth.getSession();

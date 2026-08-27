@@ -1,5 +1,5 @@
 //============================================================
-// Puttan Version 2.89
+// Puttan Version 2.90
 // server.js
 //
 // ・PostgreSQL / Supabase
@@ -1185,7 +1185,7 @@ function parseRssTitles(xml, limit) {
 async function updateTopNews() {
     try {
         const response = await fetch(TOP_NEWS_URL, {
-            headers: { "User-Agent": "Puttan/2.89 news ticker client" }
+            headers: { "User-Agent": "Puttan/2.90 news ticker client" }
         });
 
         if (!response.ok) {
@@ -1230,7 +1230,7 @@ let busPositions = [];
 
 async function fetchBusFeed(feed) {
     const response = await fetch(feed.url, {
-        headers: { "User-Agent": "Puttan/2.89 bus tracker client" }
+        headers: { "User-Agent": "Puttan/2.90 bus tracker client" }
     });
 
     if (!response.ok) {
@@ -1421,7 +1421,7 @@ async function geocodeCrimeLocation(city, machi) {
                 "&q=" + encodeURIComponent(query);
 
             const response = await fetch(url, {
-                headers: { "User-Agent": "Puttan/2.89 (GPS tracking tool; contact: leftdeadlive81@gmail.com)" }
+                headers: { "User-Agent": "Puttan/2.90 (GPS tracking tool; contact: leftdeadlive81@gmail.com)" }
             });
 
             if (!response.ok) { throw new Error("HTTP " + response.status); }
@@ -1468,7 +1468,7 @@ async function loadCrimeData() {
     for (const source of CRIME_CSV_SOURCES) {
         try {
             const url = `https://data.bodik.jp/dataset/${source.datasetId}/resource/${source.resourceId}/download`;
-            const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 Puttan/2.89" } });
+            const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 Puttan/2.90" } });
 
             if (!response.ok) {
                 console.error("犯罪発生情報 CSV取得失敗:", source.year, source.type, response.status);
