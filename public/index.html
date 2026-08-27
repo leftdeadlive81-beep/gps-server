@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Puttan Version 2.91</title>
+<title>Puttan Version 2.92</title>
 
 <link rel="icon" type="image/png" href="/icon.png">
 <link rel="apple-touch-icon" href="/icon.png">
@@ -388,8 +388,26 @@ input, select {
     overflow: hidden;
 }
 
-.map3dButton { border-top: 1px solid #ccc; font-size: 15px; }
-.map3dButton.active { background: #1976d2; color: #fff; }
+.map3dStandaloneButton {
+    position: absolute;
+    top: 138px;
+    left: 10px;
+    z-index: 15;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    border: 2px solid rgba(0,0,0,0.2);
+    border-radius: 4px;
+    font-size: 17px;
+    padding: 0;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.map3dStandaloneButton:hover { background: #f4f4f4; }
+.map3dStandaloneButton.active { background: #1976d2; }
 
 .map3dErrorBanner {
     position: absolute;
@@ -1375,6 +1393,7 @@ html.native-app #placeNameText { font-size: 11px; }
     <div id="mapTab" class="tabContent active">
         <div id="map"></div>
         <div id="map3d"></div>
+        <button type="button" id="map3dToggleButton" class="map3dStandaloneButton" onclick="toggle3DView()" title="3D表示（地形・熊本市建物）に切替">🏔</button>
 
         <div id="addressSearchBox" class="addressSearchBox">
             <div class="addressSearchRow">
@@ -3920,17 +3939,6 @@ locateControl.onAdd = function(){
         });
     }
 
-    const map3dLink = L.DomUtil.create("a", "locateButton map3dButton", container);
-    map3dLink.id = "map3dToggleButton";
-    map3dLink.href = "#";
-    map3dLink.title = "3D表示（地形・熊本市建物）に切替";
-    map3dLink.innerHTML = "🏔";
-
-    L.DomEvent.on(map3dLink, "click", e => {
-        L.DomEvent.preventDefault(e);
-        toggle3DView();
-    });
-
     return container;
 };
 
@@ -4165,8 +4173,10 @@ function toggle3DView(){
         if(toggleButton){ toggleButton.classList.add("active"); }
 
         init3DMap();
-        map3d.jumpTo({ center: [center.lng, center.lat], zoom: Math.max(zoom, 12) });
-        setTimeout(() => map3d.resize(), 50);
+        if(map3d){
+            map3d.jumpTo({ center: [center.lng, center.lat], zoom: Math.max(zoom, 12) });
+            setTimeout(() => { if(map3d){ map3d.resize(); } }, 50);
+        }
     }
     else{
         map3dDiv.style.display = "none";
@@ -7884,7 +7894,7 @@ function showTab(tabId, button){
 ================================================== */
 
 window.addEventListener("load", async () => {
-    console.log("Version 2.91 起動");
+    console.log("Version 2.92 起動");
 
     try{
         const { data, error } = await supabaseClient.auth.getSession();
