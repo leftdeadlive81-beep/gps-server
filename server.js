@@ -1,5 +1,5 @@
 //============================================================
-// Puttan Version 2.77
+// Puttan Version 2.78
 // server.js
 //
 // ・PostgreSQL / Supabase
@@ -1131,11 +1131,13 @@ async function updateTrafficRegulations() {
 
 //============================================================
 // トップニュース（画面上部のテロップ）
-// ・NHK NEWS WEBの主要ニュースRSSを定期取得し、全端末へ配信する
+// ・Yahoo!ニュース トピックス「主要」RSSを定期取得し、全端末へ配信する
 // ・グループに関わらず全員共通（交通規制・全体周知と同じ扱い）
+// ・当初はNHK NEWS WEBのRSSを使用していたが、配信内容が長期間
+//   更新されない現象が確認されたためこちらに切り替えた
 //============================================================
 
-const TOP_NEWS_URL = "https://www3.nhk.or.jp/rss/news/cat0.xml";
+const TOP_NEWS_URL = "https://news.yahoo.co.jp/rss/topics/top-picks.xml";
 const TOP_NEWS_REFRESH_MS = 5 * 60 * 1000; // 5分ごと
 const TOP_NEWS_LIMIT = 10;
 
@@ -1172,7 +1174,7 @@ function parseRssTitles(xml, limit) {
 async function updateTopNews() {
     try {
         const response = await fetch(TOP_NEWS_URL, {
-            headers: { "User-Agent": "Puttan/2.77 news ticker client" }
+            headers: { "User-Agent": "Puttan/2.78 news ticker client" }
         });
 
         if (!response.ok) {
