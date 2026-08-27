@@ -3729,6 +3729,15 @@ async function initPushNotifications(){
             vibration: true
         });
 
+        await plugin.createChannel({
+            id: "call",
+            name: "着信通知",
+            description: "音声・ビデオ通話の着信通知",
+            importance: 5,
+            visibility: 1,
+            vibration: true
+        });
+
         await plugin.register();
     }
     catch(error){

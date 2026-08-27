@@ -1566,6 +1566,44 @@ async function sendChronologyPushNotifications(item, excludeUserId) {
     }
 }
 
+//====================================================
+// 着信のプッシュ通知
+// ・Socket.IOの合図（callInvite）は接続中の端末にはリアルタイムに届くが、
+//   画面が消えている/アプリがバックグラウンドの状態では、それだけでは
+//   気づかれないことがある。プッシュ通知で通知欄・ロック画面にも
+//   発信者名を表示させ、気づけるようにする
+//====================================================
+
+async function sendCallPushNotification(toUserId, fromName, isVideo) {
+    if (!firebaseMessaging) { return; }
+
+    const toUser = users[toUserId];
+    if (!toUser || typeof toUser.pushToken !== "string" || !toUser.pushToken) { return; }
+
+    try {
+        await firebaseMessaging.send({
+            token: toUser.pushToken,
+            notification: {
+                title: isVideo ? "📹 ビデオ着信" : "📞 着信",
+                body: (fromName || "不明") + "さんから着信があります"
+            },
+            android: {
+                priority: "high",
+                notification: {
+                    channelId: "call",
+                    sound: "default"
+                }
+            },
+            data: {
+                type: "call"
+            }
+        });
+    }
+    catch (err) {
+        console.error("着信プッシュ通知送信エラー:", toUserId, err);
+    }
+}
+
 setInterval(markStaleUsersOffline, 60 * 1000);
 
 //====================================================
@@ -2999,12 +3037,17 @@ io.on("connection", socket => {
         callPeerByUserId[fromUserId] = toUserId;
         callPeerByUserId[toUserId] = fromUserId;
 
+        const fromName = String((data && data.fromName) || fromUserId);
+        const isVideo = !!(data && data.video);
+
         io.to("user:" + toUserId).emit("callInvite", {
             fromUserId: fromUserId,
-            fromName: String((data && data.fromName) || fromUserId),
-            video: !!(data && data.video),
+            fromName: fromName,
+            video: isVideo,
             sdp: data && data.sdp
         });
+
+        sendCallPushNotification(toUserId, fromName, isVideo);
     });
 
     socket.on("callAnswer", data => {
