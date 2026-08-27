@@ -1,5 +1,5 @@
 //============================================================
-// Puttan Version 2.87
+// Puttan Version 2.88
 // server.js
 //
 // ・PostgreSQL / Supabase
@@ -288,6 +288,16 @@ app.get("/api/geocode", async (req, res) => {
         console.error("住所検索エラー", err);
         res.status(502).json({ error: "geocode failed" });
     }
+});
+
+//============================================================
+// 犯罪発生情報（熊本県警オープンデータ、ジオコーディング済み）
+// ・データ量が大きいためソケットでは配信せず、地図でレイヤーを
+//   ONにした時だけクライアントがこのAPIを取得する
+//============================================================
+
+app.get("/api/crime-data", (req, res) => {
+    res.json(crimeIncidents);
 });
 
 //============================================================
@@ -1175,7 +1185,7 @@ function parseRssTitles(xml, limit) {
 async function updateTopNews() {
     try {
         const response = await fetch(TOP_NEWS_URL, {
-            headers: { "User-Agent": "Puttan/2.87 news ticker client" }
+            headers: { "User-Agent": "Puttan/2.88 news ticker client" }
         });
 
         if (!response.ok) {
@@ -1220,7 +1230,7 @@ let busPositions = [];
 
 async function fetchBusFeed(feed) {
     const response = await fetch(feed.url, {
-        headers: { "User-Agent": "Puttan/2.87 bus tracker client" }
+        headers: { "User-Agent": "Puttan/2.88 bus tracker client" }
     });
 
     if (!response.ok) {
@@ -1269,6 +1279,242 @@ async function updateBusPositions() {
     catch (err) {
         console.error("バス位置情報更新エラー:", err);
     }
+}
+
+//============================================================
+// 犯罪発生情報（熊本県警、data.bodik.jp オープンデータ）
+// ・CSVには町丁目までの地名しか無く緯度経度が無いため、Nominatimで
+//   ジオコーディングしてから配信する（結果はDBに永続キャッシュ）
+// ・グループに関わらず全員共通。データ量が大きいためソケットでの
+//   常時配信はせず、/api/crime-data をレイヤーON時にのみ取得させる
+//============================================================
+
+const CRIME_CSV_SOURCES = [
+    { year: "令和4年", datasetId: "430005_00318", type: "部品ねらい", resourceId: "5bb38331-16ef-4557-bd5b-9c836811c330" },
+    { year: "令和4年", datasetId: "430005_00318", type: "ひったくり", resourceId: "8e2817a9-6bc0-4a36-9725-e1b0ed2fcca8" },
+    { year: "令和4年", datasetId: "430005_00318", type: "オートバイ盗", resourceId: "0bd1a0d7-6c0d-407f-b864-558c5b7af7fa" },
+    { year: "令和4年", datasetId: "430005_00318", type: "車上ねらい", resourceId: "c97851a5-89e9-43a9-81c7-1c8ead74d109" },
+    { year: "令和4年", datasetId: "430005_00318", type: "自動販売機ねらい", resourceId: "06a56081-1597-4bab-9d77-4994f5a6e65d" },
+    { year: "令和4年", datasetId: "430005_00318", type: "自動車盗", resourceId: "2fa9841c-5ccf-4464-ab5a-718b8ab05b95" },
+    { year: "令和4年", datasetId: "430005_00318", type: "自転車盗", resourceId: "06f8ee3e-1be9-48b5-af21-c1219645e825" },
+    { year: "令和5年", datasetId: "430005_00358", type: "オートバイ盗", resourceId: "9a03865a-08ae-4d80-9669-4a40a5bfe0d8" },
+    { year: "令和5年", datasetId: "430005_00358", type: "ひったくり", resourceId: "dd17edc6-7800-47bd-bd31-58154dd8a214" },
+    { year: "令和5年", datasetId: "430005_00358", type: "自転車盗", resourceId: "2f10a339-1f3a-4b1b-a166-0479bc5d49f5" },
+    { year: "令和5年", datasetId: "430005_00358", type: "自動車盗", resourceId: "e957875c-6f18-467b-b2be-6fd3a3615c75" },
+    { year: "令和5年", datasetId: "430005_00358", type: "車上ねらい", resourceId: "3b450765-f6b9-4dba-a5a7-0de27590c7a5" },
+    { year: "令和5年", datasetId: "430005_00358", type: "自動販売機ねらい", resourceId: "34c5908a-46bc-4c10-b205-f5b1b6e6c25c" },
+    { year: "令和5年", datasetId: "430005_00358", type: "部品ねらい", resourceId: "06ec0a58-1439-456a-a95b-7134f1569eeb" },
+    { year: "令和6年", datasetId: "430005_00429", type: "オートバイ盗", resourceId: "42bb5ed4-ea4a-4678-afeb-3226ac7b4e6f" },
+    { year: "令和6年", datasetId: "430005_00429", type: "ひったくり", resourceId: "1de69f45-3e5e-40e7-b5c1-bf0c8851f0a4" },
+    { year: "令和6年", datasetId: "430005_00429", type: "自転車盗", resourceId: "13aa1bf5-2737-4e37-8b39-22ab6ce2302e" },
+    { year: "令和6年", datasetId: "430005_00429", type: "自動車盗", resourceId: "b982cde2-bc22-4b20-9985-cd688475fc72" },
+    { year: "令和6年", datasetId: "430005_00429", type: "車上ねらい", resourceId: "724a858b-2696-419a-985a-3632ffda4c05" },
+    { year: "令和6年", datasetId: "430005_00429", type: "自動販売機ねらい", resourceId: "6071b306-9118-414c-a991-b788b4ab673e" },
+    { year: "令和6年", datasetId: "430005_00429", type: "部品ねらい", resourceId: "0846d1c2-62cb-44c6-bbfe-19fac64f40dd" },
+    { year: "令和7年", datasetId: "430005_00463", type: "ひったくり", resourceId: "a9fac4c6-3943-48d0-83ea-48e1aa9ee5ee" },
+    { year: "令和7年", datasetId: "430005_00463", type: "オートバイ盗", resourceId: "078e1e0e-376b-4dd0-8b4a-ebc6de5aca92" },
+    { year: "令和7年", datasetId: "430005_00463", type: "自転車盗", resourceId: "9820ff20-3e8b-4758-a4a0-d7f3e6a450e7" },
+    { year: "令和7年", datasetId: "430005_00463", type: "自動車盗", resourceId: "51451691-32e0-4e79-8651-c2507197f523" },
+    { year: "令和7年", datasetId: "430005_00463", type: "車上ねらい", resourceId: "360abeb6-68ae-4d0c-9b91-0f29e9d7d513" },
+    { year: "令和7年", datasetId: "430005_00463", type: "自動販売機ねらい", resourceId: "f63ab652-25cd-480b-b1d7-398f558c67bc" },
+    { year: "令和7年", datasetId: "430005_00463", type: "部品ねらい", resourceId: "425cc408-61c4-469a-9b43-d73ec0d0111d" }
+];
+
+const CRIME_REFRESH_MS = 24 * 60 * 60 * 1000; // 1日ごと（元データの更新頻度が低いため）
+
+let crimeGeocodeCache = {}; // { "都道府県|市区町村|町丁目": {lat, lon} | null }
+let crimeIncidents = [];
+
+// "a","b","c" 形式のCSV1行を配列にする（値中の""エスケープに対応）
+function parseCrimeCsvLine(line) {
+    const values = [];
+    let current = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+
+        if (inQuotes) {
+            if (ch === "\"") {
+                if (line[i + 1] === "\"") { current += "\""; i++; }
+                else { inQuotes = false; }
+            }
+            else {
+                current += ch;
+            }
+        }
+        else if (ch === "\"") {
+            inQuotes = true;
+        }
+        else if (ch === ",") {
+            values.push(current);
+            current = "";
+        }
+        else {
+            current += ch;
+        }
+    }
+    values.push(current);
+    return values;
+}
+
+function parseCrimeCsv(text) {
+    const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== "");
+    if (lines.length < 2) { return []; }
+
+    const header = parseCrimeCsvLine(lines[0]);
+    const col = name => header.indexOf(name);
+    const idx = {
+        city: col("市区町村（発生地）"),
+        machi: col("町丁目（発生地）"),
+        date: col("発生年月日（始期）"),
+        time: col("発生時（始期）"),
+        place: col("発生場所"),
+        detail: col("発生場所の詳細")
+    };
+
+    return lines.slice(1).map(line => {
+        const cols = parseCrimeCsvLine(line);
+        return {
+            city: cols[idx.city] || "",
+            machi: cols[idx.machi] || "",
+            date: cols[idx.date] || "",
+            time: cols[idx.time] || "",
+            place: cols[idx.place] || "",
+            detail: cols[idx.detail] || ""
+        };
+    });
+}
+
+async function loadCrimeGeocodeCacheFromDb() {
+    try {
+        const result = await pool.query("SELECT location_key, lat, lon FROM crime_geocode_cache");
+        result.rows.forEach(row => {
+            crimeGeocodeCache[row.location_key] = (row.lat != null && row.lon != null)
+                ? { lat: Number(row.lat), lon: Number(row.lon) }
+                : null;
+        });
+        console.log("犯罪発生情報 地名キャッシュ復元:", result.rows.length, "件");
+    }
+    catch (err) {
+        console.error("犯罪発生情報 地名キャッシュ復元エラー:", err);
+    }
+}
+
+// 町丁目単位でジオコーディングし、DBへ永続キャッシュする
+// （失敗した場合もnullとしてキャッシュし、毎回リトライしないようにする）
+async function geocodeCrimeLocation(city, machi) {
+    const locationKey = "熊本県|" + city + "|" + machi;
+
+    if (Object.prototype.hasOwnProperty.call(crimeGeocodeCache, locationKey)) {
+        return crimeGeocodeCache[locationKey];
+    }
+
+    let result = null;
+
+    try {
+        const query = "熊本県" + city + machi;
+        const results = await scheduleNominatimRequest(async () => {
+            const url =
+                "https://nominatim.openstreetmap.org/search" +
+                "?format=jsonv2&limit=1&countrycodes=jp&accept-language=ja" +
+                "&q=" + encodeURIComponent(query);
+
+            const response = await fetch(url, {
+                headers: { "User-Agent": "Puttan/2.88 (GPS tracking tool; contact: leftdeadlive81@gmail.com)" }
+            });
+
+            if (!response.ok) { throw new Error("HTTP " + response.status); }
+
+            return response.json();
+        });
+
+        if (Array.isArray(results) && results.length > 0) {
+            result = { lat: Number(results[0].lat), lon: Number(results[0].lon) };
+        }
+    }
+    catch (err) {
+        console.error("犯罪発生情報 ジオコーディングエラー:", locationKey, err.message);
+    }
+
+    crimeGeocodeCache[locationKey] = result;
+
+    try {
+        await pool.query(
+            `
+            INSERT INTO crime_geocode_cache (location_key, lat, lon, geocoded_at)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (location_key) DO UPDATE SET
+                lat = EXCLUDED.lat,
+                lon = EXCLUDED.lon,
+                geocoded_at = EXCLUDED.geocoded_at
+            `,
+            [locationKey, result ? result.lat : null, result ? result.lon : null, Date.now()]
+        );
+    }
+    catch (err) {
+        console.error("犯罪発生情報 地名キャッシュ保存エラー:", locationKey, err);
+    }
+
+    return result;
+}
+
+async function loadCrimeData() {
+    console.log("================================");
+    console.log("犯罪発生情報 取得開始:", CRIME_CSV_SOURCES.length, "ファイル");
+
+    const rows = [];
+
+    for (const source of CRIME_CSV_SOURCES) {
+        try {
+            const url = `https://data.bodik.jp/dataset/${source.datasetId}/resource/${source.resourceId}/download`;
+            const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 Puttan/2.88" } });
+
+            if (!response.ok) {
+                console.error("犯罪発生情報 CSV取得失敗:", source.year, source.type, response.status);
+                continue;
+            }
+
+            const text = await response.text();
+            const parsed = parseCrimeCsv(text);
+            parsed.forEach(row => rows.push({ ...row, type: source.type, year: source.year }));
+        }
+        catch (err) {
+            console.error("犯罪発生情報 CSV取得エラー:", source.year, source.type, err);
+        }
+    }
+
+    console.log("犯罪発生情報 CSV読込完了:", rows.length, "件。地名のジオコーディングを開始します（時間がかかります）");
+
+    const incidents = [];
+    let geocodedCount = 0;
+
+    for (const row of rows) {
+        if (!row.city || !row.machi) { continue; }
+
+        const location = await geocodeCrimeLocation(row.city, row.machi);
+        geocodedCount++;
+
+        if (!location) { continue; }
+
+        incidents.push({
+            type: row.type,
+            year: row.year,
+            date: row.date,
+            time: row.time,
+            city: row.city,
+            machi: row.machi,
+            place: row.place,
+            detail: row.detail,
+            lat: location.lat,
+            lon: location.lon
+        });
+    }
+
+    crimeIncidents = incidents;
+
+    console.log("犯罪発生情報 更新完了:", crimeIncidents.length, "件（地名処理:", geocodedCount, "件）");
+    console.log("================================");
 }
 
 //============================================================
@@ -3380,6 +3626,7 @@ async function startServer() {
     await loadChronologyReactions();
     await loadChronology();
     await pruneLocationHistory();
+    await loadCrimeGeocodeCacheFromDb();
 
     server.listen(PORT, async () => {
         console.log("================================");
@@ -3400,14 +3647,21 @@ async function startServer() {
         await updateTopNews();
         await updateBusPositions();
 
+        // 犯罪発生情報は初回ジオコーディングに時間がかかる（未キャッシュの
+        // 地名が多いと10分程度）ため、起動をブロックしないよう待たずに開始する
+        loadCrimeData().catch(err => console.error("犯罪発生情報 初回取得エラー:", err));
+
         //================================================
         // 定期更新（交通規制は3日ごと、トップニュースは5分ごと、
-        // バス位置情報は30秒ごと）
+        // バス位置情報は30秒ごと、犯罪発生情報は1日ごと）
         //================================================
 
         setInterval(updateTrafficRegulations, TRAFFIC_UPDATE_INTERVAL);
         setInterval(updateTopNews, TOP_NEWS_REFRESH_MS);
         setInterval(updateBusPositions, BUS_REFRESH_MS);
+        setInterval(() => {
+            loadCrimeData().catch(err => console.error("犯罪発生情報 定期更新エラー:", err));
+        }, CRIME_REFRESH_MS);
     });
 }
 

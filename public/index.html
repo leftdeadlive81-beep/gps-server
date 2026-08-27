@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Puttan Version 2.87</title>
+<title>Puttan Version 2.88</title>
 
 <link rel="icon" type="image/png" href="/icon.png">
 <link rel="apple-touch-icon" href="/icon.png">
@@ -3350,6 +3350,86 @@ function renderBusPositions(buses){
 socket.on("busPositions", renderBusPositions);
 
 /* ==================================================
+   犯罪発生情報（熊本県警、data.bodik.jp オープンデータ）
+   ・元データは町丁目単位の地名のみで緯度経度が無いため、
+     サーバー側でジオコーディング済みのものを取得する
+   ・データ量が大きいため、レイヤーを一度ONにした時だけ
+     /api/crime-data を取得する（遅延読込）
+================================================== */
+
+const crimeLayer = L.markerClusterGroup({
+    maxClusterRadius: 50,
+    disableClusteringAtZoom: 17
+});
+
+let crimeDataLoaded = false;
+
+const CRIME_TYPE_INFO = {
+    "オートバイ盗": { emoji: "🏍️", color: "#6d4c41" },
+    "ひったくり": { emoji: "👜", color: "#ad1457" },
+    "自転車盗": { emoji: "🚲", color: "#558b2f" },
+    "自動車盗": { emoji: "🚗", color: "#37474f" },
+    "車上ねらい": { emoji: "🚙", color: "#455a64" },
+    "自動販売機ねらい": { emoji: "🥤", color: "#f57f17" },
+    "部品ねらい": { emoji: "🔧", color: "#5d4037" }
+};
+
+function createCrimeIcon(type){
+    const info = CRIME_TYPE_INFO[type] || { emoji: "🚨", color: "#616161" };
+    return L.divIcon({
+        className: "pointDivIconWrapper",
+        html: `<div class="pointDivIcon" style="background:${info.color};"><span>${info.emoji}</span></div>`,
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
+        popupAnchor: [0, -18]
+    });
+}
+
+function formatCrimeDate(dateStr, timeStr){
+    if(!dateStr || dateStr.length !== 8){ return dateStr || "-"; }
+    const y = dateStr.slice(0, 4);
+    const m = dateStr.slice(4, 6);
+    const d = dateStr.slice(6, 8);
+    const t = (timeStr && /^\d+$/.test(timeStr)) ? `${timeStr}時ごろ` : "";
+    return `${y}/${m}/${d} ${t}`;
+}
+
+async function loadCrimeData(){
+    if(crimeDataLoaded){ return; }
+    crimeDataLoaded = true;
+
+    try{
+        const response = await fetch("/api/crime-data");
+        const incidents = await response.json();
+
+        incidents.forEach(incident => {
+            const info = CRIME_TYPE_INFO[incident.type] || { emoji: "🚨" };
+            const marker = L.marker([incident.lat, incident.lon], { icon: createCrimeIcon(incident.type) });
+
+            marker.bindPopup(`
+                <div class="popupCard">
+                    <div class="popupHeader"><b>${info.emoji} ${escapeHtml(incident.type)}</b></div>
+                    <div class="popupSection">
+                        ${escapeHtml(incident.city)}${escapeHtml(incident.machi)}<br>
+                        ${formatCrimeDate(incident.date, incident.time)}<br>
+                        ${escapeHtml(incident.detail || incident.place || "")}
+                    </div>
+                    <div class="popupFooter">
+                        <div class="popupUserId">熊本県警オープンデータ・場所は町丁目レベルの概算</div>
+                    </div>
+                </div>
+            `);
+
+            marker.addTo(crimeLayer);
+        });
+    }
+    catch(err){
+        console.error("犯罪発生情報の取得に失敗しました:", err);
+        crimeDataLoaded = false;
+    }
+}
+
+/* ==================================================
    指定緊急避難場所（熊本市、国のオープンデータを整形して同梱）
    ・出典: くまもとデータ連携基盤データカタログポータルサイト
      「指定緊急避難場所一覧（熊本市）」（CC-BY）
@@ -3420,10 +3500,6 @@ async function loadEvacuationSites(){
         evacuationSitesLoaded = false;
     }
 }
-
-map.on("overlayadd", e => {
-    if(e.layer === evacuationLayer){ loadEvacuationSites(); }
-});
 
 /* ==================================================
    雨雲レーダー（気象庁 高解像度降水ナウキャスト）
@@ -3639,11 +3715,17 @@ const OVERLAY_GROUPS = [
     {
         title: "防災情報",
         items: [
-            { label: "🏃 避難場所（熊本市）", layer: evacuationLayer },
+            { label: "🏃 避難場所（熊本市）", layer: evacuationLayer, onFirstShow: loadEvacuationSites },
             { label: "🌊 洪水浸水想定区域", layer: floodHazardLayer },
             { label: "⛰️ 土砂災害警戒区域", layer: sedimentHazardLayer },
             { label: "🚧 交通規制", layer: trafficRegulationLayer },
             { label: "🌧 雨雲レーダー", layer: rainRadarLayer }
+        ]
+    },
+    {
+        title: "防犯",
+        items: [
+            { label: "🚨 犯罪発生情報（熊本県）", layer: crimeLayer, onFirstShow: loadCrimeData }
         ]
     },
     {
@@ -3683,12 +3765,16 @@ function switchBaseLayer(index){
 }
 
 function toggleOverlayLayer(checkbox, index){
-    const layer = OVERLAY_ITEMS[index].layer;
+    const item = OVERLAY_ITEMS[index];
     if(checkbox.checked){
-        map.addLayer(layer);
+        map.addLayer(item.layer);
+        // Leaflet標準のL.control.layers()が発火する"overlayadd"イベントに
+        // 頼った遅延読込（避難場所・犯罪発生情報など）は、自作パネルからの
+        // map.addLayer()呼び出しでは発火しないため、ここで直接呼び出す
+        if(item.onFirstShow){ item.onFirstShow(); }
     }
     else{
-        map.removeLayer(layer);
+        map.removeLayer(item.layer);
     }
 }
 
@@ -7504,7 +7590,7 @@ function showTab(tabId, button){
 ================================================== */
 
 window.addEventListener("load", async () => {
-    console.log("Version 2.87 起動");
+    console.log("Version 2.88 起動");
 
     try{
         const { data, error } = await supabaseClient.auth.getSession();
