@@ -1,5 +1,5 @@
 //============================================================
-// Puttan Version 2.85
+// Puttan Version 2.86
 // server.js
 //
 // ・PostgreSQL / Supabase
@@ -31,6 +31,7 @@ const zlib = require("zlib");
 const fs = require("fs");
 const { initializeApp, cert } = require("firebase-admin/app");
 const { getMessaging } = require("firebase-admin/messaging");
+const GtfsRealtimeBindings = require("gtfs-realtime-bindings");
 
 const app = express();
 
@@ -1174,7 +1175,7 @@ function parseRssTitles(xml, limit) {
 async function updateTopNews() {
     try {
         const response = await fetch(TOP_NEWS_URL, {
-            headers: { "User-Agent": "Puttan/2.85 news ticker client" }
+            headers: { "User-Agent": "Puttan/2.86 news ticker client" }
         });
 
         if (!response.ok) {
@@ -1196,6 +1197,77 @@ async function updateTopNews() {
     }
     catch (err) {
         console.error("トップニュース取得エラー:", err);
+    }
+}
+
+//============================================================
+// バス位置情報（熊本県内、バスきたくまさん GTFS Realtime）
+// ・熊本県内バス4社が共通のバスロケーションシステムで公開している
+//   認証不要のGTFS Realtime(VehiclePosition)を定期取得し、全端末へ配信する
+// ・グループに関わらず全員共通（交通規制・全体周知と同じ扱い）
+//============================================================
+
+const BUS_FEEDS = [
+    { company: "産交バス", url: "https://km.bus-vision.jp/realtime/sankobus_vpos_update.bin" },
+    { company: "熊本電鉄バス", url: "https://km.bus-vision.jp/realtime/dentetsu_vpos_update.bin" },
+    { company: "熊本バス", url: "https://km.bus-vision.jp/realtime/kumabus_vpos_update.bin" },
+    { company: "熊本都市バス", url: "https://km.bus-vision.jp/realtime/toshibus_vpos_update.bin" }
+];
+
+const BUS_REFRESH_MS = 30 * 1000; // 30秒ごと
+
+let busPositions = [];
+
+async function fetchBusFeed(feed) {
+    const response = await fetch(feed.url, {
+        headers: { "User-Agent": "Puttan/2.86 bus tracker client" }
+    });
+
+    if (!response.ok) {
+        throw new Error("HTTP " + response.status + " " + response.statusText);
+    }
+
+    const buf = Buffer.from(await response.arrayBuffer());
+    const message = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(buf);
+
+    return message.entity
+        .filter(entity => entity.vehicle && entity.vehicle.position)
+        .map(entity => ({
+            id: feed.company + ":" + (entity.id || (entity.vehicle.vehicle && entity.vehicle.vehicle.id) || ""),
+            company: feed.company,
+            lat: entity.vehicle.position.latitude,
+            lon: entity.vehicle.position.longitude,
+            bearing: entity.vehicle.position.bearing ?? null,
+            speed: entity.vehicle.position.speed ?? null
+        }));
+}
+
+async function updateBusPositions() {
+    try {
+        const results = await Promise.allSettled(BUS_FEEDS.map(fetchBusFeed));
+
+        const merged = [];
+        results.forEach((result, index) => {
+            if (result.status === "fulfilled") {
+                merged.push(...result.value);
+            }
+            else {
+                console.error("バス位置情報取得エラー:", BUS_FEEDS[index].company, result.reason);
+            }
+        });
+
+        if (merged.length === 0) {
+            console.warn("バス位置情報: 0件のため今回の更新をスキップ");
+            return;
+        }
+
+        busPositions = merged;
+        io.emit("busPositions", busPositions);
+
+        console.log("バス位置情報更新:", busPositions.length, "件");
+    }
+    catch (err) {
+        console.error("バス位置情報更新エラー:", err);
     }
 }
 
@@ -2023,13 +2095,14 @@ io.on("connection", socket => {
     // 初期データ
     // ・locations/points/chronologyはグループごとに内容が異なるため、
     //   ユーザーが判明する(=registerUser成功後)まで送らない
-    // ・trafficRegulations/announcement/topNewsは全グループ共通のため、
-    //   未登録の接続直後でも送ってよい
+    // ・trafficRegulations/announcement/topNews/busPositionsは全グループ
+    //   共通のため、未登録の接続直後でも送ってよい
     //====================================================
 
     socket.emit("trafficRegulations", trafficRegulations);
     socket.emit("announcement", announcementText);
     socket.emit("topNews", topNews);
+    socket.emit("busPositions", busPositions);
 
     //====================================================
     // 地点登録
@@ -3325,13 +3398,16 @@ async function startServer() {
 
         await updateTrafficRegulations();
         await updateTopNews();
+        await updateBusPositions();
 
         //================================================
-        // 定期更新（交通規制は3日ごと、トップニュースは5分ごと）
+        // 定期更新（交通規制は3日ごと、トップニュースは5分ごと、
+        // バス位置情報は30秒ごと）
         //================================================
 
         setInterval(updateTrafficRegulations, TRAFFIC_UPDATE_INTERVAL);
         setInterval(updateTopNews, TOP_NEWS_REFRESH_MS);
+        setInterval(updateBusPositions, BUS_REFRESH_MS);
     });
 }
 

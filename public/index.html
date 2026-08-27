@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Puttan Version 2.85</title>
+<title>Puttan Version 2.86</title>
 
 <link rel="icon" type="image/png" href="/icon.png">
 <link rel="apple-touch-icon" href="/icon.png">
@@ -3304,6 +3304,52 @@ function renderSdfFacilities(){
 renderSdfFacilities();
 
 /* ==================================================
+   バス位置情報（熊本県内、バスきたくまさん GTFS Realtime）
+   ・産交バス・熊本電鉄バス・熊本バス・熊本都市バスの4社が
+     公開している認証不要のリアルタイム位置情報
+   ・サーバーが30秒ごとに取得・配信し、届くたびに描画し直す
+================================================== */
+
+const busLayer = L.layerGroup();
+
+function createBusIcon(){
+    return L.divIcon({
+        className: "pointDivIconWrapper",
+        html: `<div class="pointDivIcon" style="background:#f9a825;"><span>🚌</span></div>`,
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
+        popupAnchor: [0, -22]
+    });
+}
+
+function renderBusPositions(buses){
+    busLayer.clearLayers();
+
+    if(!Array.isArray(buses)){ return; }
+
+    buses.forEach(bus => {
+        if(bus.lat == null || bus.lon == null){ return; }
+
+        const marker = L.marker([bus.lat, bus.lon], { icon: createBusIcon() });
+
+        marker.bindPopup(`
+            <div class="popupCard">
+                <div class="popupHeader">
+                    <b>🚌 ${escapeHtml(bus.company || "バス")}</b>
+                </div>
+                <div class="popupFooter">
+                    <div class="popupUserId">バスきたくまさん（GTFS Realtime）・30秒ごと自動更新</div>
+                </div>
+            </div>
+        `);
+
+        marker.addTo(busLayer);
+    });
+}
+
+socket.on("busPositions", renderBusPositions);
+
+/* ==================================================
    指定緊急避難場所（熊本市、国のオープンデータを整形して同梱）
    ・出典: くまもとデータ連携基盤データカタログポータルサイト
      「指定緊急避難場所一覧（熊本市）」（CC-BY）
@@ -3610,6 +3656,12 @@ const OVERLAY_GROUPS = [
             { label: "🪖 陸上自衛隊 駐屯地", layer: gsdfLayer },
             { label: "⚓ 海上自衛隊 基地", layer: msdfLayer },
             { label: "✈️ 航空自衛隊 基地", layer: asdfLayer }
+        ]
+    },
+    {
+        title: "バス",
+        items: [
+            { label: "🚌 バス（熊本県内）", layer: busLayer }
         ]
     },
     {
@@ -7450,7 +7502,7 @@ function showTab(tabId, button){
 ================================================== */
 
 window.addEventListener("load", async () => {
-    console.log("Version 2.85 起動");
+    console.log("Version 2.86 起動");
 
     try{
         const { data, error } = await supabaseClient.auth.getSession();
