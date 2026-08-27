@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Puttan Version 2.84</title>
+<title>Puttan Version 2.85</title>
 
 <link rel="icon" type="image/png" href="/icon.png">
 <link rel="apple-touch-icon" href="/icon.png">
@@ -2922,6 +2922,388 @@ function refreshLiveCameraImage(index){
 renderLiveCameras();
 
 /* ==================================================
+   自衛隊関連施設（駐屯地・基地）
+   ・防衛省・Wikipediaの公開情報（いずれも一般公開されている
+     所在地情報）をもとに全国の駐屯地・基地を手動でリスト化。
+     災害派遣の拠点として参考になるよう表示する
+   ・座標は市区町村レベルの概算（個別施設ページは調査していない）
+================================================== */
+
+const SDF_FACILITIES = [
+// ==== 陸上自衛隊 駐屯地・分屯地 ====
+
+// -- 北部方面隊 (Hokkaido) --
+{ name: "名寄駐屯地（北海道名寄市）", type: "gsdf", lat: 44.3564, lon: 142.4645 },
+{ name: "稚内分屯地（北海道稚内市）", type: "gsdf", lat: 45.4090, lon: 141.6733 },
+{ name: "礼文分屯地（北海道礼文郡礼文町）", type: "gsdf", lat: 45.3167, lon: 141.0500 },
+{ name: "留萌駐屯地（北海道留萌市）", type: "gsdf", lat: 43.9421, lon: 141.6364 },
+{ name: "遠軽駐屯地（北海道紋別郡遠軽町）", type: "gsdf", lat: 44.0592, lon: 143.5406 },
+{ name: "旭川駐屯地（北海道旭川市）", type: "gsdf", lat: 43.7706, lon: 142.3649 },
+{ name: "沼田分屯地（北海道雨竜郡沼田町）", type: "gsdf", lat: 43.7500, lon: 141.7667 },
+{ name: "近文台分屯地（北海道旭川市）", type: "gsdf", lat: 43.7500, lon: 142.3400 },
+{ name: "上富良野駐屯地（北海道空知郡上富良野町）", type: "gsdf", lat: 43.4500, lon: 142.4667 },
+{ name: "多田分屯地（北海道空知郡上富良野町）", type: "gsdf", lat: 43.4400, lon: 142.4500 },
+{ name: "美幌駐屯地（北海道網走郡美幌町）", type: "gsdf", lat: 43.8167, lon: 144.1167 },
+{ name: "別海駐屯地（北海道野付郡別海町）", type: "gsdf", lat: 43.3667, lon: 144.9667 },
+{ name: "釧路駐屯地（北海道釧路郡釧路町）", type: "gsdf", lat: 42.9750, lon: 144.3833 },
+{ name: "標津分屯地（北海道標津郡標津町）", type: "gsdf", lat: 43.6667, lon: 145.1333 },
+{ name: "帯広駐屯地（北海道帯広市）", type: "gsdf", lat: 42.9238, lon: 143.1958 },
+{ name: "足寄分屯地（北海道足寄郡足寄町）", type: "gsdf", lat: 43.2333, lon: 143.7667 },
+{ name: "鹿追駐屯地（北海道河東郡鹿追町）", type: "gsdf", lat: 43.1000, lon: 142.9833 },
+{ name: "北千歳駐屯地（北海道千歳市）", type: "gsdf", lat: 42.8500, lon: 141.6500 },
+{ name: "東千歳駐屯地（北海道千歳市）", type: "gsdf", lat: 42.7833, lon: 141.6333 },
+{ name: "北恵庭駐屯地（北海道恵庭市）", type: "gsdf", lat: 42.8667, lon: 141.5833 },
+{ name: "南恵庭駐屯地（北海道恵庭市）", type: "gsdf", lat: 42.8333, lon: 141.5667 },
+{ name: "島松駐屯地（北海道恵庭市）", type: "gsdf", lat: 42.9500, lon: 141.5167 },
+{ name: "日高分屯地（北海道沙流郡日高町）", type: "gsdf", lat: 42.5333, lon: 142.4667 },
+{ name: "安平駐屯地（北海道勇払郡安平町）", type: "gsdf", lat: 42.7333, lon: 141.7833 },
+{ name: "早来分屯地（北海道勇払郡安平町）", type: "gsdf", lat: 42.7167, lon: 141.7667 },
+{ name: "白老駐屯地（北海道白老郡白老町）", type: "gsdf", lat: 42.5500, lon: 141.3500 },
+{ name: "幌別駐屯地（北海道登別市）", type: "gsdf", lat: 42.4239, lon: 141.1069 },
+{ name: "静内駐屯地（北海道日高郡新ひだか町）", type: "gsdf", lat: 42.3333, lon: 142.3667 },
+{ name: "岩見沢駐屯地（北海道岩見沢市）", type: "gsdf", lat: 43.1958, lon: 141.7728 },
+{ name: "札幌駐屯地（北海道札幌市中央区）", type: "gsdf", lat: 43.0561, lon: 141.3467 },
+{ name: "丘珠駐屯地（北海道札幌市東区）", type: "gsdf", lat: 43.0900, lon: 141.3800 },
+{ name: "滝川駐屯地（北海道滝川市）", type: "gsdf", lat: 43.5500, lon: 141.9167 },
+{ name: "美唄駐屯地（北海道美唄市）", type: "gsdf", lat: 43.3333, lon: 141.8667 },
+{ name: "真駒内駐屯地（北海道札幌市南区）", type: "gsdf", lat: 43.0100, lon: 141.3500 },
+{ name: "倶知安駐屯地（北海道虻田郡倶知安町）", type: "gsdf", lat: 42.9000, lon: 140.7667 },
+{ name: "函館駐屯地（北海道函館市）", type: "gsdf", lat: 41.7687, lon: 140.7288 },
+{ name: "苗穂分屯地（北海道札幌市東区）", type: "gsdf", lat: 43.0700, lon: 141.3900 },
+
+// -- 東北方面隊 --
+{ name: "青森駐屯地（青森県青森市）", type: "gsdf", lat: 40.8244, lon: 140.7400 },
+{ name: "弘前駐屯地（青森県弘前市）", type: "gsdf", lat: 40.6031, lon: 140.4638 },
+{ name: "八戸駐屯地（青森県八戸市）", type: "gsdf", lat: 40.5122, lon: 141.4881 },
+{ name: "岩手駐屯地（岩手県滝沢市）", type: "gsdf", lat: 39.7167, lon: 141.0500 },
+{ name: "秋田駐屯地（秋田県秋田市）", type: "gsdf", lat: 39.7186, lon: 140.1024 },
+{ name: "霞目駐屯地（宮城県仙台市若林区）", type: "gsdf", lat: 38.2333, lon: 140.9000 },
+{ name: "多賀城駐屯地（宮城県多賀城市）", type: "gsdf", lat: 38.3000, lon: 140.9833 },
+{ name: "大和駐屯地（宮城県黒川郡大和町）", type: "gsdf", lat: 38.4333, lon: 140.8667 },
+{ name: "仙台駐屯地（宮城県仙台市宮城野区）", type: "gsdf", lat: 38.2683, lon: 140.8967 },
+{ name: "反町分屯地（宮城県宮城郡松島町）", type: "gsdf", lat: 38.3833, lon: 141.0667 },
+{ name: "船岡駐屯地（宮城県柴田郡柴田町）", type: "gsdf", lat: 38.0500, lon: 140.7667 },
+{ name: "神町駐屯地（山形県東根市）", type: "gsdf", lat: 38.4167, lon: 140.3833 },
+{ name: "福島駐屯地（福島県福島市）", type: "gsdf", lat: 37.7608, lon: 140.4747 },
+{ name: "郡山駐屯地（福島県郡山市）", type: "gsdf", lat: 37.4003, lon: 140.3592 },
+
+// -- 東部方面隊 --
+{ name: "勝田駐屯地（茨城県ひたちなか市）", type: "gsdf", lat: 36.3958, lon: 140.5292 },
+{ name: "土浦駐屯地（茨城県稲敷郡阿見町）", type: "gsdf", lat: 36.0333, lon: 140.2167 },
+{ name: "霞ヶ浦駐屯地（茨城県土浦市）", type: "gsdf", lat: 36.0742, lon: 140.1972 },
+{ name: "朝日分屯地（茨城県稲敷郡阿見町）", type: "gsdf", lat: 36.0167, lon: 140.2333 },
+{ name: "古河駐屯地（茨城県古河市）", type: "gsdf", lat: 36.1786, lon: 139.7522 },
+{ name: "大宮駐屯地（埼玉県さいたま市北区）", type: "gsdf", lat: 35.9167, lon: 139.6333 },
+{ name: "松戸駐屯地（千葉県松戸市）", type: "gsdf", lat: 35.7877, lon: 139.9034 },
+{ name: "習志野駐屯地（千葉県船橋市）", type: "gsdf", lat: 35.6926, lon: 140.0219 },
+{ name: "下志津駐屯地（千葉県千葉市若葉区）", type: "gsdf", lat: 35.6167, lon: 140.2000 },
+{ name: "木更津駐屯地（千葉県木更津市）", type: "gsdf", lat: 35.3706, lon: 139.9186 },
+{ name: "朝霞駐屯地（東京都練馬区・埼玉県朝霞市等）", type: "gsdf", lat: 35.7900, lon: 139.5967 },
+{ name: "練馬駐屯地（東京都練馬区）", type: "gsdf", lat: 35.7356, lon: 139.6517 },
+{ name: "十条駐屯地（東京都北区）", type: "gsdf", lat: 35.7500, lon: 139.7167 },
+{ name: "市ヶ谷駐屯地（東京都新宿区）", type: "gsdf", lat: 35.6919, lon: 139.7284 },
+{ name: "三宿駐屯地（東京都世田谷区・目黒区）", type: "gsdf", lat: 35.6500, lon: 139.6667 },
+{ name: "目黒駐屯地（東京都目黒区）", type: "gsdf", lat: 35.6333, lon: 139.6833 },
+{ name: "用賀駐屯地（東京都世田谷区）", type: "gsdf", lat: 35.6333, lon: 139.6333 },
+{ name: "小平駐屯地（東京都小平市）", type: "gsdf", lat: 35.7267, lon: 139.4886 },
+{ name: "東立川駐屯地（東京都立川市）", type: "gsdf", lat: 35.7000, lon: 139.4200 },
+{ name: "立川駐屯地（東京都立川市）", type: "gsdf", lat: 35.6939, lon: 139.4147 },
+{ name: "座間駐屯地（神奈川県相模原市南区）", type: "gsdf", lat: 35.4878, lon: 139.4033 },
+{ name: "横浜駐屯地（神奈川県横浜市保土ケ谷区）", type: "gsdf", lat: 35.4500, lon: 139.6000 },
+{ name: "久里浜駐屯地（神奈川県横須賀市）", type: "gsdf", lat: 35.2333, lon: 139.6833 },
+{ name: "武山駐屯地（神奈川県横須賀市）", type: "gsdf", lat: 35.2167, lon: 139.6167 },
+{ name: "北富士駐屯地（山梨県南都留郡忍野村）", type: "gsdf", lat: 35.4167, lon: 138.8500 },
+{ name: "富士駐屯地（静岡県駿東郡小山町）", type: "gsdf", lat: 35.3500, lon: 138.9333 },
+{ name: "滝ヶ原駐屯地（静岡県御殿場市）", type: "gsdf", lat: 35.2900, lon: 138.9000 },
+{ name: "駒門駐屯地（静岡県御殿場市）", type: "gsdf", lat: 35.2833, lon: 138.9167 },
+{ name: "板妻駐屯地（静岡県御殿場市）", type: "gsdf", lat: 35.3200, lon: 138.9000 },
+{ name: "北宇都宮駐屯地（栃木県宇都宮市）", type: "gsdf", lat: 36.5700, lon: 139.8700 },
+{ name: "宇都宮駐屯地（栃木県宇都宮市）", type: "gsdf", lat: 36.5551, lon: 139.8828 },
+{ name: "相馬原駐屯地（群馬県北群馬郡榛東村）", type: "gsdf", lat: 36.4333, lon: 138.9667 },
+{ name: "新町駐屯地（群馬県高崎市）", type: "gsdf", lat: 36.3167, lon: 138.9500 },
+{ name: "吉井分屯地（群馬県高崎市）", type: "gsdf", lat: 36.2667, lon: 138.8167 },
+{ name: "新発田駐屯地（新潟県新発田市）", type: "gsdf", lat: 37.9500, lon: 139.3333 },
+{ name: "高田駐屯地（新潟県上越市）", type: "gsdf", lat: 37.1167, lon: 138.2333 },
+{ name: "松本駐屯地（長野県松本市）", type: "gsdf", lat: 36.2381, lon: 137.9720 },
+
+// -- 中部方面隊 --
+{ name: "今津駐屯地（滋賀県高島市）", type: "gsdf", lat: 35.3833, lon: 136.0167 },
+{ name: "大津駐屯地（滋賀県大津市）", type: "gsdf", lat: 35.0044, lon: 135.8686 },
+{ name: "福知山駐屯地（京都府福知山市）", type: "gsdf", lat: 35.2978, lon: 135.1264 },
+{ name: "桂駐屯地（京都府京都市西京区）", type: "gsdf", lat: 34.9833, lon: 135.6833 },
+{ name: "宇治駐屯地（京都府宇治市）", type: "gsdf", lat: 34.8917, lon: 135.7997 },
+{ name: "祝園分屯地（京都府相楽郡精華町）", type: "gsdf", lat: 34.7500, lon: 135.7833 },
+{ name: "大久保駐屯地（京都府宇治市）", type: "gsdf", lat: 34.8800, lon: 135.7800 },
+{ name: "八尾駐屯地（大阪府八尾市）", type: "gsdf", lat: 34.6267, lon: 135.6003 },
+{ name: "信太山駐屯地（大阪府和泉市）", type: "gsdf", lat: 34.4833, lon: 135.4167 },
+{ name: "川西駐屯地（兵庫県川西市）", type: "gsdf", lat: 34.8333, lon: 135.4167 },
+{ name: "伊丹駐屯地（兵庫県伊丹市）", type: "gsdf", lat: 34.7833, lon: 135.4167 },
+{ name: "千僧駐屯地（兵庫県伊丹市）", type: "gsdf", lat: 34.7900, lon: 135.4100 },
+{ name: "青野原駐屯地（兵庫県小野市）", type: "gsdf", lat: 34.8500, lon: 134.9333 },
+{ name: "姫路駐屯地（兵庫県姫路市）", type: "gsdf", lat: 34.8154, lon: 134.6858 },
+{ name: "和歌山駐屯地（和歌山県日高郡美浜町）", type: "gsdf", lat: 33.9333, lon: 135.1333 },
+{ name: "富山駐屯地（富山県砺波市）", type: "gsdf", lat: 36.6500, lon: 136.9500 },
+{ name: "金沢駐屯地（石川県金沢市）", type: "gsdf", lat: 36.5613, lon: 136.6562 },
+{ name: "鯖江駐屯地（福井県鯖江市）", type: "gsdf", lat: 35.9500, lon: 136.1833 },
+{ name: "岐阜分屯地（岐阜県各務原市）", type: "gsdf", lat: 35.4000, lon: 136.8833 },
+{ name: "春日井駐屯地（愛知県春日井市）", type: "gsdf", lat: 35.2481, lon: 136.9725 },
+{ name: "守山駐屯地（愛知県名古屋市守山区）", type: "gsdf", lat: 35.2000, lon: 136.9833 },
+{ name: "豊川駐屯地（愛知県豊川市）", type: "gsdf", lat: 34.8267, lon: 137.3917 },
+{ name: "久居駐屯地（三重県津市）", type: "gsdf", lat: 34.6167, lon: 136.4833 },
+{ name: "明野駐屯地（三重県伊勢市）", type: "gsdf", lat: 34.4833, lon: 136.6833 },
+{ name: "米子駐屯地（鳥取県米子市）", type: "gsdf", lat: 35.4283, lon: 133.3308 },
+{ name: "美保分屯地（鳥取県境港市）", type: "gsdf", lat: 35.5333, lon: 133.2333 },
+{ name: "出雲駐屯地（島根県出雲市）", type: "gsdf", lat: 35.3672, lon: 132.7556 },
+{ name: "日本原駐屯地（岡山県勝田郡奈義町）", type: "gsdf", lat: 35.0333, lon: 134.1667 },
+{ name: "三軒屋駐屯地（岡山県岡山市北区）", type: "gsdf", lat: 34.6667, lon: 133.9167 },
+{ name: "海田市駐屯地（広島県安芸郡海田町）", type: "gsdf", lat: 34.3667, lon: 132.5333 },
+{ name: "山口駐屯地（山口県山口市）", type: "gsdf", lat: 34.1785, lon: 131.4737 },
+{ name: "防府分屯地（山口県防府市）", type: "gsdf", lat: 34.0517, lon: 131.5617 },
+{ name: "徳島駐屯地（徳島県阿南市）", type: "gsdf", lat: 33.9217, lon: 134.6594 },
+{ name: "北徳島分屯地（徳島県板野郡松茂町）", type: "gsdf", lat: 34.1167, lon: 134.6167 },
+{ name: "善通寺駐屯地（香川県善通寺市）", type: "gsdf", lat: 34.2333, lon: 133.7833 },
+{ name: "松山駐屯地（愛媛県松山市）", type: "gsdf", lat: 33.8392, lon: 132.7658 },
+{ name: "高知駐屯地（高知県香南市）", type: "gsdf", lat: 33.5833, lon: 133.6667 },
+
+// -- 西部方面隊 --
+{ name: "福岡駐屯地（福岡県春日市）", type: "gsdf", lat: 33.5233, lon: 130.4700 },
+{ name: "春日駐屯地（福岡県春日市）", type: "gsdf", lat: 33.5250, lon: 130.4650 },
+{ name: "小倉駐屯地（福岡県北九州市小倉南区）", type: "gsdf", lat: 33.8000, lon: 130.8833 },
+{ name: "富野分屯地（福岡県北九州市小倉北区）", type: "gsdf", lat: 33.8667, lon: 130.8667 },
+{ name: "飯塚駐屯地（福岡県飯塚市）", type: "gsdf", lat: 33.6500, lon: 130.6917 },
+{ name: "小郡駐屯地（福岡県小郡市）", type: "gsdf", lat: 33.4167, lon: 130.5667 },
+{ name: "久留米駐屯地（福岡県久留米市）", type: "gsdf", lat: 33.3167, lon: 130.5083 },
+{ name: "前川原駐屯地（福岡県久留米市）", type: "gsdf", lat: 33.3100, lon: 130.5200 },
+{ name: "目達原駐屯地（佐賀県神埼郡吉野ヶ里町）", type: "gsdf", lat: 33.3167, lon: 130.4000 },
+{ name: "鳥栖分屯地（佐賀県鳥栖市）", type: "gsdf", lat: 33.3767, lon: 130.5083 },
+{ name: "佐賀駐屯地（佐賀県佐賀市）", type: "gsdf", lat: 33.2494, lon: 130.2989 },
+{ name: "大村駐屯地（長崎県大村市）", type: "gsdf", lat: 32.9167, lon: 129.9500 },
+{ name: "相浦駐屯地（長崎県佐世保市）", type: "gsdf", lat: 33.1667, lon: 129.7167 },
+{ name: "竹松駐屯地（長崎県大村市）", type: "gsdf", lat: 32.8900, lon: 129.9600 },
+{ name: "対馬駐屯地（長崎県対馬市）", type: "gsdf", lat: 34.2000, lon: 129.2833 },
+{ name: "別府駐屯地（大分県別府市）", type: "gsdf", lat: 33.2846, lon: 131.4914 },
+{ name: "大分分屯地（大分県大分市）", type: "gsdf", lat: 33.2382, lon: 131.6126 },
+{ name: "湯布院駐屯地（大分県由布市）", type: "gsdf", lat: 33.2667, lon: 131.3667 },
+{ name: "玖珠駐屯地（大分県玖珠郡玖珠町）", type: "gsdf", lat: 33.2667, lon: 131.1833 },
+{ name: "熊本駐屯地（熊本県熊本市東区）", type: "gsdf", lat: 32.8000, lon: 130.7500 },
+{ name: "健軍駐屯地（熊本県熊本市東区）", type: "gsdf", lat: 32.7967, lon: 130.7533 },
+{ name: "高遊原分屯地（熊本県上益城郡益城町）", type: "gsdf", lat: 32.7833, lon: 130.7833 },
+{ name: "北熊本駐屯地（熊本県熊本市北区）", type: "gsdf", lat: 32.8500, lon: 130.6833 },
+{ name: "えびの駐屯地（宮崎県えびの市）", type: "gsdf", lat: 32.0333, lon: 130.7833 },
+{ name: "都城駐屯地（宮崎県都城市）", type: "gsdf", lat: 31.7167, lon: 131.0667 },
+{ name: "川内駐屯地（鹿児島県薩摩川内市）", type: "gsdf", lat: 31.8167, lon: 130.3000 },
+{ name: "国分駐屯地（鹿児島県霧島市）", type: "gsdf", lat: 31.7333, lon: 130.7667 },
+{ name: "奄美駐屯地（鹿児島県奄美市）", type: "gsdf", lat: 28.3775, lon: 129.4933 },
+{ name: "瀬戸内分屯地（鹿児島県大島郡瀬戸内町）", type: "gsdf", lat: 28.1000, lon: 129.3167 },
+{ name: "那覇駐屯地（沖縄県那覇市）", type: "gsdf", lat: 26.2125, lon: 127.6811 },
+{ name: "白川分屯地（沖縄県沖縄市）", type: "gsdf", lat: 26.3344, lon: 127.8056 },
+{ name: "勝連分屯地（沖縄県うるま市）", type: "gsdf", lat: 26.3833, lon: 127.8667 },
+{ name: "知念分屯地（沖縄県南城市）", type: "gsdf", lat: 26.1667, lon: 127.7667 },
+{ name: "八重瀬分屯地（沖縄県島尻郡八重瀬町）", type: "gsdf", lat: 26.1333, lon: 127.7167 },
+{ name: "南与座分屯地（沖縄県島尻郡八重瀬町）", type: "gsdf", lat: 26.1300, lon: 127.7050 },
+{ name: "南那覇駐屯地（沖縄県那覇市）", type: "gsdf", lat: 26.1900, lon: 127.6700 },
+{ name: "宮古島駐屯地（沖縄県宮古島市）", type: "gsdf", lat: 24.8056, lon: 125.2811 },
+{ name: "石垣駐屯地（沖縄県石垣市）", type: "gsdf", lat: 24.3400, lon: 124.1556 },
+{ name: "与那国駐屯地（沖縄県八重山郡与那国町）", type: "gsdf", lat: 24.4667, lon: 123.0167 },
+
+// ==== 航空自衛隊 基地・分屯基地 ====
+
+// -- 北部防衛区域 --
+{ name: "千歳基地（北海道千歳市）", type: "asdf", lat: 42.7875, lon: 141.6706 },
+{ name: "長沼分屯基地（北海道夕張郡長沼町）", type: "asdf", lat: 43.0333, lon: 141.7667 },
+{ name: "三沢基地（青森県三沢市）", type: "asdf", lat: 40.7032, lon: 141.3686 },
+{ name: "稚内分屯基地（北海道稚内市）", type: "asdf", lat: 45.4150, lon: 141.6600 },
+{ name: "網走分屯基地（北海道網走市）", type: "asdf", lat: 44.0206, lon: 144.2733 },
+{ name: "根室分屯基地（北海道根室市）", type: "asdf", lat: 43.3300, lon: 145.5833 },
+{ name: "当別分屯基地（北海道石狩郡当別町）", type: "asdf", lat: 43.2167, lon: 141.5333 },
+{ name: "奥尻島分屯基地（北海道奥尻郡奥尻町）", type: "asdf", lat: 42.1667, lon: 139.5167 },
+{ name: "襟裳分屯基地（北海道幌泉郡えりも町）", type: "asdf", lat: 42.0167, lon: 143.1500 },
+{ name: "八雲分屯基地（北海道二海郡八雲町）", type: "asdf", lat: 42.2500, lon: 140.2667 },
+{ name: "大湊分屯基地（青森県むつ市）", type: "asdf", lat: 41.2800, lon: 141.2100 },
+{ name: "車力分屯基地（青森県つがる市）", type: "asdf", lat: 40.8167, lon: 140.3833 },
+{ name: "東北町分屯基地（青森県上北郡東北町）", type: "asdf", lat: 40.7333, lon: 141.1667 },
+{ name: "山田分屯基地（岩手県下閉伊郡山田町）", type: "asdf", lat: 39.4667, lon: 141.9500 },
+{ name: "加茂分屯基地（秋田県男鹿市）", type: "asdf", lat: 39.9000, lon: 139.7000 },
+{ name: "秋田分屯基地（秋田県秋田市）", type: "asdf", lat: 39.6100, lon: 140.2200 },
+
+// -- 中部防衛区域 --
+{ name: "松島基地（宮城県東松島市）", type: "asdf", lat: 38.4167, lon: 141.2167 },
+{ name: "百里基地（茨城県小美玉市）", type: "asdf", lat: 36.1811, lon: 140.4147 },
+{ name: "熊谷基地（埼玉県熊谷市）", type: "asdf", lat: 36.1472, lon: 139.3886 },
+{ name: "十条基地（東京都北区）", type: "asdf", lat: 35.7500, lon: 139.7167 },
+{ name: "市ヶ谷基地（東京都新宿区）", type: "asdf", lat: 35.6919, lon: 139.7284 },
+{ name: "目黒基地（東京都目黒区）", type: "asdf", lat: 35.6333, lon: 139.6833 },
+{ name: "府中基地（東京都府中市）", type: "asdf", lat: 35.6694, lon: 139.4778 },
+{ name: "横田基地（東京都福生市）", type: "asdf", lat: 35.7486, lon: 139.3486 },
+{ name: "入間基地（埼玉県狭山市・入間市）", type: "asdf", lat: 35.8367, lon: 139.4139 },
+{ name: "大滝根山分屯基地（福島県双葉郡川内村）", type: "asdf", lat: 37.4000, lon: 140.6667 },
+{ name: "霞ヶ浦分屯基地（茨城県土浦市）", type: "asdf", lat: 36.0742, lon: 140.1972 },
+{ name: "習志野分屯基地（千葉県船橋市）", type: "asdf", lat: 35.6926, lon: 140.0219 },
+{ name: "木更津分屯基地（千葉県木更津市）", type: "asdf", lat: 35.3706, lon: 139.9186 },
+{ name: "峯岡山分屯基地（千葉県南房総市）", type: "asdf", lat: 34.9500, lon: 139.9333 },
+{ name: "硫黄島分屯基地（東京都小笠原村）", type: "asdf", lat: 24.7833, lon: 141.3167 },
+{ name: "武山分屯基地（神奈川県横須賀市）", type: "asdf", lat: 35.2167, lon: 139.6167 },
+{ name: "佐渡分屯基地（新潟県佐渡市）", type: "asdf", lat: 38.0500, lon: 138.3667 },
+{ name: "新潟分屯基地（新潟県新潟市東区）", type: "asdf", lat: 37.9333, lon: 139.0833 },
+{ name: "輪島分屯基地（石川県輪島市）", type: "asdf", lat: 37.3900, lon: 136.9006 },
+{ name: "御前崎分屯基地（静岡県御前崎市）", type: "asdf", lat: 34.6167, lon: 138.2167 },
+{ name: "笠取山分屯基地（三重県津市）", type: "asdf", lat: 34.6500, lon: 136.3167 },
+{ name: "経ヶ岬分屯基地（京都府京丹後市）", type: "asdf", lat: 35.7667, lon: 135.2167 },
+{ name: "串本分屯基地（和歌山県東牟婁郡串本町）", type: "asdf", lat: 33.4667, lon: 135.7833 },
+{ name: "静浜基地（静岡県焼津市）", type: "asdf", lat: 34.8000, lon: 138.3167 },
+{ name: "浜松基地（静岡県浜松市中央区）", type: "asdf", lat: 34.7108, lon: 137.7264 },
+{ name: "小牧基地（愛知県小牧市）", type: "asdf", lat: 35.2833, lon: 136.9167 },
+{ name: "岐阜基地（岐阜県各務原市）", type: "asdf", lat: 35.3936, lon: 136.8833 },
+{ name: "高蔵寺分屯基地（愛知県春日井市）", type: "asdf", lat: 35.2833, lon: 137.0500 },
+{ name: "白山分屯基地（三重県津市）", type: "asdf", lat: 34.6300, lon: 136.3400 },
+{ name: "饗庭野分屯基地（滋賀県高島市）", type: "asdf", lat: 35.3333, lon: 136.0167 },
+{ name: "小松基地（石川県小松市）", type: "asdf", lat: 36.4041, lon: 136.4067 },
+{ name: "奈良基地（奈良県奈良市）", type: "asdf", lat: 34.6851, lon: 135.8049 },
+
+// -- 西部防衛区域 --
+{ name: "美保基地（鳥取県境港市）", type: "asdf", lat: 35.5333, lon: 133.2333 },
+{ name: "防府北基地（山口県防府市）", type: "asdf", lat: 34.0700, lon: 131.5500 },
+{ name: "防府南基地（山口県防府市）", type: "asdf", lat: 34.0400, lon: 131.5700 },
+{ name: "築城基地（福岡県行橋市・築上郡築上町）", type: "asdf", lat: 33.6833, lon: 131.0000 },
+{ name: "芦屋基地（福岡県遠賀郡芦屋町・岡垣町）", type: "asdf", lat: 33.8667, lon: 130.6667 },
+{ name: "春日基地（福岡県春日市）", type: "asdf", lat: 33.5233, lon: 130.4700 },
+{ name: "高尾山分屯基地（島根県松江市）", type: "asdf", lat: 35.4667, lon: 133.0500 },
+{ name: "見島分屯基地（山口県萩市）", type: "asdf", lat: 34.7833, lon: 131.1167 },
+{ name: "土佐清水分屯基地（高知県土佐清水市）", type: "asdf", lat: 32.7833, lon: 132.9667 },
+{ name: "高良台分屯基地（福岡県久留米市）", type: "asdf", lat: 33.2833, lon: 130.5333 },
+{ name: "背振山分屯基地（佐賀県神埼市）", type: "asdf", lat: 33.4167, lon: 130.3667 },
+{ name: "海栗島分屯基地（長崎県対馬市）", type: "asdf", lat: 34.2000, lon: 129.2833 },
+{ name: "福江島分屯基地（長崎県五島市）", type: "asdf", lat: 32.6967, lon: 128.8433 },
+{ name: "高畑山分屯基地（宮崎県串間市）", type: "asdf", lat: 31.9000, lon: 131.2833 },
+{ name: "下甑島分屯基地（鹿児島県薩摩川内市）", type: "asdf", lat: 31.8500, lon: 129.8500 },
+{ name: "新田原基地（宮崎県児湯郡新富町）", type: "asdf", lat: 32.0833, lon: 131.4667 },
+
+// -- 南西防衛区域 --
+{ name: "那覇基地（沖縄県那覇市）", type: "asdf", lat: 26.1958, lon: 127.6461 },
+{ name: "奄美大島分屯基地（鹿児島県奄美市）", type: "asdf", lat: 28.3775, lon: 129.4933 },
+{ name: "沖永良部島分屯基地（鹿児島県大島郡知名町）", type: "asdf", lat: 27.3667, lon: 128.5667 },
+{ name: "恩納分屯基地（沖縄県国頭郡恩納村）", type: "asdf", lat: 26.5000, lon: 127.8500 },
+{ name: "久米島分屯基地（沖縄県島尻郡久米島町）", type: "asdf", lat: 26.3333, lon: 126.8000 },
+{ name: "知念分屯基地（沖縄県南城市）", type: "asdf", lat: 26.1667, lon: 127.7667 },
+{ name: "与座岳分屯基地（沖縄県糸満市）", type: "asdf", lat: 26.1167, lon: 127.6833 },
+{ name: "宮古島分屯基地（沖縄県宮古島市）", type: "asdf", lat: 24.8056, lon: 125.2811 },
+
+// ==== 海上自衛隊 基地・陸上施設 ====
+
+// -- 横須賀警備区 --
+{ name: "横須賀基地（神奈川県横須賀市）", type: "msdf", lat: 35.2833, lon: 139.6683 },
+{ name: "自衛隊横須賀病院（神奈川県横須賀市田浦港町）", type: "msdf", lat: 35.3000, lon: 139.6667 },
+{ name: "横須賀消磁所（神奈川県横須賀市泊町）", type: "msdf", lat: 35.2667, lon: 139.6500 },
+{ name: "父島基地（東京都小笠原村父島）", type: "msdf", lat: 27.0928, lon: 142.1917 },
+{ name: "厚木航空基地（神奈川県綾瀬市）", type: "msdf", lat: 35.4522, lon: 139.4506 },
+{ name: "硫黄島航空基地（東京都小笠原村硫黄島）", type: "msdf", lat: 24.7833, lon: 141.3167 },
+{ name: "南鳥島航空基地（東京都小笠原村南鳥島）", type: "msdf", lat: 24.2833, lon: 153.9833 },
+{ name: "下総航空基地（千葉県柏市）", type: "msdf", lat: 35.8333, lon: 140.0333 },
+{ name: "館山航空基地（千葉県館山市）", type: "msdf", lat: 34.9833, lon: 139.8500 },
+{ name: "木更津地区（千葉県木更津市）", type: "msdf", lat: 35.3706, lon: 139.9186 },
+{ name: "市原送信所（千葉県市原市）", type: "msdf", lat: 35.4833, lon: 140.1000 },
+{ name: "飯岡受信所（千葉県旭市）", type: "msdf", lat: 35.7000, lon: 140.7167 },
+{ name: "市ヶ谷地区（東京都新宿区）", type: "msdf", lat: 35.6919, lon: 139.7284 },
+{ name: "十条地区（東京都北区）", type: "msdf", lat: 35.7500, lon: 139.7167 },
+{ name: "目黒地区（東京都目黒区）", type: "msdf", lat: 35.6333, lon: 139.6833 },
+{ name: "東立川地区（東京都立川市）", type: "msdf", lat: 35.7000, lon: 139.4200 },
+
+// -- 旧大湊警備区 --
+{ name: "大湊基地（青森県むつ市）", type: "msdf", lat: 41.2833, lon: 141.2167 },
+{ name: "大湊航空基地（青森県むつ市）", type: "msdf", lat: 41.2800, lon: 141.2100 },
+{ name: "函館地区（北海道函館市）", type: "msdf", lat: 41.7687, lon: 140.7288 },
+{ name: "稚内地区（北海道稚内市）", type: "msdf", lat: 45.4090, lon: 141.6733 },
+{ name: "松前警備所（北海道松前郡松前町）", type: "msdf", lat: 41.4300, lon: 140.1067 },
+{ name: "余市防備隊（北海道余市郡余市町）", type: "msdf", lat: 43.1833, lon: 140.7833 },
+{ name: "八戸航空基地（青森県八戸市）", type: "msdf", lat: 40.5333, lon: 141.4667 },
+{ name: "竜飛警備所（青森県東津軽郡外ヶ浜町）", type: "msdf", lat: 41.2564, lon: 140.3439 },
+{ name: "下北海洋観測所（青森県下北郡東通村）", type: "msdf", lat: 41.1667, lon: 141.3833 },
+
+// -- 舞鶴警備区 --
+{ name: "舞鶴基地（京都府舞鶴市）", type: "msdf", lat: 35.4772, lon: 135.3844 },
+{ name: "舞鶴航空基地（京都府舞鶴市字長浜）", type: "msdf", lat: 35.4939, lon: 135.3822 },
+{ name: "新潟基地（新潟県新潟市東区）", type: "msdf", lat: 37.9333, lon: 139.0833 },
+
+// -- 呉警備区 --
+{ name: "呉基地（広島県呉市）", type: "msdf", lat: 34.2492, lon: 132.5653 },
+{ name: "自衛隊呉病院（広島県呉市）", type: "msdf", lat: 34.2500, lon: 132.5667 },
+{ name: "海上自衛隊第1術科学校（広島県江田島市江田島町）", type: "msdf", lat: 34.2028, lon: 132.4761 },
+{ name: "海上自衛隊幹部候補生学校（広島県江田島市江田島町）", type: "msdf", lat: 34.2033, lon: 132.4750 },
+{ name: "第31航空群標的機整備隊（広島県江田島市江田島町大原）", type: "msdf", lat: 34.2000, lon: 132.5000 },
+{ name: "特別警備隊（広島県江田島市江田島町）", type: "msdf", lat: 34.2050, lon: 132.4800 },
+{ name: "阪神基地隊（兵庫県神戸市東灘区）", type: "msdf", lat: 34.7167, lon: 135.2667 },
+{ name: "由良基地分遣隊（和歌山県日高郡由良町）", type: "msdf", lat: 33.9500, lon: 135.1167 },
+{ name: "仮屋磁気測定所（兵庫県淡路市）", type: "msdf", lat: 34.5333, lon: 134.9833 },
+{ name: "岩国航空基地（山口県岩国市）", type: "msdf", lat: 34.1439, lon: 132.2358 },
+{ name: "徳島航空基地（徳島県板野郡松茂町）", type: "msdf", lat: 34.1167, lon: 134.6167 },
+{ name: "小松島航空基地（徳島県小松島市）", type: "msdf", lat: 34.0031, lon: 134.5967 },
+{ name: "佐伯基地（大分県佐伯市）", type: "msdf", lat: 32.9600, lon: 131.9000 },
+{ name: "えびの送信所（宮崎県えびの市）", type: "msdf", lat: 32.0333, lon: 130.7833 },
+
+// -- 佐世保警備区 --
+{ name: "佐世保基地（長崎県佐世保市）", type: "msdf", lat: 33.1594, lon: 129.7189 },
+{ name: "大村航空基地（長崎県大村市）", type: "msdf", lat: 32.9167, lon: 129.9500 },
+{ name: "対馬防備隊（長崎県対馬市美津島町）", type: "msdf", lat: 34.3000, lon: 129.2833 },
+{ name: "上対馬警備所（長崎県対馬市上対馬町）", type: "msdf", lat: 34.6167, lon: 129.4000 },
+{ name: "下対馬警備所（長崎県対馬市厳原町）", type: "msdf", lat: 34.1833, lon: 129.2833 },
+{ name: "壱岐警備所（長崎県壱岐市）", type: "msdf", lat: 33.7500, lon: 129.7167 },
+{ name: "下関基地（山口県下関市）", type: "msdf", lat: 33.9500, lon: 130.9333 },
+{ name: "小月航空基地（山口県下関市）", type: "msdf", lat: 34.0167, lon: 131.0500 },
+{ name: "鹿屋航空基地（鹿児島県鹿屋市）", type: "msdf", lat: 31.3667, lon: 130.8500 },
+{ name: "鹿児島音響測定所（鹿児島県霧島市）", type: "msdf", lat: 31.7333, lon: 130.7667 },
+{ name: "奄美基地（鹿児島県大島郡瀬戸内町）", type: "msdf", lat: 28.1000, lon: 129.3167 },
+{ name: "那覇航空基地（沖縄県那覇市）", type: "msdf", lat: 26.1958, lon: 127.6461 },
+{ name: "沖縄基地（沖縄県うるま市）", type: "msdf", lat: 26.3378, lon: 127.8994 }
+];
+
+const SDF_TYPE_INFO = {
+    gsdf: { emoji: "🪖", label: "陸上自衛隊", color: "#4a5d23" },
+    msdf: { emoji: "⚓", label: "海上自衛隊", color: "#1a3c6e" },
+    asdf: { emoji: "✈️", label: "航空自衛隊", color: "#0d6ba8" }
+};
+
+// 陸海空で個別にON/OFFできるよう、branchごとに別レイヤーにする
+const gsdfLayer = L.layerGroup();
+const msdfLayer = L.layerGroup();
+const asdfLayer = L.layerGroup();
+const SDF_BRANCH_LAYERS = { gsdf: gsdfLayer, msdf: msdfLayer, asdf: asdfLayer };
+
+function createSdfFacilityIcon(type){
+    const info = SDF_TYPE_INFO[type] || SDF_TYPE_INFO.gsdf;
+    return L.divIcon({
+        className: "pointDivIconWrapper",
+        html: `<div class="pointDivIcon" style="background:${info.color};"><span>${info.emoji}</span></div>`,
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
+        popupAnchor: [0, -22]
+    });
+}
+
+function renderSdfFacilities(){
+    SDF_FACILITIES.forEach(facility => {
+        const info = SDF_TYPE_INFO[facility.type] || SDF_TYPE_INFO.gsdf;
+        const marker = L.marker([facility.lat, facility.lon], { icon: createSdfFacilityIcon(facility.type) });
+
+        marker.bindPopup(`
+            <div class="popupCard">
+                <div class="popupHeader">
+                    <b>${info.emoji} ${escapeHtml(facility.name)}</b>
+                </div>
+                <div class="popupFooter">
+                    <span style="color:#666;">${info.label}</span><br>
+                    <div class="popupUserId">防衛省・公開情報をもとに作成、座標は市区町村レベルの概算</div>
+                </div>
+            </div>
+        `);
+
+        const targetLayer = SDF_BRANCH_LAYERS[facility.type] || gsdfLayer;
+        marker.addTo(targetLayer);
+    });
+}
+
+renderSdfFacilities();
+
+/* ==================================================
    指定緊急避難場所（熊本市、国のオープンデータを整形して同梱）
    ・出典: くまもとデータ連携基盤データカタログポータルサイト
      「指定緊急避難場所一覧（熊本市）」（CC-BY）
@@ -3220,6 +3602,14 @@ const OVERLAY_GROUPS = [
         title: "カメラ",
         items: [
             { label: "📷 ライブカメラ（九州・沖縄）", layer: liveCameraLayer }
+        ]
+    },
+    {
+        title: "自衛隊",
+        items: [
+            { label: "🪖 陸上自衛隊 駐屯地", layer: gsdfLayer },
+            { label: "⚓ 海上自衛隊 基地", layer: msdfLayer },
+            { label: "✈️ 航空自衛隊 基地", layer: asdfLayer }
         ]
     },
     {
@@ -7060,7 +7450,7 @@ function showTab(tabId, button){
 ================================================== */
 
 window.addEventListener("load", async () => {
-    console.log("Version 2.84 起動");
+    console.log("Version 2.85 起動");
 
     try{
         const { data, error } = await supabaseClient.auth.getSession();
