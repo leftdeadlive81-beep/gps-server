@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Puttan Version 2.82</title>
+<title>Puttan Version 2.83</title>
 
 <link rel="icon" type="image/png" href="/icon.png">
 <link rel="apple-touch-icon" href="/icon.png">
@@ -3239,7 +3239,13 @@ function toggleOverlayLayer(checkbox, index){
 
 function toggleLayerPanel(){
     const panel = document.getElementById("layerPanelControl");
-    if(panel){ panel.classList.toggle("expanded"); }
+    if(!panel){ return; }
+
+    const expanded = panel.classList.toggle("expanded");
+
+    // 展開中は右下の地名・MGRS表示と重なって邪魔になるため、開いている間は隠す
+    const utmBox = document.getElementById("utmCenterBox");
+    if(utmBox){ utmBox.style.display = expanded ? "none" : ""; }
 }
 
 const layerPanelControl = L.control({ position: "topright" });
@@ -3375,6 +3381,7 @@ const utmCenterControl = L.control({ position: "bottomright" });
 
 utmCenterControl.onAdd = function(){
     const div = L.DomUtil.create("div", "utmCenterBox");
+    div.id = "utmCenterBox";
     div.innerHTML = `
         <div id="placeNameText">取得中...</div>
         <div id="utmCenterText">MGRS -</div>
@@ -7042,7 +7049,7 @@ function showTab(tabId, button){
 ================================================== */
 
 window.addEventListener("load", async () => {
-    console.log("Version 2.82 起動");
+    console.log("Version 2.83 起動");
 
     try{
         const { data, error } = await supabaseClient.auth.getSession();
