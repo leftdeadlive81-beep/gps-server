@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Puttan Version 2.81</title>
+<title>Puttan Version 2.82</title>
 
 <link rel="icon" type="image/png" href="/icon.png">
 <link rel="apple-touch-icon" href="/icon.png">
@@ -1177,6 +1177,11 @@ html.native-app #placeNameText { font-size: 11px; }
     box-shadow: 0 1px 4px rgba(0,0,0,.3);
     color: #111;
     font-size: 13px;
+    /* Leafletのコントロールは左上→右上→左下→右下の順でDOM追加されるため、
+       同じz-indexだと右下（地名・MGRS表示）が右上のこのパネルより後に
+       描画され、開いたときに重なって隠れてしまう。展開時は最前面にする */
+    position: relative;
+    z-index: 10000;
 }
 .layerPanelToggle {
     display: block;
@@ -7037,7 +7042,7 @@ function showTab(tabId, button){
 ================================================== */
 
 window.addEventListener("load", async () => {
-    console.log("Version 2.81 起動");
+    console.log("Version 2.82 起動");
 
     try{
         const { data, error } = await supabaseClient.auth.getSession();
