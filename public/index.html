@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Puttan Version 2.88</title>
+<title>Puttan Version 2.89</title>
 
 <link rel="icon" type="image/png" href="/icon.png">
 <link rel="apple-touch-icon" href="/icon.png">
@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css">
 
 <style>
 :root {
@@ -378,6 +379,17 @@ input, select {
     border-radius: 6px;
     overflow: hidden;
 }
+
+#map3d {
+    display: none;
+    position: absolute;
+    inset: 0;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.map3dButton { border-top: 1px solid #ccc; font-size: 15px; }
+.map3dButton.active { background: #1976d2; color: #fff; }
 
 .addressSearchBox {
     position: absolute;
@@ -1265,6 +1277,8 @@ html.native-app #placeNameText { font-size: 11px; }
 <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
 
 </head>
 <body>
@@ -1332,6 +1346,7 @@ html.native-app #placeNameText { font-size: 11px; }
 
     <div id="mapTab" class="tabContent active">
         <div id="map"></div>
+        <div id="map3d"></div>
 
         <div id="addressSearchBox" class="addressSearchBox">
             <div class="addressSearchRow">
@@ -3877,10 +3892,187 @@ locateControl.onAdd = function(){
         });
     }
 
+    const map3dLink = L.DomUtil.create("a", "locateButton map3dButton", container);
+    map3dLink.id = "map3dToggleButton";
+    map3dLink.href = "#";
+    map3dLink.title = "3D表示（地形・熊本市建物）に切替";
+    map3dLink.innerHTML = "🏔";
+
+    L.DomEvent.on(map3dLink, "click", e => {
+        L.DomEvent.preventDefault(e);
+        toggle3DView();
+    });
+
     return container;
 };
 
 locateControl.addTo(map);
+
+/* ==================================================
+   3D表示（地形＋熊本市 建物3D）
+   通常運用はLeafletの2Dマップのまま。ここはMapLibre GL JS +
+   deck.glを使った別モードとして、ボタンで切り替えて重ねて表示する。
+   ・地形：国土地理院 標高タイル（dem_png）をmaplibregl.addProtocolで
+     Terrain-RGB形式に変換してraster-demソースとして利用
+   ・建物：国交省PLATEAUの熊本市 建物モデル（LOD1、5区分、3D Tiles）を
+     deck.glのTile3DLayerで表示
+================================================== */
+
+const KUMAMOTO_BLDG_TILESETS = [
+    "https://assets.cms.plateau.reearth.io/assets/12/8c7b00-ac20-4af9-b169-86acf8f778bf/43100_kumamoto-shi_city_2022_citygml_4_op_bldg_3dtiles_43101_chuo-ku_lod1/tileset.json",
+    "https://assets.cms.plateau.reearth.io/assets/a0/5efe4f-664e-49dd-98be-81805885bb69/43100_kumamoto-shi_city_2022_citygml_4_op_bldg_3dtiles_43102_higashi-ku_lod1/tileset.json",
+    "https://assets.cms.plateau.reearth.io/assets/16/16d07e-5954-49c0-ae46-6ad709c1e168/43100_kumamoto-shi_city_2022_citygml_4_op_bldg_3dtiles_43103_nishi-ku_lod1/tileset.json",
+    "https://assets.cms.plateau.reearth.io/assets/4f/2475cd-a819-40d2-8f36-e2aa912223f2/43100_kumamoto-shi_city_2022_citygml_4_op_bldg_3dtiles_43104_minami-ku_lod1/tileset.json",
+    "https://assets.cms.plateau.reearth.io/assets/8a/bde865-bd9b-4d19-a053-dfe42e25bded/43100_kumamoto-shi_city_2022_citygml_4_op_bldg_3dtiles_43105_kita-ku_lod1/tileset.json"
+];
+
+let map3d = null;
+let map3dOverlay = null;
+let is3DActive = false;
+let gsiDemProtocolRegistered = false;
+
+// 地理院標高タイル(dem_png)の1画素(R,G,B)を、MapLibreのraster-demが
+// 読めるMapbox Terrain-RGB形式の(R,G,B)に変換する
+function gsidemPixelToTerrainRgb(r, g, b){
+    let height = r * 655.36 + g * 2.56 + b * 0.01;
+
+    if(r === 128 && g === 0 && b === 0){
+        height = 0;
+    }
+    else if(r >= 128){
+        height -= 167772.16;
+    }
+
+    const v = (height + 10000) * 10;
+    const tB = Math.floor(v % 256);
+    const tG = Math.floor((v / 256) % 256);
+    const tR = Math.floor((v / 65536) % 256);
+
+    return [tR, tG, tB];
+}
+
+function registerGsiDemProtocol(){
+    if(gsiDemProtocolRegistered){ return; }
+    gsiDemProtocolRegistered = true;
+
+    maplibregl.addProtocol("gsidem", (params, callback) => {
+        const image = new Image();
+        image.crossOrigin = "anonymous";
+
+        image.onload = () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = image.width;
+            canvas.height = image.height;
+
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(image, 0, 0);
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            for(let i = 0; i < imageData.data.length; i += 4){
+                const [tR, tG, tB] = gsidemPixelToTerrainRgb(imageData.data[i], imageData.data[i + 1], imageData.data[i + 2]);
+                imageData.data[i] = tR;
+                imageData.data[i + 1] = tG;
+                imageData.data[i + 2] = tB;
+                imageData.data[i + 3] = 255;
+            }
+            ctx.putImageData(imageData, 0, 0);
+
+            canvas.toBlob(blob => {
+                if(!blob){ callback(new Error("標高タイルのPNG変換に失敗しました")); return; }
+                blob.arrayBuffer().then(buf => callback(null, buf, null, null));
+            }, "image/png");
+        };
+
+        image.onerror = () => callback(new Error("標高タイルの読み込みに失敗しました"));
+        image.src = params.url.replace("gsidem://", "");
+
+        return { cancel: () => {} };
+    });
+}
+
+function init3DMap(){
+    if(map3d){ return; }
+
+    registerGsiDemProtocol();
+
+    const center = map.getCenter();
+
+    map3d = new maplibregl.Map({
+        container: "map3d",
+        style: {
+            version: 8,
+            sources: {
+                gsiPale3d: {
+                    type: "raster",
+                    tiles: ["https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png"],
+                    tileSize: 256,
+                    attribution: "地理院タイル（国土地理院）"
+                },
+                gsidem: {
+                    type: "raster-dem",
+                    tiles: ["gsidem://https://cyberjapandata.gsi.go.jp/xyz/dem_png/{z}/{x}/{y}.png"],
+                    tileSize: 256,
+                    encoding: "mapbox"
+                }
+            },
+            layers: [
+                { id: "gsiPale3dLayer", type: "raster", source: "gsiPale3d" }
+            ],
+            terrain: { source: "gsidem", exaggeration: 1.3 }
+        },
+        center: [center.lng, center.lat],
+        zoom: Math.max(map.getZoom(), 12),
+        pitch: 60,
+        maxPitch: 85
+    });
+
+    map3d.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+
+    map3d.on("load", () => {
+        map3d.setSky({
+            "sky-color": "#8ecbf0",
+            "horizon-color": "#ffffff",
+            "fog-color": "#ffffff",
+            "sky-horizon-blend": 0.5
+        });
+
+        map3dOverlay = new deck.MapboxOverlay({
+            interleaved: true,
+            layers: KUMAMOTO_BLDG_TILESETS.map((url, idx) => new deck.Tile3DLayer({
+                id: "plateau-bldg-" + idx,
+                data: url
+            }))
+        });
+        map3d.addControl(map3dOverlay);
+    });
+}
+
+function toggle3DView(){
+    const mapDiv = document.getElementById("map");
+    const map3dDiv = document.getElementById("map3d");
+    const toggleButton = document.getElementById("map3dToggleButton");
+
+    is3DActive = !is3DActive;
+
+    if(is3DActive){
+        const center = map.getCenter();
+        const zoom = map.getZoom();
+
+        mapDiv.style.display = "none";
+        map3dDiv.style.display = "";
+        if(toggleButton){ toggleButton.classList.add("active"); }
+
+        init3DMap();
+        map3d.jumpTo({ center: [center.lng, center.lat], zoom: Math.max(zoom, 12) });
+        setTimeout(() => map3d.resize(), 50);
+    }
+    else{
+        map3dDiv.style.display = "none";
+        mapDiv.style.display = "";
+        if(toggleButton){ toggleButton.classList.remove("active"); }
+        map.invalidateSize();
+    }
+}
 
 function toggleMapFullscreen(){
     if(document.fullscreenElement){
@@ -7590,7 +7782,7 @@ function showTab(tabId, button){
 ================================================== */
 
 window.addEventListener("load", async () => {
-    console.log("Version 2.88 起動");
+    console.log("Version 2.89 起動");
 
     try{
         const { data, error } = await supabaseClient.auth.getSession();
