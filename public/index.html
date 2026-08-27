@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Puttan Version 2.79</title>
+<title>Puttan Version 2.80</title>
 
 <link rel="icon" type="image/png" href="/icon.png">
 <link rel="apple-touch-icon" href="/icon.png">
@@ -2751,15 +2751,18 @@ const sedimentHazardLayer = L.layerGroup([
 let trafficRegulationLayer = L.layerGroup();
 
 /* ==================================================
-   ライブカメラ（国交省 九州地方整備局 熊本河川国道事務所）
-   ・全国統一の座標付きカメラAPIは存在しないため、活動エリア
-     （熊本県）周辺のカメラを手動でリスト化している
+   ライブカメラ（国交省 九州地方整備局 各事務所 + 沖縄総合事務局）
+   ・全国統一の座標付きカメラAPIは存在しないため、九州7県・沖縄の
+     カメラを事務所ごとに手動でリスト化している
    ・座標は住所ジオコーダーによる市町村レベルの概算値
-   ・画像は事務所サイトの静止画を直接埋め込み（数分〜十数分
+   ・画像は各事務所サイトの静止画を直接埋め込み（数分〜十数分
      おきに更新される想定。ポップアップを開くたびに再取得する）
+   ・沖縄は道路カメラのみ（河川・北部エリアの安定した直リンクが
+     見つからなかったため未収録）
 ================================================== */
 
 const LIVE_CAMERAS = [
+    // ==== 熊本県 ====
     { name: "宇土市長浜（国道57号）", type: "road", lat: 32.690434, lon: 130.571259, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam2_5.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/road_live/road_live02.html" },
     { name: "阿蘇口交差点（国道57号）", type: "road", lat: 32.922459, lon: 131.062347, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam2_1.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/road_live/road_live02.html" },
     { name: "三角町三角浦（国道57号）", type: "road", lat: 32.699459, lon: 130.665588, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam2_8.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/road_live/road_live02.html" },
@@ -2771,12 +2774,89 @@ const LIVE_CAMERAS = [
     { name: "大町（緑川）", type: "river", lat: 32.651173, lon: 130.811234, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam5_9.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/kasen_live/kasen_live02.html" },
     { name: "田口橋（緑川）", type: "river", lat: 32.651173, lon: 130.811234, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam5_5.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/kasen_live/kasen_live02.html" },
     { name: "霊台橋（緑川）", type: "river", lat: 32.639721, lon: 130.788895, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam5_16.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/kasen_live/kasen_live02.html" },
-    { name: "緑川ダム放水口（緑川）", type: "river", lat: 32.639721, lon: 130.788895, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam5_17.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/kasen_live/kasen_live02.html" }
+    { name: "緑川ダム放水口（緑川）", type: "river", lat: 32.639721, lon: 130.788895, imageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/data/cctv/pc/cam5_17.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kumamoto/bousai/kasen_live/kasen_live02.html" },
+
+    // ==== 福岡県 ====
+    { name: "犬鳴川河川公園付近（宮若市本城）", type: "river", lat: 33.7028, lon: 130.6668, imageUrl: "https://www.qsr.mlit.go.jp/onga/cctv/miyata_nomal.jpg", pageUrl: "https://www.qsr.mlit.go.jp/onga/cctv/" },
+    { name: "飯塚大橋付近（飯塚市川島）", type: "river", lat: 33.6481, lon: 130.6903, imageUrl: "https://www.qsr.mlit.go.jp/onga/cctv/iizuka_nomal.jpg", pageUrl: "https://www.qsr.mlit.go.jp/onga/cctv/" },
+    { name: "中間大橋付近（中間市垣生）", type: "river", lat: 33.8023, lon: 130.6955, imageUrl: "https://www.qsr.mlit.go.jp/onga/cctv/nakama_nomal.jpg", pageUrl: "https://www.qsr.mlit.go.jp/onga/cctv/" },
+    { name: "遠賀川河口堰付近（遠賀郡水巻町猪熊）", type: "river", lat: 33.8603, lon: 130.6928, imageUrl: "https://www.qsr.mlit.go.jp/onga/cctv/kakou_nomal.jpg", pageUrl: "https://www.qsr.mlit.go.jp/onga/cctv/" },
+    { name: "直方市役所付近（直方市溝堀）", type: "river", lat: 33.7434, lon: 130.7343, imageUrl: "https://www.qsr.mlit.go.jp/onga/cctv/onga_nomal.jpg", pageUrl: "https://www.qsr.mlit.go.jp/onga/cctv/" },
+    { name: "伊田大橋付近（田川市寿町）", type: "river", lat: 33.6332, lon: 130.8034, imageUrl: "https://www.qsr.mlit.go.jp/onga/cctv/tagawa_nomal.jpg", pageUrl: "https://www.qsr.mlit.go.jp/onga/cctv/" },
+    { name: "城山トンネル付近（国道3号 岡垣町）", type: "road", lat: 33.8451, lon: 130.5412, imageUrl: "https://www.qsr.mlit.go.jp/kitakyu/camera/cam01_1.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kitakyu/bousai/livecamera/index.html" },
+    { name: "烏尾峠付近（国道201号 糸田町）", type: "road", lat: 33.6534, lon: 130.7502, imageUrl: "https://www.qsr.mlit.go.jp/kitakyu/camera/cam03_1.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kitakyu/bousai/livecamera/index.html" },
+    { name: "篠栗橋（篠栗町）", type: "road", lat: 33.5937, lon: 130.5449, imageUrl: "https://www.qsr.mlit.go.jp/kitakyu/camera/cam60_1.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kitakyu/bousai/livecamera/index.html" },
+    { name: "八木山1（八木山峠付近）", type: "road", lat: 33.5960, lon: 130.6140, imageUrl: "https://www.qsr.mlit.go.jp/kitakyu/camera/cam34_1.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kitakyu/bousai/livecamera/index.html" },
+
+    // ==== 佐賀県 ====
+    { name: "神埼橋下（神埼市神埼町）国道34号", type: "road", lat: 33.3173, lon: 130.3968, imageUrl: "https://www.qsr.mlit.go.jp/sakoku/bousai/data/img/cctv/S02761.jpg", pageUrl: "https://www.qsr.mlit.go.jp/sakoku/bousai_doro/camera/index.html" },
+    { name: "嘉瀬橋下（佐賀市鍋島町）国道34号", type: "road", lat: 33.2564, lon: 130.2715, imageUrl: "https://www.qsr.mlit.go.jp/sakoku/bousai/data/img/cctv/S02320.jpg", pageUrl: "https://www.qsr.mlit.go.jp/sakoku/bousai_doro/camera/index.html" },
+    { name: "基山駅前下（三養基郡基山町）国道3号", type: "road", lat: 33.5020, lon: 130.5144, imageUrl: "https://www.qsr.mlit.go.jp/sakoku/bousai/data/img/cctv/S02322.jpg", pageUrl: "https://www.qsr.mlit.go.jp/sakoku/bousai_doro/camera/index.html" },
+    { name: "諸富橋下（佐賀市諸富町）国道208号", type: "road", lat: 33.2452, lon: 130.3512, imageUrl: "https://www.qsr.mlit.go.jp/sakoku/bousai/data/img/cctv/S02367.jpg", pageUrl: "https://www.qsr.mlit.go.jp/sakoku/bousai_doro/camera/index.html" },
+    { name: "唐津大橋下（唐津市鏡）国道202号", type: "road", lat: 33.4368, lon: 129.9758, imageUrl: "https://www.qsr.mlit.go.jp/sakoku/bousai/data/img/cctv/S02361.jpg", pageUrl: "https://www.qsr.mlit.go.jp/sakoku/bousai_doro/camera/index.html" },
+    { name: "笹原峠上（唐津市厳木町）国道203号", type: "road", lat: 33.3833, lon: 130.0876, imageUrl: "https://www.qsr.mlit.go.jp/sakoku/bousai/data/img/cctv/S02352.jpg", pageUrl: "https://www.qsr.mlit.go.jp/sakoku/bousai_doro/camera/index.html" },
+    { name: "下西山下（武雄市武雄町）国道34号", type: "road", lat: 33.1943, lon: 130.0172, imageUrl: "https://www.qsr.mlit.go.jp/sakoku/bousai/data/img/cctv/S02763.jpg", pageUrl: "https://www.qsr.mlit.go.jp/sakoku/bousai_doro/camera/index.html" },
+    { name: "不動山上（嬉野市嬉野町）国道34号", type: "road", lat: 33.1330, lon: 130.0794, imageUrl: "https://www.qsr.mlit.go.jp/sakoku/bousai/data/img/cctv/S02382.jpg", pageUrl: "https://www.qsr.mlit.go.jp/sakoku/bousai_doro/camera/index.html" },
+
+    // ==== 長崎県 ====
+    { name: "松浦IC入口（松浦市）", type: "road", lat: 33.3592, lon: 129.7159, imageUrl: "https://www.qsr.mlit.go.jp/nagasaki/bousai/cctv/ngscctv_vga_29.jpg", pageUrl: "https://www.qsr.mlit.go.jp/nagasaki/bousai/road/sasebo.html" },
+    { name: "調川IC（松浦市調川町）", type: "road", lat: 33.3221, lon: 129.7269, imageUrl: "https://www.qsr.mlit.go.jp/nagasaki/bousai/cctv/ngscctv_vga_30.jpg", pageUrl: "https://www.qsr.mlit.go.jp/nagasaki/bousai/road/sasebo.html" },
+    { name: "木原町（佐世保市木原町）", type: "road", lat: 33.1206, lon: 129.7364, imageUrl: "https://www.qsr.mlit.go.jp/nagasaki/bousai/cctv/ngscctv_vga_04.jpg", pageUrl: "https://www.qsr.mlit.go.jp/nagasaki/bousai/road/sasebo.html" },
+    { name: "日宇町（佐世保市日宇町）", type: "road", lat: 33.1653, lon: 129.7369, imageUrl: "https://www.qsr.mlit.go.jp/nagasaki/bousai/cctv/ngscctv_vga_18.jpg", pageUrl: "https://www.qsr.mlit.go.jp/nagasaki/bousai/road/sasebo.html" },
+    { name: "俵坂（東彼杵郡東彼杵町・佐賀県境）", type: "road", lat: 33.1626, lon: 129.9515, imageUrl: "https://www.qsr.mlit.go.jp/nagasaki/bousai/cctv/ngscctv_vga_01.jpg", pageUrl: "https://www.qsr.mlit.go.jp/nagasaki/bousai/road/sasebo.html" },
+    { name: "川棚大橋（東彼杵郡川棚町）", type: "road", lat: 33.0187, lon: 129.8375, imageUrl: "https://www.qsr.mlit.go.jp/nagasaki/bousai/cctv/ngscctv_vga_40.jpg", pageUrl: "https://www.qsr.mlit.go.jp/nagasaki/bousai/road/sasebo.html" },
+    { name: "中里町（大村市中里町）", type: "road", lat: 32.9376, lon: 129.9503, imageUrl: "https://www.qsr.mlit.go.jp/nagasaki/bousai/cctv/ngscctv_vga_19.jpg", pageUrl: "https://www.qsr.mlit.go.jp/nagasaki/bousai/road/omura.html" },
+    { name: "島原大橋（島原市）", type: "road", lat: 32.7897, lon: 130.3728, imageUrl: "https://www.qsr.mlit.go.jp/nagasaki/bousai/cctv/ngscctv_vga_53.jpg", pageUrl: "https://www.qsr.mlit.go.jp/nagasaki/bousai/road/obama.html" },
+    { name: "愛野展望所（雲仙市愛野町）", type: "road", lat: 32.8148, lon: 130.2716, imageUrl: "https://www.qsr.mlit.go.jp/nagasaki/bousai/cctv/ngscctv_vga_59.jpg", pageUrl: "https://www.qsr.mlit.go.jp/nagasaki/bousai/road/obama.html" },
+    { name: "岩床山（雲仙普賢岳監視カメラ）", type: "volcano", lat: 32.7627, lon: 130.2949, imageUrl: "https://www.qsr.mlit.go.jp/unzen/camera/images/cam01_s.jpg", pageUrl: "https://www.qsr.mlit.go.jp/unzen/camera/" },
+
+    // ==== 大分県 ====
+    { name: "原村（大分川）", type: "river", lat: 33.2758, lon: 131.5432, imageUrl: "https://www.qsr.mlit.go.jp/oita/bousaiinfo/data/cctv/img/cctv_vga_364.jpg", pageUrl: "https://www.qsr.mlit.go.jp/oitagawa/map/" },
+    { name: "河内（大分川）", type: "river", lat: 33.2588, lon: 131.5187, imageUrl: "https://www.qsr.mlit.go.jp/oita/bousaiinfo/data/cctv/img/cctv_vga_362.jpg", pageUrl: "https://www.qsr.mlit.go.jp/oitagawa/map/" },
+    { name: "道の駅のつはる（大分市野津原）", type: "river", lat: 33.1548, lon: 131.5453, imageUrl: "https://www.qsr.mlit.go.jp/oita/bousaiinfo/data/cctv/img/cctv_vga_361.jpg", pageUrl: "https://www.qsr.mlit.go.jp/oitagawa/map/" },
+    { name: "荷小野大橋（大野川）", type: "river", lat: 33.0813, lon: 131.5871, imageUrl: "https://www.qsr.mlit.go.jp/oita/bousaiinfo/data/cctv/img/cctv_vga_360.jpg", pageUrl: "https://www.qsr.mlit.go.jp/oitagawa/map/" },
+    { name: "庄内西（由布市庄内町西）国道210号", type: "road", lat: 33.2029, lon: 131.2708, imageUrl: "https://www.qsr.mlit.go.jp/oita/bousaiinfo/data/cctv/img/cctv_vga_004.jpg", pageUrl: "https://www.qsr.mlit.go.jp/oita/bousaiinfo/cctv/douro_r210.html" },
+    { name: "湯布院IC（由布市湯布院町川北）国道210号", type: "road", lat: 33.2644, lon: 131.3697, imageUrl: "https://www.qsr.mlit.go.jp/oita/bousaiinfo/data/cctv/img/cctv_vga_011.jpg", pageUrl: "https://www.qsr.mlit.go.jp/oita/bousaiinfo/cctv/douro_r210.html" },
+    { name: "尾本TN起点 新妙見橋（玖珠郡九重町野上）国道210号", type: "road", lat: 33.2332, lon: 131.1810, imageUrl: "https://www.qsr.mlit.go.jp/oita/bousaiinfo/data/cctv/img/cctv_vga_021.jpg", pageUrl: "https://www.qsr.mlit.go.jp/oita/bousaiinfo/cctv/douro_r210.html" },
+    { name: "赤岩洞門起点（日田市天瀬町赤岩）国道210号", type: "road", lat: 33.2665, lon: 130.9814, imageUrl: "https://www.qsr.mlit.go.jp/oita/bousaiinfo/data/cctv/img/cctv_vga_026.jpg", pageUrl: "https://www.qsr.mlit.go.jp/oita/bousaiinfo/cctv/douro_r210.html" },
+    { name: "寺内TN終点（日田市石井）国道210号", type: "road", lat: 33.3224, lon: 130.9412, imageUrl: "https://www.qsr.mlit.go.jp/oita/bousaiinfo/data/cctv/img/cctv_vga_037.jpg", pageUrl: "https://www.qsr.mlit.go.jp/oita/bousaiinfo/cctv/douro_r210.html" },
+
+    // ==== 宮崎県 ====
+    { name: "内山（国道10号・220号）", type: "road", lat: 32.5820, lon: 131.6210, imageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/Camera/d0001.jpg", pageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/mapSC2.html" },
+    { name: "いるか岬（国道10号・220号）", type: "road", lat: 32.4990, lon: 131.6960, imageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/Camera/d0003.jpg", pageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/mapSC2.html" },
+    { name: "宮浦地区（延岡市）国道10号・220号", type: "road", lat: 32.5670, lon: 131.6780, imageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/Camera/d0004.jpg", pageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/mapSC2.html" },
+    { name: "宮崎水位観測所（大淀川）", type: "river", lat: 31.9109, lon: 131.4238, imageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/Camera/k0002.jpg", pageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/mapSC1.html" },
+    { name: "樋渡橋（大淀川）", type: "river", lat: 31.8520, lon: 131.3540, imageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/Camera/k0006.jpg", pageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/mapSC1.html" },
+    { name: "小丸大橋（小丸川）", type: "river", lat: 32.1120, lon: 131.4230, imageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/Camera/k0011.jpg", pageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/mapSC1.html" },
+    { name: "入野橋（大淀川）", type: "river", lat: 31.8310, lon: 131.3140, imageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/Camera/k0014.jpg", pageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/mapSC1.html" },
+    { name: "矢岳第6砂防堰堤（霧島火山）", type: "volcano", lat: 31.9080, lon: 130.8730, imageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/Camera/s0001.jpg", pageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/mapSC6.html" },
+    { name: "高千穂峰南斜面（霧島火山）", type: "volcano", lat: 31.8840, lon: 130.8620, imageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/Camera/s0002.jpg", pageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/mapSC6.html" },
+    { name: "高原町役場付近（新燃岳東側）", type: "volcano", lat: 31.9450, lon: 130.8580, imageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/Camera/s0003.jpg", pageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/mapSC6.html" },
+
+    // ==== 鹿児島県 ====
+    { name: "金山峠（国道3号 出水市・阿久根市）", type: "road", lat: 32.0500, lon: 130.3600, imageUrl: "https://www.qsr.mlit.go.jp/kakoku/cctvimg/R3_347k980.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kakoku/traffic/cctv/" },
+    { name: "亀割峠（国道10号）", type: "road", lat: 31.7300, lon: 130.6600, imageUrl: "https://www.qsr.mlit.go.jp/kakoku/cctvimg/R10_422k300.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kakoku/traffic/cctv/" },
+    { name: "竜ケ水（国道10号 鹿児島市）", type: "road", lat: 31.6515, lon: 130.5885, imageUrl: "https://www.qsr.mlit.go.jp/kakoku/cctvimg/R10_454k540.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kakoku/traffic/cctv/" },
+    { name: "峯尾（国道225号 南九州市）", type: "road", lat: 31.3500, lon: 130.4700, imageUrl: "https://www.qsr.mlit.go.jp/kakoku/cctvimg/R225_009k680.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kakoku/traffic/cctv/" },
+    { name: "川辺峠（国道225号 南九州市川辺町）", type: "road", lat: 31.3300, lon: 130.4400, imageUrl: "https://www.qsr.mlit.go.jp/kakoku/cctvimg/R225_034k070.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kakoku/traffic/cctv/" },
+    { name: "前之浜（国道226号 鹿児島市喜入前之浜町）", type: "road", lat: 31.3860, lon: 130.5490, imageUrl: "https://www.qsr.mlit.go.jp/kakoku/cctvimg/R226_061k750.jpg", pageUrl: "https://www.qsr.mlit.go.jp/kakoku/traffic/cctv/" },
+    { name: "砂防センター（桜島）", type: "volcano", lat: 31.5931, lon: 130.6461, imageUrl: "https://www.qsr.mlit.go.jp/osumi/bousai/Camera/s-camera07.jpg", pageUrl: "https://www.qsr.mlit.go.jp/osumi/bousai/mapSC2.html" },
+    { name: "道の駅桜島", type: "volcano", lat: 31.5925, lon: 130.6455, imageUrl: "https://www.qsr.mlit.go.jp/osumi/bousai/Camera/r-camera22.jpg", pageUrl: "https://www.qsr.mlit.go.jp/osumi/bousai/mapSC3.html" },
+    { name: "有村（桜島 溶岩なぎさ公園付近）", type: "volcano", lat: 31.5735, lon: 130.6579, imageUrl: "https://www.qsr.mlit.go.jp/osumi/bousai/Camera/r-camera17.jpg", pageUrl: "https://www.qsr.mlit.go.jp/osumi/bousai/mapSC3.html" },
+    { name: "霧島市牧園町三体堂（新燃岳西側）", type: "volcano", lat: 31.9200, lon: 130.8300, imageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/Camera/s0004.jpg", pageUrl: "https://www.qsr.mlit.go.jp/miyazaki/bousai/mapSC6.html" },
+
+    // ==== 沖縄県 ====
+    { name: "国道58号 読谷村比謝", type: "road", lat: 26.3940, lon: 127.7320, imageUrl: "https://www.dc.ogb.go.jp/nankoku/cctv/images/01.jpg", pageUrl: "https://www.dc.ogb.go.jp/nankoku/cctv/01.html" },
+    { name: "国道329号 中城村久場", type: "road", lat: 26.2830, lon: 127.8090, imageUrl: "https://www.dc.ogb.go.jp/nankoku/cctv/images/02.jpg", pageUrl: "https://www.dc.ogb.go.jp/nankoku/cctv/02.html" },
+    { name: "国道329号 西原町小那覇", type: "road", lat: 26.2210, lon: 127.7590, imageUrl: "https://www.dc.ogb.go.jp/nankoku/cctv/images/03.jpg", pageUrl: "https://www.dc.ogb.go.jp/nankoku/cctv/03.html" },
+    { name: "国道331号 糸満市摩文仁", type: "road", lat: 26.0900, lon: 127.7100, imageUrl: "https://www.dc.ogb.go.jp/nankoku/cctv/images/04.jpg", pageUrl: "https://www.dc.ogb.go.jp/nankoku/cctv/04.html" },
+    { name: "国道332号 那覇市安次嶺", type: "road", lat: 26.2040, lon: 127.6790, imageUrl: "https://www.dc.ogb.go.jp/nankoku/cctv/images/05.jpg", pageUrl: "https://www.dc.ogb.go.jp/nankoku/cctv/05.html" }
 ];
 
 const LIVE_CAMERA_TYPE_INFO = {
-    road:  { emoji: "🚗", label: "道路カメラ", color: "#455a64" },
-    river: { emoji: "🌊", label: "河川カメラ", color: "#00695c" }
+    road:    { emoji: "🚗", label: "道路カメラ", color: "#455a64" },
+    river:   { emoji: "🌊", label: "河川カメラ", color: "#00695c" },
+    volcano: { emoji: "🌋", label: "火山カメラ", color: "#bf360c" }
 };
 
 const liveCameraLayer = L.layerGroup();
@@ -2808,7 +2888,7 @@ function renderLiveCameras(){
                 <div class="popupFooter">
                     <button onclick="refreshLiveCameraImage(${index})">🔄 更新</button>
                     <a href="${cam.pageUrl}" target="_blank" rel="noopener">公式ページ</a>
-                    <div class="popupUserId">国土交通省 九州地方整備局 提供・座標は概算</div>
+                    <div class="popupUserId">国土交通省 提供・座標は概算</div>
                 </div>
             </div>
         `);
@@ -3104,7 +3184,7 @@ L.control.layers(
     {
         "👥 隊員": memberLayerGroup,
         "📍 登録地点": pointClusterGroup,
-        "📷 ライブカメラ（熊本）": liveCameraLayer,
+        "📷 ライブカメラ（九州・沖縄）": liveCameraLayer,
         "🏃 避難場所（熊本市）": evacuationLayer,
         "🌊 洪水浸水想定区域": floodHazardLayer,
         "⛰️ 土砂災害警戒区域": sedimentHazardLayer,
@@ -6869,7 +6949,7 @@ function showTab(tabId, button){
 ================================================== */
 
 window.addEventListener("load", async () => {
-    console.log("Version 2.79 起動");
+    console.log("Version 2.80 起動");
 
     try{
         const { data, error } = await supabaseClient.auth.getSession();
