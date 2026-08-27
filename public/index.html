@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Puttan Version 2.90</title>
+<title>Puttan Version 2.91</title>
 
 <link rel="icon" type="image/png" href="/icon.png">
 <link rel="apple-touch-icon" href="/icon.png">
@@ -4023,38 +4023,40 @@ function registerGsiDemProtocol(){
     if(gsiDemProtocolRegistered){ return; }
     gsiDemProtocolRegistered = true;
 
-    maplibregl.addProtocol("gsidem", (params, callback) => {
-        const image = new Image();
-        image.crossOrigin = "anonymous";
+    // MapLibre GL JS v4のaddProtocolはコールバック方式ではなく、
+    // Promiseを返す方式のAPIに変わっている（{data: ArrayBuffer}を解決する）
+    maplibregl.addProtocol("gsidem", (params) => {
+        return new Promise((resolve, reject) => {
+            const image = new Image();
+            image.crossOrigin = "anonymous";
 
-        image.onload = () => {
-            const canvas = document.createElement("canvas");
-            canvas.width = image.width;
-            canvas.height = image.height;
+            image.onload = () => {
+                const canvas = document.createElement("canvas");
+                canvas.width = image.width;
+                canvas.height = image.height;
 
-            const ctx = canvas.getContext("2d");
-            ctx.drawImage(image, 0, 0);
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(image, 0, 0);
 
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            for(let i = 0; i < imageData.data.length; i += 4){
-                const [tR, tG, tB] = gsidemPixelToTerrainRgb(imageData.data[i], imageData.data[i + 1], imageData.data[i + 2]);
-                imageData.data[i] = tR;
-                imageData.data[i + 1] = tG;
-                imageData.data[i + 2] = tB;
-                imageData.data[i + 3] = 255;
-            }
-            ctx.putImageData(imageData, 0, 0);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                for(let i = 0; i < imageData.data.length; i += 4){
+                    const [tR, tG, tB] = gsidemPixelToTerrainRgb(imageData.data[i], imageData.data[i + 1], imageData.data[i + 2]);
+                    imageData.data[i] = tR;
+                    imageData.data[i + 1] = tG;
+                    imageData.data[i + 2] = tB;
+                    imageData.data[i + 3] = 255;
+                }
+                ctx.putImageData(imageData, 0, 0);
 
-            canvas.toBlob(blob => {
-                if(!blob){ callback(new Error("標高タイルのPNG変換に失敗しました")); return; }
-                blob.arrayBuffer().then(buf => callback(null, buf, null, null));
-            }, "image/png");
-        };
+                canvas.toBlob(blob => {
+                    if(!blob){ reject(new Error("標高タイルのPNG変換に失敗しました")); return; }
+                    blob.arrayBuffer().then(buf => resolve({ data: buf }));
+                }, "image/png");
+            };
 
-        image.onerror = () => callback(new Error("標高タイルの読み込みに失敗しました"));
-        image.src = params.url.replace("gsidem://", "");
-
-        return { cancel: () => {} };
+            image.onerror = () => reject(new Error("標高タイルの読み込みに失敗しました"));
+            image.src = params.url.replace("gsidem://", "");
+        });
     });
 }
 
@@ -7882,7 +7884,7 @@ function showTab(tabId, button){
 ================================================== */
 
 window.addEventListener("load", async () => {
-    console.log("Version 2.90 起動");
+    console.log("Version 2.91 起動");
 
     try{
         const { data, error } = await supabaseClient.auth.getSession();
