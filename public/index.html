@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Puttan Version 2.86</title>
+<title>Puttan Version 2.87</title>
 
 <link rel="icon" type="image/png" href="/icon.png">
 <link rel="apple-touch-icon" href="/icon.png">
@@ -3426,7 +3426,9 @@ map.on("overlayadd", e => {
 });
 
 /* ==================================================
-   雨雲レーダー（RainViewer）
+   雨雲レーダー（気象庁 高解像度降水ナウキャスト）
+   ・250mメッシュ、5分おき更新。zoom3〜10までしか配信されない
+     ため、それ以上は既存タイルを拡大表示させる(maxNativeZoom)
 ================================================== */
 
 const rainRadarLayer = L.layerGroup();
@@ -3434,14 +3436,13 @@ let rainRadarTileLayer = null;
 
 async function updateRainRadarLayer(){
     try{
-        const response = await fetch("https://api.rainviewer.com/public/weather-maps.json");
-        const data = await response.json();
+        const response = await fetch("https://www.jma.go.jp/bosai/jmatile/data/nowc/targetTimes_N1.json");
+        const times = await response.json();
 
-        const frames = data && data.radar && data.radar.past;
-        if(!frames || frames.length === 0){ return; }
+        if(!Array.isArray(times) || times.length === 0){ return; }
 
-        const latest = frames[frames.length - 1];
-        const url = `${data.host}${latest.path}/256/{z}/{x}/{y}/2/1_1.png`;
+        const latest = times[0];
+        const url = `https://www.jma.go.jp/bosai/jmatile/data/nowc/${latest.basetime}/none/${latest.validtime}/surf/hrpns/{z}/{x}/{y}.png`;
 
         if(rainRadarTileLayer){
             rainRadarLayer.removeLayer(rainRadarTileLayer);
@@ -3449,7 +3450,8 @@ async function updateRainRadarLayer(){
 
         rainRadarTileLayer = L.tileLayer(url, {
             opacity: 0.6,
-            attribution: "Weather data &copy; <a href=\"https://www.rainviewer.com/\">RainViewer</a>"
+            maxNativeZoom: 10,
+            attribution: "気象データ &copy; <a href=\"https://www.jma.go.jp/\">気象庁</a>"
         });
 
         rainRadarLayer.addLayer(rainRadarTileLayer);
@@ -7502,7 +7504,7 @@ function showTab(tabId, button){
 ================================================== */
 
 window.addEventListener("load", async () => {
-    console.log("Version 2.86 起動");
+    console.log("Version 2.87 起動");
 
     try{
         const { data, error } = await supabaseClient.auth.getSession();

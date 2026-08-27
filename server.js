@@ -1,5 +1,5 @@
 //============================================================
-// Puttan Version 2.86
+// Puttan Version 2.87
 // server.js
 //
 // ・PostgreSQL / Supabase
@@ -1175,7 +1175,7 @@ function parseRssTitles(xml, limit) {
 async function updateTopNews() {
     try {
         const response = await fetch(TOP_NEWS_URL, {
-            headers: { "User-Agent": "Puttan/2.86 news ticker client" }
+            headers: { "User-Agent": "Puttan/2.87 news ticker client" }
         });
 
         if (!response.ok) {
@@ -1220,7 +1220,7 @@ let busPositions = [];
 
 async function fetchBusFeed(feed) {
     const response = await fetch(feed.url, {
-        headers: { "User-Agent": "Puttan/2.86 bus tracker client" }
+        headers: { "User-Agent": "Puttan/2.87 bus tracker client" }
     });
 
     if (!response.ok) {
