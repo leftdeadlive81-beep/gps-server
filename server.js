@@ -1,5 +1,5 @@
 //============================================================
-// Puttan Version 2.93
+// Puttan Version 2.94
 // server.js
 //
 // ・PostgreSQL / Supabase
@@ -1185,7 +1185,7 @@ function parseRssTitles(xml, limit) {
 async function updateTopNews() {
     try {
         const response = await fetch(TOP_NEWS_URL, {
-            headers: { "User-Agent": "Puttan/2.93 news ticker client" }
+            headers: { "User-Agent": "Puttan/2.94 news ticker client" }
         });
 
         if (!response.ok) {
@@ -1230,7 +1230,7 @@ let busPositions = [];
 
 async function fetchBusFeed(feed) {
     const response = await fetch(feed.url, {
-        headers: { "User-Agent": "Puttan/2.93 bus tracker client" }
+        headers: { "User-Agent": "Puttan/2.94 bus tracker client" }
     });
 
     if (!response.ok) {
@@ -1421,7 +1421,7 @@ async function geocodeCrimeLocation(city, machi) {
                 "&q=" + encodeURIComponent(query);
 
             const response = await fetch(url, {
-                headers: { "User-Agent": "Puttan/2.93 (GPS tracking tool; contact: leftdeadlive81@gmail.com)" }
+                headers: { "User-Agent": "Puttan/2.94 (GPS tracking tool; contact: leftdeadlive81@gmail.com)" }
             });
 
             if (!response.ok) { throw new Error("HTTP " + response.status); }
@@ -1459,6 +1459,17 @@ async function geocodeCrimeLocation(city, machi) {
     return result;
 }
 
+// 熊本県警オープンデータのCSVは年度によって文字コードが異なる
+// （令和6年はUTF-8(BOM付き)、他の年はShift_JIS）ため、BOMの有無で判定して
+// デコードする。response.text()はUTF-8固定でデコードしてしまい、
+// Shift_JISのファイルは文字化けして中身が読めなくなる（ヘッダー名が
+// 一致せず全行スキップされる）ため、必ずこの関数経由でデコードすること
+function decodeCrimeCsvBuffer(buffer) {
+    const hasUtf8Bom = buffer.length >= 3 && buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF;
+    const encoding = hasUtf8Bom ? "utf-8" : "shift_jis";
+    return new TextDecoder(encoding).decode(buffer);
+}
+
 async function loadCrimeData() {
     console.log("================================");
     console.log("犯罪発生情報 取得開始:", CRIME_CSV_SOURCES.length, "ファイル");
@@ -1468,15 +1479,21 @@ async function loadCrimeData() {
     for (const source of CRIME_CSV_SOURCES) {
         try {
             const url = `https://data.bodik.jp/dataset/${source.datasetId}/resource/${source.resourceId}/download`;
-            const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 Puttan/2.93" } });
+            const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 Puttan/2.94" } });
 
             if (!response.ok) {
                 console.error("犯罪発生情報 CSV取得失敗:", source.year, source.type, response.status);
                 continue;
             }
 
-            const text = await response.text();
+            const buffer = Buffer.from(await response.arrayBuffer());
+            const text = decodeCrimeCsvBuffer(buffer);
             const parsed = parseCrimeCsv(text);
+
+            if (parsed.length === 0) {
+                console.error("犯罪発生情報 CSV解析0件:", source.year, source.type, "(文字コード判定ミスの可能性)");
+            }
+
             parsed.forEach(row => rows.push({ ...row, type: source.type, year: source.year }));
         }
         catch (err) {
