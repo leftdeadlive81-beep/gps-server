@@ -95,6 +95,17 @@ button { cursor: pointer; }
     cursor: pointer;
 }
 .authBrandLogo.nyaWiggle { animation: nyaWiggleKeyframes .5s ease; }
+.authGameLink {
+    display: block;
+    width: 100%;
+    margin: 10px 0 0;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 4px 14px rgba(0,0,0,.18);
+    transition: transform .15s ease;
+}
+.authGameLink img { display: block; width: 100%; }
+.authGameLink:active { transform: scale(0.97); }
 @keyframes nyaWiggleKeyframes {
     0%, 100% { transform: rotate(0deg); }
     25% { transform: rotate(-4deg); }
@@ -1339,7 +1350,7 @@ html.native-app #placeNameText { font-size: 11px; }
     <div id="loginBox" class="authBox">
         <div class="authBrand">
             <div class="authBrandTagline">野外活動支援ツール</div>
-            <img src="/logo.png" alt="P.U.T.T.A.N." class="authBrandLogo" onclick="handleLogoTap(event)">
+            <img src="/logo2.png" alt="P.U.T.T.A.N." class="authBrandLogo" onclick="handleLogoTap(event)">
         </div>
         <h3 class="authFormTitle">🔐 ログイン</h3>
         <input type="text" id="loginUsername" placeholder="ログインID(英数字)" autocomplete="username">
@@ -1349,12 +1360,15 @@ html.native-app #placeNameText { font-size: 11px; }
         <div class="authDivider"></div>
         <button class="authButtonSecondary" onclick="showRegister()">👤 新規アカウント登録</button>
         <p class="authHint">初めて使用する場合は「新規アカウント登録」から。<br>次回以降は自動的にログオンします。</p>
+        <a href="/mortar_fdc_game.html" target="_blank" rel="noopener" class="authGameLink">
+            <img src="/log3.png" alt="Project ConSim - ここをクリックで起動">
+        </a>
     </div>
 
     <div id="registerBox" class="authBox" style="display:none;">
         <div class="authBrand">
             <div class="authBrandTagline">野外活動支援ツール</div>
-            <img src="/logo.png" alt="P.U.T.T.A.N." class="authBrandLogo" onclick="handleLogoTap(event)">
+            <img src="/logo2.png" alt="P.U.T.T.A.N." class="authBrandLogo" onclick="handleLogoTap(event)">
         </div>
         <h3 class="authFormTitle">👤 新規アカウント登録</h3>
         <input type="text" id="registerPasscode" placeholder="合言葉" autocomplete="off">
