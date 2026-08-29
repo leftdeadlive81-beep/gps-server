@@ -191,6 +191,7 @@
 
   .command-box{
     position:fixed; z-index:60; width:230px; max-width:90vw;
+    max-height:80vh; overflow-y:auto;
     background:var(--panel); border:1px solid var(--amber); border-radius:5px;
     padding:10px 11px; box-shadow:0 4px 18px rgba(0,0,0,0.5);
   }
@@ -2703,15 +2704,29 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
 function commitDecision(){
   if(!state || state.stageResolved || state.animating || state.snipeMortarStrikesPending>0 || state.placementPending) return;
 
-  const firingMortars = state.mortars.filter(m=>m.hp>0 && m.pendingFire);
-  const ammoNeeded = {he:0, heat:0};
-  firingMortars.forEach(m=>{ ammoNeeded[m.fireShell] += m.fireCount; });
-  if(ammoNeeded.he > state.ammo.he || ammoNeeded.heat > state.ammo.heat){
-    log('sys','システム','弾薬が不足しています。');
-    const shortIdx = state.mortars.findIndex(m=>m.hp>0 && m.pendingFire);
-    if(shortIdx>=0) unitSpeak('mortar', shortIdx, 'ammo');
-    return;
-  }
+  // A mortar whose queued shot can't be afforded only cancels THAT mortar's
+  // order (reverts to standby) -- it must never block the whole decision
+  // cycle, or the entire game (including the enemy's turn) softlocks
+  // permanently once ammo runs low, since every future 決心 press would hit
+  // the same shortfall and return before anything else ever resolves.
+  let heBudget = state.ammo.he, heatBudget = state.ammo.heat;
+  const firingMortars = [];
+  state.mortars.forEach(m=>{
+    if(m.hp<=0 || !m.pendingFire) return;
+    if(m.fireShell==='he' || m.fireShell==='heat'){
+      const budget = m.fireShell==='he' ? heBudget : heatBudget;
+      if(m.fireCount > budget){
+        log('sys','システム', `迫撃砲${m.id+1}: 弾薬不足のため射撃指示を取消。`);
+        unitSpeak('mortar', m.id, 'ammo');
+        m.pendingFire = null;
+        m.order = 'standby';
+        return;
+      }
+      if(m.fireShell==='he') heBudget -= m.fireCount; else heatBudget -= m.fireCount;
+    }
+    firingMortars.push(m);
+  });
+  const ammoNeeded = {he: state.ammo.he-heBudget, heat: state.ammo.heat-heatBudget};
 
   const turnCost = firingMortars.length>0 ? 2 : 1;
 
@@ -3195,6 +3210,11 @@ function assignSquadHunt(idx){
   const targetId = state.enemyCommandBox;
   const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
   if(!target) return;
+  if(sq.order==='hunt' && sq.huntTargetId===target.id){
+    clearSquadHunt(idx);
+    log('sys','前線', `第${idx+1}分隊、${target.id}への攻撃指示を解除。`);
+    return;
+  }
   sq.order = 'hunt';
   sq.huntTargetId = target.id;
   sq.pendingDest = null;
@@ -3219,6 +3239,13 @@ function assignMortarFire(idx){
   const targetId = state.enemyCommandBox;
   const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
   if(!target) return;
+  if(mortar.order==='fire' && mortar.pendingFire && mortar.pendingFire.snappedId===target.id){
+    mortar.pendingFire = null;
+    mortar.order = 'standby';
+    log('fdc','FDC', `迫撃砲${idx+1}、${target.id}への攻撃指示を解除。`);
+    render();
+    return;
+  }
   const e = estPosFromMortar(mortar, target);
   mortar.pendingFire = {x:e.x, y:e.y, snappedId:target.id};
   mortar.order = 'fire';
@@ -3237,6 +3264,12 @@ function assignSniperTarget(idx){
   const targetId = state.enemyCommandBox;
   const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
   if(!target) return;
+  if(sn.pendingSnipeTargetId===target.id){
+    sn.pendingSnipeTargetId = null;
+    log('mortar','狙撃', `狙撃${idx+1}班、${target.id}への狙撃指示を解除。`);
+    render();
+    return;
+  }
   sn.pendingSnipeTargetId = target.id;
   unitSpeak('sniper', idx, 'order');
   log('mortar','狙撃', `狙撃${idx+1}班、${target.id} を狙撃目標に指示。`);
@@ -3542,14 +3575,24 @@ function renderCommandBox(){
     </div>
     ${bodyHtml}
   `;
-  const boxW = 230;
-  let left = pos.x - boxW/2;
-  left = clamp(left, 8, window.innerWidth-boxW-8);
-  let top = pos.y + 26;
-  if(top + 320 > window.innerHeight) top = pos.y - 320;
+  positionCommandBox(box, pos, 230);
+}
+
+// Positions a .command-box near (pos.x,pos.y) so it never runs off-screen.
+// Measures the box's ACTUAL rendered height (via offsetHeight, after its
+// content/display are already set) instead of guessing a fixed height --
+// these boxes' content length varies a lot (roster lists, standing-order
+// dropdowns, and now the enemy box's per-unit-type attack buttons), so a
+// hardcoded guess reliably goes stale and lets the box overflow the viewport.
+function positionCommandBox(box, pos, boxW){
+  const left = clamp(pos.x-boxW/2, 8, window.innerWidth-boxW-8);
   box.style.left = left+'px';
-  box.style.top = Math.max(8,top)+'px';
   box.style.display = 'block';
+  const boxH = box.offsetHeight || 220;
+  let top = pos.y + 26;
+  if(top + boxH > window.innerHeight - 8) top = window.innerHeight - boxH - 8;
+  if(top < 8) top = 8;
+  box.style.top = top+'px';
 }
 
 function renderEnemyCommandBox(){
@@ -3591,14 +3634,7 @@ function renderEnemyCommandBox(){
       ${allBtns || '<div class="empty-hint" style="padding:4px 0;">出撃可能なユニットがありません</div>'}
     </div>
   `;
-  const boxW = 230;
-  let left = pos.x - boxW/2;
-  left = clamp(left, 8, window.innerWidth-boxW-8);
-  let top = pos.y + 26;
-  if(top + 220 > window.innerHeight) top = pos.y - 220;
-  box.style.left = left+'px';
-  box.style.top = Math.max(8,top)+'px';
-  box.style.display = 'block';
+  positionCommandBox(box, pos, 230);
 }
 
 function renderStats(){
