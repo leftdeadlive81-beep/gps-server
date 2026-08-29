@@ -110,6 +110,16 @@
     .board-wrap{height:min(58vh, 620px); min-height:260px;}
   }
 
+  /* Duplicate holder for the 決心(decision) button, shown floating over the
+     map bottom-right instead of in the scrolled-away bottombar -- but only on
+     phone-width screens (see @media(max-width:600px) below, which overrides
+     this to display:block; must stay ABOVE that block in source order or this
+     unconditional rule wins the cascade tie and the button never shows at
+     all). Both this and the normal .decision-panel-holder in the bottombar
+     are kept in sync by renderDecisionPanel(), which writes the same markup
+     to every element matching the shared .decision-panel-holder class. */
+  .decision-overlay-mobile{display:none;}
+
   @media (max-width:600px){
     body{padding:8px;}
     .panel{padding:10px;}
@@ -159,14 +169,6 @@
     text-transform:uppercase;margin-bottom:4px;
   }
   .eo-count{font-family:var(--font-mono);font-size:22px;font-weight:700;color:var(--ink);margin-bottom:6px;}
-
-  /* Duplicate holder for the 決心(decision) button, shown floating over the
-     map bottom-right instead of in the scrolled-away bottombar -- but only on
-     phone-width screens (see @media(max-width:600px) below). Both this and
-     the normal .decision-panel-holder in the bottombar are kept in sync by
-     renderDecisionPanel(), which writes the same markup to every element
-     matching the shared .decision-panel-holder class. */
-  .decision-overlay-mobile{display:none;}
 
   .command-box{
     position:fixed; z-index:60; width:230px; max-width:90vw;
@@ -1643,8 +1645,8 @@ function log(role, who, text){
   const div = document.createElement('div');
   div.className = cls;
   div.innerHTML = `<b>[${who}]</b> ${text}`;
-  el.appendChild(div);
-  el.scrollTop = el.scrollHeight;
+  el.insertBefore(div, el.firstChild);
+  el.scrollTop = 0;
 }
 
 function enemyCounterAttack(actionTurns){
