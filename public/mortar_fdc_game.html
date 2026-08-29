@@ -764,17 +764,14 @@ const MINE_TRIGGER_RADIUS_M = 20;
 const MINE_TRIGGER_RADIUS_UNITS = MINE_TRIGGER_RADIUS_M / METERS_PER_UNIT;
 const ROAD_NODE_SNAP_RADIUS_M = 60; // road points within this distance of each other merge into one graph node (bridges gaps from the earlier road-simplification pass and links crossing ways)
 const ROAD_NODE_SNAP_RADIUS_UNITS = ROAD_NODE_SNAP_RADIUS_M / METERS_PER_UNIT;
-// per user request: friendly mortar hit/suppression rate was too low -- halved (was 30).
-// For a 2D gaussian scatter with a fixed kill radius, halving the spread roughly
-// quadruples the hit probability in the low-probability regime this was sitting in.
-const MORTAR_DISPERSION_M = 15;
+// per user request: raised back up (15 -> 140) for wider impact scatter
+const MORTAR_DISPERSION_M = 140;
 const MORTAR_DISPERSION_UNITS = MORTAR_DISPERSION_M / METERS_PER_UNIT;
-// per user request: mortar crews correct fire onto a snapped (identified) target's true
-// position by this fraction, on top of the raw (often much less accurate) spotted estimate
-// -- halves the effective aiming error specifically for mortar fire, without touching the
-// shared bearingErr/distErr estimate used elsewhere (sniper aiming, the UI uncertainty
-// circle, squad/sniper approach). Combined with the dispersion halving above, this is the
-// other half of the ~4x hit/suppression-rate increase.
+// mortar crews correct fire onto a snapped (identified) target's true position by this
+// fraction, on top of the raw (often much less accurate) spotted estimate -- halves the
+// effective aiming bias specifically for mortar fire, without touching the shared
+// bearingErr/distErr estimate used elsewhere (sniper aiming, the UI uncertainty circle,
+// squad/sniper approach).
 const MORTAR_FIRE_CORRECTION_FRAC = 0.5;
 const VISUAL_LERP_RATE = 0.12;
 const SUPPRESSION_TURNS = 3;
@@ -886,6 +883,28 @@ function effectMultiplier(shell, fuze, type){
     return 0.5;
   }
   return 0.5;
+}
+
+// per user request: firing at an identified target auto-loads the shell/fuze/round-count
+// combo effectMultiplier() rates best for that target type, instead of just reusing whatever
+// the mortar's panel was last left on. Falls back to 'impact' if the ideal fuze somehow isn't
+// unlocked yet (impact is always unlocked, see selectDifficulty).
+const MORTAR_BEST_LOADOUT = {
+  infantry:  {shell:'he',   fuze:'proximity', count:3},
+  vehicle:   {shell:'heat', fuze:'impact',    count:2},
+  artillery: {shell:'he',   fuze:'impact',    count:2},
+  drone:     {shell:'he',   fuze:'proximity', count:2},
+};
+function bestMortarLoadoutFor(type){
+  const pick = MORTAR_BEST_LOADOUT[type] || {shell:'he', fuze:'impact', count:2};
+  const fuze = state.fuzeUnlocked[pick.fuze] ? pick.fuze : 'impact';
+  return {shell:pick.shell, fuze, count:pick.count};
+}
+function applyBestMortarLoadout(mortar, target){
+  const loadout = bestMortarLoadoutFor(target.type);
+  mortar.fireShell = loadout.shell;
+  mortar.fireFuze = loadout.fuze;
+  mortar.fireCount = loadout.count;
 }
 
 let state = null;
@@ -3291,6 +3310,7 @@ function setPendingFireAt(px, py, mortar){
     state.selectedId = best.id;
     const e = estPosFromMortar(mortar, best);
     mortar.pendingFire = {x:e.x, y:e.y, snappedId:best.id};
+    applyBestMortarLoadout(mortar, best);
   } else {
     state.selectedId = null;
     mortar.pendingFire = {x:px, y:py, snappedId:null};
@@ -3411,11 +3431,12 @@ function assignMortarFire(idx){
   }
   const e = estPosFromMortar(mortar, target);
   mortar.pendingFire = {x:e.x, y:e.y, snappedId:target.id};
+  applyBestMortarLoadout(mortar, target);
   mortar.order = 'fire';
   mortar.pendingDest = null;
   state.selectedId = target.id;
   unitSpeak('mortar', idx, 'order');
-  log('fdc','FDC', `迫撃砲${idx+1}、${target.id} を攻撃目標に指示。`);
+  log('fdc','FDC', `迫撃砲${idx+1}、${target.id} を攻撃目標に指示。${SHELLS[mortar.fireShell]}・${FUZES[mortar.fireFuze]}・${mortar.fireCount}発を自動選択。`);
   render();
 }
 
