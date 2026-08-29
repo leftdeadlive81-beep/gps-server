@@ -3750,9 +3750,16 @@ let mapDragMoved = false;
 let threeReady = false;
 let scene3d, camera3d, renderer3d, terrainObject3d;
 const HEIGHT_GRID = { cols:0, rows:0, values:null, minX:0, minZ:0, stepX:1, stepZ:1 };
+// On phones, start the camera rotated -90 deg so the friendly<->enemy axis
+// (canvas X: friendly at low X, enemy at high X) reads bottom-to-top on
+// screen (friendly near/bottom, enemy far/top) instead of the desktop's
+// left-to-right layout -- a better fit for a narrow, tall viewport. Free
+// rotation via two-finger touch/right-drag still works from this starting
+// point either way.
+const MAP_INITIAL_AZIMUTH = (window.innerWidth||0) <= 600 ? -Math.PI/2 : 0;
 const MAP_VIEW = {
   cx: CANVAS_W/2, cy: CANVAS_H/2,      // look-at point, in canvas-unit space
-  zoom: 1, azimuth: 0, polar: 0.6,     // orbit distance factor / horizontal / tilt angle (rad)
+  zoom: 1, azimuth: MAP_INITIAL_AZIMUTH, polar: 0.6, // orbit distance factor / horizontal / tilt angle (rad)
   containerW: 1, containerH: 1,
 };
 const MAP_ZOOM_MIN = 0.35, MAP_ZOOM_MAX = 5;
