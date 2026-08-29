@@ -3210,6 +3210,39 @@ function clearSquadHunt(idx){
   render();
 }
 
+// Arms a mortar's fire mission at the enemy-command-box target, same as
+// manually pressing "攻撃地点設定" then clicking the target on the map --
+// still requires 決心 (commitDecision) to actually fire.
+function assignMortarFire(idx){
+  const mortar = state.mortars[idx];
+  if(!mortar || mortar.hp<=0) return;
+  const targetId = state.enemyCommandBox;
+  const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
+  if(!target) return;
+  const e = estPosFromMortar(mortar, target);
+  mortar.pendingFire = {x:e.x, y:e.y, snappedId:target.id};
+  mortar.order = 'fire';
+  mortar.pendingDest = null;
+  state.selectedId = target.id;
+  unitSpeak('mortar', idx, 'order');
+  log('fdc','FDC', `迫撃砲${idx+1}、${target.id} を攻撃目標に指示。`);
+  render();
+}
+
+// Locks a sniper onto the enemy-command-box target, same as manually
+// pressing "狙撃目標を指定" then clicking the target on the map.
+function assignSniperTarget(idx){
+  const sn = state.snipers[idx];
+  if(!sn || !sn.soldiers.some(s=>s.alive)) return;
+  const targetId = state.enemyCommandBox;
+  const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
+  if(!target) return;
+  sn.pendingSnipeTargetId = target.id;
+  unitSpeak('sniper', idx, 'order');
+  log('mortar','狙撃', `狙撃${idx+1}班、${target.id} を狙撃目標に指示。`);
+  render();
+}
+
 // Lets a unit be selected from the 部隊稼働状況 (force status) list at the
 // bottom of the screen, opening the same command box as clicking it on the
 // map -- renderCommandBox() positions the box from the unit's own map
@@ -3532,19 +3565,30 @@ function renderEnemyCommandBox(){
   const vx = t._visX!==undefined ? t._visX : estPos(t).x;
   const vy = t._visY!==undefined ? t._visY : estPos(t).y;
   const pos = canvasToScreen(vx, vy);
+  const mortarBtns = state.mortars.map((m,idx)=>{
+    if(m.hp<=0) return '';
+    const active = m.order==='fire' && m.pendingFire && m.pendingFire.snappedId===t.id;
+    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignMortarFire(${idx})">迫撃砲${idx+1}に攻撃させる${active?'(照準中)':''}</button>`;
+  }).filter(Boolean).join('');
+  const sniperBtns = state.snipers.map((sn,idx)=>{
+    if(!sn.soldiers.some(s=>s.alive)) return '';
+    const active = sn.pendingSnipeTargetId===t.id;
+    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignSniperTarget(${idx})">狙撃${idx+1}班に攻撃させる${active?'(照準中)':''}</button>`;
+  }).filter(Boolean).join('');
   const squadBtns = state.squads.map((sq,idx)=>{
     if(!sq.soldiers.some(s=>s.alive)) return '';
     const active = sq.order==='hunt' && sq.huntTargetId===t.id;
     return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignSquadHunt(${idx})">第${idx+1}分隊に攻撃させる${active?'(攻撃中)':''}</button>`;
   }).filter(Boolean).join('');
+  const allBtns = mortarBtns + sniperBtns + squadBtns;
   box.innerHTML = `
     <div class="cb-head">
       <span class="cb-title">${t.id} ― ${t.revealed?t.def.label:'識別不能'}</span>
       <button class="cb-close" onclick="closeEnemyCommandBox()">×</button>
     </div>
-    <div class="meta" style="margin-bottom:8px;">この目標を攻撃させる分隊を選択(接敵距離まで前進して交戦):</div>
+    <div class="meta" style="margin-bottom:8px;">この目標を攻撃させるユニットを選択:</div>
     <div style="display:flex;flex-direction:column;gap:6px;">
-      ${squadBtns || '<div class="empty-hint" style="padding:4px 0;">出撃可能な分隊がありません</div>'}
+      ${allBtns || '<div class="empty-hint" style="padding:4px 0;">出撃可能なユニットがありません</div>'}
     </div>
   `;
   const boxW = 230;
