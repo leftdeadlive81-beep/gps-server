@@ -734,6 +734,10 @@ const SNIPER_AIM_RANGE_UNITS = SNIPER_AIM_RANGE_M / METERS_PER_UNIT;
 const SNIPER_AIM_LINE_WIDTH_M = 20;
 const SNIPER_AIM_LINE_WIDTH_UNITS = SNIPER_AIM_LINE_WIDTH_M / METERS_PER_UNIT;
 const SNIPER_DMG = [16,26];
+// per user request: mortar's effective range (used for the 主線方位角 fan's length)
+const MORTAR_MAINLINE_RANGE_M = 6000;
+const MORTAR_MAINLINE_RANGE_UNITS = MORTAR_MAINLINE_RANGE_M / METERS_PER_UNIT;
+const MORTAR_MAINLINE_HALF_FOV = 15; // degrees either side of the set azimuth (30 deg fan)
 const SCOUT_MAX_RANGE_UNITS = 2000 / METERS_PER_UNIT;
 const ROAD_SPEED_KMH = {vehicle:60, infantry:10, sniper:5, mortar:40, artillery:5};
 const OFF_ROAD_SPEED_MULT = 0.7;
@@ -953,6 +957,7 @@ function initGame(){
       id:i, x:OP_HOME_X, y:OP_HOME_Y+(i-(NUM_MORTARS-1)/2)*40, hp:100, maxHp:100,
       order:'standby', pendingFire:null, pendingDest:null,
       fireShell:'he', fireFuze:'impact', fireCount:2,
+      mainlineAngle: null,
       exposure: EXPOSURE_DEFAULT,
     })),
     squads: [],
@@ -1165,6 +1170,7 @@ function startStage(){
       id:i, x:OP_HOME_X, y:clamp(OP_HOME_Y+(i-(NUM_MORTARS-1)/2)*40*INITIAL_DEPLOY_SPACING_MULT, 30, CANVAS_H-30), hp:100, maxHp:100,
       order:'standby', pendingFire:null, pendingDest:null,
       fireShell:'he', fireFuze:'impact', fireCount:2,
+      mainlineAngle: null,
       crew: ROSTER_MORTAR_CREWS[i],
       exposure: EXPOSURE_DEFAULT,
     }));
@@ -1206,7 +1212,7 @@ function startStage(){
       s.pendingDest = null; s.pendingReconTargetId = null;
     });
     state.mortars.forEach(m=>{
-      m.order = 'standby'; m.pendingFire = null; m.pendingDest = null;
+      m.order = 'standby'; m.pendingFire = null; m.pendingDest = null; m.mainlineAngle = null;
     });
     state.squads.forEach(sq=>{
       sq.order = 'hold'; sq.pendingDest = null; sq.huntTargetId = null; sq.reinforceUsed = false;
@@ -1251,7 +1257,7 @@ function buildPlacementQueue(){
   const queue = [];
   state.mortars.forEach((m,idx)=>queue.push({kind:'mortar', idx, label:`迫撃砲${idx+1}`}));
   state.scouts.forEach((s,idx)=>queue.push({kind:'scout', idx, label:`斥候${idx+1}`}));
-  state.squads.forEach((sq,idx)=>queue.push({kind:'squad', idx, label:`第${idx+1}分隊`}));
+  state.squads.forEach((sq,idx)=>queue.push({kind:'squad', idx, label:`第${idx+1}小隊`}));
   state.snipers.forEach((sn,idx)=>queue.push({kind:'sniper', idx, label:`狙撃${idx+1}班`}));
   return queue;
 }
@@ -1726,7 +1732,7 @@ function updateRevealed(){
       if(near){ reason = '接触'; detector = near; }
     }
     if(!reason){
-      // 自軍歩兵(分隊)が500m以内に接近した場合は視界・地形に関わらず強制的に識別する
+      // 自軍歩兵(小隊)が500m以内に接近した場合は視界・地形に関わらず強制的に識別する
       const nearSquad = contactFriendlies.find(f=>f.kind==='squad' && Math.hypot(f.u.x-t.trueX, f.u.y-t.trueY) <= SQUAD_FORCE_REVEAL_RANGE_UNITS);
       if(nearSquad){ reason = '接近'; detector = nearSquad; }
     }
@@ -2003,7 +2009,7 @@ function applySquadMovement(sq, sqIdx){
     checkMineTrigger('squad', sqIdx, sq.x, sq.y);
     if(Math.hypot(sq.x-sq.pendingDest.x, sq.y-sq.pendingDest.y) < 12){
       sq.pendingDest = null;
-      log('sys','前線', `第${sqIdx+1}分隊、指定地点に到着。`);
+      log('sys','前線', `第${sqIdx+1}小隊、指定地点に到着。`);
     }
     return;
   }
@@ -2039,7 +2045,7 @@ function applySquadMovement(sq, sqIdx){
     if(!target || target.destroyed){
       sq.huntTargetId = null;
       sq.order = 'hold';
-      log('sys','前線', `第${sqIdx+1}分隊、攻撃目標を喪失(撃破/消失)。待機に移行。`);
+      log('sys','前線', `第${sqIdx+1}小隊、攻撃目標を喪失(撃破/消失)。待機に移行。`);
     } else {
       const e = estPos(target);
       const dist = Math.hypot(e.x-sq.x, e.y-sq.y);
@@ -2060,7 +2066,7 @@ function resolveSquadOrders(actionTurns){
     state.squads.forEach((sq, sqIdx)=>{
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
       if(aliveSoldiers.length===0) return;
-      applyStandingOrder(sq, `第${sqIdx+1}分隊`, true);
+      applyStandingOrder(sq, `第${sqIdx+1}小隊`, true);
       applySquadMovement(sq, sqIdx);
 
       let engageTargets = state.targets.filter(t=>!t.destroyed && t.type==='infantry');
@@ -2080,7 +2086,7 @@ function resolveSquadOrders(actionTurns){
         const dist = Math.hypot(e.x-sq.x, e.y-sq.y);
         if(dist > SQUAD_ENGAGE_RANGE) return;
         if(revealTarget(t)){
-          log('op','斥候', `第${sqIdx+1}分隊が${t.id}と交戦、<b>${t.def.label}</b>と識別。`);
+          log('op','斥候', `第${sqIdx+1}小隊が${t.id}と交戦、<b>${t.def.label}</b>と識別。`);
         }
         const curAlive = sq.soldiers.filter(s=>s.alive);
         if(curAlive.length===0) return;
@@ -2097,7 +2103,7 @@ function resolveSquadOrders(actionTurns){
         enemyTracers.push({startX:sq.x, startY:sq.y, endX:e.x, endY:e.y, born:performance.now(), duration:220});
         if(t.hp<=0 && !t.destroyed){
           t.destroyed = true; t.hp = 0;
-          log('op','斥候', `${t.id} 第${sqIdx+1}分隊との交戦で撃破を確認。`);
+          log('op','斥候', `${t.id} 第${sqIdx+1}小隊との交戦で撃破を確認。`);
           onTargetDestroyed(t);
         }
         const enemyAltMult = altitudeBonus(t.trueX, t.trueY, sq.x, sq.y);
@@ -2106,7 +2112,7 @@ function resolveSquadOrders(actionTurns){
         if(Math.random() < casualtyChance){
           const victim = choice(curAlive);
           victim.alive = false;
-          log('sys','前線', `第${sqIdx+1}分隊、${t.id}との交戦で<b>${victim.rank} ${victim.name}</b> 戦死。残存 ${sq.soldiers.filter(s=>s.alive).length}/${sq.soldiers.length}名。`);
+          log('sys','前線', `第${sqIdx+1}小隊、${t.id}との交戦で<b>${victim.rank} ${victim.name}</b> 戦死。残存 ${sq.soldiers.filter(s=>s.alive).length}/${sq.soldiers.length}名。`);
           enemyTracers.push({startX:e.x, startY:e.y, endX:sq.x, endY:sq.y, born:performance.now(), duration:280});
           unitSpeak('squad', sqIdx, 'injury');
         }
@@ -2114,7 +2120,7 @@ function resolveSquadOrders(actionTurns){
     });
   }
   if(allSquadsWiped()){
-    log('sys','前線', '自軍歩兵、全分隊が壊滅。前線が崩壊した。');
+    log('sys','前線', '自軍歩兵、全小隊が壊滅。前線が崩壊した。');
     anyEvent = true;
   }
   return anyEvent;
@@ -2314,9 +2320,26 @@ function clearSniperAim(idx){
   state.snipers[idx].aimAngle = null;
   render();
 }
+// per user request: a mortar's "主線方位角" (primary line of fire) -- a reference direction
+// drawn as a pale-yellow fire-sector fan out to MORTAR_MAINLINE_RANGE_UNITS, purely a visual
+// reference like a real mortar's base line (unlike the sniper's aim line, it doesn't
+// auto-engage anything -- fire missions still go through the normal target-snap flow).
+function armMortarMainlineOrder(idx){
+  const mortar = state.mortars[idx];
+  if(!mortar) return;
+  state.orderMode = {kind:'mortar-mainline', idx};
+  state.commandBox = null;
+  unitSpeak('mortar', idx, 'order');
+  render();
+}
+function clearMortarMainline(idx){
+  if(!state.mortars[idx]) return;
+  state.mortars[idx].mainlineAngle = null;
+  render();
+}
 
 function reinforceUnitLabel(kind, idx){
-  if(kind==='squad') return `第${idx+1}分隊`;
+  if(kind==='squad') return `第${idx+1}小隊`;
   if(kind==='scout') return `斥候${idx+1}班`;
   return `狙撃${idx+1}班`;
 }
@@ -2354,7 +2377,7 @@ function friendlyFireCandidateLabel(c){
   if(c.kind==='hq') return '指揮所';
   if(c.kind==='mortar') return `迫撃砲${c.idx+1}`;
   if(c.kind==='scout') return `斥候${c.idx+1}`;
-  if(c.kind==='squad') return `第${c.idx+1}分隊`;
+  if(c.kind==='squad') return `第${c.idx+1}小隊`;
   return `狙撃${c.idx+1}班`;
 }
 function checkFriendlyFireAt(ix, iy, killRadius){
@@ -2454,7 +2477,7 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
     if(aliveSoldiers.length>0){
       const victim = choice(aliveSoldiers);
       victim.alive = false;
-      log('sys','被弾', `${sourceLabel}が第${target.idx+1}分隊を攻撃。<b>${victim.rank} ${victim.name}</b> 戦死。`);
+      log('sys','被弾', `${sourceLabel}が第${target.idx+1}小隊を攻撃。<b>${victim.rank} ${victim.name}</b> 戦死。`);
       unitSpeak('squad', target.idx, 'injury');
     }
   } else if(target.kind==='sniper'){
@@ -2712,7 +2735,7 @@ function advanceEnemyInfantry(actionTurns){
       if(inContact){
         if(!t._contactLogged){
           t._contactLogged = true;
-          log('op','斥候', `${t.id} が自軍分隊と接触。前進を停止し交戦中。`);
+          log('op','斥候', `${t.id} が自軍小隊と接触。前進を停止し交戦中。`);
         }
         return;
       }
@@ -3199,7 +3222,7 @@ function handleCanvasClick(evt){
           x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X),
           y: clamp(py, 30, CANVAS_H-30),
         };
-        log('sys','前線', `第${mode.idx+1}分隊に移動目標を指示。`);
+        log('sys','前線', `第${mode.idx+1}小隊に移動目標を指示。`);
       }
     } else if(mode.kind==='scout-move'){
       const scout = state.scouts[mode.idx];
@@ -3273,6 +3296,12 @@ function handleCanvasClick(evt){
       if(sn){
         sn.aimAngle = bearingBetween(sn.x, sn.y, px, py);
         log('mortar','狙撃', `狙撃${mode.idx+1}班、射撃方向 ${Math.round(sn.aimAngle)}° を指示。`);
+      }
+    } else if(mode.kind==='mortar-mainline'){
+      const mortar = state.mortars[mode.idx];
+      if(mortar){
+        mortar.mainlineAngle = bearingBetween(mortar.x, mortar.y, px, py);
+        log('mortar','迫撃砲班', `迫撃砲${mode.idx+1}、主線方位角 ${Math.round(mortar.mainlineAngle)}° を設定。`);
       }
     }
     render();
@@ -3395,14 +3424,14 @@ function assignSquadHunt(idx){
   if(!target) return;
   if(sq.order==='hunt' && sq.huntTargetId===target.id){
     clearSquadHunt(idx);
-    log('sys','前線', `第${idx+1}分隊、${target.id}への攻撃指示を解除。`);
+    log('sys','前線', `第${idx+1}小隊、${target.id}への攻撃指示を解除。`);
     return;
   }
   sq.order = 'hunt';
   sq.huntTargetId = target.id;
   sq.pendingDest = null;
   unitSpeak('squad', idx, 'order');
-  log('sys','前線', `第${idx+1}分隊、${target.id} を攻撃目標に指示。接敵まで前進する。`);
+  log('sys','前線', `第${idx+1}小隊、${target.id} を攻撃目標に指示。接敵まで前進する。`);
   render();
 }
 function clearSquadHunt(idx){
@@ -3548,8 +3577,26 @@ function mortarBoxHtml(idx){
   return `
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin-bottom:8px;">${stanceBtns}</div>
     ${bodyHtml}
+    ${!dead ? mortarMainlineHtml(idx, mortar) : ''}
     ${exposureMetaHtml(mortar.exposure)}
     ${crewHtml}
+  `;
+}
+
+// per user request: a persistent reference-direction control, independent of the mortar's
+// current order/fire-mission state (see armMortarMainlineOrder for what it draws on the map)
+function mortarMainlineHtml(idx, mortar){
+  const arming = state.orderMode && state.orderMode.kind==='mortar-mainline' && state.orderMode.idx===idx;
+  const hasAngle = mortar.mainlineAngle!==null && mortar.mainlineAngle!==undefined;
+  const status = arming
+    ? '地図をクリックして主線方位角を指定…'
+    : (hasAngle ? `主線方位角: ${Math.round(mortar.mainlineAngle)}° (射程${MORTAR_MAINLINE_RANGE_M}m、表示のみ)` : '主線方位角: 未設定');
+  return `
+    <div class="row-2" style="margin:8px 0 4px;">
+      <button class="btn ${arming?'active squad-order-btn':''}" onclick="armMortarMainlineOrder(${idx})">主線方位角を指定</button>
+      <button class="btn" ${hasAngle?'':'disabled'} onclick="clearMortarMainline(${idx})">解除</button>
+    </div>
+    <div class="meta" style="margin-bottom:6px;">${status}</div>
   `;
 }
 
@@ -3719,7 +3766,7 @@ function renderCommandBox(){
   } else if(kind==='squad'){
     const sq = state.squads[state.commandBox.idx];
     if(!sq){ box.style.display='none'; return; }
-    title = `第${state.commandBox.idx+1}分隊`;
+    title = `第${state.commandBox.idx+1}小隊`;
     bodyHtml = squadBoxHtml(state.commandBox.idx);
     pos = canvasToScreen(sq._visX!==undefined?sq._visX:sq.x, sq._visY!==undefined?sq._visY:sq.y);
   } else if(kind==='sniper'){
@@ -3783,7 +3830,7 @@ function renderEnemyCommandBox(){
   const squadBtns = state.squads.map((sq,idx)=>{
     if(!sq.soldiers.some(s=>s.alive)) return '';
     const active = sq.order==='hunt' && sq.huntTargetId===t.id;
-    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignSquadHunt(${idx})">第${idx+1}分隊に攻撃させる${active?'(攻撃中)':''}</button>`;
+    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignSquadHunt(${idx})">第${idx+1}小隊に攻撃させる${active?'(攻撃中)':''}</button>`;
   }).filter(Boolean).join('');
   const allBtns = mortarBtns + squadBtns;
   box.innerHTML = `
@@ -3859,7 +3906,7 @@ function renderStats(){
   });
   state.squads.forEach((sq,i)=>{
     const alive = sq.soldiers.filter(s=>s.alive).length;
-    rows.push(forceRow(`分隊${i+1}`, alive/sq.soldiers.length, `${alive}/${sq.soldiers.length}`, 'var(--blue-id)', 'squad', i));
+    rows.push(forceRow(`小隊${i+1}`, alive/sq.soldiers.length, `${alive}/${sq.soldiers.length}`, 'var(--blue-id)', 'squad', i));
   });
   state.snipers.forEach((sn,i)=>{
     const alive = sn.soldiers.filter(s=>s.alive).length;
@@ -3897,7 +3944,7 @@ function renderDecisionPanel(){
     if(s.pendingReconTargetId) queued.push(`斥候${idx+1}: 偵察`);
     else if(s.pendingDest) queued.push(`斥候${idx+1}: 移動`);
   });
-  state.squads.forEach((sq,idx)=>{ if(sq.pendingDest) queued.push(`第${idx+1}分隊: 移動`); });
+  state.squads.forEach((sq,idx)=>{ if(sq.pendingDest) queued.push(`第${idx+1}小隊: 移動`); });
   state.snipers.forEach((sn,idx)=>{
     if(sn.pendingSnipeTargetId) queued.push(`狙撃${idx+1}班: 狙撃`);
     else if(sn.pendingDest) queued.push(`狙撃${idx+1}班: 移動`);
@@ -4011,6 +4058,30 @@ function drawBoard(){
       ctx.fillRect(bx,by,barW*hpPct,barH);
     }
   }
+
+  // mortar mainline (主線方位角) fans ― pale-yellow reference sector out to
+  // MORTAR_MAINLINE_RANGE_UNITS, drawn before the markers so they sit underneath. Purely a
+  // visual reference (see armMortarMainlineOrder) -- it doesn't affect targeting or fire.
+  state.mortars.forEach(mortar=>{
+    if(mortar.hp<=0 || mortar.mainlineAngle===null || mortar.mainlineAngle===undefined) return;
+    const mVisL = smoothVisualPos(mortar, mortar.x, mortar.y);
+    const originP = project(mVisL.x, mVisL.y);
+    const steps = 24;
+    ctx.beginPath();
+    ctx.moveTo(originP.x, originP.y);
+    for(let i=0;i<=steps;i++){
+      const ang = mortar.mainlineAngle - MORTAR_MAINLINE_HALF_FOV + (MORTAR_MAINLINE_HALF_FOV*2)*(i/steps);
+      const pL = bearingToXY(ang, MORTAR_MAINLINE_RANGE_UNITS, mVisL.x, mVisL.y);
+      const p = project(pL.x, pL.y);
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(232,210,58,0.14)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(232,210,58,0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
 
   // mortar markers (自軍, left side)
   state.mortars.forEach(mortar=>{
@@ -4151,7 +4222,7 @@ function drawBoard(){
       ctx.font = '14px "JetBrains Mono"';
       ctx.textAlign='center';
       const sqOrderLabel = sq.pendingDest ? `${ORDER_LABEL[sq.order]}→移動` : ORDER_LABEL[sq.order];
-      ctx.fillText(`第${sqIdx+1}分隊 ${aliveSoldiers.length}/${sq.soldiers.length} [${sqOrderLabel}]`, sqVis.x, sqVis.y+28);
+      ctx.fillText(`第${sqIdx+1}小隊 ${aliveSoldiers.length}/${sq.soldiers.length} [${sqOrderLabel}]`, sqVis.x, sqVis.y+28);
 
       if(aliveSoldiers.length>0){
         state.targets.filter(t=>!t.destroyed && t.type==='infantry' && isTargetDetected(t)).forEach(t=>{
