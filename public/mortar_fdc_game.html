@@ -777,15 +777,38 @@ const MINE_TRIGGER_RADIUS_M = 20;
 const MINE_TRIGGER_RADIUS_UNITS = MINE_TRIGGER_RADIUS_M / METERS_PER_UNIT;
 const ROAD_NODE_SNAP_RADIUS_M = 60; // road points within this distance of each other merge into one graph node (bridges gaps from the earlier road-simplification pass and links crossing ways)
 const ROAD_NODE_SNAP_RADIUS_UNITS = ROAD_NODE_SNAP_RADIUS_M / METERS_PER_UNIT;
-// per user request: raised back up (15 -> 140) for wider impact scatter
-const MORTAR_DISPERSION_M = 140;
+// Balance pass: 140 (a prior request, meant to widen scatter after 15 felt like guaranteed
+// hits) turned out to overshoot badly. For a 2D gaussian scatter, single-shot hit chance is
+// 1-exp(-R^2/2*sigma^2); at sigma=140 that's only ~22% for HE (kill radius 100m) and ~4% for
+// HEAT (kill radius 40m) even against a fully spotted target with zero aim bias -- both far
+// below what a 2-3 round volley should reliably achieve. 60 brings HE to a healthy ~75%,
+// while SHELL_DISPERSION_MULT below tightens HEAT specifically so anti-armor fire isn't left
+// far worse off than HE just because its kill radius is smaller.
+const MORTAR_DISPERSION_M = 60;
 const MORTAR_DISPERSION_UNITS = MORTAR_DISPERSION_M / METERS_PER_UNIT;
+// HEAT's kill radius (40m) is much tighter than HE's (100m), so sharing one dispersion value
+// would leave anti-armor fire (~20% hit/shot at sigma=60) far less reliable than HE (~75%).
+// Tightening HEAT's effective dispersion (sigma=60*0.6=36) brings it to ~46%/shot -- still
+// harder to land than HE (fitting for a precision anti-armor round) but no longer a coin
+// flip stacked three times over just to connect once.
+const SHELL_DISPERSION_MULT = {heat:0.6};
 // mortar crews correct fire onto a snapped (identified) target's true position by this
 // fraction, on top of the raw (often much less accurate) spotted estimate -- halves the
 // effective aiming bias specifically for mortar fire, without touching the shared
 // bearingErr/distErr estimate used elsewhere (sniper aiming, the UI uncertainty circle,
 // squad/sniper approach).
 const MORTAR_FIRE_CORRECTION_FRAC = 0.5;
+// per user request ("面白くなる要素" -> 対砲兵レーダー/Shoot & Scoot): firing repeatedly from the
+// same position risks the enemy's counter-battery radar triangulating it. Once a mortar has
+// fired more than MORTAR_CB_SHOTS_THRESHOLD volleys without relocating, each further volley
+// risks detection; once detected the player has MORTAR_CB_WARN_TURNS turns to actually
+// complete a relocation (see resolveOneMortarDecision's "陣地転換完了") before a guaranteed,
+// heavy counter-battery strike lands on that mortar. Encourages shoot-and-scoot instead of
+// parking a mortar in one spot for the whole stage.
+const MORTAR_CB_SHOTS_THRESHOLD = 3;
+const MORTAR_CB_DETECT_BASE = 0.3;
+const MORTAR_CB_WARN_TURNS = 2;
+const MORTAR_CB_STRIKE_DMG = [28, 42];
 const VISUAL_LERP_RATE = 0.12;
 const SUPPRESSION_TURNS = 3;
 const SUPPRESSION_NEARMISS_TURNS = 1;
@@ -967,6 +990,7 @@ function initGame(){
       order:'standby', pendingFire:null, pendingDest:null,
       fireShell:'he', fireFuze:'impact', fireCount:2,
       mainlineAngle: null,
+      shotsSinceMove: 0, cbWarnTurns: null,
       exposure: EXPOSURE_DEFAULT,
     })),
     squads: [],
@@ -1182,6 +1206,7 @@ function startStage(){
       order:'standby', pendingFire:null, pendingDest:null,
       fireShell:'he', fireFuze:'impact', fireCount:2,
       mainlineAngle: null,
+      shotsSinceMove: 0, cbWarnTurns: null,
       crew: ROSTER_MORTAR_CREWS[i],
       exposure: EXPOSURE_DEFAULT,
     }));
@@ -1841,7 +1866,12 @@ function resolveOneMortarDecision(mortar){
   if(Math.hypot(mortar.x-mortar.pendingDest.x, mortar.y-mortar.pendingDest.y) < 12){
     mortar.pendingDest = null;
     mortar.order = 'standby';
+    mortar.shotsSinceMove = 0;
     log('mortar','迫撃砲班', `迫撃砲${mortar.id+1}、陣地転換完了。新位置から射撃準備。`);
+    if(mortar.cbWarnTurns!==null && mortar.cbWarnTurns!==undefined){
+      mortar.cbWarnTurns = null;
+      log('mortar','迫撃砲班', `迫撃砲${mortar.id+1}、対砲兵射撃圏内から離脱に成功。`);
+    }
   }
 }
 function resolveMortarDecision(){
@@ -1940,12 +1970,22 @@ function log(role, who, text){
 function enemyCounterAttack(actionTurns){
   let anyHit = false;
   const remaining = state.targets.filter(t=>!t.destroyed);
+  // Balance note: infantry now arrives as several independent formation groups (see
+  // buildEnemyInfantryGroups) instead of one squad-sized target, so without this correction
+  // the total number of infantry units rolling for a counter-attack each turn -- and hence
+  // total incoming fire on forward assets like scouts -- scales with however many groups the
+  // wave happened to split into (up to ~7), silently multiplying threat well beyond what
+  // COUNTER_CHANCE.infantry was tuned for. Dividing by the live infantry group count keeps
+  // the AGGREGATE attack-attempt rate equivalent to a single infantry unit's, regardless of
+  // formation count, so SCOUT_EXPOSURE's intended survivability isn't eaten by this.
+  const infantryGroupCount = remaining.filter(t=>t.type==='infantry').length;
   for(let i=0;i<actionTurns;i++){
     remaining.forEach(t=>{
       if(t.destroyed) return;
       if(allScoutsWiped() && allMortarsWiped()) return;
       const suppressionMult = isSuppressed(t) ? SUPPRESSION_COUNTER_MULT : 1;
-      const chance = (COUNTER_CHANCE[t.type] + state.stage*0.008) * DIFFICULTIES[state.difficulty].counterMult * WEATHER_TYPES[state.weather].counterMult * suppressionMult;
+      const groupCorrection = t.type==='infantry' ? 1/Math.max(1, infantryGroupCount) : 1;
+      const chance = (COUNTER_CHANCE[t.type] + state.stage*0.008) * DIFFICULTIES[state.difficulty].counterMult * WEATHER_TYPES[state.weather].counterMult * suppressionMult * groupCorrection;
       if(Math.random() < chance){
         const near = nearestFriendlyAsset(t.trueX, t.trueY, false);
         if(!near) return;
@@ -2737,7 +2777,10 @@ function advanceEnemyInfantry(actionTurns){
         if(t._droneCooldown === undefined) t._droneCooldown = Math.floor(rnd(2, INFANTRY_DRONE_COOLDOWN_TICKS));
         if(t._droneCooldown > 0){
           t._droneCooldown -= 1;
-        } else if(Math.random() < INFANTRY_DRONE_LAUNCH_CHANCE){
+        // per-group chance is divided by the live group count (see the matching
+        // correction in enemyCounterAttack) so splitting infantry into more formation
+        // groups doesn't also multiply total drone-swarm launch volume per tick
+        } else if(Math.random() < INFANTRY_DRONE_LAUNCH_CHANCE/Math.max(1, enemyInfantry.length)){
           spawnInfantryDroneSwarm(t);
           t._droneCooldown = INFANTRY_DRONE_COOLDOWN_TICKS;
         }
@@ -2781,6 +2824,50 @@ function advanceEnemyInfantry(actionTurns){
   return moved;
 }
 
+// shoot-and-scoot: a mortar that keeps firing from the same spot risks the enemy's
+// counter-battery radar triangulating it (see the MORTAR_CB_* constants). Once flagged, the
+// player has a couple of turns to actually complete a relocation (resolveOneMortarDecision
+// clears cbWarnTurns on arrival) before a guaranteed, heavy strike lands on that position.
+function resolveMortarCounterBattery(actionTurns){
+  let anyEvent = false;
+  for(let i=0;i<actionTurns;i++){
+    state.mortars.forEach(mortar=>{
+      if(mortar.hp<=0) return;
+      if(mortar.cbWarnTurns!==null && mortar.cbWarnTurns!==undefined){
+        mortar.cbWarnTurns -= 1;
+        if(mortar.cbWarnTurns<=0){
+          mortar.cbWarnTurns = null;
+          mortar.shotsSinceMove = 0;
+          anyEvent = true;
+          log('sys','警報', `迫撃砲${mortar.id+1}、対砲兵射撃着弾!`);
+          projectiles.push({
+            startX: ENEMY_SPAWN_MIN_X, startY: clamp(mortar.y, 60, CANVAS_H-60),
+            endX: mortar.x, endY: mortar.y,
+            born: performance.now(),
+            duration: FLIGHT_DURATION,
+            onLand: ()=>{
+              const dmg = Math.round(rnd(MORTAR_CB_STRIKE_DMG[0], MORTAR_CB_STRIKE_DMG[1]) * DIFFICULTIES[state.difficulty].counterMult);
+              damageFriendlyAsset({kind:'mortar', idx:mortar.id}, dmg, '敵対砲兵レーダーによる制圧射撃');
+              render();
+            }
+          });
+        }
+        return;
+      }
+      if(mortar.shotsSinceMove > MORTAR_CB_SHOTS_THRESHOLD){
+        const chance = MORTAR_CB_DETECT_BASE + state.stage*0.01;
+        if(Math.random() < chance){
+          mortar.cbWarnTurns = MORTAR_CB_WARN_TURNS;
+          anyEvent = true;
+          log('sys','警告', `迫撃砲${mortar.id+1}、同一陣地からの連続射撃を敵対砲兵レーダーに捕捉された可能性!${MORTAR_CB_WARN_TURNS}ターン以内に陣地転換せよ。`);
+          unitSpeak('mortar', mortar.id, 'warning');
+        }
+      }
+    });
+  }
+  return anyEvent;
+}
+
 function resolveEnemyTurn(actionTurns){
   log('sys','敵ターン', '━━━ 敵が行動 ━━━');
   maybePlaceMine();
@@ -2789,6 +2876,7 @@ function resolveEnemyTurn(actionTurns){
   const assaulted = resolveVehicleAssault(actionTurns);
   const swarmed = resolveDroneSwarm(actionTurns);
   const hit = enemyCounterAttack(actionTurns);
+  const cbEvent = resolveMortarCounterBattery(actionTurns);
   let infEvent = false;
   if(!allSquadsWiped()){
     infEvent = resolveSquadOrders(actionTurns);
@@ -2797,7 +2885,7 @@ function resolveEnemyTurn(actionTurns){
   if(!allSnipersWiped()){
     sniperEvent = resolveSniperOrders(actionTurns);
   }
-  if(!hit && !infEvent && !sniperEvent && !advanced && !assaulted && !swarmed){
+  if(!hit && !infEvent && !sniperEvent && !advanced && !assaulted && !swarmed && !cbEvent){
     log('sys','敵ターン', '目立った動きなし。');
   }
   state.targets.forEach(t=>{
@@ -2806,13 +2894,17 @@ function resolveEnemyTurn(actionTurns){
 }
 
 function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVolleyDone){
+  // shoot-and-scoot: every volley fired counts against the same-position streak (see
+  // resolveMortarCounterBattery); resolveOneMortarDecision resets this back to 0 once the
+  // mortar actually completes a relocation.
+  mortar.shotsSinceMove = (mortar.shotsSinceMove||0) + 1;
   // per user request: fire aimed at an identified target is corrected part of the way from
   // the raw (error-prone) spotted estimate toward the target's true position -- see
   // MORTAR_FIRE_CORRECTION_FRAC. A manually-clicked bare coordinate (no snappedTarget) has no
   // true position to correct toward, so it's unaffected.
   const aimX = snappedTarget ? aim.x + (snappedTarget.trueX-aim.x)*MORTAR_FIRE_CORRECTION_FRAC : aim.x;
   const aimY = snappedTarget ? aim.y + (snappedTarget.trueY-aim.y)*MORTAR_FIRE_CORRECTION_FRAC : aim.y;
-  const dispersion = computeDispersionAt() * WEATHER_TYPES[state.weather].dispersionMult;
+  const dispersion = computeDispersionAt() * WEATHER_TYPES[state.weather].dispersionMult * (SHELL_DISPERSION_MULT[shell]||1);
   const base = 25;
 
   const brg = bearingBetween(mortar.x, mortar.y, aimX, aimY);
@@ -3588,8 +3680,15 @@ function mortarBoxHtml(idx){
     </div>
   `;
 
+  const cbWarnHtml = (!dead && mortar.cbWarnTurns!==null && mortar.cbWarnTurns!==undefined)
+    ? `<div class="meta" style="color:var(--red);margin-bottom:6px;">⚠ 対砲兵射撃警戒中 ― あと${mortar.cbWarnTurns}ターンで着弾。直ちに陣地転換せよ</div>`
+    : (!dead && mortar.shotsSinceMove>MORTAR_CB_SHOTS_THRESHOLD
+        ? `<div class="meta" style="margin-bottom:6px;">同一陣地からの連続射撃 ${mortar.shotsSinceMove}回 ― 対砲兵レーダーに捕捉される危険あり</div>`
+        : '');
+
   return `
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin-bottom:8px;">${stanceBtns}</div>
+    ${cbWarnHtml}
     ${bodyHtml}
     ${!dead ? mortarMainlineHtml(idx, mortar) : ''}
     ${exposureMetaHtml(mortar.exposure)}
@@ -4108,6 +4207,18 @@ function drawBoard(){
     ctx.beginPath();
     ctx.moveTo(0,-12); ctx.lineTo(10,10); ctx.lineTo(-10,10); ctx.closePath();
     ctx.fill();
+    // shoot-and-scoot: a pulsing red ring while a counter-battery strike is inbound, so the
+    // threat reads clearly on the map itself and not just in the mortar's own panel
+    if(mAlive && mortar.cbWarnTurns!==null && mortar.cbWarnTurns!==undefined){
+      const pulse = 3 + Math.sin(performance.now()*0.008)*3;
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(217,80,60,0.85)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4,3]);
+      ctx.arc(0, 0, 20+pulse, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign='center';
