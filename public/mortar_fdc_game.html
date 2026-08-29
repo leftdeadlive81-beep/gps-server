@@ -1492,11 +1492,13 @@ function clearSquadDest(idx){
 function armScoutMoveOrder(idx){
   state.orderMode = {kind:'scout-move', idx};
   state.commandBox = null;
+  unitSpeak('scout', idx, 'order');
   render();
 }
 function armScoutReconOrder(idx){
   state.orderMode = {kind:'scout-recon', idx};
   state.commandBox = null;
+  unitSpeak('scout', idx, 'order');
   render();
 }
 function clearScoutOrder(idx){
@@ -1514,19 +1516,25 @@ function revealTarget(t){
 }
 function updateRevealed(){
   if(!state) return;
-  const contactFriendlies = [
-    ...state.scouts.filter(s=>unitAlive(s)),
-    ...state.mortars.filter(m=>m.hp>0),
-    ...state.squads.filter(sq=>sq.soldiers.some(s=>s.alive)),
-    ...state.snipers.filter(sn=>sn.soldiers.some(s=>s.alive)),
-  ];
+  const contactFriendlies = [];
+  state.scouts.forEach((s,i)=>{ if(unitAlive(s)) contactFriendlies.push({kind:'scout', idx:i, u:s}); });
+  state.mortars.forEach((m,i)=>{ if(m.hp>0) contactFriendlies.push({kind:'mortar', idx:i, u:m}); });
+  state.squads.forEach((sq,i)=>{ if(sq.soldiers.some(s=>s.alive)) contactFriendlies.push({kind:'squad', idx:i, u:sq}); });
+  state.snipers.forEach((sn,i)=>{ if(sn.soldiers.some(s=>s.alive)) contactFriendlies.push({kind:'sniper', idx:i, u:sn}); });
   state.targets.forEach(t=>{
     if(t.destroyed || t.revealed) return;
     let reason = null;
-    if(inScoutCone(t)) reason = '視認';
-    else if(contactFriendlies.some(f=>Math.hypot(f.x-t.trueX, f.y-t.trueY) <= CONTACT_RANGE_UNITS)) reason = '接触';
+    let detector = null;
+    if(inScoutCone(t)){
+      reason = '視認';
+      detector = contactFriendlies.find(f=>f.kind==='scout');
+    } else {
+      const near = contactFriendlies.find(f=>Math.hypot(f.u.x-t.trueX, f.u.y-t.trueY) <= CONTACT_RANGE_UNITS);
+      if(near){ reason = '接触'; detector = near; }
+    }
     if(reason && revealTarget(t)){
       log('op','斥候', `${t.id} を${reason}、<b>${t.def.label}</b>と識別。`);
+      if(detector) unitSpeak(detector.kind, detector.idx, 'warning');
     }
   });
 }
@@ -1584,6 +1592,7 @@ function setMortarOrder(idx, order){
   const mortar = state.mortars[idx];
   if(!mortar || !MORTAR_ORDER_LABEL[order]) return;
   mortar.order = order;
+  unitSpeak('mortar', idx, 'order');
   if(order==='fire'){
     mortar.pendingDest = null;
     state.orderMode = null;
@@ -1635,6 +1644,7 @@ function saveAchievements(){
 function onTargetDestroyed(t){
   unlockAchievement('firstBlood');
   if(t.type==='artillery') unlockAchievement('mortarHunter');
+  speakRandomAliveUnit('morale');
 }
 
 function unlockAchievement(key){
@@ -1873,6 +1883,7 @@ function resolveSquadOrders(actionTurns){
           victim.alive = false;
           log('sys','前線', `第${sqIdx+1}分隊、${t.id}との交戦で<b>${victim.rank} ${victim.name}</b> 戦死。残存 ${sq.soldiers.filter(s=>s.alive).length}/${sq.soldiers.length}名。`);
           enemyTracers.push({startX:e.x, startY:e.y, endX:sq.x, endY:sq.y, born:performance.now(), duration:280});
+          unitSpeak('squad', sqIdx, 'injury');
         }
       });
     });
@@ -1953,12 +1964,14 @@ function resolveSniperOrders(actionTurns){
 function setSquadOrder(idx, order){
   if(!state.squads[idx]) return;
   state.squads[idx].order = order;
+  unitSpeak('squad', idx, 'order');
   render();
 }
 
 function setSniperOrder(idx, order){
   if(!state.snipers[idx]) return;
   state.snipers[idx].order = order;
+  unitSpeak('sniper', idx, 'order');
   render();
 }
 function setStandingOrder(kind, idx, value){
@@ -2098,6 +2111,7 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
       const victim = choice(aliveSoldiers);
       victim.alive = false;
       log('sys','被弾', `${sourceLabel}が斥候${target.idx+1}を攻撃。<b>${victim.rank} ${victim.name}</b> 戦死。`);
+      unitSpeak('scout', target.idx, 'injury');
     }
   } else if(target.kind==='squad'){
     const aliveSoldiers = state.squads[target.idx].soldiers.filter(s=>s.alive);
@@ -2105,6 +2119,7 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
       const victim = choice(aliveSoldiers);
       victim.alive = false;
       log('sys','被弾', `${sourceLabel}が第${target.idx+1}分隊を攻撃。<b>${victim.rank} ${victim.name}</b> 戦死。`);
+      unitSpeak('squad', target.idx, 'injury');
     }
   } else if(target.kind==='sniper'){
     const aliveSoldiers = state.snipers[target.idx].soldiers.filter(s=>s.alive);
@@ -2112,12 +2127,14 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
       const victim = choice(aliveSoldiers);
       victim.alive = false;
       log('sys','被弾', `${sourceLabel}が狙撃${target.idx+1}班を攻撃。<b>${victim.rank} ${victim.name}</b> 戦死。`);
+      unitSpeak('sniper', target.idx, 'injury');
     }
   } else if(target.kind==='mortar'){
     const mortar = state.mortars[target.idx];
     mortar.hp = Math.max(0, mortar.hp-dmg);
     if(mortar.hp <= mortar.maxHp*0.2) state.hpDroppedLow = true;
     log('sys','被弾', `${sourceLabel}が迫撃砲${target.idx+1}を攻撃。被害 ${dmg}。`);
+    if(mortar.hp>0) unitSpeak('mortar', target.idx, 'warning');
   }
 }
 
@@ -2374,6 +2391,8 @@ function commitDecision(){
   firingMortars.forEach(m=>{ ammoNeeded[m.fireShell] += m.fireCount; });
   if(ammoNeeded.he > state.ammo.he || ammoNeeded.heat > state.ammo.heat){
     log('sys','システム','弾薬が不足しています。');
+    const shortIdx = state.mortars.findIndex(m=>m.hp>0 && m.pendingFire);
+    if(shortIdx>=0) unitSpeak('mortar', shortIdx, 'ammo');
     return;
   }
 
@@ -2383,6 +2402,7 @@ function commitDecision(){
   state.ammo.he -= ammoNeeded.he;
   state.ammo.heat -= ammoNeeded.heat;
 
+  speakRandomAliveUnit('coordination');
   log('sys','司令部', '━━━ 決心 ━━━');
   resolveScoutDecision();
   resolveMortarDecision();
@@ -2543,6 +2563,7 @@ function applyWaveResupply(){
 }
 
 function handleStageClear(){
+  speakRandomAliveUnit('victory');
   const reward = computeReward();
   state.money += reward.total;
 
@@ -2595,6 +2616,7 @@ function showGameClear(reward){
 }
 
 function showStageFailed(reason){
+  speakRandomAliveUnit('panic');
   const ov = document.getElementById('overlay');
   document.getElementById('overlay-title').textContent = 'MISSION FAILED';
   document.getElementById('overlay-title').style.color = 'var(--red)';
@@ -3738,6 +3760,104 @@ function drawBoard(){
       ctx.fillText(`▼ ${item.label} を配置`, up.x, up.y-30-pulse);
     }
   }
+
+  drawCallouts(ctx);
+}
+
+// ===================== Voice callouts (speech bubbles) =====================
+// Combat radio-chatter lines, grouped by situation. unitSpeak(kind, idx,
+// category) is called from gameplay events (orders given, contact spotted,
+// casualties, low ammo, morale swings, coordination, panic, stage cleared)
+// to have that unit's représentative soldier say a random line from the
+// matching category. Bubbles are purely visual/transient (not persisted in
+// state) and auto-expire after CALLOUT_DURATION_MS.
+const COMBAT_CALLOUTS = {
+  order: ['撃て！','前進！','伏せろ！','隠れろ！','動くな！','待て！','突撃！','退避！','後退！','集合！','散開！','援護しろ！','カバーしろ！','装填！','構え！','狙え！','撤退だ！','進め！','止まれ！','全員伏せろ！'],
+  warning: ['敵だ！','敵発見！','狙撃手だ！','手榴弾！','伏兵だ！','地雷だ！','右から来るぞ！','左に敵！','後ろだ！','頭を下げろ！','爆発物だ！','火の海だ！','戦車だ！','空襲だ！','気をつけろ！','危ない！','伏せて！','撃たれてる！','弾幕だ！','包囲されてる！'],
+  injury: ['誰か助けてくれ！','衛生兵！','撃たれた！','やられた！','動けない！','出血がひどい！','死ぬな！','しっかりしろ！','傷を見せろ！','すぐ運べ！','息をしてない！','まだ生きてる！','担架を持ってこい！'],
+  ammo: ['弾切れだ！','弾をくれ！','予備弾倉！','リロード中！','銃が壊れた！','無線が繋がらない！','燃料が切れた！'],
+  morale: ['諦めるな！','行けるぞ！','頑張れ！','まだやれる！','負けるな！','仲間を信じろ！','一緒に生き延びるぞ！','家族のために！','祖国のために！','俺たちならできる！'],
+  coordination: ['こちら応答せよ！','状況を報告しろ！','位置を教えろ！','目標確認！','座標を送れ！','こちら〇〇小隊！','了解！','確認した！','進捗はどうだ！','応援を呼べ！'],
+  panic: ['逃げろ！','どうすればいい！','もうダメだ！','終わりだ！','助けてくれ！','誰かいないのか！','こっちに来い！','何が起きてる！','パニックになるな！','落ち着け！'],
+  victory: ['やったぞ！','制圧完了！','敵を撃退した！','安全確保！','戦闘終了！','全員無事か！','生きてるか！','帰るぞ！','よくやった！','任務完了！'],
+};
+const CALLOUT_DURATION_MS = 2000;
+let activeCallouts = [];
+
+function calloutUnitRef(kind, idx){
+  if(kind==='mortar') return state.mortars[idx];
+  if(kind==='scout') return state.scouts[idx];
+  if(kind==='squad') return state.squads[idx];
+  if(kind==='sniper') return state.snipers[idx];
+  return null;
+}
+function calloutSpeakerName(kind, idx){
+  const u = calloutUnitRef(kind, idx);
+  if(!u) return null;
+  if(kind==='mortar') return (u.hp>0 && u.crew && u.crew[0]) ? u.crew[0].name : null;
+  const soldier = u.soldiers && u.soldiers.find(s=>s.alive);
+  return soldier ? soldier.name : null;
+}
+function unitSpeak(kind, idx, category){
+  const list = COMBAT_CALLOUTS[category];
+  if(!list || !list.length) return;
+  const name = calloutSpeakerName(kind, idx);
+  if(!name) return;
+  const text = list[Math.floor(Math.random()*list.length)];
+  activeCallouts = activeCallouts.filter(c=>!(c.kind===kind && c.idx===idx));
+  activeCallouts.push({kind, idx, name, text, expiresAt: performance.now()+CALLOUT_DURATION_MS});
+}
+// For situational lines (coordination, morale, panic, victory) not tied to
+// one specific unit's own action -- picks any one currently alive unit to say it.
+function randomAliveUnitRef(){
+  const pool = [];
+  state.mortars.forEach((m,i)=>{ if(m.hp>0) pool.push({kind:'mortar', idx:i}); });
+  state.scouts.forEach((s,i)=>{ if(unitAlive(s)) pool.push({kind:'scout', idx:i}); });
+  state.squads.forEach((sq,i)=>{ if(sq.soldiers.some(s=>s.alive)) pool.push({kind:'squad', idx:i}); });
+  state.snipers.forEach((sn,i)=>{ if(sn.soldiers.some(s=>s.alive)) pool.push({kind:'sniper', idx:i}); });
+  if(!pool.length) return null;
+  return pool[Math.floor(Math.random()*pool.length)];
+}
+function speakRandomAliveUnit(category){
+  const ref = randomAliveUnitRef();
+  if(ref) unitSpeak(ref.kind, ref.idx, category);
+}
+function drawCallouts(ctx){
+  const now = performance.now();
+  activeCallouts = activeCallouts.filter(c=>c.expiresAt>now);
+  activeCallouts.forEach(c=>{
+    const unit = calloutUnitRef(c.kind, c.idx);
+    if(!unit) return;
+    const ux = unit._visX!==undefined ? unit._visX : unit.x;
+    const uy = unit._visY!==undefined ? unit._visY : unit.y;
+    const p = project(ux, uy);
+    if(!p.visible) return;
+    const label = `${c.name}: ${c.text}`;
+    ctx.font = '700 12px "Noto Sans JP", sans-serif';
+    const textW = ctx.measureText(label).width;
+    const boxW = textW+16, boxH = 22;
+    const bx = p.x - boxW/2, by = p.y - 44 - boxH;
+    ctx.fillStyle = 'rgba(20,24,15,0.92)';
+    ctx.strokeStyle = 'rgba(217,164,65,0.85)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.rect(bx, by, boxW, boxH);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(p.x-6, by+boxH);
+    ctx.lineTo(p.x+6, by+boxH);
+    ctx.lineTo(p.x, by+boxH+8);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(20,24,15,0.92)';
+    ctx.fill();
+    ctx.fillStyle = '#e8e3ce';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, p.x, by+boxH/2+1);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+  });
 }
 
 // ===================== 3D terrain map (Three.js) =====================
