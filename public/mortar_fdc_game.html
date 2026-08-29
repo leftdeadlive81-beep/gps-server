@@ -764,8 +764,18 @@ const MINE_TRIGGER_RADIUS_M = 20;
 const MINE_TRIGGER_RADIUS_UNITS = MINE_TRIGGER_RADIUS_M / METERS_PER_UNIT;
 const ROAD_NODE_SNAP_RADIUS_M = 60; // road points within this distance of each other merge into one graph node (bridges gaps from the earlier road-simplification pass and links crossing ways)
 const ROAD_NODE_SNAP_RADIUS_UNITS = ROAD_NODE_SNAP_RADIUS_M / METERS_PER_UNIT;
-const MORTAR_DISPERSION_M = 30;
+// per user request: friendly mortar hit/suppression rate was too low -- halved (was 30).
+// For a 2D gaussian scatter with a fixed kill radius, halving the spread roughly
+// quadruples the hit probability in the low-probability regime this was sitting in.
+const MORTAR_DISPERSION_M = 15;
 const MORTAR_DISPERSION_UNITS = MORTAR_DISPERSION_M / METERS_PER_UNIT;
+// per user request: mortar crews correct fire onto a snapped (identified) target's true
+// position by this fraction, on top of the raw (often much less accurate) spotted estimate
+// -- halves the effective aiming error specifically for mortar fire, without touching the
+// shared bearingErr/distErr estimate used elsewhere (sniper aiming, the UI uncertainty
+// circle, squad/sniper approach). Combined with the dispersion halving above, this is the
+// other half of the ~4x hit/suppression-rate increase.
+const MORTAR_FIRE_CORRECTION_FRAC = 0.5;
 const VISUAL_LERP_RATE = 0.12;
 const SUPPRESSION_TURNS = 3;
 const SUPPRESSION_NEARMISS_TURNS = 1;
@@ -2743,7 +2753,12 @@ function resolveEnemyTurn(actionTurns){
 }
 
 function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVolleyDone){
-  const aimX = aim.x, aimY = aim.y;
+  // per user request: fire aimed at an identified target is corrected part of the way from
+  // the raw (error-prone) spotted estimate toward the target's true position -- see
+  // MORTAR_FIRE_CORRECTION_FRAC. A manually-clicked bare coordinate (no snappedTarget) has no
+  // true position to correct toward, so it's unaffected.
+  const aimX = snappedTarget ? aim.x + (snappedTarget.trueX-aim.x)*MORTAR_FIRE_CORRECTION_FRAC : aim.x;
+  const aimY = snappedTarget ? aim.y + (snappedTarget.trueY-aim.y)*MORTAR_FIRE_CORRECTION_FRAC : aim.y;
   const dispersion = computeDispersionAt() * WEATHER_TYPES[state.weather].dispersionMult;
   const base = 25;
 
