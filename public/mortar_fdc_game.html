@@ -747,6 +747,8 @@ const SMOKE_DURATION_TURNS = 3;
 const MARKER_REVEAL_RADIUS_UNITS = CONTACT_RANGE_UNITS; // 200m, same as normal contact-reveal range
 const MINE_TRIGGER_RADIUS_M = 20;
 const MINE_TRIGGER_RADIUS_UNITS = MINE_TRIGGER_RADIUS_M / METERS_PER_UNIT;
+const ROAD_NODE_SNAP_RADIUS_M = 60; // road points within this distance of each other merge into one graph node (bridges gaps from the earlier road-simplification pass and links crossing ways)
+const ROAD_NODE_SNAP_RADIUS_UNITS = ROAD_NODE_SNAP_RADIUS_M / METERS_PER_UNIT;
 const MORTAR_DISPERSION_M = 30;
 const MORTAR_DISPERSION_UNITS = MORTAR_DISPERSION_M / METERS_PER_UNIT;
 const VISUAL_LERP_RATE = 0.12;
@@ -1336,6 +1338,12 @@ function generateTerrain(){
 // canvas-unit space once, asynchronously, as soon as the 3D terrain finishes
 // loading (see buildRealRoads() in the 3D map section below).
 const REAL_ROADS_CANVAS = [];
+// Road-network graph (nodes + adjacency) built once from REAL_ROADS_CANVAS by
+// buildRoadGraph() (see 3D map section) -- used to constrain vehicle movement
+// to roads via A* pathfinding (findRoadPath). Stays null if the 3D terrain
+// (and therefore road data) never loads; vehicle movement falls back to the
+// normal terrainAwareStep in that case.
+let ROAD_GRAPH = null;
 
 function nearestPointOnRoad(road, px, py){
   let best=null, bestD=Infinity, bestIdx=0;
@@ -2427,7 +2435,20 @@ function resolveVehicleAssault(actionTurns){
         const suppressionMoveMult = isSuppressed(t) ? SUPPRESSION_MOVE_MULT : 1;
         const step = Math.min((45 + state.stage*2.6) * DIFFICULTIES[state.difficulty].advanceMult, VEHICLE_MOVE_CAP) * suppressionMoveMult;
         const moveGoal = mergeAdjustedGoal(t, near);
-        const next = terrainAwareStep(t.trueX, t.trueY, moveGoal.x, moveGoal.y, step);
+        let next = null;
+        // Vehicles are road-bound: route along the real road network via A*
+        // rather than cutting cross-country. Only the final short hop from
+        // the nearest road node to the actual (usually off-road) target is
+        // a direct line. Falls back to the old free-roaming terrainAwareStep
+        // if the road graph never loaded (e.g. 3D terrain/road data failed).
+        if(ROAD_GRAPH && ROAD_GRAPH.nodes.length){
+          const roadPath = findRoadPath(t.trueX, t.trueY, moveGoal.x, moveGoal.y);
+          if(roadPath && roadPath.length){
+            const fullPath = roadPath.concat([{x:moveGoal.x, y:moveGoal.y}]);
+            next = advanceAlongPath(t.trueX, t.trueY, fullPath, step);
+          }
+        }
+        if(!next) next = terrainAwareStep(t.trueX, t.trueY, moveGoal.x, moveGoal.y, step);
         t.trueX = next.x; t.trueY = clamp(next.y, 30, CANVAS_H-30);
         const dx = t.trueX-OP.x, dy = t.trueY-OP.y;
         t.trueBearing = (Math.atan2(dx,-dy)*180/Math.PI+360)%360;
@@ -4488,6 +4509,136 @@ function buildRealRoads(){
     REAL_ROADS_CANVAS.push(poly);
   });
   if(state) state.roads = REAL_ROADS_CANVAS;
+  buildRoadGraph();
+}
+
+// Builds a graph (nodes + adjacency list) from REAL_ROADS_CANVAS so vehicles
+// can be routed along the actual road network via A* (findRoadPath) instead
+// of just getting an off-road speed bonus for being near one. Points from
+// different ways that fall within ROAD_NODE_SNAP_RADIUS_UNITS of each other
+// are merged into a single node -- this both represents real intersections
+// and bridges any small gaps introduced by the earlier road-simplification
+// pass, using a spatial grid (bucketed by snap radius) so it stays roughly
+// linear in the number of road points instead of comparing every pair.
+function buildRoadGraph(){
+  const snapR = ROAD_NODE_SNAP_RADIUS_UNITS;
+  const cellSize = Math.max(1, snapR);
+  const buckets = new Map();
+  const nodes = [];
+  const adj = [];
+  function bucketKeyFor(bx, by){ return bx+','+by; }
+  function findOrCreateNode(x, y){
+    const bx = Math.floor(x/cellSize), by = Math.floor(y/cellSize);
+    for(let dx=-1; dx<=1; dx++){
+      for(let dy=-1; dy<=1; dy++){
+        const arr = buckets.get(bucketKeyFor(bx+dx, by+dy));
+        if(!arr) continue;
+        for(const idx of arr){
+          if(Math.hypot(nodes[idx].x-x, nodes[idx].y-y) <= snapR) return idx;
+        }
+      }
+    }
+    const idx = nodes.length;
+    nodes.push({x, y});
+    adj.push([]);
+    const key = bucketKeyFor(bx, by);
+    if(!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(idx);
+    return idx;
+  }
+  function addEdge(a, b, dist){
+    if(a===b) return;
+    if(!adj[a].some(e=>e.to===b)) adj[a].push({to:b, dist});
+    if(!adj[b].some(e=>e.to===a)) adj[b].push({to:a, dist});
+  }
+  REAL_ROADS_CANVAS.forEach(road=>{
+    let prevIdx = null, prevPt = null;
+    road.forEach(pt=>{
+      const idx = findOrCreateNode(pt.x, pt.y);
+      if(prevIdx!==null){
+        addEdge(prevIdx, idx, Math.hypot(pt.x-prevPt.x, pt.y-prevPt.y));
+      }
+      prevIdx = idx; prevPt = pt;
+    });
+  });
+  ROAD_GRAPH = {nodes, adj};
+}
+
+function nearestRoadNodeIdx(x, y){
+  if(!ROAD_GRAPH || !ROAD_GRAPH.nodes.length) return -1;
+  let best=-1, bd=Infinity;
+  ROAD_GRAPH.nodes.forEach((n,i)=>{
+    const d = Math.hypot(n.x-x, n.y-y);
+    if(d<bd){ bd=d; best=i; }
+  });
+  return best;
+}
+
+// A* over the road graph from (fromX,fromY) to (toX,toY), both snapped to
+// their nearest graph node. Returns an ordered array of {x,y} waypoints
+// (graph nodes only -- the caller is responsible for the final off-road hop
+// from the last node to the actual target position), or null if no path
+// exists (e.g. disconnected road graph, or no road data loaded at all).
+function findRoadPath(fromX, fromY, toX, toY){
+  if(!ROAD_GRAPH || !ROAD_GRAPH.nodes.length) return null;
+  const startIdx = nearestRoadNodeIdx(fromX, fromY);
+  const goalIdx = nearestRoadNodeIdx(toX, toY);
+  if(startIdx<0 || goalIdx<0) return null;
+  const nodes = ROAD_GRAPH.nodes, adj = ROAD_GRAPH.adj;
+  if(startIdx===goalIdx) return [nodes[startIdx]];
+  const goalNode = nodes[goalIdx];
+  const gScore = new Map([[startIdx, 0]]);
+  const fScore = new Map([[startIdx, Math.hypot(nodes[startIdx].x-goalNode.x, nodes[startIdx].y-goalNode.y)]]);
+  const cameFrom = new Map();
+  const open = new Set([startIdx]);
+  const closed = new Set();
+  while(open.size){
+    let cur=-1, bestF=Infinity;
+    open.forEach(idx=>{
+      const f = fScore.has(idx) ? fScore.get(idx) : Infinity;
+      if(f<bestF){ bestF=f; cur=idx; }
+    });
+    if(cur===goalIdx){
+      const path = [nodes[cur]];
+      let c = cur;
+      while(cameFrom.has(c)){ c = cameFrom.get(c); path.unshift(nodes[c]); }
+      return path;
+    }
+    open.delete(cur);
+    closed.add(cur);
+    (adj[cur]||[]).forEach(e=>{
+      if(closed.has(e.to)) return;
+      const tentG = (gScore.has(cur)?gScore.get(cur):Infinity) + e.dist;
+      if(tentG < (gScore.has(e.to)?gScore.get(e.to):Infinity)){
+        cameFrom.set(e.to, cur);
+        gScore.set(e.to, tentG);
+        fScore.set(e.to, tentG + Math.hypot(nodes[e.to].x-goalNode.x, nodes[e.to].y-goalNode.y));
+        open.add(e.to);
+      }
+    });
+  }
+  return null;
+}
+
+// Walks up to stepLen distance along a polyline of waypoints starting from
+// (fromX,fromY), crossing as many waypoints as fit within the step.
+function advanceAlongPath(fromX, fromY, path, stepLen){
+  let remaining = stepLen;
+  let curX = fromX, curY = fromY;
+  for(let i=0; i<path.length && remaining>0; i++){
+    const wp = path[i];
+    const segDist = Math.hypot(wp.x-curX, wp.y-curY);
+    if(segDist <= remaining){
+      curX = wp.x; curY = wp.y;
+      remaining -= segDist;
+    } else {
+      const t = segDist>0 ? remaining/segDist : 0;
+      curX = curX + (wp.x-curX)*t;
+      curY = curY + (wp.y-curY)*t;
+      remaining = 0;
+    }
+  }
+  return {x:curX, y:curY};
 }
 
 function canvasUnitToWorldXZ(cx, cy){
