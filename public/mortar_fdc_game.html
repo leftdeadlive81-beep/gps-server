@@ -317,6 +317,12 @@
     font-family:var(--font-mono);font-size:12.5px;line-height:1.7;
   }
   @media (max-width:1100px){ .log{height:170px;} }
+  /* Placed after the max-width:1100px override above (not inside the earlier
+     max-width:600px block elsewhere in this stylesheet) so it wins the
+     cascade on phone widths -- equal-specificity rules resolve by source
+     order, and a rule appearing earlier in the file loses to one below it
+     even when both are wrapped in @media blocks that both match. */
+  @media (max-width:600px){ .log{height:85px;} }
   .log .l-op{color:#8fbf7a;}
   .log .l-fdc{color:var(--amber);}
   .log .l-mortar{color:#7fb2d9;}
@@ -1736,7 +1742,7 @@ function enemyCounterAttack(actionTurns){
               if(rollExposureHit(getUnitExposure(near))){
                 damageFriendlyAsset(near, dmg, sourceLabel);
               } else {
-                log('sys','回避', `${sourceLabel}は着弾したが、${friendlyFireCandidateLabel(near)}は暴露率により被弾を免れた。`);
+                log('sys','回避', `${sourceLabel}は着弾したが、${friendlyFireCandidateLabel(near)}は掩蔽率により被弾を免れた。`);
               }
               render();
             }
@@ -1745,7 +1751,7 @@ function enemyCounterAttack(actionTurns){
           damageFriendlyAsset(near, dmg, sourceLabel);
           enemyTracers.push({startX:e.x, startY:e.y, endX:near.x, endY:near.y, born:performance.now(), duration:320});
         } else {
-          log('sys','回避', `${sourceLabel}を受けたが、${friendlyFireCandidateLabel(near)}は暴露率により被弾を免れた。`);
+          log('sys','回避', `${sourceLabel}を受けたが、${friendlyFireCandidateLabel(near)}は掩蔽率により被弾を免れた。`);
         }
       }
     });
@@ -1922,7 +1928,7 @@ function resolveSniperOrders(actionTurns){
       }
       anyEvent = true;
       if(!rollExposureHit(t.exposure)){
-        log('mortar','狙撃', `狙撃${sn.id+1}班、${t.id}へ発砲するも暴露率により外す。`);
+        log('mortar','狙撃', `狙撃${sn.id+1}班、${t.id}へ発砲するも掩蔽率により外す。`);
         return;
       }
       const curAlive = sn.soldiers.filter(s=>s.alive);
@@ -2136,7 +2142,7 @@ function resolveVehicleAssault(actionTurns){
           damageFriendlyAsset(near, dmg, `${t.id}(装甲車)の突撃`);
           enemyTracers.push({startX:e.x, startY:e.y, endX:near.x, endY:near.y, born:performance.now(), duration:260});
         } else {
-          log('sys','回避', `${t.id}(装甲車)の突撃を受けたが、${friendlyFireCandidateLabel(near)}は暴露率により被弾を免れた。`);
+          log('sys','回避', `${t.id}(装甲車)の突撃を受けたが、${friendlyFireCandidateLabel(near)}は掩蔽率により被弾を免れた。`);
         }
         if(near.kind==='squad'){
           const aliveSoldiers = state.squads[near.idx].soldiers.filter(s=>s.alive);
@@ -2185,7 +2191,7 @@ function resolveDroneSwarm(actionTurns){
           damageFriendlyAsset(near, dmg, `${t.id}(ドローン)の自爆`);
           enemyTracers.push({startX:e.x, startY:e.y, endX:near.x, endY:near.y, born:performance.now(), duration:180});
         } else {
-          log('sys','回避', `${t.id}(ドローン)が自爆したが、${friendlyFireCandidateLabel(near)}は暴露率により被弾を免れた。`);
+          log('sys','回避', `${t.id}(ドローン)が自爆したが、${friendlyFireCandidateLabel(near)}は掩蔽率により被弾を免れた。`);
         }
         t.trueX = rnd(ENEMY_SPAWN_MIN_X, ENEMY_SPAWN_MAX_X);
         t.trueY = rnd(30, CANVAS_H-30);
@@ -2235,7 +2241,7 @@ function advanceEnemyInfantry(actionTurns){
             if(state.hq.hp <= state.hq.maxHp*0.3) state.hpDroppedLow = true;
             log('sys','被弾', `${t.id} が指揮所に肉薄、突入攻撃(被害 ${dmg})。`);
           } else {
-            log('sys','回避', `${t.id} が指揮所に肉薄したが、暴露率により突入攻撃を回避。`);
+            log('sys','回避', `${t.id} が指揮所に肉薄したが、掩蔽率により突入攻撃を回避。`);
           }
           moved = true;
           return;
@@ -2923,7 +2929,7 @@ function updateFireConfigCancel(idx){
 
 function exposureMetaHtml(exposure){
   const pct = Math.round(hitChanceFromExposure(exposure)*100);
-  return `<div class="meta">暴露率: ${exposure} (被弾率目安 ${pct}%)</div>`;
+  return `<div class="meta">掩蔽率: ${exposure} (被弾率目安 ${pct}%)</div>`;
 }
 
 function soldierRosterHtml(soldiers){
