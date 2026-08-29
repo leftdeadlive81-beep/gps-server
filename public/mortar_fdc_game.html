@@ -815,6 +815,9 @@ const ENEMY_FORMATION_TEMPLATES = {
   ],
 };
 const ENEMY_FORMATION_NAMES = Object.keys(ENEMY_FORMATION_TEMPLATES);
+// per user request: individual soldier symbols were made bigger/easier to read -- this scales
+// up each formation template's spacing to match, so the larger glyphs don't overlap.
+const SOLDIER_FORMATION_SCALE = 1.4;
 const ENEMY_FORMATION_BASE_SIZE = 6; // legacy single-squad size that TARGET_TYPES.infantry.hp was tuned against
 // per user request: the old "3 units per wave" cap is gone -- enemy infantry now
 // splits into several groups totalling roughly this many soldiers instead of one squad.
@@ -4216,23 +4219,26 @@ function drawBoard(){
         // with a wider wander radius so the group reads as a restless swarm, plus a tiny
         // HP bar over each soldier's head once the group is revealed.
         const aliveTroops = t.troops.filter(s=>s.alive);
+        // per user request: bigger, easier-to-read individual soldier symbols -- the formation
+        // spacing is scaled up to match (SOLDIER_FORMATION_SCALE) so the larger glyphs don't
+        // overlap each other within a group.
         aliveTroops.forEach((s,si)=>{
           const off = offsets[si % offsets.length];
-          const pos = wanderPos(e.x+off.dx, e.y+off.dy, s.seed, 6, nowWander);
+          const pos = wanderPos(e.x+off.dx*SOLDIER_FORMATION_SCALE, e.y+off.dy*SOLDIER_FORMATION_SCALE, s.seed, 8, nowWander);
           const color = t.revealed ? t.def.mark : '#8f9678';
           ctx.fillStyle = color;
           ctx.strokeStyle = color;
           ctx.beginPath();
-          ctx.arc(pos.x, pos.y-2.2, 1.4, 0, Math.PI*2);
+          ctx.arc(pos.x, pos.y-3.6, 2.3, 0, Math.PI*2);
           ctx.fill();
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 2.2;
           ctx.beginPath();
-          ctx.moveTo(pos.x, pos.y-0.9);
-          ctx.lineTo(pos.x, pos.y+2.3);
+          ctx.moveTo(pos.x, pos.y-1.5);
+          ctx.lineTo(pos.x, pos.y+4);
           ctx.stroke();
           if(t.revealed){
-            const barW = 6, barH = 1.4;
-            const bx = pos.x-barW/2, by = pos.y-6.4;
+            const barW = 10, barH = 2;
+            const bx = pos.x-barW/2, by = pos.y-9.6;
             const frac = clamp(s.hp/s.maxHp, 0, 1);
             ctx.fillStyle = 'rgba(0,0,0,0.45)';
             ctx.fillRect(bx, by, barW, barH);
