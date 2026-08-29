@@ -227,6 +227,9 @@
     font-family:var(--font-mono);font-size:10.5px;color:var(--ink);
   }
   .force-row.dead .force-label, .force-row.dead .force-pct{color:var(--red);}
+  .force-row.selectable{cursor:pointer;border-radius:3px;margin:-2px -4px;padding:2px 4px;}
+  .force-row.selectable:hover{background:var(--panel-2);}
+  .force-row.selectable:hover .force-label{color:var(--amber);}
 
   .roster-list{max-height:110px;overflow-y:auto;margin-bottom:8px;border-top:1px dashed var(--edge);padding-top:6px;}
   .roster-row{display:flex;justify-content:space-between;gap:6px;font-family:var(--font-mono);font-size:10.5px;padding:1px 0;}
@@ -2802,6 +2805,15 @@ function closeCommandBox(){
   render();
 }
 
+// Lets a unit be selected from the 部隊稼働状況 (force status) list at the
+// bottom of the screen, opening the same command box as clicking it on the
+// map -- renderCommandBox() positions the box from the unit's own map
+// coordinates, so no click position is needed here.
+function selectForceUnit(kind, idx){
+  state.commandBox = {kind, idx};
+  render();
+}
+
 function updateFireConfig(idx, field, value){
   const mortar = state.mortars[idx];
   if(!mortar) return;
@@ -3122,10 +3134,11 @@ function renderStats(){
   });
   document.getElementById('enemy-breakdown').innerHTML = ebRows.length ? ebRows.join('') : '<div class="eb-empty">敵情報なし ― 偵察未了</div>';
 
-  function forceRow(label, frac, pctText, barColor){
+  function forceRow(label, frac, pctText, barColor, kind, idx){
     const dead = frac<=0;
+    const selectable = kind && !dead;
     return `
-      <div class="force-row${dead?' dead':''}">
+      <div class="force-row${dead?' dead':''}${selectable?' selectable':''}" ${selectable?`onclick="selectForceUnit('${kind}',${idx})"`:''}>
         <span class="force-label">${label}</span>
         <div class="hpbar"><div style="width:${Math.max(0,frac*100)}%;background:${dead?'var(--red)':barColor}"></div></div>
         <span class="force-pct">${pctText}</span>
@@ -3135,19 +3148,19 @@ function renderStats(){
   const rows = [];
   rows.push(forceRow('指揮所', state.hq.hp/state.hq.maxHp, state.hq.hp>0?Math.round(state.hq.hp/state.hq.maxHp*100)+'%':'陥落', 'var(--red)'));
   state.mortars.forEach((m,i)=>{
-    rows.push(forceRow(`迫${i+1}`, m.hp/m.maxHp, m.hp>0?Math.round(m.hp/m.maxHp*100)+'%':'不能', 'var(--amber)'));
+    rows.push(forceRow(`迫${i+1}`, m.hp/m.maxHp, m.hp>0?Math.round(m.hp/m.maxHp*100)+'%':'不能', 'var(--amber)', 'mortar', i));
   });
   state.scouts.forEach((s,i)=>{
     const alive = unitAliveCount(s);
-    rows.push(forceRow(`斥${i+1}`, alive/s.soldiers.length, `${alive}/${s.soldiers.length}`, 'var(--green-id)'));
+    rows.push(forceRow(`斥${i+1}`, alive/s.soldiers.length, `${alive}/${s.soldiers.length}`, 'var(--green-id)', 'scout', i));
   });
   state.squads.forEach((sq,i)=>{
     const alive = sq.soldiers.filter(s=>s.alive).length;
-    rows.push(forceRow(`分隊${i+1}`, alive/sq.soldiers.length, `${alive}/${sq.soldiers.length}`, 'var(--green-id)'));
+    rows.push(forceRow(`分隊${i+1}`, alive/sq.soldiers.length, `${alive}/${sq.soldiers.length}`, 'var(--green-id)', 'squad', i));
   });
   state.snipers.forEach((sn,i)=>{
     const alive = sn.soldiers.filter(s=>s.alive).length;
-    rows.push(forceRow(`狙${i+1}`, alive/sn.soldiers.length, `${alive}/${sn.soldiers.length}`, 'var(--blue-id)'));
+    rows.push(forceRow(`狙${i+1}`, alive/sn.soldiers.length, `${alive}/${sn.soldiers.length}`, 'var(--blue-id)', 'sniper', i));
   });
   rows.push(forceRow('予備', state.reserve/RESERVE_SIZE, `${state.reserve}/${RESERVE_SIZE}`, 'var(--muted)'));
   document.getElementById('force-list').innerHTML = rows.join('');
