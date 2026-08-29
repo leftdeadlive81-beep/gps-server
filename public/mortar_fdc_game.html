@@ -2652,7 +2652,6 @@ function handleCanvasClick(evt){
   const unitHit = findFriendlyUnitAt(px, py);
   if(unitHit){
     state.commandBox = unitHit;
-    focusMapOn(px, py);
   } else {
     state.commandBox = null;
   }
@@ -3696,13 +3695,17 @@ function initThree(){
   renderer3d = new THREE.WebGLRenderer({ canvas: canvas3d, antialias:true });
   renderer3d.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
   renderer3d.setClearColor(0x11140d, 1);
+  // The terrain texture is tagged sRGBEncoding (see applyTerrainTextureOverride);
+  // without matching output encoding on the renderer the final image comes out
+  // noticeably darker/duller than the source texture.
+  if('outputEncoding' in renderer3d) renderer3d.outputEncoding = THREE.sRGBEncoding;
   scene3d = new THREE.Scene();
 
   camera3d = new THREE.PerspectiveCamera(45, 1, 1, 100000);
   scene3d.add(camera3d);
 
-  scene3d.add(new THREE.AmbientLight(0xffffff, 0.7));
-  const sun = new THREE.DirectionalLight(0xfff4e0, 0.85);
+  scene3d.add(new THREE.AmbientLight(0xffffff, 0.95));
+  const sun = new THREE.DirectionalLight(0xfff4e0, 1.05);
   sun.position.set(600, 1200, 400);
   scene3d.add(sun);
 
@@ -4008,7 +4011,7 @@ function setupMapControls(){
         MAP_VIEW.zoom = clamp(pinchStartZoom*(dist/pinchStartDist), MAP_ZOOM_MIN, MAP_ZOOM_MAX);
       }
       const angle = Math.atan2(t1.clientY-t0.clientY, t1.clientX-t0.clientX);
-      MAP_VIEW.azimuth -= (angle-twoTouchLastAngle);
+      MAP_VIEW.azimuth += (angle-twoTouchLastAngle);
       twoTouchLastAngle = angle;
       const midY = touchMid(e.touches).y;
       MAP_VIEW.polar = clamp(MAP_VIEW.polar - (midY-twoTouchLastMidY)*0.005, MAP_POLAR_MIN, MAP_POLAR_MAX);
