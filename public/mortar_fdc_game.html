@@ -763,6 +763,15 @@ const SHELL_KILL_RADIUS_UNITS = {
 const SMOKE_RADIUS_M = 60;
 const SMOKE_RADIUS_UNITS = SMOKE_RADIUS_M / METERS_PER_UNIT;
 const SMOKE_DURATION_TURNS = 3;
+// per user request: illumination round -- bursts high up, a light ball then drifts slowly
+// down (ILLUM_FALL_DURATION, a real-time screen-space animation), lighting up the terrain
+// in ILLUM_RADIUS_M below it for ILLUM_DURATION_TURNS turns (same turn-based persistence
+// style as smoke clouds above).
+const ILLUM_RADIUS_M = 200;
+const ILLUM_RADIUS_UNITS = ILLUM_RADIUS_M / METERS_PER_UNIT;
+const ILLUM_DURATION_TURNS = 3;
+const ILLUM_BURST_HEIGHT = 130; // screen-space px the flare bursts at above its ground point
+const ILLUM_FALL_DURATION = 3000; // ms to drift from burst height down to the ground
 const MARKER_REVEAL_RADIUS_UNITS = CONTACT_RANGE_UNITS; // 200m, same as normal contact-reveal range
 const MINE_TRIGGER_RADIUS_M = 20;
 const MINE_TRIGGER_RADIUS_UNITS = MINE_TRIGGER_RADIUS_M / METERS_PER_UNIT;
@@ -976,6 +985,7 @@ function initGame(){
     contours: null,
     roads: [],
     smokeClouds: [],
+    illumFlares: [],
     mines: [],
     turns: 0,
     targets: [],
@@ -1085,6 +1095,7 @@ function startStage(){
   state.contours = computeContours();
   state.roads = REAL_ROADS_CANVAS;
   state.smokeClouds = [];
+  state.illumFlares = [];
   state.mines = [];
   // per user request: no more flat "3 units per wave" cap -- infantry now spawns as
   // several formation groups (buildEnemyInfantryGroups) totalling ~50 soldiers, generated
@@ -2828,7 +2839,8 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
           if(shell==='illum' || shell==='smoke' || shell==='marker'){
             hitAny = true;
             if(shell==='illum'){
-              log('mortar','観測', `弾着${i+1}: 照明弾展開。夜間視界を確保(効果なし)。`);
+              state.illumFlares.push({x:ix, y:iy, born:performance.now(), turnsLeft:ILLUM_DURATION_TURNS});
+              log('mortar','観測', `弾着${i+1}: 照明弾、上空で破裂。光弾が降下しながら半径${Math.round(ILLUM_RADIUS_M)}mを照射(${ILLUM_DURATION_TURNS}ターン持続)。`);
             } else if(shell==='smoke'){
               state.smokeClouds.push({x:ix, y:iy, turnsLeft:SMOKE_DURATION_TURNS});
               log('mortar','観測', `弾着${i+1}: 発煙弾展開。半径${Math.round(SMOKE_RADIUS_M)}mを遮蔽(${SMOKE_DURATION_TURNS}ターン持続)。`);
@@ -2941,6 +2953,8 @@ function commitDecision(){
 
   state.smokeClouds.forEach(c=>{ c.turnsLeft -= 1; });
   state.smokeClouds = state.smokeClouds.filter(c=>c.turnsLeft>0);
+  state.illumFlares.forEach(f=>{ f.turnsLeft -= 1; });
+  state.illumFlares = state.illumFlares.filter(f=>f.turnsLeft>0);
 
   speakRandomAliveUnit('coordination');
   log('sys','司令部', '━━━ 決心 ━━━');
@@ -3545,7 +3559,7 @@ function mortarBoxHtml(idx){
           <option value="heat" ${mortar.fireShell==='heat'?'selected':''}>対戦車榴弾 (HEAT) ― 対装甲</option>
           <option value="smoke" ${mortar.fireShell==='smoke'?'selected':''}>発煙弾 ― 視界遮蔽</option>
           <option value="marker" ${mortar.fireShell==='marker'?'selected':''}>マーカー弾 ― 試射・半径200m捕捉</option>
-          <option value="illum" ${mortar.fireShell==='illum'?'selected':''}>照明弾 ― 夜間照明(効果なし)</option>
+          <option value="illum" ${mortar.fireShell==='illum'?'selected':''}>照明弾 ― 半径${ILLUM_RADIUS_M}mを照射</option>
         </select>
       </div>
       <div class="row-2">
@@ -4597,6 +4611,54 @@ function drawBoard(){
       ctx.arc(cp.x+pf.dx, cp.y+pf.dy, pf.r, 0, Math.PI*2);
       ctx.fill();
     });
+  });
+
+  // illumination flares (照明弾) ― bursts high above the ground point, then a bright light
+  // ball drifts slowly down over ILLUM_FALL_DURATION while a soft glow lights up the ground
+  // below it; the ground glow itself persists for the flare's full turnsLeft lifetime.
+  (state.illumFlares||[]).forEach(f=>{
+    const gp = project(f.x, f.y);
+    if(!gp.visible) return;
+    const lifeAge = 1 - clamp(f.turnsLeft/ILLUM_DURATION_TURNS, 0, 1);
+    const groundAlpha = 0.4 - lifeAge*0.22;
+    if(groundAlpha > 0){
+      const glowR = ILLUM_RADIUS_UNITS;
+      const grad = ctx.createRadialGradient(gp.x, gp.y, 0, gp.x, gp.y, glowR);
+      grad.addColorStop(0, `rgba(255,248,210,${groundAlpha})`);
+      grad.addColorStop(0.6, `rgba(255,240,180,${groundAlpha*0.5})`);
+      grad.addColorStop(1, 'rgba(255,240,180,0)');
+      ctx.beginPath();
+      ctx.fillStyle = grad;
+      ctx.arc(gp.x, gp.y, glowR, 0, Math.PI*2);
+      ctx.fill();
+    }
+    const fallAge = nowP - f.born;
+    if(fallAge < ILLUM_FALL_DURATION){
+      const fallP = clamp(fallAge/ILLUM_FALL_DURATION, 0, 1);
+      const flareX = gp.x, flareY = gp.y - ILLUM_BURST_HEIGHT*(1-fallP);
+      if(fallAge < 260){
+        const burstP = fallAge/260;
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(255,250,220,${1-burstP})`;
+        ctx.lineWidth = 2;
+        ctx.arc(flareX, flareY, 6+burstP*20, 0, Math.PI*2);
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(255,244,200,0.35)';
+      ctx.lineWidth = 1.5;
+      ctx.moveTo(flareX, gp.y);
+      ctx.lineTo(flareX, flareY);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(255,250,225,0.3)';
+      ctx.arc(flareX, flareY, 9, 0, Math.PI*2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(255,250,225,0.95)';
+      ctx.arc(flareX, flareY, 3.5, 0, Math.PI*2);
+      ctx.fill();
+    }
   });
 
   // weather tint overlay
