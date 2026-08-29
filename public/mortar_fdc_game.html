@@ -3974,18 +3974,21 @@ function setupMapControls(){
     y:(touches[0].clientY+touches[1].clientY)/2,
   });
   el.addEventListener('touchstart', e=>{
-    // touch-action:none on #board (CSS) is what actually stops the browser's
-    // native pinch-zoom/pan gesture from firing over the map; preventDefault
-    // here is a defensive fallback for browsers/webviews that don't fully
-    // honor touch-action, so the whole page never zooms while gesturing the map.
-    e.preventDefault();
     mapFocusTarget = null;
     if(e.touches.length===1){
+      // No preventDefault here: a plain tap (touchstart+touchend with no
+      // movement) must still synthesize its native 'click' so unit selection
+      // keeps working. touch-action:none on #board (CSS) already stops the
+      // browser's native pan/zoom gesture from engaging over the map.
       touchMode='pan'; mapDragMoved=false;
       touchLastX=e.touches[0].clientX; touchLastY=e.touches[0].clientY;
       const rect = el.getBoundingClientRect();
       dragGround = groundPlaneCanvasUnitAt(touchLastX-rect.left, touchLastY-rect.top);
     } else if(e.touches.length===2){
+      // A second finger means this is a pinch/rotate gesture, never a tap, so
+      // it's safe (and necessary, as a fallback if touch-action isn't fully
+      // honored) to preventDefault here without risking a lost click.
+      e.preventDefault();
       touchMode='pinch'; mapDragMoved=true; dragGround=null;
       const [t0,t1] = e.touches;
       pinchStartDist = Math.hypot(t1.clientX-t0.clientX, t1.clientY-t0.clientY);
