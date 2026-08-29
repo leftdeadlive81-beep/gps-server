@@ -453,6 +453,7 @@
 </div>
 
 <div class="command-box" id="command-box" style="display:none;"></div>
+<div class="command-box" id="enemy-command-box" style="display:none;"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
@@ -709,6 +710,10 @@ const METERS_PER_UNIT = (MAP_WIDTH_KM*1000) / CANVAS_W;
 const CONTACT_RANGE_M = 200;
 const CONTACT_RANGE_UNITS = CONTACT_RANGE_M / METERS_PER_UNIT;
 const SNIPER_RANGE_UNITS = SNIPER_RANGE_M / METERS_PER_UNIT;
+const SNIPER_AIM_RANGE_M = 2000;
+const SNIPER_AIM_RANGE_UNITS = SNIPER_AIM_RANGE_M / METERS_PER_UNIT;
+const SNIPER_AIM_LINE_WIDTH_M = 20;
+const SNIPER_AIM_LINE_WIDTH_UNITS = SNIPER_AIM_LINE_WIDTH_M / METERS_PER_UNIT;
 const SNIPER_DMG = [16,26];
 const SCOUT_MAX_RANGE_UNITS = 2000 / METERS_PER_UNIT;
 const ROAD_SPEED_KMH = {vehicle:60, infantry:10, sniper:5, mortar:40};
@@ -766,7 +771,7 @@ const ENEMY_FORMATION_OFFSETS = [
 ];
 const FIELD_MARGIN = 130;
 const UNCERTAINTY_CIRCLE_CAP = 120;
-const ORDER_LABEL = {advance:'前進', retreat:'後退', hold:'防御', assault:'突撃'};
+const ORDER_LABEL = {advance:'前進', retreat:'後退', hold:'防御', assault:'突撃', hunt:'追跡攻撃'};
 const MORTAR_ORDER_LABEL = {fire:'射撃', standby:'待機', move:'移動'};
 const MORTAR_ZONE_MIN_X = 40, MORTAR_ZONE_MAX_X = 380;
 
@@ -867,6 +872,8 @@ function initGame(){
     targets: [],
     selectedId: null,
     commandBox: null,
+    enemyCommandBox: null,
+    snipeMortarStrikesPending: 0,
     animating: false,
     stageResolved: false,
     deploymentMode: 'auto',
@@ -1033,6 +1040,7 @@ function startStage(){
       id: si,
       order: 'hold',
       pendingDest: null,
+      huntTargetId: null,
       standingOrder: null,
       x: FRIENDLY_INF_POS.x,
       y: FRIENDLY_INF_POS.y + (si-(NUM_SQUADS-1)/2)*52,
@@ -1045,6 +1053,7 @@ function startStage(){
       order: 'hold',
       pendingDest: null,
       pendingSnipeTargetId: null,
+      aimAngle: null,
       standingOrder: null,
       x: SNIPER_POS.x,
       y: SNIPER_POS.y + (si-(NUM_SNIPERS-1)/2)*52,
@@ -1069,11 +1078,11 @@ function startStage(){
     });
     state.squads.forEach((sq,si)=>{
       sq.x = FRIENDLY_INF_POS.x; sq.y = FRIENDLY_INF_POS.y + (si-(NUM_SQUADS-1)/2)*52;
-      sq.order = 'hold'; sq.pendingDest = null; sq.reinforceUsed = false;
+      sq.order = 'hold'; sq.pendingDest = null; sq.huntTargetId = null; sq.reinforceUsed = false;
     });
     state.snipers.forEach((sn,si)=>{
       sn.x = SNIPER_POS.x; sn.y = SNIPER_POS.y + (si-(NUM_SNIPERS-1)/2)*52;
-      sn.order = 'hold'; sn.pendingDest = null; sn.pendingSnipeTargetId = null; sn.reinforceUsed = false;
+      sn.order = 'hold'; sn.pendingDest = null; sn.pendingSnipeTargetId = null; sn.aimAngle = null; sn.reinforceUsed = false;
     });
   }
   state.animating = false;
@@ -1081,6 +1090,8 @@ function startStage(){
   state.hpDroppedLow = false;
   state.orderMode = null;
   state.commandBox = null;
+  state.enemyCommandBox = null;
+  state.snipeMortarStrikesPending = 0;
   state.stageStartSnapshot = JSON.parse(JSON.stringify({
     ammo: state.ammo, turns: state.turns, reserve: state.reserve, reserveRoster: state.reserveRoster, hq: state.hq,
     mortars: state.mortars, squads: state.squads, scouts: state.scouts, snipers: state.snipers,
@@ -1854,6 +1865,22 @@ function applySquadMovement(sq, sqIdx){
       sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
       sq.y = clamp(next.y, 30, CANVAS_H-30);
     }
+  } else if(sq.order==='hunt' && sq.huntTargetId){
+    const target = state.targets.find(t=>t.id===sq.huntTargetId);
+    if(!target || target.destroyed){
+      sq.huntTargetId = null;
+      sq.order = 'hold';
+      log('sys','前線', `第${sqIdx+1}分隊、攻撃目標を喪失(撃破/消失)。待機に移行。`);
+    } else {
+      const e = estPos(target);
+      const dist = Math.hypot(e.x-sq.x, e.y-sq.y);
+      if(dist > SQUAD_ENGAGE_RANGE*0.8){
+        const next = terrainAwareStep(sq.x, sq.y, e.x, e.y, INFANTRY_MOVE_CAP);
+        sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+        sq.y = clamp(next.y, 30, CANVAS_H-30);
+      }
+      // else: already within engage range -- hold position, resolveSquadOrders' duel loop handles the attack
+    }
   }
   checkMineTrigger('squad', sqIdx, sq.x, sq.y);
 }
@@ -1867,14 +1894,18 @@ function resolveSquadOrders(actionTurns){
       applyStandingOrder(sq, `第${sqIdx+1}分隊`, true);
       applySquadMovement(sq, sqIdx);
 
-      const enemyInfantry = state.targets.filter(t=>!t.destroyed && t.type==='infantry');
-      if(enemyInfantry.length===0) return;
+      let engageTargets = state.targets.filter(t=>!t.destroyed && t.type==='infantry');
+      if(sq.order==='hunt' && sq.huntTargetId){
+        const huntTarget = state.targets.find(t=>t.id===sq.huntTargetId && !t.destroyed);
+        if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
+      }
+      if(engageTargets.length===0) return;
       let dmgMult=1, casualtyMult=1;
-      if(sq.order==='assault'){ dmgMult=1.6; casualtyMult=1.5; }
+      if(sq.order==='assault' || sq.order==='hunt'){ dmgMult=1.6; casualtyMult=1.5; }
       else if(sq.order==='hold'){ dmgMult=0.9; casualtyMult=0.6; }
       else if(sq.order==='retreat'){ dmgMult=0.5; casualtyMult=0.7; }
 
-      enemyInfantry.forEach(t=>{
+      engageTargets.forEach(t=>{
         if(t.destroyed) return;
         const e = estPos(t);
         const dist = Math.hypot(e.x-sq.x, e.y-sq.y);
@@ -1941,6 +1972,84 @@ function applySniperMovement(sn){
   checkMineTrigger('sniper', sn.id, sn.x, sn.y);
 }
 
+// Shared direct-fire resolution used both by the manual snipe-target lock
+// and by the automatic aim-line engagement below.
+function sniperEngageTarget(sn, t){
+  if(revealTarget(t)){
+    log('op','斥候', `狙撃${sn.id+1}班が${t.id}を捕捉、<b>${t.def.label}</b>と識別。`);
+  }
+  if(!rollExposureHit(t.exposure)){
+    log('mortar','狙撃', `狙撃${sn.id+1}班、${t.id}へ発砲するも掩蔽率により外す。`);
+    return;
+  }
+  const curAlive = sn.soldiers.filter(s=>s.alive);
+  const strengthFrac = curAlive.length/sn.soldiers.length;
+  const altMult = altitudeBonus(sn.x, sn.y, t.trueX, t.trueY);
+  const suppressionDmgMult = isSuppressed(t) ? SUPPRESSION_DUEL_DMG_BONUS : 1;
+  const dmg = Math.round(rnd(SNIPER_DMG[0], SNIPER_DMG[1]) * strengthFrac * altMult * suppressionDmgMult);
+  t.hp -= dmg;
+  log('mortar','狙撃', `狙撃${sn.id+1}班、${t.id}に精密射撃(効果 ${dmg})。`);
+  enemyTracers.push({startX:sn.x, startY:sn.y, endX:t.trueX, endY:t.trueY, born:performance.now(), duration:180});
+  if(t.hp<=0 && !t.destroyed){
+    t.destroyed = true; t.hp = 0;
+    log('fdc','FDC', `${t.id} 狙撃により<b>撃破を確認</b>。`);
+    onTargetDestroyed(t);
+    if(sn.pendingSnipeTargetId===t.id) sn.pendingSnipeTargetId = null;
+  }
+}
+
+// Nearest live, non-destroyed enemy target lying within SNIPER_AIM_RANGE_UNITS
+// along sn.aimAngle and within SNIPER_AIM_LINE_WIDTH_UNITS of that line.
+function findTargetOnSniperLine(sn){
+  if(sn.aimAngle===null || sn.aimAngle===undefined) return null;
+  const rad = sn.aimAngle*Math.PI/180;
+  const dirX = Math.sin(rad), dirY = -Math.cos(rad);
+  let best=null, bestProj=Infinity;
+  state.targets.forEach(t=>{
+    if(t.destroyed) return;
+    const vx = t.trueX-sn.x, vy = t.trueY-sn.y;
+    const proj = vx*dirX + vy*dirY;
+    if(proj<0 || proj>SNIPER_AIM_RANGE_UNITS) return;
+    const perp = Math.abs(vx*dirY - vy*dirX);
+    if(perp > SNIPER_AIM_LINE_WIDTH_UNITS/2) return;
+    if(proj<bestProj){ bestProj=proj; best=t; }
+  });
+  return best;
+}
+
+// A vehicle target caught on a sniper's aim line can't be engaged directly
+// (small arms vs. armor) -- the sniper instead calls it in, and the nearest
+// live mortar fires a single HEAT round at it, consuming 1 HEAT round from
+// the shared ammo pool. Uses state.snipeMortarStrikesPending (separate from
+// state.animating) to block re-entry into commitDecision()/handleCanvasClick
+// while this independent volley is still resolving, without touching the
+// existing player-volley animating/remaining bookkeeping.
+function callInMortarHeatStrike(target, sn){
+  const aliveMortars = state.mortars.filter(m=>m.hp>0);
+  if(!aliveMortars.length) return;
+  let nearest=null, nd=Infinity;
+  aliveMortars.forEach(m=>{
+    const d = Math.hypot(m.x-target.trueX, m.y-target.trueY);
+    if(d<nd){ nd=d; nearest=m; }
+  });
+  if(!nearest) return;
+  if(revealTarget(target)){
+    log('op','斥候', `狙撃${sn.id+1}班が${target.id}を捕捉、<b>${target.def.label}</b>と識別。`);
+  }
+  if(state.ammo.heat <= 0){
+    log('sys','システム', `狙撃${sn.id+1}班より対装甲目標発見、迫撃砲${nearest.id+1}へ徹甲弾射撃を要求するも弾薬不足。`);
+    return;
+  }
+  log('fdc','FDC', `狙撃${sn.id+1}班より対装甲目標発見の報告。迫撃砲${nearest.id+1}が${target.id}へ徹甲弾射撃。`);
+  state.ammo.heat -= 1;
+  state.snipeMortarStrikesPending += 1;
+  launchMortarVolley(nearest, 'heat', 'impact', 1, {x:target.trueX, y:target.trueY, snappedId:target.id}, target, ()=>{
+    state.snipeMortarStrikesPending -= 1;
+    checkEnd();
+    render();
+  });
+}
+
 function resolveSniperOrders(actionTurns){
   let anyEvent = false;
   for(let i=0;i<actionTurns;i++){
@@ -1950,35 +2059,28 @@ function resolveSniperOrders(actionTurns){
       applyStandingOrder(sn, `狙撃${sn.id+1}班`, false);
       applySniperMovement(sn);
 
-      if(!sn.pendingSnipeTargetId) return;
-      const t = state.targets.find(x=>x.id===sn.pendingSnipeTargetId);
-      if(!t || t.destroyed){ sn.pendingSnipeTargetId = null; return; }
-      if(!isTargetDetected(t)) return;
-      const dist = Math.hypot(t.trueX-sn.x, t.trueY-sn.y);
-      if(dist > SNIPER_RANGE_UNITS) return;
-      if(!hasLineOfSight(sn.x, sn.y, t.trueX, t.trueY)) return;
+      if(sn.pendingSnipeTargetId){
+        const t = state.targets.find(x=>x.id===sn.pendingSnipeTargetId);
+        if(!t || t.destroyed){
+          sn.pendingSnipeTargetId = null;
+        } else if(isTargetDetected(t)){
+          const dist = Math.hypot(t.trueX-sn.x, t.trueY-sn.y);
+          if(dist <= SNIPER_RANGE_UNITS && hasLineOfSight(sn.x, sn.y, t.trueX, t.trueY)){
+            anyEvent = true;
+            sniperEngageTarget(sn, t);
+          }
+        }
+      }
 
-      if(revealTarget(t)){
-        log('op','斥候', `狙撃${sn.id+1}班が${t.id}を捕捉、<b>${t.def.label}</b>と識別。`);
-      }
-      anyEvent = true;
-      if(!rollExposureHit(t.exposure)){
-        log('mortar','狙撃', `狙撃${sn.id+1}班、${t.id}へ発砲するも掩蔽率により外す。`);
-        return;
-      }
-      const curAlive = sn.soldiers.filter(s=>s.alive);
-      const strengthFrac = curAlive.length/sn.soldiers.length;
-      const altMult = altitudeBonus(sn.x, sn.y, t.trueX, t.trueY);
-      const suppressionDmgMult = isSuppressed(t) ? SUPPRESSION_DUEL_DMG_BONUS : 1;
-      const dmg = Math.round(rnd(SNIPER_DMG[0], SNIPER_DMG[1]) * strengthFrac * altMult * suppressionDmgMult);
-      t.hp -= dmg;
-      log('mortar','狙撃', `狙撃${sn.id+1}班、${t.id}に精密射撃(効果 ${dmg})。`);
-      enemyTracers.push({startX:sn.x, startY:sn.y, endX:t.trueX, endY:t.trueY, born:performance.now(), duration:180});
-      if(t.hp<=0 && !t.destroyed){
-        t.destroyed = true; t.hp = 0;
-        log('fdc','FDC', `${t.id} 狙撃により<b>撃破を確認</b>。`);
-        onTargetDestroyed(t);
-        sn.pendingSnipeTargetId = null;
+      const lineTarget = findTargetOnSniperLine(sn);
+      if(lineTarget){
+        if(lineTarget.type==='vehicle'){
+          anyEvent = true;
+          callInMortarHeatStrike(lineTarget, sn);
+        } else if(hasLineOfSight(sn.x, sn.y, lineTarget.trueX, lineTarget.trueY)){
+          anyEvent = true;
+          sniperEngageTarget(sn, lineTarget);
+        }
       }
     });
   }
@@ -2025,6 +2127,19 @@ function armSniperTargetOrder(idx){
 function clearSniperTarget(idx){
   if(!state.snipers[idx]) return;
   state.snipers[idx].pendingSnipeTargetId = null;
+  render();
+}
+function armSniperAimOrder(idx){
+  const sn = state.snipers[idx];
+  if(!sn) return;
+  state.orderMode = {kind:'sniper-aim', idx};
+  state.commandBox = null;
+  unitSpeak('sniper', idx, 'order');
+  render();
+}
+function clearSniperAim(idx){
+  if(!state.snipers[idx]) return;
+  state.snipers[idx].aimAngle = null;
   render();
 }
 
@@ -2516,7 +2631,7 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
 }
 
 function commitDecision(){
-  if(!state || state.stageResolved || state.animating || state.placementPending) return;
+  if(!state || state.stageResolved || state.animating || state.snipeMortarStrikesPending>0 || state.placementPending) return;
 
   const firingMortars = state.mortars.filter(m=>m.hp>0 && m.pendingFire);
   const ammoNeeded = {he:0, heat:0};
@@ -2787,7 +2902,7 @@ function selectNextTarget(){
 }
 
 function handleCanvasClick(evt){
-  if(!state || state.stageResolved || state.animating) return;
+  if(!state || state.stageResolved || state.animating || state.snipeMortarStrikesPending>0) return;
   if(mapDragMoved) return;
   const cv = document.getElementById('board');
   const rect = cv.getBoundingClientRect();
@@ -2886,10 +3001,25 @@ function handleCanvasClick(evt){
       } else {
         log('sys','システム','狙撃目標が見つかりません。捕捉中の目標付近をクリックしてください。');
       }
+    } else if(mode.kind==='sniper-aim'){
+      const sn = state.snipers[mode.idx];
+      if(sn){
+        sn.aimAngle = bearingBetween(sn.x, sn.y, px, py);
+        log('mortar','狙撃', `狙撃${mode.idx+1}班、射撃方向 ${Math.round(sn.aimAngle)}° を指示。`);
+      }
     }
     render();
     return;
   }
+
+  const enemyHit = findEnemyTargetAt(px, py);
+  if(enemyHit){
+    state.enemyCommandBox = enemyHit.id;
+    state.commandBox = null;
+    render();
+    return;
+  }
+  state.enemyCommandBox = null;
 
   const unitHit = findFriendlyUnitAt(px, py);
   if(unitHit){
@@ -2930,6 +3060,18 @@ function canvasToScreen(cx, cy){
   return { x: rect.left + cx/CANVAS_W*rect.width, y: rect.top + cy/CANVAS_H*rect.height };
 }
 
+function findEnemyTargetAt(px, py){
+  let best=null, bestD=Infinity;
+  state.targets.forEach(t=>{
+    if(t.destroyed || !isTargetDetected(t)) return;
+    const vx = t._visX!==undefined ? t._visX : estPos(t).x;
+    const vy = t._visY!==undefined ? t._visY : estPos(t).y;
+    const d = Math.hypot(vx-px, vy-py);
+    if(d<bestD){ bestD=d; best=t; }
+  });
+  return (best && bestD<=42) ? best : null;
+}
+
 function findFriendlyUnitAt(px, py){
   const HIT_R = 22;
   for(let i=0;i<state.scouts.length;i++){
@@ -2965,6 +3107,36 @@ function findFriendlyUnitAt(px, py){
 
 function closeCommandBox(){
   state.commandBox = null;
+  render();
+}
+
+function closeEnemyCommandBox(){
+  state.enemyCommandBox = null;
+  render();
+}
+
+// Assigns a squad to close distance on and repeatedly attack a specific
+// player-chosen enemy target (any type), rather than the squad's normal
+// orders which only auto-engage whatever enemy infantry happens to wander
+// within range.
+function assignSquadHunt(idx){
+  const sq = state.squads[idx];
+  if(!sq || !sq.soldiers.some(s=>s.alive)) return;
+  const targetId = state.enemyCommandBox;
+  const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
+  if(!target) return;
+  sq.order = 'hunt';
+  sq.huntTargetId = target.id;
+  sq.pendingDest = null;
+  unitSpeak('squad', idx, 'order');
+  log('sys','前線', `第${idx+1}分隊、${target.id} を攻撃目標に指示。接敵まで前進する。`);
+  render();
+}
+function clearSquadHunt(idx){
+  const sq = state.squads[idx];
+  if(!sq) return;
+  sq.huntTargetId = null;
+  if(sq.order==='hunt') sq.order = 'hold';
   render();
 }
 
@@ -3166,6 +3338,10 @@ function squadBoxHtml(idx){
   ).join('');
   const arming = state.orderMode && state.orderMode.kind==='squad' && state.orderMode.idx===idx;
   const destStatus = arming ? '地図をクリックして移動先指定…' : (sq.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
+  const huntTarget = sq.huntTargetId ? state.targets.find(t=>t.id===sq.huntTargetId) : null;
+  const huntStatus = (huntTarget && !huntTarget.destroyed)
+    ? `攻撃目標: ${huntTarget.id} (${huntTarget.revealed?huntTarget.def.label:'識別不能'})`
+    : null;
   return `
     <div class="meta">${alive} / ${sq.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sq.x,sq.y))}</div>
     ${exposureMetaHtml(sq.exposure)}
@@ -3175,6 +3351,7 @@ function squadBoxHtml(idx){
       <button class="btn" ${wiped||!sq.pendingDest?'disabled':''} onclick="clearSquadDest(${idx})">解除</button>
     </div>
     <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
+    ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearSquadHunt(${idx})">攻撃目標を解除</button>` : ''}
     ${standingOrderSelectHtml('squad', idx, sq, true)}
     ${soldierRosterHtml(sq.soldiers)}
     ${reinforceButtonHtml('squad', idx, sq)}
@@ -3190,12 +3367,17 @@ function sniperBoxHtml(idx){
   ).join('');
   const arming = state.orderMode && state.orderMode.kind==='sniper-move' && state.orderMode.idx===idx;
   const armingTarget = state.orderMode && state.orderMode.kind==='sniper-target' && state.orderMode.idx===idx;
+  const armingAim = state.orderMode && state.orderMode.kind==='sniper-aim' && state.orderMode.idx===idx;
   const destStatus = arming ? '地図をクリックして移動先指定…' : (sn.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
   const snipeTarget = sn.pendingSnipeTargetId ? state.targets.find(t=>t.id===sn.pendingSnipeTargetId) : null;
   let snipeStatus;
   if(armingTarget) snipeStatus = '狙撃する目標をクリックして指定…';
   else if(snipeTarget && !snipeTarget.destroyed) snipeStatus = `狙撃目標: ${snipeTarget.id} (${snipeTarget.revealed?snipeTarget.def.label:'識別不能'})`;
   else snipeStatus = '狙撃目標: 未設定';
+  let aimStatus;
+  if(armingAim) aimStatus = '射撃方向にする地点をクリック…';
+  else if(sn.aimAngle!==null && sn.aimAngle!==undefined) aimStatus = `射撃方向: ${Math.round(sn.aimAngle)}° (射程${SNIPER_AIM_RANGE_M}m、自動交戦)`;
+  else aimStatus = '射撃方向: 未設定';
   return `
     <div class="meta">${alive} / ${sn.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sn.x,sn.y))} ・ 有効射程約${SNIPER_RANGE_M}m</div>
     ${exposureMetaHtml(sn.exposure)}
@@ -3207,7 +3389,10 @@ function sniperBoxHtml(idx){
     <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
     <button class="btn ${armingTarget?'active squad-order-btn':''}" ${wiped?'disabled':''} onclick="armSniperTargetOrder(${idx})" style="margin-bottom:6px;">狙撃目標を指定</button>
     <div class="meta" style="margin-bottom:6px;">${snipeStatus}</div>
-    ${sn.pendingSnipeTargetId ? `<button class="btn" onclick="clearSniperTarget(${idx})">狙撃目標を解除</button>` : ''}
+    ${sn.pendingSnipeTargetId ? `<button class="btn" onclick="clearSniperTarget(${idx})" style="margin-bottom:6px;">狙撃目標を解除</button>` : ''}
+    <button class="btn ${armingAim?'active squad-order-btn':''}" ${wiped?'disabled':''} onclick="armSniperAimOrder(${idx})" style="margin-bottom:6px;">射撃方向を指定</button>
+    <div class="meta" style="margin-bottom:6px;">${aimStatus}</div>
+    ${(sn.aimAngle!==null && sn.aimAngle!==undefined) ? `<button class="btn" onclick="clearSniperAim(${idx})">射撃方向を解除</button>` : ''}
     ${standingOrderSelectHtml('sniper', idx, sn, false)}
     ${soldierRosterHtml(sn.soldiers)}
     ${reinforceButtonHtml('sniper', idx, sn)}
@@ -3259,6 +3444,44 @@ function renderCommandBox(){
   left = clamp(left, 8, window.innerWidth-boxW-8);
   let top = pos.y + 26;
   if(top + 320 > window.innerHeight) top = pos.y - 320;
+  box.style.left = left+'px';
+  box.style.top = Math.max(8,top)+'px';
+  box.style.display = 'block';
+}
+
+function renderEnemyCommandBox(){
+  const box = document.getElementById('enemy-command-box');
+  if(!box) return;
+  if(!state.enemyCommandBox){ box.style.display='none'; return; }
+  const t = state.targets.find(x=>x.id===state.enemyCommandBox);
+  if(!t || t.destroyed){
+    state.enemyCommandBox = null;
+    box.style.display='none';
+    return;
+  }
+  const vx = t._visX!==undefined ? t._visX : estPos(t).x;
+  const vy = t._visY!==undefined ? t._visY : estPos(t).y;
+  const pos = canvasToScreen(vx, vy);
+  const squadBtns = state.squads.map((sq,idx)=>{
+    if(!sq.soldiers.some(s=>s.alive)) return '';
+    const active = sq.order==='hunt' && sq.huntTargetId===t.id;
+    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignSquadHunt(${idx})">第${idx+1}分隊に攻撃させる${active?'(攻撃中)':''}</button>`;
+  }).filter(Boolean).join('');
+  box.innerHTML = `
+    <div class="cb-head">
+      <span class="cb-title">${t.id} ― ${t.revealed?t.def.label:'識別不能'}</span>
+      <button class="cb-close" onclick="closeEnemyCommandBox()">×</button>
+    </div>
+    <div class="meta" style="margin-bottom:8px;">この目標を攻撃させる分隊を選択(接敵距離まで前進して交戦):</div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      ${squadBtns || '<div class="empty-hint" style="padding:4px 0;">出撃可能な分隊がありません</div>'}
+    </div>
+  `;
+  const boxW = 230;
+  let left = pos.x - boxW/2;
+  left = clamp(left, 8, window.innerWidth-boxW-8);
+  let top = pos.y + 26;
+  if(top + 220 > window.innerHeight) top = pos.y - 220;
   box.style.left = left+'px';
   box.style.top = Math.max(8,top)+'px';
   box.style.display = 'block';
@@ -3639,6 +3862,22 @@ function drawBoard(){
           ctx.lineTo(e.x, e.y);
           ctx.stroke();
           ctx.setLineDash([]);
+        }
+      }
+
+      // firing-direction line ― solid blue, SNIPER_AIM_RANGE_UNITS long; any
+      // enemy that overlaps it is auto-engaged (see findTargetOnSniperLine).
+      if(aliveSoldiers.length>0 && sn.aimAngle!==null && sn.aimAngle!==undefined){
+        const rad = sn.aimAngle*Math.PI/180;
+        const endL = {x: sn.x+Math.sin(rad)*SNIPER_AIM_RANGE_UNITS, y: sn.y-Math.cos(rad)*SNIPER_AIM_RANGE_UNITS};
+        const endVis = project(endL.x, endL.y);
+        if(endVis.visible){
+          ctx.beginPath();
+          ctx.strokeStyle = 'rgba(80,150,230,0.65)';
+          ctx.lineWidth = 2;
+          ctx.moveTo(snVis.x, snVis.y);
+          ctx.lineTo(endVis.x, endVis.y);
+          ctx.stroke();
         }
       }
     });
@@ -4511,6 +4750,7 @@ function render(){
   selectNextTarget();
   renderDecisionPanel();
   renderCommandBox();
+  renderEnemyCommandBox();
   drawBoard();
 }
 
