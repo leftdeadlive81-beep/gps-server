@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FDC PLOTTING BOARD ― 射撃指揮所 v0.2</title>
+<title>コンシム ― FDC PLOTTING BOARD v0.2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Stencil:wght@700;800&family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
@@ -777,10 +777,58 @@ function smoothVisualPos(obj, targetX, targetY){
   }
   return {x:obj._visX, y:obj._visY};
 }
-const ENEMY_FORMATION_OFFSETS = [
-  {dx:-13,dy:-9},{dx:0,dy:-11},{dx:13,dy:-9},
-  {dx:-13,dy:9},{dx:0,dy:11},{dx:13,dy:9},
-];
+// per user request: enemy infantry is no longer a single fixed 6-man cluster --
+// each infantry group now picks one of several formation shapes, and its soldier
+// count is simply that shape's point count (see buildEnemyInfantryGroups).
+const ENEMY_FORMATION_TEMPLATES = {
+  box: [ // 密集方陣 (original tight cluster)
+    {dx:-13,dy:-9},{dx:0,dy:-11},{dx:13,dy:-9},
+    {dx:-13,dy:9},{dx:0,dy:11},{dx:13,dy:9},
+  ],
+  line: [ // 横一列 (line abreast)
+    {dx:-27,dy:-3},{dx:-21,dy:2},{dx:-15,dy:-4},{dx:-9,dy:3},{dx:-3,dy:-2},
+    {dx:3,dy:3},{dx:9,dy:-3},{dx:15,dy:2},{dx:21,dy:-2},{dx:27,dy:4},
+  ],
+  wedge: [ // 楔形 (wedge / arrowhead)
+    {dx:0,dy:-14},
+    {dx:-6,dy:-8},{dx:6,dy:-8},
+    {dx:-12,dy:-2},{dx:12,dy:-2},
+    {dx:-18,dy:4},{dx:18,dy:4},
+    {dx:-24,dy:10},{dx:24,dy:10},
+  ],
+  column: [ // 単縦陣 (column)
+    {dx:-2,dy:-18},{dx:2,dy:-13},{dx:-2,dy:-8},{dx:2,dy:-3},
+    {dx:-2,dy:2},{dx:2,dy:7},{dx:-2,dy:12},{dx:2,dy:17},
+  ],
+  skirmish: [ // 散兵線 (loose scattered skirmish line)
+    {dx:-22,dy:-10},{dx:-9,dy:-14},{dx:6,dy:-9},{dx:19,dy:-13},
+    {dx:-26,dy:2},{dx:-11,dy:4},{dx:2,dy:-2},{dx:14,dy:3},{dx:25,dy:-1},
+    {dx:-15,dy:13},{dx:0,dy:15},{dx:16,dy:12},
+  ],
+  echelon: [ // 梯形/千鳥 (staggered echelon)
+    {dx:-24,dy:-10},{dx:-18,dy:-4},{dx:-12,dy:2},{dx:-6,dy:8},{dx:0,dy:14},
+    {dx:6,dy:-10},{dx:12,dy:-4},{dx:18,dy:2},{dx:24,dy:8},{dx:30,dy:14},
+  ],
+};
+const ENEMY_FORMATION_NAMES = Object.keys(ENEMY_FORMATION_TEMPLATES);
+const ENEMY_FORMATION_BASE_SIZE = 6; // legacy single-squad size that TARGET_TYPES.infantry.hp was tuned against
+// per user request: the old "3 units per wave" cap is gone -- enemy infantry now
+// splits into several groups totalling roughly this many soldiers instead of one squad.
+const ENEMY_INFANTRY_TOTAL_TARGET = 50;
+
+function buildEnemyInfantryGroups(stage){
+  // ramp up toward full strength over the first several stages rather than dropping
+  // the whole ~50-soldier force on the player from stage 1
+  const targetTotal = Math.min(ENEMY_INFANTRY_TOTAL_TARGET, 16 + stage*5);
+  const groups = [];
+  let total = 0;
+  while(total < targetTotal){
+    const name = choice(ENEMY_FORMATION_NAMES);
+    groups.push({formationName:name, offsets:ENEMY_FORMATION_TEMPLATES[name]});
+    total += ENEMY_FORMATION_TEMPLATES[name].length;
+  }
+  return groups;
+}
 const FIELD_MARGIN = 130;
 const UNCERTAINTY_CIRCLE_CAP = 120;
 const ORDER_LABEL = {advance:'前進', retreat:'後退', hold:'防御', assault:'突撃', hunt:'追跡攻撃'};
@@ -895,7 +943,7 @@ function initGame(){
   };
   ripples = []; projectiles = []; flashes = []; enemyTracers = [];
   document.getElementById('log').innerHTML='';
-  log('sys', 'システム', `FDC PLOTTING BOARD v${GAME_VERSION} 起動。難易度を選択せよ。`);
+  log('sys', 'システム', `コンシム v${GAME_VERSION} 起動。難易度を選択せよ。`);
   renderDifficultyOverlay();
   document.getElementById('difficulty-overlay').classList.add('show');
 }
@@ -956,7 +1004,9 @@ function chooseDeploymentMode(mode){
 }
 
 function pickTypesForCount(count, stage){
-  const base = ['infantry','vehicle','artillery'];
+  // infantry is generated separately now (see buildEnemyInfantryGroups) as several
+  // formation groups rather than one slot in this mixed pool
+  const base = ['vehicle','artillery'];
   if(stage>=DRONE_INTRO_STAGE) base.push('drone');
   for(let i=base.length-1;i>0;i--){
     const j = Math.floor(Math.random()*(i+1));
@@ -987,7 +1037,11 @@ function startStage(){
   state.roads = REAL_ROADS_CANVAS;
   state.smokeClouds = [];
   state.mines = [];
-  const count = Math.min(3+Math.floor((stage-1)/3), 5);
+  // per user request: no more flat "3 units per wave" cap -- infantry now spawns as
+  // several formation groups (buildEnemyInfantryGroups) totalling ~50 soldiers, generated
+  // independently from the small mixed pool of artillery/vehicle/drone below.
+  const infantryGroups = buildEnemyInfantryGroups(stage);
+  const otherCount = Math.min(2+Math.floor((stage-1)/3), 6);
   const diff = DIFFICULTIES[state.difficulty];
   const hpMult = (1 + (stage-1)*0.08) * diff.hpMult;
   state.weather = stage===1 ? 'clear' : choice(Object.keys(WEATHER_TYPES));
@@ -995,16 +1049,22 @@ function startStage(){
   const opticsMult = (state.equipment.optics ? 0.8 : 1) * weather.errMult;
   const bearingErrBase = (45 + (stage-1)*2) * opticsMult;
   const distErrBase = (180 + (stage-1)*8) * opticsMult;
-  const spots = generateSpots(count);
-  const types = pickTypesForCount(count, stage);
+  const totalCount = infantryGroups.length + otherCount;
+  const spots = generateSpots(totalCount);
+  const otherTypes = pickTypesForCount(otherCount, stage);
 
   const centroidX = spots.reduce((s,p)=>s+p.x,0)/spots.length;
   const centroidY = spots.reduce((s,p)=>s+p.y,0)/spots.length;
 
   const targets = spots.map((p,i)=>{
-    const type = types[i];
+    const isInfantry = i < infantryGroups.length;
+    const type = isInfantry ? 'infantry' : otherTypes[i-infantryGroups.length];
     const def = TARGET_TYPES[type];
-    const hp = Math.round(def.hp*hpMult);
+    const group = isInfantry ? infantryGroups[i] : null;
+    const squadSize = isInfantry ? group.offsets.length : 0;
+    const hp = isInfantry
+      ? Math.round(def.hp * hpMult * (squadSize/ENEMY_FORMATION_BASE_SIZE))
+      : Math.round(def.hp*hpMult);
     const dx = p.x-OP.x, dy = p.y-OP.y;
     const trueBearing = (Math.atan2(dx,-dy)*180/Math.PI+360)%360;
     const trueDistance = Math.sqrt(dx*dx+dy*dy);
@@ -1020,7 +1080,9 @@ function startStage(){
       bearingErr:bearingErrBase, distErr:distErrBase,
       bOffset: rnd(-1,1), dOffset: rnd(-1,1),
       impacts:[],
-      squadSeeds: type==='infantry' ? Array.from({length:6},()=>Math.random()*1000) : null,
+      squadSeeds: isInfantry ? Array.from({length:squadSize},()=>Math.random()*1000) : null,
+      formationOffsets: isInfantry ? group.offsets : null,
+      formationName: isInfantry ? group.formationName : null,
       suppressed: 0,
       exposure: EXPOSURE_DEFAULT,
     };
@@ -1407,6 +1469,23 @@ function terrainAwareStep(fromX, fromY, targetX, targetY, stepLen){
   return best;
 }
 
+// terrainAwareStep only lets elevation nudge the HEADING (a small subset of
+// candidate headings score better on flatter ground) -- it never actually
+// slows movement down for climbing/descending, so in practice units barely
+// feel terrain at all. Scouts specifically should be genuinely limited by
+// rough ground (that's the whole point of a light recon team picking a
+// careful route), so this wraps the normal step and scales the distance
+// actually covered down when the chosen step crosses a steep elevation change.
+const SCOUT_TERRAIN_SPEED_PENALTY = 2.2;
+const SCOUT_TERRAIN_MIN_SPEED_MULT = 0.35;
+function scoutTerrainAwareStep(fromX, fromY, targetX, targetY, stepLen){
+  const next = terrainAwareStep(fromX, fromY, targetX, targetY, stepLen);
+  const elevChange = Math.abs(elevationAt(next.x, next.y) - elevationAt(fromX, fromY));
+  const mult = clamp(1 - elevChange*SCOUT_TERRAIN_SPEED_PENALTY, SCOUT_TERRAIN_MIN_SPEED_MULT, 1);
+  if(mult >= 0.999) return next;
+  return { x: fromX + (next.x-fromX)*mult, y: fromY + (next.y-fromY)*mult };
+}
+
 function elevationAt(x,y){
   if(!state || !state.terrain) return 0;
   let e = 0;
@@ -1491,9 +1570,20 @@ function localDetection(t){
     return Math.hypot(t.trueX-sq.x, t.trueY-sq.y) <= DETECTION_RANGE.infantry;
   });
   if(nearSquad) return true;
-  return state.snipers.some(sn=>{
+  const nearSniper = state.snipers.some(sn=>{
     if(!sn.soldiers.some(s=>s.alive)) return false;
     return Math.hypot(t.trueX-sn.x, t.trueY-sn.y) <= DETECTION_RANGE.infantry;
+  });
+  if(nearSniper) return true;
+  // Scouts previously had NO proximity fallback here, relying entirely on
+  // inScoutCone's narrow ~45 deg facing cone -- a scout not aimed exactly at
+  // an approaching enemy would never spot it until the much shorter general
+  // "contact" reveal range kicked in, making them feel nearly blind. Give
+  // scouts the same all-around passive awareness radius as squads/snipers,
+  // on top of (not instead of) their much longer aimed cone.
+  return state.scouts.some(s=>{
+    if(!unitAlive(s)) return false;
+    return Math.hypot(t.trueX-s.x, t.trueY-s.y) <= DETECTION_RANGE.infantry;
   });
 }
 function isTargetDetected(t){
@@ -1618,7 +1708,7 @@ function resolveOneScoutDecision(scout, idx){
       else log('sys','FDC', `${t.id} は斥候${idx+1}から視認できず偵察失敗。`);
     }
   } else if(scout.pendingDest){
-    const next = terrainAwareStep(scout.x, scout.y, scout.pendingDest.x, scout.pendingDest.y, 50);
+    const next = scoutTerrainAwareStep(scout.x, scout.y, scout.pendingDest.x, scout.pendingDest.y, 50);
     scout.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SCOUT_ADVANCE_LIMIT_X);
     scout.y = clamp(next.y, 20, CANVAS_H-20);
     checkMineTrigger('scout', idx, scout.x, scout.y);
@@ -1946,6 +2036,9 @@ function resolveSquadOrders(actionTurns){
         const dmgToEnemy = Math.round(rnd(INFANTRY_DUEL_DMG_TO_ENEMY[0], INFANTRY_DUEL_DMG_TO_ENEMY[1]) * strengthFrac * dmgMult * squadAltMult * suppressionDmgMult * enemyExposureMult);
         t.hp -= dmgToEnemy;
         anyEvent = true;
+        // per user request: show a shooting animation for the squad's own outgoing fire too,
+        // not just the enemy's return fire on a casualty (see the enemyTracers.push below)
+        enemyTracers.push({startX:sq.x, startY:sq.y, endX:e.x, endY:e.y, born:performance.now(), duration:220});
         if(t.hp<=0 && !t.destroyed){
           t.destroyed = true; t.hp = 0;
           log('op','斥候', `${t.id} 第${sqIdx+1}分隊との交戦で撃破を確認。`);
@@ -4099,8 +4192,9 @@ function drawBoard(){
       let labelY = e.y+20;
       if(t.type==='infantry' && t.squadSeeds){
         const squadCount = Math.max(1, Math.ceil(t.squadSeeds.length * t.hp/t.maxHp));
+        const offsets = t.formationOffsets || ENEMY_FORMATION_TEMPLATES.box;
         for(let si=0; si<squadCount; si++){
-          const off = ENEMY_FORMATION_OFFSETS[si];
+          const off = offsets[si % offsets.length];
           const pos = wanderPos(e.x+off.dx, e.y+off.dy, t.squadSeeds[si], 4, nowWander);
           ctx.fillStyle = t.revealed ? t.def.mark : '#8f9678';
           ctx.beginPath();
