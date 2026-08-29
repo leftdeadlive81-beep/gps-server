@@ -533,11 +533,16 @@ const DIFFICULTIES = {
   },
 };
 
+// per user request: enemy symbols are unified to red (all four target types share the
+// same mark color now, rather than a distinct hue per type); friendly units are unified
+// to blue the same way (see HQ/mortar/scout/squad/sniper marker drawing in drawBoard).
+const ENEMY_MARK_COLOR = '#c1453b';
+const FRIENDLY_MARK_COLOR = '#6f9bbf';
 const TARGET_TYPES = {
-  infantry:  {label:'歩兵',         hp:60,  radius:26, mark:'#7fa568'},
-  artillery: {label:'砲兵',         hp:100, radius:16, mark:'#c98a4b'},
-  vehicle:   {label:'装甲車',       hp:95,  radius:18, mark:'#6f9bbf'},
-  drone:     {label:'ドローン',     hp:12,  radius:20, mark:'#c9789a'},
+  infantry:  {label:'歩兵',         hp:60,  radius:26, mark:ENEMY_MARK_COLOR},
+  artillery: {label:'砲兵',         hp:100, radius:16, mark:ENEMY_MARK_COLOR},
+  vehicle:   {label:'装甲車',       hp:95,  radius:18, mark:ENEMY_MARK_COLOR},
+  drone:     {label:'ドローン',     hp:12,  radius:20, mark:ENEMY_MARK_COLOR},
 };
 const DRONE_INTRO_STAGE = 3;
 const CONTOUR_LEVELS = [0.25, 0.5, 0.75, 1.0, 1.25];
@@ -3803,17 +3808,19 @@ function renderStats(){
     `;
   }
   const rows = [];
-  rows.push(forceRow('指揮所', state.hq.hp/state.hq.maxHp, state.hq.hp>0?Math.round(state.hq.hp/state.hq.maxHp*100)+'%':'陥落', 'var(--red)'));
+  // per user request: friendly force-status bars are unified to blue across the board
+  // (HQ was red, mortar amber, scout/squad green -- now all match sniper's existing blue)
+  rows.push(forceRow('指揮所', state.hq.hp/state.hq.maxHp, state.hq.hp>0?Math.round(state.hq.hp/state.hq.maxHp*100)+'%':'陥落', 'var(--blue-id)'));
   state.mortars.forEach((m,i)=>{
-    rows.push(forceRow(`迫${i+1}`, m.hp/m.maxHp, m.hp>0?Math.round(m.hp/m.maxHp*100)+'%':'不能', 'var(--amber)', 'mortar', i));
+    rows.push(forceRow(`迫${i+1}`, m.hp/m.maxHp, m.hp>0?Math.round(m.hp/m.maxHp*100)+'%':'不能', 'var(--blue-id)', 'mortar', i));
   });
   state.scouts.forEach((s,i)=>{
     const alive = unitAliveCount(s);
-    rows.push(forceRow(`斥${i+1}`, alive/s.soldiers.length, `${alive}/${s.soldiers.length}`, 'var(--green-id)', 'scout', i));
+    rows.push(forceRow(`斥${i+1}`, alive/s.soldiers.length, `${alive}/${s.soldiers.length}`, 'var(--blue-id)', 'scout', i));
   });
   state.squads.forEach((sq,i)=>{
     const alive = sq.soldiers.filter(s=>s.alive).length;
-    rows.push(forceRow(`分隊${i+1}`, alive/sq.soldiers.length, `${alive}/${sq.soldiers.length}`, 'var(--green-id)', 'squad', i));
+    rows.push(forceRow(`分隊${i+1}`, alive/sq.soldiers.length, `${alive}/${sq.soldiers.length}`, 'var(--blue-id)', 'squad', i));
   });
   state.snipers.forEach((sn,i)=>{
     const alive = sn.soldiers.filter(s=>s.alive).length;
@@ -3934,7 +3941,7 @@ function drawBoard(){
   {
     const hq = state.hq;
     const hqAlive = hq.hp>0;
-    const hqCol = hqAlive ? '#d9a441' : '#5c2a25';
+    const hqCol = hqAlive ? FRIENDLY_MARK_COLOR : '#5c2a25';
     const hqP = project(hq.x, hq.y);
     ctx.save();
     ctx.translate(hqP.x, hqP.y);
@@ -3945,7 +3952,7 @@ function drawBoard(){
     ctx.strokeStyle = hqCol; ctx.lineWidth = 2; ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(0,-22); ctx.lineTo(14,-17); ctx.lineTo(0,-12); ctx.closePath();
-    ctx.fillStyle = hqAlive ? '#c1453b' : '#5c2a25';
+    ctx.fillStyle = hqAlive ? FRIENDLY_MARK_COLOR : '#5c2a25';
     ctx.fill();
     ctx.fillStyle = '#e8e3ce';
     ctx.font = 'bold 15px "JetBrains Mono"';
@@ -3961,7 +3968,7 @@ function drawBoard(){
       ctx.fillRect(bx-1,by-1,barW+2,barH+2);
       ctx.fillStyle = '#3a4128';
       ctx.fillRect(bx,by,barW,barH);
-      ctx.fillStyle = hpPct>0.3 ? '#d9a441' : '#f0715f';
+      ctx.fillStyle = hpPct>0.3 ? FRIENDLY_MARK_COLOR : '#f0715f';
       ctx.fillRect(bx,by,barW*hpPct,barH);
     }
   }
@@ -3973,7 +3980,7 @@ function drawBoard(){
     const mAlive = mortar.hp>0;
     ctx.save();
     ctx.translate(mVis.x,mVis.y);
-    ctx.fillStyle = mAlive ? '#d9a441' : '#5c2a25';
+    ctx.fillStyle = mAlive ? FRIENDLY_MARK_COLOR : '#5c2a25';
     ctx.beginPath();
     ctx.moveTo(0,-12); ctx.lineTo(10,10); ctx.lineTo(-10,10); ctx.closePath();
     ctx.fill();
@@ -4000,7 +4007,7 @@ function drawBoard(){
       ctx.fillRect(bx-1,by-1,barW+2,barH+2);
       ctx.fillStyle = '#3a4128';
       ctx.fillRect(bx,by,barW,barH);
-      ctx.fillStyle = hpPct>0.3 ? '#c1453b' : '#f0715f';
+      ctx.fillStyle = hpPct>0.3 ? FRIENDLY_MARK_COLOR : '#f0715f';
       ctx.fillRect(bx,by,barW*hpPct,barH);
     }
   });
@@ -4022,9 +4029,9 @@ function drawBoard(){
         ctx.lineTo(p.x, p.y);
       }
       ctx.closePath();
-      ctx.fillStyle = 'rgba(127,165,104,0.14)';
+      ctx.fillStyle = 'rgba(111,155,191,0.14)';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(127,165,104,0.55)';
+      ctx.strokeStyle = 'rgba(111,155,191,0.55)';
       ctx.lineWidth = 1;
       ctx.stroke();
     }
@@ -4036,7 +4043,7 @@ function drawBoard(){
     const scoutVis = project(scoutVisL.x, scoutVisL.y);
     const aliveCount = unitAliveCount(scout);
     const scoutAlive = aliveCount>0;
-    const scoutCol = scoutAlive ? '#7fa568' : '#5c2a25';
+    const scoutCol = scoutAlive ? FRIENDLY_MARK_COLOR : '#5c2a25';
     ctx.save();
     ctx.translate(scoutVis.x, scoutVis.y);
     scout.soldiers.forEach((s,idx)=>{
@@ -4056,7 +4063,7 @@ function drawBoard(){
     ctx.moveTo(6,-6); ctx.lineTo(-6,6);
     ctx.stroke();
     ctx.beginPath();
-    ctx.strokeStyle = scoutAlive ? 'rgba(127,165,104,0.6)' : 'rgba(92,42,37,0.6)';
+    ctx.strokeStyle = scoutAlive ? 'rgba(111,155,191,0.6)' : 'rgba(92,42,37,0.6)';
     ctx.arc(0,0,11,0,Math.PI*2);
     ctx.stroke();
     ctx.fillStyle = scoutCol;
@@ -4080,7 +4087,7 @@ function drawBoard(){
       ctx.fillRect(bx-1,by-1,barW+2,barH+2);
       ctx.fillStyle = '#3a4128';
       ctx.fillRect(bx,by,barW,barH);
-      ctx.fillStyle = hpPct>0.3 ? '#7fa568' : '#f0715f';
+      ctx.fillStyle = hpPct>0.3 ? FRIENDLY_MARK_COLOR : '#f0715f';
       ctx.fillRect(bx,by,barW*hpPct,barH);
     }
   });
@@ -4095,12 +4102,12 @@ function drawBoard(){
         if(!s.alive) return;
         const off = FORMATION_OFFSETS[idx];
         const pos = wanderPos(sqVis.x+off.dx, sqVis.y+off.dy, s.seed, 4, nowWander);
-        ctx.fillStyle = '#7fa568';
+        ctx.fillStyle = FRIENDLY_MARK_COLOR;
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, 3.2, 0, Math.PI*2);
         ctx.fill();
       });
-      ctx.fillStyle = aliveSoldiers.length>0 ? '#7fa568' : '#5c2a25';
+      ctx.fillStyle = aliveSoldiers.length>0 ? FRIENDLY_MARK_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
       ctx.textAlign='center';
       const sqOrderLabel = sq.pendingDest ? `${ORDER_LABEL[sq.order]}→移動` : ORDER_LABEL[sq.order];
@@ -4135,12 +4142,12 @@ function drawBoard(){
         if(!s.alive) return;
         const off = SNIPER_FORMATION_OFFSETS[idx];
         const pos = wanderPos(snVis.x+off.dx, snVis.y+off.dy, s.seed, 3, nowWander);
-        ctx.fillStyle = '#6f9bbf';
+        ctx.fillStyle = FRIENDLY_MARK_COLOR;
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, 3, 0, Math.PI*2);
         ctx.fill();
       });
-      ctx.fillStyle = aliveSoldiers.length>0 ? '#6f9bbf' : '#5c2a25';
+      ctx.fillStyle = aliveSoldiers.length>0 ? FRIENDLY_MARK_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
       ctx.textAlign='center';
       const snOrderLabel = sn.pendingDest ? `${ORDER_LABEL[sn.order]}→移動` : ORDER_LABEL[sn.order];
@@ -5183,6 +5190,7 @@ function hideMarker3d(key){
   if(m) m.visible = false;
 }
 
+const FRIENDLY_MARK_COLOR_3D = 0x6f9bbf;
 function syncUnitMarkers3d(){
   if(!threeReady || !state) return;
   const seen = {};
@@ -5196,24 +5204,25 @@ function syncUnitMarkers3d(){
     m.visible = true;
   };
 
-  place('hq', state.hq.x, state.hq.y, 'box', state.hq.hp>0 ? 0xd9a441 : 0x5c2a25, true);
+  // per user request: friendly symbols unified to blue on the 3D minimap
+  place('hq', state.hq.x, state.hq.y, 'box', state.hq.hp>0 ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
   state.mortars.forEach((m,i)=>{
     const p = smoothVisualPos(m, m.x, m.y);
-    place('mortar'+i, p.x, p.y, 'cone', m.hp>0 ? 0xd9a441 : 0x5c2a25, true);
+    place('mortar'+i, p.x, p.y, 'cone', m.hp>0 ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
   });
   state.scouts.forEach((s,i)=>{
     const p = smoothVisualPos(s, s.x, s.y);
-    place('scout'+i, p.x, p.y, 'diamond', unitAlive(s) ? 0x7fa568 : 0x5c2a25, true);
+    place('scout'+i, p.x, p.y, 'diamond', unitAlive(s) ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
   });
   state.squads.forEach((sq,i)=>{
     const p = smoothVisualPos(sq, sq.x, sq.y);
     const alive = sq.soldiers.some(s=>s.alive);
-    place('squad'+i, p.x, p.y, 'box', alive ? 0x7fa568 : 0x5c2a25, true);
+    place('squad'+i, p.x, p.y, 'box', alive ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
   });
   state.snipers.forEach((sn,i)=>{
     const p = smoothVisualPos(sn, sn.x, sn.y);
     const alive = sn.soldiers.some(s=>s.alive);
-    place('sniper'+i, p.x, p.y, 'cylinder', alive ? 0x6f9bbf : 0x5c2a25, true);
+    place('sniper'+i, p.x, p.y, 'cylinder', alive ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
   });
   state.targets.forEach((t,i)=>{
     const key = 'target'+t.id;
@@ -5230,7 +5239,8 @@ function syncUnitMarkers3d(){
   });
 }
 
-const TARGET_TYPE_COLOR = { infantry:0x7fa568, artillery:0xc98a4b, vehicle:0x6f9bbf, drone:0xc9789a };
+// per user request: enemy symbols unified to red on the 3D minimap too
+const TARGET_TYPE_COLOR = { infantry:0xc1453b, artillery:0xc1453b, vehicle:0xc1453b, drone:0xc1453b };
 
 function renderThreeFrame(){
   if(!threeReady || !renderer3d) return;
