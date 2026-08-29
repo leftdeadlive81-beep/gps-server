@@ -124,6 +124,19 @@
     .btn, select{padding:10px 9px; font-size:13.5px;}
     .decision-btn{padding:12px 9px; font-size:14px;}
     .command-box{padding:9px 10px;}
+
+    .decision-panel{display:none;}
+    .decision-overlay-mobile{
+      display:block;
+      position:absolute; right:8px; bottom:8px; z-index:45;
+      width:min(220px,56vw); pointer-events:auto;
+      background:rgba(18,21,13,0.92); border:1px solid var(--amber-dim); border-radius:5px;
+      padding:8px 9px; backdrop-filter:blur(2px);
+      box-shadow:0 4px 14px rgba(0,0,0,.4);
+    }
+    .decision-overlay-mobile .decision-box{background:none; border:none; padding:0; margin-bottom:0;}
+    .decision-overlay-mobile .decision-summary{font-size:10px; max-height:52px; overflow-y:auto; margin-bottom:6px;}
+    .decision-overlay-mobile .decision-btn{padding:9px 6px; font-size:12.5px;}
   }
 
   .board-note{font-size:10px;color:var(--muted);margin:-6px 0 8px;flex:0 0 auto;}
@@ -146,6 +159,14 @@
     text-transform:uppercase;margin-bottom:4px;
   }
   .eo-count{font-family:var(--font-mono);font-size:22px;font-weight:700;color:var(--ink);margin-bottom:6px;}
+
+  /* Duplicate holder for the 決心(decision) button, shown floating over the
+     map bottom-right instead of in the scrolled-away bottombar -- but only on
+     phone-width screens (see @media(max-width:600px) below). Both this and
+     the normal .decision-panel-holder in the bottombar are kept in sync by
+     renderDecisionPanel(), which writes the same markup to every element
+     matching the shared .decision-panel-holder class. */
+  .decision-overlay-mobile{display:none;}
 
   .command-box{
     position:fixed; z-index:60; width:230px; max-width:90vw;
@@ -338,6 +359,7 @@
         <div class="eo-count" id="stat-left">--</div>
         <div class="enemy-breakdown" id="enemy-breakdown"></div>
       </div>
+      <div class="decision-panel-holder decision-overlay-mobile"></div>
     </div>
   </div>
 
@@ -353,7 +375,7 @@
     </div>
     <div class="panel decision-panel">
       <div class="panel-title">自軍 ― FDC / Fire Control</div>
-      <div id="decision-panel-holder"></div>
+      <div class="decision-panel-holder"></div>
     </div>
   </div>
 </div>
@@ -3080,17 +3102,17 @@ function renderStats(){
 }
 
 function renderDecisionPanel(){
-  const holder = document.getElementById('decision-panel-holder');
-  if(!state){ holder.innerHTML=''; return; }
+  const holders = document.querySelectorAll('.decision-panel-holder');
+  if(!state){ holders.forEach(h=>h.innerHTML=''); return; }
   if(state.placementPending){
     const item = state.placementQueue[state.placementIndex];
     const remaining = state.placementQueue.length - state.placementIndex;
-    holder.innerHTML = `
+    holders.forEach(h=>{ h.innerHTML = `
       <div class="decision-box">
         <div class="decision-summary">手動配置モード ― 地図をクリックして配置<br>次に配置: <b>${item?item.label:'―'}</b>(残り${remaining}ユニット)</div>
         <button class="btn" onclick="skipRemainingPlacement()">残りを既定配置で開始</button>
       </div>
-    `;
+    `; });
     return;
   }
   const anyMortarFiring = state.mortars.some(m=>m.pendingFire);
@@ -3111,12 +3133,12 @@ function renderDecisionPanel(){
     else if(sn.pendingDest) queued.push(`狙撃${idx+1}班: 移動`);
   });
   const summary = queued.length ? queued.join(' / ') : '各ユニットに行動を指示してください(未指示でも様子見として実行可)';
-  holder.innerHTML = `
+  holders.forEach(h=>{ h.innerHTML = `
     <div class="decision-box">
       <div class="decision-summary">${summary}</div>
       <button class="btn primary decision-btn" ${disabled?'disabled':''} onclick="commitDecision()">決心 (${turnCost}ターン消費)</button>
     </div>
-  `;
+  `; });
 }
 
 
