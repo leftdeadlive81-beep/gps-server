@@ -531,7 +531,7 @@ const TARGET_TYPES = {
   infantry:  {label:'歩兵',         hp:60,  radius:26, mark:'#7fa568'},
   artillery: {label:'砲兵',         hp:100, radius:16, mark:'#c98a4b'},
   vehicle:   {label:'装甲車',       hp:95,  radius:18, mark:'#6f9bbf'},
-  drone:     {label:'ドローン部隊', hp:45,  radius:20, mark:'#c9789a'},
+  drone:     {label:'ドローン',     hp:12,  radius:20, mark:'#c9789a'},
 };
 const DRONE_INTRO_STAGE = 3;
 const CONTOUR_LEVELS = [0.25, 0.5, 0.75, 1.0, 1.25];
@@ -545,8 +545,9 @@ const VEHICLE_ASSAULT_DAMAGE = [10,18];
 const DRONE_SPEED = 70;
 const DRONE_DETONATE_RANGE = 38;
 const DRONE_DETONATE_DAMAGE = [8,16];
-const INFANTRY_DRONE_LAUNCH_CHANCE = 0.05; // per action-tick, per live infantry unit not in contact
-const INFANTRY_DRONE_COOLDOWN_TICKS = 6;
+const INFANTRY_DRONE_LAUNCH_CHANCE = 0.16; // per action-tick, per live infantry unit not in contact
+const INFANTRY_DRONE_COOLDOWN_TICKS = 3;
+const INFANTRY_DRONE_SWARM_SIZE = [5, 8]; // a successful launch releases a whole swarm at once, not a single drone
 const MINE_DAMAGE = [8,18];
 const MINE_PLACEMENT_CHANCE = 0.12; // per enemy-turn resolution
 const MINE_MAX_ACTIVE = 4;
@@ -1017,7 +1018,7 @@ function startStage(){
       bearingErr:bearingErrBase, distErr:distErrBase,
       bOffset: rnd(-1,1), dOffset: rnd(-1,1),
       impacts:[],
-      squadSeeds: (type==='infantry'||type==='drone') ? Array.from({length:6},()=>Math.random()*1000) : null,
+      squadSeeds: type==='infantry' ? Array.from({length:6},()=>Math.random()*1000) : null,
       suppressed: 0,
       exposure: EXPOSURE_DEFAULT,
     };
@@ -2295,8 +2296,11 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
   }
 }
 
-// Enemy infantry occasionally launches a suicide drone as a new independent
-// target, rather than drones only ever being pre-spawned at stage start.
+// Enemy infantry occasionally launches a whole swarm of suicide drones as new
+// independent targets, rather than drones only ever being pre-spawned at
+// stage start. Each drone is its own weak, independent target (see
+// TARGET_TYPES.drone's low hp) -- the threat is in the numbers, not any one
+// drone's durability.
 function spawnInfantryDrone(source){
   const def = TARGET_TYPES.drone;
   const hpMult = (1 + (state.stage-1)*0.08) * DIFFICULTIES[state.difficulty].hpMult;
@@ -2315,12 +2319,19 @@ function spawnInfantryDrone(source){
     bearingErr: source.bearingErr, distErr: source.distErr,
     bOffset: rnd(-1,1), dOffset: rnd(-1,1),
     impacts:[],
-    squadSeeds: Array.from({length:6},()=>Math.random()*1000),
+    squadSeeds: null,
     suppressed:0,
     exposure: EXPOSURE_DEFAULT,
   };
   state.targets.push(drone);
-  log('sys','警報', `${source.id} が自爆ドローンを発進させた。${drone.id} を確認。`);
+  return drone;
+}
+function spawnInfantryDroneSwarm(source){
+  const count = Math.round(rnd(INFANTRY_DRONE_SWARM_SIZE[0], INFANTRY_DRONE_SWARM_SIZE[1]));
+  const spawned = [];
+  for(let i=0;i<count;i++) spawned.push(spawnInfantryDrone(source));
+  log('sys','警報', `${source.id} が自爆ドローン${count}機を同時発進させた。`);
+  return spawned;
 }
 
 // As an enemy unit's own losses (HP) mount, it tends to fall back and
@@ -2515,7 +2526,7 @@ function advanceEnemyInfantry(actionTurns){
         if(t._droneCooldown > 0){
           t._droneCooldown -= 1;
         } else if(Math.random() < INFANTRY_DRONE_LAUNCH_CHANCE){
-          spawnInfantryDrone(t);
+          spawnInfantryDroneSwarm(t);
           t._droneCooldown = INFANTRY_DRONE_COOLDOWN_TICKS;
         }
       }
@@ -4003,12 +4014,11 @@ function drawBoard(){
 
       // estimated center marker ― infantry targets render as an organized squad of soldiers
       let labelY = e.y+20;
-      if((t.type==='infantry'||t.type==='drone') && t.squadSeeds){
+      if(t.type==='infantry' && t.squadSeeds){
         const squadCount = Math.max(1, Math.ceil(t.squadSeeds.length * t.hp/t.maxHp));
-        const jitter = t.type==='drone' ? 9 : 4;
         for(let si=0; si<squadCount; si++){
           const off = ENEMY_FORMATION_OFFSETS[si];
-          const pos = wanderPos(e.x+off.dx, e.y+off.dy, t.squadSeeds[si], jitter, nowWander);
+          const pos = wanderPos(e.x+off.dx, e.y+off.dy, t.squadSeeds[si], 4, nowWander);
           ctx.fillStyle = t.revealed ? t.def.mark : '#8f9678';
           ctx.beginPath();
           ctx.arc(pos.x, pos.y, 2.6, 0, Math.PI*2);
@@ -4020,6 +4030,33 @@ function drawBoard(){
           ctx.font = '14px "JetBrains Mono"';
           ctx.textAlign='center';
           ctx.fillText(`敵${t.def.label} ${squadCount}/${t.squadSeeds.length}`, e.x, labelY);
+        }
+      } else if(t.type==='drone'){
+        // small quad-rotor silhouette (X-shaped arms with rotor dots), distinct
+        // from the plain circle used for vehicle/artillery.
+        const dcolor = t.revealed ? t.def.mark : '#8f9678';
+        const armLen = 7;
+        ctx.strokeStyle = dcolor;
+        ctx.lineWidth = 1.5;
+        [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([sx,sy])=>{
+          ctx.beginPath();
+          ctx.moveTo(e.x, e.y);
+          ctx.lineTo(e.x+sx*armLen, e.y+sy*armLen);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(e.x+sx*armLen, e.y+sy*armLen, 2.2, 0, Math.PI*2);
+          ctx.fillStyle = dcolor;
+          ctx.fill();
+        });
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, 2.5, 0, Math.PI*2);
+        ctx.fillStyle = dcolor;
+        ctx.fill();
+        if(t.revealed){
+          ctx.fillStyle = dcolor;
+          ctx.font = '14px "JetBrains Mono"';
+          ctx.textAlign='center';
+          ctx.fillText(t.def.label, e.x, labelY);
         }
       } else {
         ctx.fillStyle = t.revealed ? t.def.mark : '#8f9678';
