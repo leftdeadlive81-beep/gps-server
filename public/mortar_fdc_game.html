@@ -538,6 +538,9 @@ const DIFFICULTIES = {
 // to blue the same way (see HQ/mortar/scout/squad/sniper marker drawing in drawBoard).
 const ENEMY_MARK_COLOR = '#c1453b';
 const FRIENDLY_MARK_COLOR = '#6f9bbf';
+// per user request: text labels attached to a unit/target symbol are unified to white for
+// both sides, instead of inheriting each unit's identity color (red/blue/muted/etc.)
+const LABEL_TEXT_COLOR = '#e8e3ce';
 const TARGET_TYPES = {
   infantry:  {label:'歩兵',         hp:60,  radius:26, mark:ENEMY_MARK_COLOR},
   artillery: {label:'砲兵',         hp:100, radius:16, mark:ENEMY_MARK_COLOR},
@@ -3954,7 +3957,7 @@ function drawBoard(){
     ctx.moveTo(0,-22); ctx.lineTo(14,-17); ctx.lineTo(0,-12); ctx.closePath();
     ctx.fillStyle = hqAlive ? FRIENDLY_MARK_COLOR : '#5c2a25';
     ctx.fill();
-    ctx.fillStyle = '#e8e3ce';
+    ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = 'bold 15px "JetBrains Mono"';
     ctx.textAlign = 'center';
     ctx.fillText(hqAlive?'指揮所':'指揮所(壊滅)', 0, 34);
@@ -3984,7 +3987,7 @@ function drawBoard(){
     ctx.beginPath();
     ctx.moveTo(0,-12); ctx.lineTo(10,10); ctx.lineTo(-10,10); ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#8f9678';
+    ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign='center';
     ctx.fillText(mAlive?`迫撃砲${mortar.id+1}`:`迫撃砲${mortar.id+1}(戦闘不能)`, 0, 44);
@@ -3993,7 +3996,7 @@ function drawBoard(){
       if(mortar.order==='move') mOrderLabel = mortar.pendingDest ? '[移動中]' : '[移動待ち]';
       else if(mortar.pendingFire) mOrderLabel = '[射撃準備]';
       else if(mortar.order==='fire') mOrderLabel = '[攻撃地点待ち]';
-      ctx.fillStyle = mOrderLabel==='[待機]' ? '#8f9678' : '#d9a441';
+      ctx.fillStyle = LABEL_TEXT_COLOR;
       ctx.font = 'bold 13px "JetBrains Mono"';
       ctx.fillText(mOrderLabel, 0, 62);
     }
@@ -4066,7 +4069,7 @@ function drawBoard(){
     ctx.strokeStyle = scoutAlive ? 'rgba(111,155,191,0.6)' : 'rgba(92,42,37,0.6)';
     ctx.arc(0,0,11,0,Math.PI*2);
     ctx.stroke();
-    ctx.fillStyle = scoutCol;
+    ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign='center';
     ctx.fillText(scoutAlive?`斥候${scout.id+1} ${aliveCount}/${scout.soldiers.length}`:`斥候${scout.id+1}(戦闘不能)`, 0, -20);
@@ -4074,6 +4077,7 @@ function drawBoard(){
       let scoutOrderLabel = '[観測]';
       if(scout.pendingReconTargetId) scoutOrderLabel = '[偵察]';
       else if(scout.pendingDest) scoutOrderLabel = '[移動]';
+      ctx.fillStyle = LABEL_TEXT_COLOR;
       ctx.font = 'bold 13px "JetBrains Mono"';
       ctx.fillText(scoutOrderLabel, 0, 28);
     }
@@ -4107,7 +4111,7 @@ function drawBoard(){
         ctx.arc(pos.x, pos.y, 3.2, 0, Math.PI*2);
         ctx.fill();
       });
-      ctx.fillStyle = aliveSoldiers.length>0 ? FRIENDLY_MARK_COLOR : '#5c2a25';
+      ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
       ctx.textAlign='center';
       const sqOrderLabel = sq.pendingDest ? `${ORDER_LABEL[sq.order]}→移動` : ORDER_LABEL[sq.order];
@@ -4147,7 +4151,7 @@ function drawBoard(){
         ctx.arc(pos.x, pos.y, 3, 0, Math.PI*2);
         ctx.fill();
       });
-      ctx.fillStyle = aliveSoldiers.length>0 ? FRIENDLY_MARK_COLOR : '#5c2a25';
+      ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
       ctx.textAlign='center';
       const snOrderLabel = sn.pendingDest ? `${ORDER_LABEL[sn.order]}→移動` : ORDER_LABEL[sn.order];
@@ -4255,7 +4259,7 @@ function drawBoard(){
         });
         labelY = e.y+26;
         if(t.revealed){
-          ctx.fillStyle = t.def.mark;
+          ctx.fillStyle = LABEL_TEXT_COLOR;
           ctx.font = '14px "JetBrains Mono"';
           ctx.textAlign='center';
           ctx.fillText(`敵${t.def.label} ${aliveTroops.length}/${t.troops.length}`, e.x, labelY);
@@ -4282,7 +4286,7 @@ function drawBoard(){
         ctx.fillStyle = dcolor;
         ctx.fill();
         if(t.revealed){
-          ctx.fillStyle = dcolor;
+          ctx.fillStyle = LABEL_TEXT_COLOR;
           ctx.font = '14px "JetBrains Mono"';
           ctx.textAlign='center';
           ctx.fillText(t.def.label, e.x, labelY);
@@ -4293,7 +4297,7 @@ function drawBoard(){
         ctx.arc(e.x,e.y,5,0,Math.PI*2);
         ctx.fill();
         if(t.revealed){
-          ctx.fillStyle = t.def.mark;
+          ctx.fillStyle = LABEL_TEXT_COLOR;
           ctx.font = '14px "JetBrains Mono"';
           ctx.textAlign='center';
           ctx.fillText(t.def.label, e.x, labelY);
@@ -4311,12 +4315,12 @@ function drawBoard(){
       ctx.fillStyle = hpPct>0.3 ? '#c1453b' : '#f0715f';
       ctx.fillRect(tbx,tby,tBarW*hpPct,tBarH);
 
-      ctx.fillStyle = '#e8e3ce';
+      ctx.fillStyle = LABEL_TEXT_COLOR;
       ctx.font = 'bold 17px "JetBrains Mono"';
       ctx.textAlign='left';
       ctx.fillText(t.id, e.x+11, e.y-11);
       if(isSuppressed(t)){
-        ctx.fillStyle = '#d9a441';
+        ctx.fillStyle = LABEL_TEXT_COLOR;
         ctx.font = 'bold 13px "JetBrains Mono"';
         ctx.textAlign = 'center';
         ctx.fillText('[制圧]', e.x, e.y-30);
@@ -4329,7 +4333,7 @@ function drawBoard(){
       ctx.moveTo(dp.x-8,dp.y-8); ctx.lineTo(dp.x+8,dp.y+8);
       ctx.moveTo(dp.x+8,dp.y-8); ctx.lineTo(dp.x-8,dp.y+8);
       ctx.stroke();
-      ctx.fillStyle='#8f9678'; ctx.font='15px "JetBrains Mono"'; ctx.textAlign='center';
+      ctx.fillStyle=LABEL_TEXT_COLOR; ctx.font='15px "JetBrains Mono"'; ctx.textAlign='center';
       ctx.fillText(t.id+' 撃破', dp.x, dp.y-16);
     }
 
