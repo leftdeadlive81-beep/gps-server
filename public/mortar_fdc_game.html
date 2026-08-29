@@ -469,6 +469,9 @@ const OP = {x: OP_HOME_X, y: OP_HOME_Y};
 const HQ_X = 30, HQ_Y = 230;
 const HQ_MAX_HP = 200;
 const EXPOSURE_DEFAULT = 50;
+// per user request: scouts should be found/hit by the enemy at only 20% of the previous rate.
+// hitChanceFromExposure(EXPOSURE_DEFAULT) = (80-50)/100 = 30% -- solving (80-e)/100 = 30%*0.2 gives e=74.
+const SCOUT_EXPOSURE = 74;
 function hitChanceFromExposure(exposure){
   const e = clamp(exposure===undefined?EXPOSURE_DEFAULT:exposure, 1, 100);
   return clamp(80-e, 0, 100)/100;
@@ -515,17 +518,18 @@ const PRICE_FUZE = 800;
 const AMMO_PACK = 5;
 
 const DIFFICULTIES = {
+  // per user request: initial mortar ammo (HE/HEAT) is 5x what it used to be, across all difficulties
   easy: {
     label:'易しい', hpMult:0.85, counterMult:0.7, advanceMult:0.7, turnsMult:1.15,
-    startMoney:400, startHe:20, startHeat:10, rewardMult:0.9,
+    startMoney:400, startHe:100, startHeat:50, rewardMult:0.9,
   },
   normal: {
     label:'普通', hpMult:1, counterMult:1, advanceMult:1, turnsMult:1,
-    startMoney:300, startHe:16, startHeat:8, rewardMult:1,
+    startMoney:300, startHe:80, startHeat:40, rewardMult:1,
   },
   hard: {
     label:'難しい', hpMult:1.2, counterMult:1.3, advanceMult:1.25, turnsMult:0.9,
-    startMoney:220, startHe:12, startHeat:6, rewardMult:1.15,
+    startMoney:220, startHe:60, startHeat:30, rewardMult:1.15,
   },
 };
 
@@ -915,7 +919,7 @@ function initGame(){
     scouts: Array.from({length:NUM_SCOUTS}, (_,i)=>({
       id:i, x:SCOUT_X, y:SCOUT_UPPER_Y+i*40, watchAngle:90,
       soldiers: makeSoldiers(ROSTER_SCOUT_TEAMS[i]), pendingDest:null, pendingReconTargetId:null,
-      exposure: EXPOSURE_DEFAULT,
+      exposure: SCOUT_EXPOSURE,
     })),
     snipers: [],
     hq: {x:HQ_X, y:HQ_Y, hp:HQ_MAX_HP, maxHp:HQ_MAX_HP, exposure:EXPOSURE_DEFAULT},
@@ -1083,6 +1087,9 @@ function startStage(){
       squadSeeds: isInfantry ? Array.from({length:squadSize},()=>Math.random()*1000) : null,
       formationOffsets: isInfantry ? group.offsets : null,
       formationName: isInfantry ? group.formationName : null,
+      // per user request: groups should read as scattered swarms converging rather than a
+      // single wall advancing in lockstep -- each infantry group keeps its own pace.
+      speedMult: isInfantry ? rnd(0.82, 1.18) : 1,
       suppressed: 0,
       exposure: EXPOSURE_DEFAULT,
     };
@@ -1102,7 +1109,7 @@ function startStage(){
         id: i, x: SCOUT_X, y: sy,
         watchAngle: bearingBetween(SCOUT_X, sy, centroidX, centroidY),
         soldiers: makeSoldiers(ROSTER_SCOUT_TEAMS[i]), pendingDest: null, pendingReconTargetId: null,
-        exposure: EXPOSURE_DEFAULT,
+        exposure: SCOUT_EXPOSURE,
       };
     });
     state.mortars = Array.from({length:NUM_MORTARS}, (_,i)=>({
@@ -2650,7 +2657,7 @@ function advanceEnemyInfantry(actionTurns){
           return;
         }
       }
-      const step = INFANTRY_MOVE_CAP * (isSuppressed(t) ? SUPPRESSION_MOVE_MULT : 1);
+      const step = INFANTRY_MOVE_CAP * (t.speedMult||1) * (isSuppressed(t) ? SUPPRESSION_MOVE_MULT : 1);
       if(t.trueX > minX){
         const moveGoal = mergeAdjustedGoal(t, goal);
         const next = terrainAwareStep(t.trueX, t.trueY, moveGoal.x, moveGoal.y, step);
@@ -3352,26 +3359,6 @@ function assignMortarFire(idx){
   render();
 }
 
-// Locks a sniper onto the enemy-command-box target, same as manually
-// pressing "狙撃目標を指定" then clicking the target on the map.
-function assignSniperTarget(idx){
-  const sn = state.snipers[idx];
-  if(!sn || !sn.soldiers.some(s=>s.alive)) return;
-  const targetId = state.enemyCommandBox;
-  const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
-  if(!target) return;
-  if(sn.pendingSnipeTargetId===target.id){
-    sn.pendingSnipeTargetId = null;
-    log('mortar','狙撃', `狙撃${idx+1}班、${target.id}への狙撃指示を解除。`);
-    render();
-    return;
-  }
-  sn.pendingSnipeTargetId = target.id;
-  unitSpeak('sniper', idx, 'order');
-  log('mortar','狙撃', `狙撃${idx+1}班、${target.id} を狙撃目標に指示。`);
-  render();
-}
-
 // Lets a unit be selected from the 部隊稼働状況 (force status) list at the
 // bottom of the screen, opening the same command box as clicking it on the
 // map -- renderCommandBox() positions the box from the unit's own map
@@ -3709,17 +3696,15 @@ function renderEnemyCommandBox(){
     const active = m.order==='fire' && m.pendingFire && m.pendingFire.snappedId===t.id;
     return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignMortarFire(${idx})">迫撃砲${idx+1}に攻撃させる${active?'(照準中)':''}</button>`;
   }).filter(Boolean).join('');
-  const sniperBtns = state.snipers.map((sn,idx)=>{
-    if(!sn.soldiers.some(s=>s.alive)) return '';
-    const active = sn.pendingSnipeTargetId===t.id;
-    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignSniperTarget(${idx})">狙撃${idx+1}班に攻撃させる${active?'(照準中)':''}</button>`;
-  }).filter(Boolean).join('');
+  // per user request: snipers are no longer assignable from here -- they already
+  // auto-engage anything crossing their own aim line (see resolveSniperOrders),
+  // and are aimed via the "狙撃目標を指定"/"射撃方向を指定" buttons in their own unit box.
   const squadBtns = state.squads.map((sq,idx)=>{
     if(!sq.soldiers.some(s=>s.alive)) return '';
     const active = sq.order==='hunt' && sq.huntTargetId===t.id;
     return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignSquadHunt(${idx})">第${idx+1}分隊に攻撃させる${active?'(攻撃中)':''}</button>`;
   }).filter(Boolean).join('');
-  const allBtns = mortarBtns + sniperBtns + squadBtns;
+  const allBtns = mortarBtns + squadBtns;
   box.innerHTML = `
     <div class="cb-head">
       <span class="cb-title">${t.id} ― ${t.revealed?t.def.label:'識別不能'}</span>
@@ -4193,13 +4178,23 @@ function drawBoard(){
       if(t.type==='infantry' && t.squadSeeds){
         const squadCount = Math.max(1, Math.ceil(t.squadSeeds.length * t.hp/t.maxHp));
         const offsets = t.formationOffsets || ENEMY_FORMATION_TEMPLATES.box;
+        // per user request: draw each soldier as a small person glyph (head+body) rather
+        // than a plain dot, with a wider wander radius so a group of these reads as a
+        // restless swarm advancing together instead of a static clustered blob.
         for(let si=0; si<squadCount; si++){
           const off = offsets[si % offsets.length];
-          const pos = wanderPos(e.x+off.dx, e.y+off.dy, t.squadSeeds[si], 4, nowWander);
-          ctx.fillStyle = t.revealed ? t.def.mark : '#8f9678';
+          const pos = wanderPos(e.x+off.dx, e.y+off.dy, t.squadSeeds[si], 6, nowWander);
+          const color = t.revealed ? t.def.mark : '#8f9678';
+          ctx.fillStyle = color;
+          ctx.strokeStyle = color;
           ctx.beginPath();
-          ctx.arc(pos.x, pos.y, 2.6, 0, Math.PI*2);
+          ctx.arc(pos.x, pos.y-2.2, 1.4, 0, Math.PI*2);
           ctx.fill();
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(pos.x, pos.y-0.9);
+          ctx.lineTo(pos.x, pos.y+2.3);
+          ctx.stroke();
         }
         labelY = e.y+26;
         if(t.revealed){
