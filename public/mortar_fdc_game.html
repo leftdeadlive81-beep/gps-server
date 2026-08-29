@@ -1074,23 +1074,21 @@ function startStage(){
     state.reserve = RESERVE_SIZE;
     state.reserveRoster = ROSTER_RESERVE_INITIAL.slice();
   } else {
-    // subsequent waves ― survivors redeploy to their formation lines; casualties, HQ/mortar damage, ammo and reserve carry over
-    state.scouts.forEach((s,i)=>{
-      const sy = SCOUT_UPPER_Y + (NUM_SCOUTS>1 ? i*(SCOUT_LOWER_Y-SCOUT_UPPER_Y)/(NUM_SCOUTS-1) : 0);
-      s.x = SCOUT_X; s.y = sy;
-      s.watchAngle = bearingBetween(SCOUT_X, sy, centroidX, centroidY);
+    // subsequent waves ― survivors continue from their current position (no
+    // redeploy-to-formation-line reset); casualties, HQ/mortar damage, ammo
+    // and reserve carry over as before. Orders/pending actions still clear
+    // since a new wave needs fresh orders regardless of where units are standing.
+    state.scouts.forEach(s=>{
+      s.watchAngle = bearingBetween(s.x, s.y, centroidX, centroidY);
       s.pendingDest = null; s.pendingReconTargetId = null;
     });
-    state.mortars.forEach((m,i)=>{
-      m.x = OP_HOME_X; m.y = OP_HOME_Y+(i-(NUM_MORTARS-1)/2)*40;
+    state.mortars.forEach(m=>{
       m.order = 'standby'; m.pendingFire = null; m.pendingDest = null;
     });
-    state.squads.forEach((sq,si)=>{
-      sq.x = FRIENDLY_INF_POS.x; sq.y = FRIENDLY_INF_POS.y + (si-(NUM_SQUADS-1)/2)*52;
+    state.squads.forEach(sq=>{
       sq.order = 'hold'; sq.pendingDest = null; sq.huntTargetId = null; sq.reinforceUsed = false;
     });
-    state.snipers.forEach((sn,si)=>{
-      sn.x = SNIPER_POS.x; sn.y = SNIPER_POS.y + (si-(NUM_SNIPERS-1)/2)*52;
+    state.snipers.forEach(sn=>{
       sn.order = 'hold'; sn.pendingDest = null; sn.pendingSnipeTargetId = null; sn.aimAngle = null; sn.reinforceUsed = false;
     });
   }
@@ -4268,7 +4266,7 @@ const COMBAT_CALLOUTS = {
   injury: ['誰か助けてくれ！','衛生兵！','撃たれた！','やられた！','動けない！','出血がひどい！','死ぬな！','しっかりしろ！','傷を見せろ！','すぐ運べ！','息をしてない！','まだ生きてる！','担架を持ってこい！'],
   ammo: ['弾切れだ！','弾をくれ！','予備弾倉！','リロード中！','銃が壊れた！','無線が繋がらない！','燃料が切れた！'],
   morale: ['諦めるな！','行けるぞ！','頑張れ！','まだやれる！','負けるな！','仲間を信じろ！','一緒に生き延びるぞ！','家族のために！','祖国のために！','俺たちならできる！'],
-  coordination: ['こちら応答せよ！','状況を報告しろ！','位置を教えろ！','目標確認！','座標を送れ！','こちら〇〇小隊！','了解！','確認した！','進捗はどうだ！','応援を呼べ！'],
+  coordination: ['こちら応答せよ！','状況を報告しろ！','位置を教えろ！','目標確認！','座標を送れ！','こちら小隊！','了解！','確認した！','進捗はどうだ！','応援を呼べ！'],
   panic: ['逃げろ！','どうすればいい！','もうダメだ！','終わりだ！','助けてくれ！','誰かいないのか！','こっちに来い！','何が起きてる！','パニックになるな！','落ち着け！'],
   victory: ['やったぞ！','制圧完了！','敵を撃退した！','安全確保！','戦闘終了！','全員無事か！','生きてるか！','帰るぞ！','よくやった！','任務完了！'],
 };
@@ -4282,12 +4280,24 @@ function calloutUnitRef(kind, idx){
   if(kind==='sniper') return state.snipers[idx];
   return null;
 }
+const RANK_ABBR = {
+  '1等陸佐':'1佐', '2等陸佐':'2佐', '3等陸佐':'3佐',
+  '1等陸尉':'1尉', '2等陸尉':'2尉', '3等陸尉':'3尉',
+  '准陸尉':'准尉',
+  '陸曹長':'曹長',
+  '1等陸曹':'1曹', '2等陸曹':'2曹', '3等陸曹':'3曹',
+  '陸士長':'士長',
+  '1等陸士':'1士', '2等陸士':'2士',
+};
 function calloutSpeakerName(kind, idx){
   const u = calloutUnitRef(kind, idx);
   if(!u) return null;
-  if(kind==='mortar') return (u.hp>0 && u.crew && u.crew[0]) ? u.crew[0].name : null;
-  const soldier = u.soldiers && u.soldiers.find(s=>s.alive);
-  return soldier ? soldier.name : null;
+  const person = kind==='mortar'
+    ? ((u.hp>0 && u.crew && u.crew[0]) ? u.crew[0] : null)
+    : (u.soldiers && u.soldiers.find(s=>s.alive));
+  if(!person) return null;
+  const abbr = RANK_ABBR[person.rank] || person.rank;
+  return `${person.name}${abbr}`;
 }
 function unitSpeak(kind, idx, category){
   const list = COMBAT_CALLOUTS[category];
