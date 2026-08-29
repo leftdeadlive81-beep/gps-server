@@ -92,6 +92,13 @@
   #statbar-content{display:none;margin-top:10px;}
   #statbar-content.expanded{display:flex;}
 
+  .board-title-header{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;}
+  .board-title-header:hover{color:var(--amber);}
+  .board-note-hint{
+    font-family:var(--font-mono);font-size:10px;color:var(--amber-dim);
+    margin-left:auto;flex:0 0 auto;text-transform:none;letter-spacing:.5px;
+  }
+
   .bottombar{
     display:flex;gap:12px;flex:0 0 auto;
   }
@@ -124,8 +131,9 @@
     body{padding:8px;}
     .panel{padding:10px;}
     .board-wrap{height:min(50vh, 460px); min-height:220px;}
-    .enemy-overlay{width:auto; max-width:44vw; padding:7px 9px; top:6px; right:6px;}
-    .eo-count{font-size:18px;}
+    .enemy-overlay{width:auto; max-width:34vw; padding:5px 7px; top:6px; right:6px;}
+    .eo-count{font-size:15px;}
+    .map-fullscreen-btn{width:28px; height:28px; left:6px; bottom:6px; font-size:13px;}
     .statbar{gap:5px;}
     .stat{min-width:70px; padding:5px 6px;}
     .stat .value{font-size:15px;}
@@ -138,18 +146,19 @@
     .decision-panel{display:none;}
     .decision-overlay-mobile{
       display:block;
-      position:absolute; right:8px; bottom:8px; z-index:45;
-      width:min(220px,56vw); pointer-events:auto;
+      position:absolute; right:6px; bottom:6px; z-index:45;
+      width:min(170px,48vw); pointer-events:auto;
       background:rgba(18,21,13,0.92); border:1px solid var(--amber-dim); border-radius:5px;
-      padding:8px 9px; backdrop-filter:blur(2px);
+      padding:6px 7px; backdrop-filter:blur(2px);
       box-shadow:0 4px 14px rgba(0,0,0,.4);
     }
     .decision-overlay-mobile .decision-box{background:none; border:none; padding:0; margin-bottom:0;}
-    .decision-overlay-mobile .decision-summary{font-size:10px; max-height:52px; overflow-y:auto; margin-bottom:6px;}
-    .decision-overlay-mobile .decision-btn{padding:9px 6px; font-size:12.5px;}
+    .decision-overlay-mobile .decision-summary{font-size:9px; max-height:38px; overflow-y:auto; margin-bottom:4px;}
+    .decision-overlay-mobile .decision-btn{padding:7px 5px; font-size:11px;}
   }
 
-  .board-note{font-size:10px;color:var(--muted);margin:-6px 0 8px;flex:0 0 auto;}
+  .board-note{display:none;font-size:10px;color:var(--muted);margin:-2px 0 8px;flex:0 0 auto;}
+  .board-note.expanded{display:block;}
 
   .board-panel{display:flex;flex-direction:column;min-height:0;flex:1 1 auto;margin-bottom:12px;}
 
@@ -159,16 +168,26 @@
   #board{position:absolute;inset:0;width:100%;height:100%;display:block;background:transparent;touch-action:none;}
 
   .enemy-overlay{
-    position:absolute; top:10px; right:10px; width:180px; max-width:45vw; max-height:calc(100% - 20px);
+    position:absolute; top:8px; right:8px; width:132px; max-width:38vw; max-height:calc(100% - 16px);
     overflow-y:auto; pointer-events:none;
     background:rgba(18,21,13,0.86); border:1px solid var(--red-dim); border-radius:4px;
-    padding:9px 11px; backdrop-filter:blur(2px);
+    padding:6px 8px; backdrop-filter:blur(2px);
   }
   .eo-head{
-    font-family:var(--font-mono);font-size:10.5px;letter-spacing:1.5px;color:var(--red);
-    text-transform:uppercase;margin-bottom:4px;
+    font-family:var(--font-mono);font-size:9px;letter-spacing:1px;color:var(--red);
+    text-transform:uppercase;margin-bottom:2px;
   }
-  .eo-count{font-family:var(--font-mono);font-size:22px;font-weight:700;color:var(--ink);margin-bottom:6px;}
+  .eo-count{font-family:var(--font-mono);font-size:17px;font-weight:700;color:var(--ink);margin-bottom:3px;}
+
+  .map-fullscreen-btn{
+    position:absolute; left:8px; bottom:8px; z-index:46;
+    width:30px; height:30px; padding:0;
+    border:1px solid var(--edge-dim); border-radius:6px;
+    background:rgba(18,21,13,0.86); color:var(--ink); font-size:14px; line-height:1;
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+    backdrop-filter:blur(2px);
+  }
+  .map-fullscreen-btn:hover{background:rgba(30,36,20,0.92); border-color:var(--amber-dim); color:var(--amber);}
 
   .command-box{
     position:fixed; z-index:60; width:230px; max-width:90vw;
@@ -217,12 +236,12 @@
   .roster-row.dead .r-rank{color:var(--red);}
   .roster-row.dead .r-name{text-decoration:line-through;}
 
-  .enemy-breakdown{display:flex;flex-direction:column;gap:6px;}
-  .enemy-breakdown .eb-row{display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:12px;}
-  .enemy-breakdown .eb-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}
+  .enemy-breakdown{display:flex;flex-direction:column;gap:3px;}
+  .enemy-breakdown .eb-row{display:flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:10.5px;}
+  .enemy-breakdown .eb-dot{width:6px;height:6px;border-radius:50%;flex:0 0 auto;}
   .enemy-breakdown .eb-type{color:var(--ink);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .enemy-breakdown .eb-scale{color:var(--muted);white-space:nowrap;margin-left:auto;font-size:11px;}
-  .enemy-breakdown .eb-empty{font-size:11px;color:var(--muted);font-style:italic;}
+  .enemy-breakdown .eb-scale{color:var(--muted);white-space:nowrap;margin-left:auto;font-size:9.5px;}
+  .enemy-breakdown .eb-empty{font-size:9.5px;color:var(--muted);font-style:italic;}
 
   .scout-row{
     background:var(--panel-2);border:1px solid var(--edge-dim);border-radius:3px;
@@ -351,7 +370,10 @@
   </div>
 
   <div class="panel board-panel">
-    <div class="panel-title">Plotting Board ― 戦況図</div>
+    <div class="panel-title board-title-header" onclick="toggleBoardNote()">
+      <span>Plotting Board ― 戦況図</span>
+      <span class="board-note-hint" id="board-note-caret">▸ 使い方</span>
+    </div>
     <div class="board-note" id="board-note">自軍は左側、敵軍は右側遠方に展開。ドラッグでパン・ホイールでズーム。目標をクリックして選択</div>
     <div class="board-wrap">
       <canvas id="board3d"></canvas>
@@ -362,6 +384,7 @@
         <div class="enemy-breakdown" id="enemy-breakdown"></div>
       </div>
       <div class="decision-panel-holder decision-overlay-mobile"></div>
+      <button class="map-fullscreen-btn" id="mapFullscreenBtn" onclick="toggleMapFullscreen()" title="全画面表示にする">⛶</button>
     </div>
   </div>
 
@@ -1621,6 +1644,35 @@ function toggleStatbar(){
   const expanded = content.classList.toggle('expanded');
   caret.textContent = expanded ? '▾' : '▸';
 }
+
+function toggleBoardNote(){
+  const note = document.getElementById('board-note');
+  const hint = document.getElementById('board-note-caret');
+  const expanded = note.classList.toggle('expanded');
+  hint.textContent = expanded ? '▾ 使い方' : '▸ 使い方';
+}
+
+function toggleMapFullscreen(){
+  const el = document.documentElement;
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if(!fsEl){
+    const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if(req) req.call(el);
+  } else {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+    if(exit) exit.call(document);
+  }
+}
+
+function updateFullscreenBtnIcon(){
+  const btn = document.getElementById('mapFullscreenBtn');
+  if(!btn) return;
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  btn.textContent = fsEl ? '⤢' : '⛶';
+  btn.title = fsEl ? '全画面表示を解除' : '全画面表示にする';
+}
+document.addEventListener('fullscreenchange', updateFullscreenBtnIcon);
+document.addEventListener('webkitfullscreenchange', updateFullscreenBtnIcon);
 
 function openAchievements(){
   const body = document.getElementById('achievements-body');
@@ -3111,7 +3163,7 @@ function renderDecisionPanel(){
     const remaining = state.placementQueue.length - state.placementIndex;
     holders.forEach(h=>{ h.innerHTML = `
       <div class="decision-box">
-        <div class="decision-summary">手動配置モード ― 地図をクリックして配置<br>次に配置: <b>${item?item.label:'―'}</b>(残り${remaining}ユニット)</div>
+        <div class="decision-summary">次に配置: <b>${item?item.label:'―'}</b>(残り${remaining})</div>
         <button class="btn" onclick="skipRemainingPlacement()">残りを既定配置で開始</button>
       </div>
     `; });
@@ -3134,10 +3186,10 @@ function renderDecisionPanel(){
     if(sn.pendingSnipeTargetId) queued.push(`狙撃${idx+1}班: 狙撃`);
     else if(sn.pendingDest) queued.push(`狙撃${idx+1}班: 移動`);
   });
-  const summary = queued.length ? queued.join(' / ') : '各ユニットに行動を指示してください(未指示でも様子見として実行可)';
+  const summary = queued.join(' / ');
   holders.forEach(h=>{ h.innerHTML = `
     <div class="decision-box">
-      <div class="decision-summary">${summary}</div>
+      ${summary ? `<div class="decision-summary">${summary}</div>` : ''}
       <button class="btn primary decision-btn" ${disabled?'disabled':''} onclick="commitDecision()">決心 (${turnCost}ターン消費)</button>
     </div>
   `; });
