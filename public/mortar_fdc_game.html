@@ -535,7 +535,7 @@ const TARGET_TYPES = {
 const DRONE_INTRO_STAGE = 3;
 const CONTOUR_LEVELS = [0.25, 0.5, 0.75, 1.0, 1.25];
 const CONTOUR_CELL = 22;
-const SHELLS = {he:'榴弾(HE)', heat:'対戦車榴弾(HEAT)'};
+const SHELLS = {he:'榴弾(HE)', heat:'対戦車榴弾(HEAT)', smoke:'発煙弾', marker:'マーカー弾', illum:'照明弾'};
 const FUZES  = {impact:'着発信管', proximity:'近接信管', delay:'遅延信管'};
 const COUNTER_CHANCE = {infantry:0.06, artillery:0.19, vehicle:0.05, drone:0.04};
 const COUNTER_DAMAGE = {infantry:[4,9], artillery:[14,24], vehicle:[5,9], drone:[2,5]};
@@ -544,6 +544,12 @@ const VEHICLE_ASSAULT_DAMAGE = [10,18];
 const DRONE_SPEED = 70;
 const DRONE_DETONATE_RANGE = 38;
 const DRONE_DETONATE_DAMAGE = [8,16];
+const INFANTRY_DRONE_LAUNCH_CHANCE = 0.05; // per action-tick, per live infantry unit not in contact
+const INFANTRY_DRONE_COOLDOWN_TICKS = 6;
+const MINE_DAMAGE = [8,18];
+const MINE_PLACEMENT_CHANCE = 0.12; // per enemy-turn resolution
+const MINE_MAX_ACTIVE = 4;
+const MERGE_HP_THRESHOLD = 0.4; // below this HP fraction, an enemy unit regroups toward the nearest surviving unit instead of advancing
 const INFANTRY_DUEL_DMG_TO_ENEMY = [4,9];
 const SQUAD_SIZE = 10;
 const NUM_SQUADS = 4;
@@ -723,6 +729,12 @@ const SHELL_KILL_RADIUS_UNITS = {
   he: SHELL_KILL_RADIUS_M.he / METERS_PER_UNIT,
   heat: SHELL_KILL_RADIUS_M.heat / METERS_PER_UNIT,
 };
+const SMOKE_RADIUS_M = 60;
+const SMOKE_RADIUS_UNITS = SMOKE_RADIUS_M / METERS_PER_UNIT;
+const SMOKE_DURATION_TURNS = 3;
+const MARKER_REVEAL_RADIUS_UNITS = CONTACT_RANGE_UNITS; // 200m, same as normal contact-reveal range
+const MINE_TRIGGER_RADIUS_M = 20;
+const MINE_TRIGGER_RADIUS_UNITS = MINE_TRIGGER_RADIUS_M / METERS_PER_UNIT;
 const MORTAR_DISPERSION_M = 30;
 const MORTAR_DISPERSION_UNITS = MORTAR_DISPERSION_M / METERS_PER_UNIT;
 const VISUAL_LERP_RATE = 0.12;
@@ -849,6 +861,8 @@ function initGame(){
     terrain: [],
     contours: null,
     roads: [],
+    smokeClouds: [],
+    mines: [],
     turns: 0,
     targets: [],
     selectedId: null,
@@ -952,6 +966,8 @@ function startStage(){
   state.terrain = generateTerrain();
   state.contours = computeContours();
   state.roads = REAL_ROADS_CANVAS;
+  state.smokeClouds = [];
+  state.mines = [];
   const count = Math.min(3+Math.floor((stage-1)/3), 5);
   const diff = DIFFICULTIES[state.difficulty];
   const hpMult = (1 + (stage-1)*0.08) * diff.hpMult;
@@ -1411,12 +1427,14 @@ function hasLineOfSight(fromX,fromY,toX,toY){
   const steps = Math.max(6, Math.floor(dist/25));
   const fromE = elevationAt(fromX,fromY)+EYE_HEIGHT;
   const toE = elevationAt(toX,toY)+EYE_HEIGHT;
+  const smokeClouds = state && state.smokeClouds;
   for(let i=1;i<steps;i++){
     const t = i/steps;
     const x = fromX+(toX-fromX)*t;
     const y = fromY+(toY-fromY)*t;
     const sightE = fromE+(toE-fromE)*t;
     if(elevationAt(x,y) > sightE+0.02) return false;
+    if(smokeClouds && smokeClouds.some(c=>Math.hypot(x-c.x,y-c.y) <= SMOKE_RADIUS_UNITS)) return false;
   }
   return true;
 }
@@ -1569,6 +1587,7 @@ function resolveOneScoutDecision(scout, idx){
     const next = terrainAwareStep(scout.x, scout.y, scout.pendingDest.x, scout.pendingDest.y, 50);
     scout.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SCOUT_ADVANCE_LIMIT_X);
     scout.y = clamp(next.y, 20, CANVAS_H-20);
+    checkMineTrigger('scout', idx, scout.x, scout.y);
     if(Math.hypot(scout.x-scout.pendingDest.x, scout.y-scout.pendingDest.y) < 12){
       scout.pendingDest = null;
       log('op','斥候', `斥候${idx+1}、指定地点に到着。`);
@@ -1621,6 +1640,7 @@ function resolveOneMortarDecision(mortar){
   const next = terrainAwareStep(mortar.x, mortar.y, mortar.pendingDest.x, mortar.pendingDest.y, MORTAR_MOVE_CAP);
   mortar.x = clamp(next.x, MORTAR_ZONE_MIN_X, MORTAR_ZONE_MAX_X);
   mortar.y = clamp(next.y, 30, CANVAS_H-30);
+  checkMineTrigger('mortar', mortar.id, mortar.x, mortar.y);
   if(Math.hypot(mortar.x-mortar.pendingDest.x, mortar.y-mortar.pendingDest.y) < 12){
     mortar.pendingDest = null;
     mortar.order = 'standby';
@@ -1800,6 +1820,7 @@ function applySquadMovement(sq, sqIdx){
     const next = terrainAwareStep(sq.x, sq.y, sq.pendingDest.x, sq.pendingDest.y, INFANTRY_MOVE_CAP);
     sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
     sq.y = clamp(next.y, 30, CANVAS_H-30);
+    checkMineTrigger('squad', sqIdx, sq.x, sq.y);
     if(Math.hypot(sq.x-sq.pendingDest.x, sq.y-sq.pendingDest.y) < 12){
       sq.pendingDest = null;
       log('sys','前線', `第${sqIdx+1}分隊、指定地点に到着。`);
@@ -1834,6 +1855,7 @@ function applySquadMovement(sq, sqIdx){
       sq.y = clamp(next.y, 30, CANVAS_H-30);
     }
   }
+  checkMineTrigger('squad', sqIdx, sq.x, sq.y);
 }
 
 function resolveSquadOrders(actionTurns){
@@ -1900,6 +1922,7 @@ function applySniperMovement(sn){
     const next = terrainAwareStep(sn.x, sn.y, sn.pendingDest.x, sn.pendingDest.y, SNIPER_MOVE_CAP);
     sn.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
     sn.y = clamp(next.y, 30, CANVAS_H-30);
+    checkMineTrigger('sniper', sn.id, sn.x, sn.y);
     if(Math.hypot(sn.x-sn.pendingDest.x, sn.y-sn.pendingDest.y) < 12){
       sn.pendingDest = null;
       log('sys','前線', `狙撃${sn.id+1}班、指定地点に到着。`);
@@ -1915,6 +1938,7 @@ function applySniperMovement(sn){
     sn.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
     sn.y = clamp(next.y, 30, CANVAS_H-30);
   }
+  checkMineTrigger('sniper', sn.id, sn.x, sn.y);
 }
 
 function resolveSniperOrders(actionTurns){
@@ -2138,6 +2162,77 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
   }
 }
 
+// Enemy infantry occasionally launches a suicide drone as a new independent
+// target, rather than drones only ever being pre-spawned at stage start.
+function spawnInfantryDrone(source){
+  const def = TARGET_TYPES.drone;
+  const hpMult = (1 + (state.stage-1)*0.08) * DIFFICULTIES[state.difficulty].hpMult;
+  const hp = Math.round(def.hp * hpMult);
+  const trueX = clamp(source.trueX + rnd(-20,20), 20, CANVAS_W-20);
+  const trueY = clamp(source.trueY + rnd(-20,20), 20, CANVAS_H-20);
+  const dx = trueX-OP.x, dy = trueY-OP.y;
+  const trueBearing = (Math.atan2(dx,-dy)*180/Math.PI+360)%360;
+  const trueDistance = Math.sqrt(dx*dx+dy*dy);
+  const drone = {
+    id: 'T'+(state.targets.length+1),
+    type:'drone', def,
+    trueX, trueY, trueBearing, trueDistance,
+    hp, maxHp:hp,
+    destroyed:false, revealed:false, reconCount:0,
+    bearingErr: source.bearingErr, distErr: source.distErr,
+    bOffset: rnd(-1,1), dOffset: rnd(-1,1),
+    impacts:[],
+    squadSeeds: Array.from({length:6},()=>Math.random()*1000),
+    suppressed:0,
+    exposure: EXPOSURE_DEFAULT,
+  };
+  state.targets.push(drone);
+  log('sys','警報', `${source.id} が自爆ドローンを発進させた。${drone.id} を確認。`);
+}
+
+// As an enemy unit's own losses (HP) mount, it tends to fall back and
+// regroup with the nearest other surviving unit instead of continuing to
+// press its own advance alone.
+function nearestOtherAliveTarget(t){
+  let best=null, bd=Infinity;
+  state.targets.forEach(o=>{
+    if(o===t || o.destroyed) return;
+    const d = Math.hypot(o.trueX-t.trueX, o.trueY-t.trueY);
+    if(d<bd){ bd=d; best=o; }
+  });
+  return best;
+}
+function mergeAdjustedGoal(t, defaultGoal){
+  if(t.hp/t.maxHp > MERGE_HP_THRESHOLD) return defaultGoal;
+  const ally = nearestOtherAliveTarget(t);
+  if(!ally) return defaultGoal;
+  return {x: ally.trueX, y: ally.trueY};
+}
+
+// Enemy-laid road mines. Roads are visually hidden but their geometry
+// (state.roads) is still tracked purely as a "judgment" data source (see the
+// terrainAwareStep comment) -- mines are placed along that same geometry.
+function maybePlaceMine(){
+  if(!state.roads || state.roads.length===0) return;
+  if(state.mines.length >= MINE_MAX_ACTIVE) return;
+  if(Math.random() > MINE_PLACEMENT_CHANCE) return;
+  const candidateRoads = state.roads.filter(r=>r.length>1);
+  if(!candidateRoads.length) return;
+  const road = choice(candidateRoads);
+  const pt = choice(road);
+  state.mines.push({x:pt.x, y:pt.y});
+  log('sys','警報', `敵が付近の道路に地雷を敷設した形跡がある。`);
+}
+function checkMineTrigger(kind, idx, x, y){
+  if(!state.mines || !state.mines.length) return;
+  const hitIdx = state.mines.findIndex(m=>Math.hypot(m.x-x, m.y-y) <= MINE_TRIGGER_RADIUS_UNITS);
+  if(hitIdx<0) return;
+  state.mines.splice(hitIdx,1);
+  const dmg = Math.round(rnd(MINE_DAMAGE[0], MINE_DAMAGE[1]));
+  damageFriendlyAsset({kind, idx}, dmg, '地雷');
+  unitSpeak(kind, idx, 'warning');
+}
+
 function resolveVehicleAssault(actionTurns){
   const vehicles = state.targets.filter(t=>!t.destroyed && t.type==='vehicle');
   if(vehicles.length===0) return false;
@@ -2177,7 +2272,8 @@ function resolveVehicleAssault(actionTurns){
       } else {
         const suppressionMoveMult = isSuppressed(t) ? SUPPRESSION_MOVE_MULT : 1;
         const step = Math.min((45 + state.stage*2.6) * DIFFICULTIES[state.difficulty].advanceMult, VEHICLE_MOVE_CAP) * suppressionMoveMult;
-        const next = terrainAwareStep(t.trueX, t.trueY, near.x, near.y, step);
+        const moveGoal = mergeAdjustedGoal(t, near);
+        const next = terrainAwareStep(t.trueX, t.trueY, moveGoal.x, moveGoal.y, step);
         t.trueX = next.x; t.trueY = clamp(next.y, 30, CANVAS_H-30);
         const dx = t.trueX-OP.x, dy = t.trueY-OP.y;
         t.trueBearing = (Math.atan2(dx,-dy)*180/Math.PI+360)%360;
@@ -2241,6 +2337,15 @@ function advanceEnemyInfantry(actionTurns){
   for(let i=0;i<actionTurns;i++){
     enemyInfantry.forEach(t=>{
       if(t.destroyed) return;
+      if(state.stage >= DRONE_INTRO_STAGE){
+        if(t._droneCooldown === undefined) t._droneCooldown = Math.floor(rnd(2, INFANTRY_DRONE_COOLDOWN_TICKS));
+        if(t._droneCooldown > 0){
+          t._droneCooldown -= 1;
+        } else if(Math.random() < INFANTRY_DRONE_LAUNCH_CHANCE){
+          spawnInfantryDrone(t);
+          t._droneCooldown = INFANTRY_DRONE_COOLDOWN_TICKS;
+        }
+      }
       const inContact = aliveSquads.some(sq=>Math.hypot(t.trueX-sq.x, t.trueY-sq.y) <= SQUAD_ENGAGE_RANGE);
       if(inContact){
         if(!t._contactLogged){
@@ -2266,7 +2371,8 @@ function advanceEnemyInfantry(actionTurns){
       }
       const step = INFANTRY_MOVE_CAP * (isSuppressed(t) ? SUPPRESSION_MOVE_MULT : 1);
       if(t.trueX > minX){
-        const next = terrainAwareStep(t.trueX, t.trueY, goal.x, goal.y, step);
+        const moveGoal = mergeAdjustedGoal(t, goal);
+        const next = terrainAwareStep(t.trueX, t.trueY, moveGoal.x, moveGoal.y, step);
         t.trueX = Math.max(minX, next.x);
         t.trueY = clamp(next.y, 30, CANVAS_H-30);
         const dx = t.trueX-OP.x, dy = t.trueY-OP.y;
@@ -2281,6 +2387,7 @@ function advanceEnemyInfantry(actionTurns){
 
 function resolveEnemyTurn(actionTurns){
   log('sys','敵ターン', '━━━ 敵が行動 ━━━');
+  maybePlaceMine();
   const advanced = advanceEnemyInfantry(actionTurns);
   const assaulted = resolveVehicleAssault(actionTurns);
   const swarmed = resolveDroneSwarm(actionTurns);
@@ -2327,6 +2434,31 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
         duration: FLIGHT_DURATION,
         onLand: ()=>{
           volleyImpacts.push({x:ix,y:iy});
+          if(shell==='illum' || shell==='smoke' || shell==='marker'){
+            hitAny = true;
+            if(shell==='illum'){
+              log('mortar','観測', `弾着${i+1}: 照明弾展開。夜間視界を確保(効果なし)。`);
+            } else if(shell==='smoke'){
+              state.smokeClouds.push({x:ix, y:iy, turnsLeft:SMOKE_DURATION_TURNS});
+              log('mortar','観測', `弾着${i+1}: 発煙弾展開。半径${Math.round(SMOKE_RADIUS_M)}mを遮蔽(${SMOKE_DURATION_TURNS}ターン持続)。`);
+            } else {
+              let revealedCount = 0;
+              state.targets.forEach(target=>{
+                if(target.destroyed) return;
+                if(Math.hypot(ix-target.trueX, iy-target.trueY) <= MARKER_REVEAL_RADIUS_UNITS){
+                  if(revealTarget(target)) revealedCount += 1;
+                }
+              });
+              log('mortar','観測', `弾着${i+1}: マーカー弾(試射)着弾。半径200m以内の目標${revealedCount}件を捕捉、以後表示継続。`);
+            }
+            pending -= 1;
+            if(pending <= 0){
+              finalizeVolley(snappedTarget, hitAny, volleyImpacts);
+              onVolleyDone();
+            }
+            render();
+            return;
+          }
           const killRadius = SHELL_KILL_RADIUS_UNITS[shell];
           let hitTarget = null, nearMiss = false;
           state.targets.forEach(target=>{
@@ -2401,6 +2533,9 @@ function commitDecision(){
   state.turns += turnCost;
   state.ammo.he -= ammoNeeded.he;
   state.ammo.heat -= ammoNeeded.heat;
+
+  state.smokeClouds.forEach(c=>{ c.turnsLeft -= 1; });
+  state.smokeClouds = state.smokeClouds.filter(c=>c.turnsLeft>0);
 
   speakRandomAliveUnit('coordination');
   log('sys','司令部', '━━━ 決心 ━━━');
@@ -2907,6 +3042,9 @@ function mortarBoxHtml(idx){
         <select onchange="updateFireConfig(${idx},'fireShell', this.value)">
           <option value="he" ${mortar.fireShell==='he'?'selected':''}>榴弾 (HE) ― 対人・対集団</option>
           <option value="heat" ${mortar.fireShell==='heat'?'selected':''}>対戦車榴弾 (HEAT) ― 対装甲</option>
+          <option value="smoke" ${mortar.fireShell==='smoke'?'selected':''}>発煙弾 ― 視界遮蔽</option>
+          <option value="marker" ${mortar.fireShell==='marker'?'selected':''}>マーカー弾 ― 試射・半径200m捕捉</option>
+          <option value="illum" ${mortar.fireShell==='illum'?'selected':''}>照明弾 ― 夜間照明(効果なし)</option>
         </select>
       </div>
       <div class="row-2">
@@ -3731,6 +3869,24 @@ function drawBoard(){
     ctx.lineWidth = 2;
     ctx.arc(rp.x, rp.y, 10+p*40, 0, Math.PI*2);
     ctx.stroke();
+  });
+
+  // smoke clouds (発煙弾) ― billowing, semi-transparent blobs that fade as they age
+  (state.smokeClouds||[]).forEach(c=>{
+    const cp = project(c.x, c.y);
+    if(!cp.visible) return;
+    const age = 1 - clamp(c.turnsLeft/SMOKE_DURATION_TURNS, 0, 1);
+    const alpha = 0.5 - age*0.2;
+    const puffs = [
+      {dx:0, dy:0, r:26}, {dx:-14, dy:6, r:18}, {dx:14, dy:5, r:19},
+      {dx:-6, dy:-12, r:16}, {dx:9, dy:-10, r:15},
+    ];
+    puffs.forEach(pf=>{
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(210,210,205,${alpha})`;
+      ctx.arc(cp.x+pf.dx, cp.y+pf.dy, pf.r, 0, Math.PI*2);
+      ctx.fill();
+    });
   });
 
   // weather tint overlay
