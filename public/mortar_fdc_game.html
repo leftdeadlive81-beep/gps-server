@@ -489,6 +489,18 @@ const PRICE_EQUIP = {armor:1200, optics:1000, wideView:900, extMag:800};
 const REINFORCE_COST_PER_SOLDIER = 220;
 const REINFORCE_MAX_PER_CALL = 2;
 
+// per user request: a veteran system for retention -- soldiers (squad/scout/sniper, the
+// front-line personnel with individual alive-state) who survive a wave gain XP; every
+// VET_XP_PER_LEVEL waves survived earns a level, up to VET_MAX_LEVEL. Levels raise both
+// survivability (folded into getUnitExposure, so it flows through every existing
+// damage-avoidance path for free) and combat output (applied directly where each unit type
+// deals damage). Losing a leveled-up soldier is a real loss, which is the point -- it's what
+// makes keeping specific named soldiers alive matter run after run.
+const VET_XP_PER_LEVEL = 3;
+const VET_MAX_LEVEL = 5;
+const VET_DMG_BONUS_PER_LEVEL = 0.04;
+const VET_EXPOSURE_BONUS_PER_LEVEL = 5;
+
 const ACHIEVEMENTS = {
   firstBlood:       {label:'初陣',         desc:'初めて目標を撃破する'},
   oneShotKill:      {label:'一撃必殺',     desc:'無傷の目標を1発の命中で撃破する'},
@@ -500,6 +512,7 @@ const ACHIEVEMENTS = {
   ironWall:         {label:'鉄壁',         desc:'HPが20%以下から立て直しWAVEを撃退する'},
   millionaire:      {label:'戦時成金',     desc:'所持金¥5000に到達する'},
   campaignComplete: {label:'全WAVE制覇',   desc:'全50WAVEを耐え抜く'},
+  veteranMaster:    {label:'歴戦の勇士',   desc:'兵士1名を最高練度(Lv.5)まで生き延びさせる'},
 };
 
 const WEATHER_TYPES = {
@@ -970,7 +983,13 @@ function wanderPos(homeX, homeY, seed, radius, now){
 }
 
 function makeSoldiers(people){
-  return people.map((p,i)=>({id:i, alive:true, seed:Math.random()*1000, rank:p.rank, name:p.name}));
+  return people.map((p,i)=>({id:i, alive:true, seed:Math.random()*1000, rank:p.rank, name:p.name, vetXp:0}));
+}
+function vetLevelOf(soldier){ return Math.min(VET_MAX_LEVEL, Math.floor((soldier.vetXp||0)/VET_XP_PER_LEVEL)); }
+function unitAvgVetLevel(soldiers){
+  const alive = soldiers.filter(s=>s.alive);
+  if(!alive.length) return 0;
+  return alive.reduce((sum,s)=>sum+vetLevelOf(s), 0) / alive.length;
 }
 function unitAliveCount(u){ return u.soldiers.filter(s=>s.alive).length; }
 function unitAlive(u){ return unitAliveCount(u) > 0; }
@@ -2146,7 +2165,8 @@ function resolveSquadOrders(actionTurns){
         const squadAltMult = altitudeBonus(sq.x, sq.y, t.trueX, t.trueY);
         const suppressionDmgMult = suppressed ? SUPPRESSION_DUEL_DMG_BONUS : 1;
         const enemyExposureMult = exposureNormalizedMult(t.exposure);
-        const dmgToEnemy = Math.round(rnd(INFANTRY_DUEL_DMG_TO_ENEMY[0], INFANTRY_DUEL_DMG_TO_ENEMY[1]) * strengthFrac * dmgMult * squadAltMult * suppressionDmgMult * enemyExposureMult);
+        const vetDmgMult = 1 + unitAvgVetLevel(sq.soldiers)*VET_DMG_BONUS_PER_LEVEL;
+        const dmgToEnemy = Math.round(rnd(INFANTRY_DUEL_DMG_TO_ENEMY[0], INFANTRY_DUEL_DMG_TO_ENEMY[1]) * strengthFrac * dmgMult * squadAltMult * suppressionDmgMult * enemyExposureMult * vetDmgMult);
         applyDamageToTarget(t, dmgToEnemy);
         anyEvent = true;
         // per user request: show a shooting animation for the squad's own outgoing fire too,
@@ -2159,7 +2179,7 @@ function resolveSquadOrders(actionTurns){
         }
         const enemyAltMult = altitudeBonus(t.trueX, t.trueY, sq.x, sq.y);
         const suppressionCasualtyMult = suppressed ? SUPPRESSION_CASUALTY_MULT : 1;
-        const casualtyChance = (0.08 + state.stage*0.008) * casualtyMult * enemyAltMult * suppressionCasualtyMult * exposureNormalizedMult(sq.exposure);
+        const casualtyChance = (0.08 + state.stage*0.008) * casualtyMult * enemyAltMult * suppressionCasualtyMult * exposureNormalizedMult(getUnitExposure({kind:'squad', idx:sqIdx}));
         if(Math.random() < casualtyChance){
           const victim = choice(curAlive);
           victim.alive = false;
@@ -2215,7 +2235,8 @@ function sniperEngageTarget(sn, t){
   const strengthFrac = curAlive.length/sn.soldiers.length;
   const altMult = altitudeBonus(sn.x, sn.y, t.trueX, t.trueY);
   const suppressionDmgMult = isSuppressed(t) ? SUPPRESSION_DUEL_DMG_BONUS : 1;
-  const dmg = Math.round(rnd(SNIPER_DMG[0], SNIPER_DMG[1]) * strengthFrac * altMult * suppressionDmgMult);
+  const vetDmgMult = 1 + unitAvgVetLevel(sn.soldiers)*VET_DMG_BONUS_PER_LEVEL;
+  const dmg = Math.round(rnd(SNIPER_DMG[0], SNIPER_DMG[1]) * strengthFrac * altMult * suppressionDmgMult * vetDmgMult);
   applyDamageToTarget(t, dmg);
   log('mortar','狙撃', `狙撃${sn.id+1}班、${t.id}に精密射撃(効果 ${dmg})。`);
   enemyTracers.push({startX:sn.x, startY:sn.y, endX:t.trueX, endY:t.trueY, born:performance.now(), duration:180});
@@ -2412,7 +2433,9 @@ function requestReinforcement(kind, idx){
   unit.soldiers.forEach(s=>{
     if(!s.alive && revived<restoreCount){
       const replacement = state.reserveRoster.shift() || {rank:'2等陸士', name:'(補充兵)'};
-      s.alive=true; s.seed=Math.random()*1000; s.rank=replacement.rank; s.name=replacement.name;
+      // a fresh recruit is filling this slot, not the fallen soldier returning -- reset
+      // veterancy so reinforcements don't inherit a dead veteran's accumulated experience
+      s.alive=true; s.seed=Math.random()*1000; s.rank=replacement.rank; s.name=replacement.name; s.vetXp=0;
       arrivedNames.push(`${replacement.rank} ${replacement.name}`);
       revived++;
     }
@@ -2446,12 +2469,24 @@ function checkFriendlyFireAt(ix, iy, killRadius){
   return hit;
 }
 
+// veteran soldiers are harder to hit (folded in here as a bonus on top of the unit's base
+// exposure, so it flows through every existing damage-avoidance path -- enemyCounterAttack,
+// resolveVehicleAssault, mortar friendly fire, the squad/infantry duel -- for free)
 function getUnitExposure(candidate){
   if(candidate.kind==='hq') return state.hq.exposure;
   if(candidate.kind==='mortar') return state.mortars[candidate.idx].exposure;
-  if(candidate.kind==='scout') return state.scouts[candidate.idx].exposure;
-  if(candidate.kind==='squad') return state.squads[candidate.idx].exposure;
-  if(candidate.kind==='sniper') return state.snipers[candidate.idx].exposure;
+  if(candidate.kind==='scout'){
+    const u = state.scouts[candidate.idx];
+    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL;
+  }
+  if(candidate.kind==='squad'){
+    const u = state.squads[candidate.idx];
+    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL;
+  }
+  if(candidate.kind==='sniper'){
+    const u = state.snipers[candidate.idx];
+    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL;
+  }
   return EXPOSURE_DEFAULT;
 }
 function rollExposureHit(exposure){
@@ -3208,8 +3243,35 @@ function applyWaveResupply(){
   return {ammoHe, ammoHeat, personnel, perf};
 }
 
+// per user request: every soldier who survives a cleared wave earns veteran XP (see the
+// VET_* constants) -- called once per wave-clear, before the reward/achievement checks below.
+function awardVeteranXp(){
+  const groups = [
+    {units:state.squads,  label:i=>`第${i+1}小隊`},
+    {units:state.scouts,  label:i=>`斥候${i+1}`},
+    {units:state.snipers, label:i=>`狙撃${i+1}班`},
+  ];
+  const levelUps = [];
+  groups.forEach(group=>{
+    group.units.forEach((unit,uIdx)=>{
+      unit.soldiers.forEach(s=>{
+        if(!s.alive) return;
+        const before = vetLevelOf(s);
+        s.vetXp = (s.vetXp||0) + 1;
+        const after = vetLevelOf(s);
+        if(after>before){
+          levelUps.push(`${group.label(uIdx)} ${s.rank} ${s.name}(Lv.${after})`);
+          if(after>=VET_MAX_LEVEL) unlockAchievement('veteranMaster');
+        }
+      });
+    });
+  });
+  if(levelUps.length) log('fdc','戦果', `古参兵昇進: ${levelUps.join('、')}`);
+}
+
 function handleStageClear(){
   speakRandomAliveUnit('victory');
+  awardVeteranXp();
   const reward = computeReward();
   state.money += reward.total;
 
@@ -3725,9 +3787,11 @@ function exposureMetaHtml(exposure){
 }
 
 function soldierRosterHtml(soldiers){
-  const rows = soldiers.map(s=>
-    `<div class="roster-row${s.alive?'':' dead'}"><span class="r-rank">${s.rank}</span><span class="r-name">${s.name}</span></div>`
-  ).join('');
+  const rows = soldiers.map(s=>{
+    const lvl = s.alive ? vetLevelOf(s) : 0;
+    const vetBadge = lvl>0 ? `<span style="color:var(--amber);letter-spacing:-1px;margin-left:3px;" title="古参兵 Lv.${lvl}">${'★'.repeat(lvl)}</span>` : '';
+    return `<div class="roster-row${s.alive?'':' dead'}"><span class="r-rank">${s.rank}</span><span class="r-name">${s.name}${vetBadge}</span></div>`;
+  }).join('');
   return `<div class="roster-list">${rows}</div>`;
 }
 
@@ -3757,7 +3821,7 @@ function scoutBoxHtml(idx){
   else if(scout.pendingReconTargetId) orderStatus = `行動: ${scout.pendingReconTargetId} を偵察予定`;
   return `
     <div class="meta">${dead?'戦闘不能':alive+'/'+scout.soldiers.length+'名'} ・ 標高: ${elevationLabel(elevationAt(scout.x,scout.y))}</div>
-    ${exposureMetaHtml(scout.exposure)}
+    ${exposureMetaHtml(getUnitExposure({kind:'scout', idx}))}
     <div class="meta">観測方向: ${Math.round(scout.watchAngle)}° (視野約${Math.round(scoutHalfFov()*2)}°)</div>
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/scout.soldiers.length*100)}%"></div></div>
     <div class="row-2" style="margin-bottom:6px;">
@@ -3804,7 +3868,7 @@ function squadBoxHtml(idx){
     : null;
   return `
     <div class="meta">${alive} / ${sq.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sq.x,sq.y))}</div>
-    ${exposureMetaHtml(sq.exposure)}
+    ${exposureMetaHtml(getUnitExposure({kind:'squad', idx}))}
     <div class="squad-orders" style="margin:6px 0;">${btns}</div>
     <div class="row-2" style="margin-bottom:6px;">
       <button class="btn ${arming?'active squad-order-btn':''}" ${wiped?'disabled':''} onclick="armSquadMoveOrder(${idx})">移動先を指定</button>
@@ -3840,7 +3904,7 @@ function sniperBoxHtml(idx){
   else aimStatus = '射撃方向: 未設定';
   return `
     <div class="meta">${alive} / ${sn.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sn.x,sn.y))} ・ 有効射程約${SNIPER_RANGE_M}m</div>
-    ${exposureMetaHtml(sn.exposure)}
+    ${exposureMetaHtml(getUnitExposure({kind:'sniper', idx}))}
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
     <div class="row-2" style="margin-bottom:6px;">
       <button class="btn ${arming?'active squad-order-btn':''}" ${wiped?'disabled':''} onclick="armSniperMoveOrder(${idx})">移動先を指定</button>
