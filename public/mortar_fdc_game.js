@@ -4979,6 +4979,23 @@ function drawBoard(){
     const startG = project(p.startX, p.startY);
     const endG = project(p.endX, p.endY);
 
+    // per user request: full parabolic arc curve for the whole flight (敵味方問わず --
+    // this projectiles[] array is shared by friendly mortar volleys and enemy indirect
+    // fire/counter-battery alike), shown in addition to the existing moving-dot + trail.
+    ctx.beginPath();
+    const arcSteps = 20;
+    for(let k=0;k<=arcSteps;k++){
+      const tt = k/arcSteps;
+      const agx = p.startX + (p.endX-p.startX)*tt;
+      const agy = p.startY + (p.endY-p.startY)*tt;
+      const agp = project(agx, agy);
+      const ax = agp.x, ay = agp.y - Math.sin(tt*Math.PI)*ARC_HEIGHT;
+      if(k===0) ctx.moveTo(ax,ay); else ctx.lineTo(ax,ay);
+    }
+    ctx.strokeStyle = 'rgba(217,164,65,0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
     // faint dashed ground track + aim point ring
     ctx.beginPath();
     ctx.setLineDash([2,4]);
