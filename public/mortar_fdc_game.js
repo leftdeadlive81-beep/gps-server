@@ -391,12 +391,17 @@ const MORTAR_CB_SHOTS_THRESHOLD = 3;
 const MORTAR_CB_DETECT_BASE = 0.3;
 const MORTAR_CB_WARN_TURNS = 2;
 const MORTAR_CB_STRIKE_DMG = [28, 42];
-// per user request: tracers/destruction effects/hit resolution all use the raw logical
-// position (obj.x/obj.y, or t.trueX/trueY), never the smoothed _visX/_visY the marker
-// actually renders at -- a slower rate here meant the marker visibly lagged behind where
-// combat was actually happening while a unit was moving. Raised from 0.12 so the marker
-// catches up to its real position much faster, without going all the way to an instant snap.
-const VISUAL_LERP_RATE = 0.35;
+// per user request: switched from a frame-rate-dependent exponential lerp (which either
+// visibly lagged behind combat at a low rate, or converged in a fraction of a decision
+// interval and then sat frozen -- stutter-stepping in time with 自動's 0.5s auto-commit tick
+// -- to a time-based tween matched to that same interval. Every call whose target has moved
+// starts a fresh tween from the marker's current (possibly still in-flight) visual position
+// to the new one, taking VISUAL_TWEEN_DURATION_MS of *wall-clock* time regardless of frame
+// rate, so motion stays continuous for the whole gap between decisions and still finishes
+// (tracers/destruction effects use the raw logical position, never _visX/_visY) essentially
+// exactly when the next commit is due, matching auto-commit's cadence.
+const VISUAL_TWEEN_DURATION_MS = 480;
+function smoothstep01(t){ return t*t*(3-2*t); }
 const SUPPRESSION_TURNS = 3;
 const SUPPRESSION_NEARMISS_TURNS = 1;
 const SUPPRESSION_COUNTER_MULT = 0.3;
@@ -411,12 +416,28 @@ const STANDING_ORDER_LABEL = {
 };
 function unitsToMeters(u){ return Math.round(u*METERS_PER_UNIT); }
 function smoothVisualPos(obj, targetX, targetY){
+  const now = performance.now();
   if(obj._visX===undefined || obj._visY===undefined){
+    // First time this object is drawn -- no prior visual position to tween from, so it
+    // simply appears at its real position instead of sliding in from nowhere.
     obj._visX = targetX; obj._visY = targetY;
-  } else {
-    obj._visX += (targetX-obj._visX)*VISUAL_LERP_RATE;
-    obj._visY += (targetY-obj._visY)*VISUAL_LERP_RATE;
+    obj._tweenFromX = targetX; obj._tweenFromY = targetY;
+    obj._tweenToX = targetX; obj._tweenToY = targetY;
+    obj._tweenStartAt = now;
+    return {x:obj._visX, y:obj._visY};
   }
+  if(obj._tweenToX!==targetX || obj._tweenToY!==targetY){
+    // The underlying logical position moved since the last tween's target -- start a new
+    // tween from wherever the marker visually is *right now* (which may still be mid-tween)
+    // so redirecting never pops/snaps.
+    obj._tweenFromX = obj._visX; obj._tweenFromY = obj._visY;
+    obj._tweenToX = targetX; obj._tweenToY = targetY;
+    obj._tweenStartAt = now;
+  }
+  const t = clamp((now-obj._tweenStartAt)/VISUAL_TWEEN_DURATION_MS, 0, 1);
+  const te = smoothstep01(t);
+  obj._visX = obj._tweenFromX + (obj._tweenToX-obj._tweenFromX)*te;
+  obj._visY = obj._tweenFromY + (obj._tweenToY-obj._tweenFromY)*te;
   return {x:obj._visX, y:obj._visY};
 }
 // per user request: enemy infantry is no longer a single fixed 6-man cluster --
