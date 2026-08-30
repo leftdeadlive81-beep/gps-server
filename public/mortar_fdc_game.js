@@ -4593,7 +4593,7 @@ function drawBoard(){
     ctx.save();
     ctx.translate(mVis.x,mVis.y);
     // per user request: custom mortar icon image (our side only) in place of the old triangle
-    drawUnitIcon(ctx, mortarIcon, 0, 0, 66, !mAlive);
+    drawUnitIcon(ctx, mortarIcon, 0, 0, 33, !mAlive);
     // shoot-and-scoot: a pulsing red ring while a counter-battery strike is inbound, so the
     // threat reads clearly on the map itself and not just in the mortar's own panel
     if(mAlive && mortar.cbWarnTurns!==null && mortar.cbWarnTurns!==undefined){
@@ -4660,7 +4660,7 @@ function drawBoard(){
     ctx.save();
     ctx.translate(scoutVis.x, scoutVis.y);
     // per user request: custom scout icon image (our side only) in place of the cross+circle glyph
-    drawUnitIcon(ctx, scoutIcon, 0, 0, 66, !scoutAlive);
+    drawUnitIcon(ctx, scoutIcon, 0, 0, 33, !scoutAlive);
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign='center';
@@ -4686,7 +4686,7 @@ function drawBoard(){
       const sqVisL = smoothVisualPos(sq, sq.x, sq.y);
       const sqVis = project(sqVisL.x, sqVisL.y);
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
-      drawUnitIcon(ctx, infantryIcon, sqVis.x, sqVis.y, 66, aliveSoldiers.length===0);
+      drawUnitIcon(ctx, infantryIcon, sqVis.x, sqVis.y, 33, aliveSoldiers.length===0);
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, sqVis.x+32, sqVis.y, aliveSoldiers.length/sq.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
@@ -4720,7 +4720,7 @@ function drawBoard(){
       const snVis = project(snVisL.x, snVisL.y);
       const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
       // per user request: custom sniper icon image (our side only) in place of the triangle
-      drawUnitIcon(ctx, sniperIcon, snVis.x, snVis.y, 66, aliveSoldiers.length===0);
+      drawUnitIcon(ctx, sniperIcon, snVis.x, snVis.y, 33, aliveSoldiers.length===0);
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, snVis.x+20, snVis.y, aliveSoldiers.length/sn.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
