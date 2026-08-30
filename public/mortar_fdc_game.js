@@ -4636,15 +4636,8 @@ function drawBoard(){
     const scoutCol = scoutAlive ? FRIENDLY_MARK_COLOR : '#5c2a25';
     ctx.save();
     ctx.translate(scoutVis.x, scoutVis.y);
-    scout.soldiers.forEach((s,idx)=>{
-      if(!s.alive) return;
-      const off = SCOUT_FORMATION_OFFSETS[idx];
-      const pos = wanderPos(off.dx, off.dy, s.seed, 2, nowWander);
-      ctx.fillStyle = scoutCol;
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, 2.4, 0, Math.PI*2);
-      ctx.fill();
-    });
+    // per user request: dropped the per-soldier dot scatter around the marker -- the
+    // cross+circle glyph below is now the single simple symbol for the whole unit.
     ctx.strokeStyle = scoutCol;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -4681,15 +4674,11 @@ function drawBoard(){
       const sqVisL = smoothVisualPos(sq, sq.x, sq.y);
       const sqVis = project(sqVisL.x, sqVisL.y);
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
-      sq.soldiers.forEach((s,idx)=>{
-        if(!s.alive) return;
-        const off = FORMATION_OFFSETS[idx];
-        const pos = wanderPos(sqVis.x+off.dx, sqVis.y+off.dy, s.seed, 4, nowWander);
-        ctx.fillStyle = FRIENDLY_MARK_COLOR;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 3.2, 0, Math.PI*2);
-        ctx.fill();
-      });
+      // per user request: dropped the per-soldier dot scatter -- one simple square marker
+      // now stands for the whole squad (matches the 'box' shape used on the 3D minimap).
+      const sqCol = aliveSoldiers.length>0 ? FRIENDLY_MARK_COLOR : '#5c2a25';
+      ctx.fillStyle = sqCol;
+      ctx.fillRect(sqVis.x-7, sqVis.y-7, 14, 14);
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, sqVis.x+32, sqVis.y, aliveSoldiers.length/sq.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
@@ -4722,15 +4711,16 @@ function drawBoard(){
       const snVisL = smoothVisualPos(sn, sn.x, sn.y);
       const snVis = project(snVisL.x, snVisL.y);
       const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
-      sn.soldiers.forEach((s,idx)=>{
-        if(!s.alive) return;
-        const off = SNIPER_FORMATION_OFFSETS[idx];
-        const pos = wanderPos(snVis.x+off.dx, snVis.y+off.dy, s.seed, 3, nowWander);
-        ctx.fillStyle = FRIENDLY_MARK_COLOR;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 3, 0, Math.PI*2);
-        ctx.fill();
-      });
+      // per user request: dropped the per-soldier dot scatter -- one simple triangle marker
+      // now stands for the whole sniper team (distinct from squad's square).
+      const snCol = aliveSoldiers.length>0 ? FRIENDLY_MARK_COLOR : '#5c2a25';
+      ctx.fillStyle = snCol;
+      ctx.beginPath();
+      ctx.moveTo(snVis.x, snVis.y-8);
+      ctx.lineTo(snVis.x+7.5, snVis.y+6);
+      ctx.lineTo(snVis.x-7.5, snVis.y+6);
+      ctx.closePath();
+      ctx.fill();
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, snVis.x+20, snVis.y, aliveSoldiers.length/sn.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
@@ -4802,42 +4792,19 @@ function drawBoard(){
         ctx.stroke();
       }
 
-      // estimated center marker ― infantry targets render as individually identifiable soldiers
+      // estimated center marker ― one simple symbol per formation group
       let labelY = e.y+20;
       if(t.type==='infantry' && t.troops){
-        const offsets = t.formationOffsets || ENEMY_FORMATION_TEMPLATES.box;
-        // per user request: one symbol per living soldier (10 alive = 10 symbols, not one
-        // shared blob), each carrying its own life gauge -- draw a person glyph (head+body)
-        // with a wider wander radius so the group reads as a restless swarm, plus a tiny
-        // HP bar over each soldier's head once the group is revealed.
+        // per user request: dropped the per-soldier glyph scatter -- one marker (with an
+        // aggregate HP bar, same green/yellow/red convention as friendly units) now stands
+        // for the whole formation group instead of one symbol per living soldier.
         const aliveTroops = t.troops.filter(s=>s.alive);
-        // per user request: bigger, easier-to-read individual soldier symbols -- the formation
-        // spacing is scaled up to match (SOLDIER_FORMATION_SCALE) so the larger glyphs don't
-        // overlap each other within a group.
-        aliveTroops.forEach((s,si)=>{
-          const off = offsets[si % offsets.length];
-          const pos = wanderPos(e.x+off.dx*SOLDIER_FORMATION_SCALE, e.y+off.dy*SOLDIER_FORMATION_SCALE, s.seed, 8, nowWander);
-          const color = t.revealed ? t.def.mark : '#8f9678';
-          ctx.fillStyle = color;
-          ctx.strokeStyle = color;
-          ctx.beginPath();
-          ctx.arc(pos.x, pos.y-3.6, 2.3, 0, Math.PI*2);
-          ctx.fill();
-          ctx.lineWidth = 2.2;
-          ctx.beginPath();
-          ctx.moveTo(pos.x, pos.y-1.5);
-          ctx.lineTo(pos.x, pos.y+4);
-          ctx.stroke();
-          if(t.revealed){
-            const barW = 10, barH = 2;
-            const bx = pos.x-barW/2, by = pos.y-9.6;
-            const frac = clamp(s.hp/s.maxHp, 0, 1);
-            ctx.fillStyle = 'rgba(0,0,0,0.45)';
-            ctx.fillRect(bx, by, barW, barH);
-            ctx.fillStyle = frac>0.5 ? '#7fc76b' : frac>0.25 ? '#e0b84a' : '#d9524a';
-            ctx.fillRect(bx, by, barW*frac, barH);
-          }
-        });
+        const color = t.revealed ? t.def.mark : '#8f9678';
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, 7, 0, Math.PI*2);
+        ctx.fill();
+        if(t.revealed) drawAttritionBar(ctx, e.x+14, e.y, t.hp/t.maxHp);
         labelY = e.y+26;
         if(t.revealed){
           ctx.fillStyle = LABEL_TEXT_COLOR;
@@ -4846,25 +4813,17 @@ function drawBoard(){
           ctx.fillText(`敵${t.def.label} ${aliveTroops.length}/${t.troops.length}`, e.x, labelY);
         }
       } else if(t.type==='drone'){
-        // small quad-rotor silhouette (X-shaped arms with rotor dots), distinct
-        // from the plain circle used for vehicle/artillery.
+        // per user request: dropped the rotor-arm satellite dots -- a single diamond
+        // (matching the 3D minimap's drone shape) distinguishes it from the plain
+        // circle used for vehicle/artillery, with no clutter around it.
         const dcolor = t.revealed ? t.def.mark : '#8f9678';
-        const armLen = 7;
-        ctx.strokeStyle = dcolor;
-        ctx.lineWidth = 1.5;
-        [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([sx,sy])=>{
-          ctx.beginPath();
-          ctx.moveTo(e.x, e.y);
-          ctx.lineTo(e.x+sx*armLen, e.y+sy*armLen);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.arc(e.x+sx*armLen, e.y+sy*armLen, 2.2, 0, Math.PI*2);
-          ctx.fillStyle = dcolor;
-          ctx.fill();
-        });
-        ctx.beginPath();
-        ctx.arc(e.x, e.y, 2.5, 0, Math.PI*2);
         ctx.fillStyle = dcolor;
+        ctx.beginPath();
+        ctx.moveTo(e.x, e.y-7);
+        ctx.lineTo(e.x+6, e.y);
+        ctx.lineTo(e.x, e.y+7);
+        ctx.lineTo(e.x-6, e.y);
+        ctx.closePath();
         ctx.fill();
         if(t.revealed){
           ctx.fillStyle = LABEL_TEXT_COLOR;
