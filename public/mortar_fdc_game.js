@@ -515,6 +515,7 @@ const SFX_SRC = {
   explosion: 'audio/explosion.mp3',
   mortarFire: 'audio/mortar_fire.mp3',
   identify: 'audio/identify.mp3',
+  fanfare: 'audio/fanfare.mp3',
 };
 const bgmAudio = new Audio(SFX_SRC.bgm);
 bgmAudio.loop = true;
@@ -2877,7 +2878,7 @@ function checkEnd(){
   const remaining = state.targets.filter(t=>!t.destroyed);
   if(remaining.length===0){
     state.stageResolved = true;
-    handleStageClear();
+    triggerWaveClearSequence();
     return;
   }
 
@@ -2888,6 +2889,24 @@ function checkEnd(){
     log('sys','システム','全弾薬を消費し、交戦可能な部隊も残っていない。任務継続不能。');
     showStageFailed('ammo');
   }
+}
+
+// per user request: after the last enemy of a wave is destroyed, let the destruction effect
+// (see spawnDestructionEffect) actually finish playing out before anything else happens, then
+// hold a further 2 second beat with a fanfare before the WAVE CLEAR screen appears.
+// state.stageResolved is already true by the time this runs (set in checkEnd), which already
+// blocks further player actions/decisions for the whole sequence -- rendering itself keeps
+// running so the hold doesn't look like the game hung.
+const WAVE_CLEAR_EFFECT_WAIT_MS = 1900;
+const WAVE_CLEAR_FANFARE_HOLD_MS = 2000;
+function triggerWaveClearSequence(){
+  setTimeout(()=>{
+    playSfx('fanfare', 0.5);
+    setTimeout(()=>{
+      handleStageClear();
+      render();
+    }, WAVE_CLEAR_FANFARE_HOLD_MS);
+  }, WAVE_CLEAR_EFFECT_WAIT_MS);
 }
 
 function computeReward(){
