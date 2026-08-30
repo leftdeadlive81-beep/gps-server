@@ -1650,6 +1650,8 @@ function enemyCounterAttack(actionTurns){
           log('op','斥候', `${t.id} からの攻撃を確認、<b>${t.def.label}</b>と識別。`);
         }
         if(t.type==='artillery'){
+          // per user request: 敵の迫撃砲(砲兵)発射時にも発射音を鳴らす
+          playSfx('mortarFire', 0.14);
           projectiles.push({
             startX: e.x, startY: e.y,
             endX: near.x, endY: near.y,
@@ -2598,7 +2600,7 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
 
   for(let i=0;i<count;i++){
     setTimeout(()=>{
-      playSfx('mortarFire', 0.275);
+      playSfx('mortarFire', 0.14);
       const ix = aimX + gauss()*dispersion;
       const iy = aimY + gauss()*dispersion;
       projectiles.push({

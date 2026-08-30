@@ -41,9 +41,14 @@
         <div class="eo-count" id="stat-left">--</div>
         <div class="enemy-breakdown" id="enemy-breakdown"></div>
       </div>
-      <div class="decision-panel-holder decision-overlay-mobile"></div>
       <button class="map-fullscreen-btn" id="mapFullscreenBtn" onclick="toggleMapFullscreen()" title="全画面表示にする">⛶</button>
     </div>
+  </div>
+
+  <!-- per user request: スマホ版のみ、地図パネルと通信記録パネルの間にこのパネルを表示し、
+       赤警報/黄警報/白警報/決心を横一列に並べる(旧・地図上フローティング表示から変更) -->
+  <div class="panel alert-decision-panel">
+    <div class="decision-panel-holder"></div>
   </div>
 
   <div class="bottombar">
