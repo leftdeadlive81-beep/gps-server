@@ -541,6 +541,13 @@ let debrisParticles = [];
 let wreckSmokes = [];
 let killBanners = [];
 
+// per user request: friendly (our side only) infantry squad icon, drawn as a flat
+// screen-space sprite via ctx.drawImage() at the marker's already-projected 2D point --
+// never rotated/skewed to match the 3D camera's azimuth/tilt, so it always reads the same
+// regardless of camera orientation (see the squad-marker block in drawBoard()).
+const infantryIcon = new Image();
+infantryIcon.src = 'icons/infant.png';
+
 // per user request: BGM + sound effects. bgmAudio/combatAudio are single persistent,
 // looping <audio> elements (started/stopped as state changes); one-shot sfx (explosion,
 // mortar fire) each get a fresh Audio() instance per play so overlapping plays (several
@@ -4674,11 +4681,19 @@ function drawBoard(){
       const sqVisL = smoothVisualPos(sq, sq.x, sq.y);
       const sqVis = project(sqVisL.x, sqVisL.y);
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
-      // per user request: dropped the per-soldier dot scatter -- one simple square marker
-      // now stands for the whole squad (matches the 'box' shape used on the 3D minimap).
-      const sqCol = aliveSoldiers.length>0 ? FRIENDLY_MARK_COLOR : '#5c2a25';
-      ctx.fillStyle = sqCol;
-      ctx.fillRect(sqVis.x-7, sqVis.y-7, 14, 14);
+      // per user request: the squad marker is now the custom infantry icon image (our side
+      // only), drawn flat in screen space so it's unaffected by the 3D camera's orientation.
+      const ICON_SIZE = 22;
+      if(infantryIcon.complete && infantryIcon.naturalWidth>0){
+        ctx.save();
+        if(aliveSoldiers.length===0) ctx.filter = 'grayscale(1) brightness(0.5)';
+        ctx.drawImage(infantryIcon, sqVis.x-ICON_SIZE/2, sqVis.y-ICON_SIZE/2, ICON_SIZE, ICON_SIZE);
+        ctx.restore();
+      } else {
+        // fallback square while the image is still loading
+        ctx.fillStyle = aliveSoldiers.length>0 ? FRIENDLY_MARK_COLOR : '#5c2a25';
+        ctx.fillRect(sqVis.x-7, sqVis.y-7, 14, 14);
+      }
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, sqVis.x+32, sqVis.y, aliveSoldiers.length/sq.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
