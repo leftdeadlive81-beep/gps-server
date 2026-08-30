@@ -1747,7 +1747,7 @@ function log(role, who, text){
   div.className = cls;
   div.innerHTML = `<b>[${who}]</b> ${text}`;
   el.insertBefore(div, el.firstChild);
-  el.scrollTop = 0;
+  el.scrollTo({top:0, behavior:'smooth'});
 }
 
 function enemyCounterAttack(actionTurns){
