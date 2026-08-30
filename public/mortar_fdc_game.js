@@ -4171,6 +4171,20 @@ function drawAttritionBar(ctx, x, y, frac){
   ctx.fillRect(bx, by+(h-filledH), w, filledH);
 }
 
+// FEBA (Forward Edge of the Battle Area / 戦闘地域前縁) ― X-coordinate of the
+// most advanced alive squad/scout, used to draw a reference line for how far
+// the front has pushed toward the enemy. Returns null if no maneuver unit is alive.
+function computeFebaX(){
+  let maxX = null;
+  state.squads.forEach(sq=>{
+    if(sq.soldiers.some(s=>s.alive)) maxX = maxX===null ? sq.x : Math.max(maxX, sq.x);
+  });
+  state.scouts.forEach(sc=>{
+    if(sc.soldiers.some(s=>s.alive)) maxX = maxX===null ? sc.x : Math.max(maxX, sc.x);
+  });
+  return maxX;
+}
+
 function drawBoard(){
   const cv = document.getElementById('board');
   const ctx = cv.getContext('2d');
@@ -4231,6 +4245,34 @@ function drawBoard(){
 
     if(hqAlive){
       drawAttritionBar(ctx, hqP.x+20, hqP.y-6, hq.hp/hq.maxHp);
+    }
+  }
+
+  // FEBA (戦闘地域前縁) ― red dashed vertical reference line at the most advanced
+  // alive squad/scout's X-coordinate. Sampled in world space and re-projected per
+  // point (not a straight screen-space line) since the board renders via a 3D camera.
+  {
+    const febaX = computeFebaX();
+    if(febaX !== null){
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([10,6]);
+      ctx.strokeStyle = 'rgba(193,69,59,0.65)';
+      ctx.lineWidth = 2;
+      const steps = 24;
+      for(let i=0;i<=steps;i++){
+        const y = CANVAS_H * (i/steps);
+        const p = project(febaX, y);
+        if(i===0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const labelP = project(febaX, 14);
+      ctx.fillStyle = 'rgba(193,69,59,0.9)';
+      ctx.font = 'bold 12px "JetBrains Mono"';
+      ctx.textAlign = 'center';
+      ctx.fillText('FEBA', labelP.x, labelP.y - 4);
+      ctx.restore();
     }
   }
 
