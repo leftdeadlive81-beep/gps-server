@@ -547,6 +547,25 @@ let killBanners = [];
 // regardless of camera orientation (see the squad-marker block in drawBoard()).
 const infantryIcon = new Image();
 infantryIcon.src = 'icons/infant.png';
+// per user request: same treatment for the mortar, sniper team, and scout markers.
+const mortarIcon = new Image();
+mortarIcon.src = 'icons/mortar.png';
+const sniperIcon = new Image();
+sniperIcon.src = 'icons/sniper.png';
+const scoutIcon = new Image();
+scoutIcon.src = 'icons/rcn.png';
+// Draws one of the custom unit-icon images centered at (cx,cy), flat in screen space (never
+// rotated to match the 3D camera), height pinned to targetH with width following the source
+// image's own aspect ratio. Grayed out when the unit has no survivors. Draws nothing (no
+// fallback primitive) until the image itself has finished loading.
+function drawUnitIcon(ctx, img, cx, cy, targetH, dead){
+  if(!img.complete || !img.naturalWidth) return;
+  const w = targetH * (img.naturalWidth/img.naturalHeight);
+  ctx.save();
+  if(dead) ctx.filter = 'grayscale(1) brightness(0.5)';
+  ctx.drawImage(img, cx-w/2, cy-targetH/2, w, targetH);
+  ctx.restore();
+}
 
 // per user request: BGM + sound effects. bgmAudio/combatAudio are single persistent,
 // looping <audio> elements (started/stopped as state changes); one-shot sfx (explosion,
@@ -4573,10 +4592,8 @@ function drawBoard(){
     const mAlive = mortar.hp>0;
     ctx.save();
     ctx.translate(mVis.x,mVis.y);
-    ctx.fillStyle = mAlive ? FRIENDLY_MARK_COLOR : '#5c2a25';
-    ctx.beginPath();
-    ctx.moveTo(0,-12); ctx.lineTo(10,10); ctx.lineTo(-10,10); ctx.closePath();
-    ctx.fill();
+    // per user request: custom mortar icon image (our side only) in place of the old triangle
+    drawUnitIcon(ctx, mortarIcon, 0, 0, 66, !mAlive);
     // shoot-and-scoot: a pulsing red ring while a counter-battery strike is inbound, so the
     // threat reads clearly on the map itself and not just in the mortar's own panel
     if(mAlive && mortar.cbWarnTurns!==null && mortar.cbWarnTurns!==undefined){
@@ -4640,22 +4657,10 @@ function drawBoard(){
     const scoutVis = project(scoutVisL.x, scoutVisL.y);
     const aliveCount = unitAliveCount(scout);
     const scoutAlive = aliveCount>0;
-    const scoutCol = scoutAlive ? FRIENDLY_MARK_COLOR : '#5c2a25';
     ctx.save();
     ctx.translate(scoutVis.x, scoutVis.y);
-    // per user request: dropped the per-soldier dot scatter around the marker -- the
-    // cross+circle glyph below is now the single simple symbol for the whole unit.
-    ctx.strokeStyle = scoutCol;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(-9,0); ctx.lineTo(9,0);
-    ctx.moveTo(-6,-6); ctx.lineTo(6,6);
-    ctx.moveTo(6,-6); ctx.lineTo(-6,6);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.strokeStyle = scoutAlive ? 'rgba(111,155,191,0.6)' : 'rgba(92,42,37,0.6)';
-    ctx.arc(0,0,11,0,Math.PI*2);
-    ctx.stroke();
+    // per user request: custom scout icon image (our side only) in place of the cross+circle glyph
+    drawUnitIcon(ctx, scoutIcon, 0, 0, 66, !scoutAlive);
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign='center';
@@ -4681,18 +4686,7 @@ function drawBoard(){
       const sqVisL = smoothVisualPos(sq, sq.x, sq.y);
       const sqVis = project(sqVisL.x, sqVisL.y);
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
-      // per user request: the squad marker is the custom infantry icon image (our side
-      // only), drawn flat in screen space so it's unaffected by the 3D camera's orientation.
-      // Height pinned to ICON_H (3x the original 22px baseline); width follows the source
-      // image's own aspect ratio instead of a fixed square, since the image isn't square.
-      const ICON_H = 66;
-      if(infantryIcon.complete && infantryIcon.naturalWidth>0){
-        const iconW = ICON_H * (infantryIcon.naturalWidth/infantryIcon.naturalHeight);
-        ctx.save();
-        if(aliveSoldiers.length===0) ctx.filter = 'grayscale(1) brightness(0.5)';
-        ctx.drawImage(infantryIcon, sqVis.x-iconW/2, sqVis.y-ICON_H/2, iconW, ICON_H);
-        ctx.restore();
-      }
+      drawUnitIcon(ctx, infantryIcon, sqVis.x, sqVis.y, 66, aliveSoldiers.length===0);
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, sqVis.x+32, sqVis.y, aliveSoldiers.length/sq.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
@@ -4725,16 +4719,8 @@ function drawBoard(){
       const snVisL = smoothVisualPos(sn, sn.x, sn.y);
       const snVis = project(snVisL.x, snVisL.y);
       const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
-      // per user request: dropped the per-soldier dot scatter -- one simple triangle marker
-      // now stands for the whole sniper team (distinct from squad's square).
-      const snCol = aliveSoldiers.length>0 ? FRIENDLY_MARK_COLOR : '#5c2a25';
-      ctx.fillStyle = snCol;
-      ctx.beginPath();
-      ctx.moveTo(snVis.x, snVis.y-8);
-      ctx.lineTo(snVis.x+7.5, snVis.y+6);
-      ctx.lineTo(snVis.x-7.5, snVis.y+6);
-      ctx.closePath();
-      ctx.fill();
+      // per user request: custom sniper icon image (our side only) in place of the triangle
+      drawUnitIcon(ctx, sniperIcon, snVis.x, snVis.y, 66, aliveSoldiers.length===0);
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, snVis.x+20, snVis.y, aliveSoldiers.length/sn.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
