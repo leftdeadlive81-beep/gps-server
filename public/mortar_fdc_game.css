@@ -341,6 +341,16 @@
 
   .empty-hint{color:var(--muted);font-size:13px;text-align:center;padding:20px 6px;}
 
+  /* per user request: BGM/SE on-off settings panel, pinned to the very bottom of the screen */
+  .audio-settings-panel-wrap{margin-top:8px;padding:8px 14px;}
+  .audio-settings-panel{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .audio-settings-label{
+    font-family:var(--font-mono);font-size:11px;letter-spacing:1.5px;color:var(--amber-dim);
+    text-transform:uppercase;
+  }
+  .audio-toggle-btn{width:auto;padding:6px 14px;font-size:12px;}
+  .audio-toggle-btn.active{background:var(--amber-dim);border-color:var(--amber);color:#1a1608;}
+
   .overlay{
     position:fixed;inset:0;background:rgba(10,12,7,.85);
     display:none;align-items:center;justify-content:center;z-index:50;

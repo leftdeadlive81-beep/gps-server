@@ -548,32 +548,83 @@ let killBanners = [];
 // .play() is wrapped in .catch(()=>{}) since browsers reject it until a user gesture has
 // occurred -- selectDifficulty() (the player's first click) is what actually starts the BGM.
 const SFX_SRC = {
-  bgm: 'audio/bgm.mp3',
   combat: 'audio/combat.mp3',
   explosion: 'audio/explosion.mp3',
   mortarFire: 'audio/mortar_fire.mp3',
   identify: 'audio/identify.mp3',
   fanfare: 'audio/fanfare.mp3',
 };
-const bgmAudio = new Audio(SFX_SRC.bgm);
+// per user request: a second BGM track, randomly picked between the two whenever a wave
+// starts (see pickWaveBgm(), called from startStage()) rather than one fixed track for
+// the whole session.
+const BGM_TRACKS = ['audio/bgm.mp3', 'audio/bgm2.mp3'];
+const bgmAudio = new Audio();
 bgmAudio.loop = true;
 bgmAudio.volume = 0.175;
 const combatAudio = new Audio(SFX_SRC.combat);
 combatAudio.loop = true;
 combatAudio.volume = 0.2;
 let bgmStarted = false;
+
+// per user request: a settings panel to mute BGM/SE independently, persisted across
+// sessions the same way achievements are (see loadAchievements/saveAchievements below).
+function loadAudioSettings(){
+  try{
+    const raw = localStorage.getItem('mortarFdcAudioSettings');
+    if(raw) return Object.assign({bgmMuted:false, sfxMuted:false}, JSON.parse(raw));
+  }catch(e){}
+  return {bgmMuted:false, sfxMuted:false};
+}
+const audioSettings = loadAudioSettings();
+function saveAudioSettings(){
+  try{ localStorage.setItem('mortarFdcAudioSettings', JSON.stringify(audioSettings)); }catch(e){}
+}
+function renderAudioSettingsPanel(){
+  const el = document.getElementById('audio-settings-panel');
+  if(!el) return;
+  el.innerHTML = `
+    <span class="audio-settings-label">音声設定</span>
+    <button class="btn audio-toggle-btn ${audioSettings.bgmMuted?'':'active'}" onclick="toggleBgmMute()">BGM: ${audioSettings.bgmMuted?'OFF':'ON'}</button>
+    <button class="btn audio-toggle-btn ${audioSettings.sfxMuted?'':'active'}" onclick="toggleSfxMute()">SE: ${audioSettings.sfxMuted?'OFF':'ON'}</button>
+  `;
+}
+function toggleBgmMute(){
+  audioSettings.bgmMuted = !audioSettings.bgmMuted;
+  saveAudioSettings();
+  if(audioSettings.bgmMuted){
+    bgmAudio.pause();
+    combatAudio.pause();
+  } else if(bgmStarted){
+    bgmAudio.play().catch(()=>{});
+  }
+  renderAudioSettingsPanel();
+}
+function toggleSfxMute(){
+  audioSettings.sfxMuted = !audioSettings.sfxMuted;
+  saveAudioSettings();
+  renderAudioSettingsPanel();
+}
+
+function pickWaveBgm(){
+  bgmAudio.pause();
+  bgmAudio.src = choice(BGM_TRACKS);
+  if(bgmStarted && !audioSettings.bgmMuted) bgmAudio.play().catch(()=>{});
+}
 function startBgm(){
   if(bgmStarted) return;
   bgmStarted = true;
-  bgmAudio.play().catch(()=>{});
+  if(!bgmAudio.src) pickWaveBgm();
+  if(!audioSettings.bgmMuted) bgmAudio.play().catch(()=>{});
 }
 function playCombatAmbience(){
+  if(audioSettings.bgmMuted) return;
   if(combatAudio.paused) combatAudio.play().catch(()=>{});
 }
 function stopCombatAmbience(){
   if(!combatAudio.paused) combatAudio.pause();
 }
 function playSfx(name, volume){
+  if(audioSettings.sfxMuted) return;
   const src = SFX_SRC[name];
   if(!src) return;
   const a = new Audio(src);
@@ -788,6 +839,7 @@ function generateSpots(n){
 
 function startStage(){
   const stage = state.stage;
+  pickWaveBgm();
   state.terrain = generateTerrain();
   state.contours = computeContours();
   state.roads = REAL_ROADS_CANVAS;
@@ -6048,6 +6100,7 @@ function loop(){
 
 document.getElementById('board').addEventListener('click', handleCanvasClick);
 loadAchievements();
+renderAudioSettingsPanel();
 initGame();
 initThree();
 setupMapControls();
