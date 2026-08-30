@@ -517,10 +517,10 @@ const SFX_SRC = {
 };
 const bgmAudio = new Audio(SFX_SRC.bgm);
 bgmAudio.loop = true;
-bgmAudio.volume = 0.35;
+bgmAudio.volume = 0.175;
 const combatAudio = new Audio(SFX_SRC.combat);
 combatAudio.loop = true;
-combatAudio.volume = 0.4;
+combatAudio.volume = 0.2;
 let bgmStarted = false;
 function startBgm(){
   if(bgmStarted) return;
@@ -537,7 +537,7 @@ function playSfx(name, volume){
   const src = SFX_SRC[name];
   if(!src) return;
   const a = new Audio(src);
-  a.volume = volume!==undefined ? volume : 0.6;
+  a.volume = volume!==undefined ? volume : 0.3;
   a.play().catch(()=>{});
 }
 
@@ -1500,21 +1500,38 @@ function onTargetDestroyed(t){
 
 // per user request: a MUCH bigger, more dramatic "destroyed" flourish shared by both sides --
 // a double-pulse explosion ring (flashes, tagged big:true, staggered so it reads as a
-// boom-BOOM rather than one flat flash), a large flung debris shower, a rising column of
-// black wreck smoke that lingers for several seconds, and a floating kill banner that pops
-// in before settling.
+// boom-BOOM rather than one flat flash), a flung debris shower, a rising column of black
+// wreck smoke that lingers for several seconds, and a floating kill banner that pops in
+// before settling.
+//
+// Perf/freeze fix: a single proximity-fuse HE burst can kill several drones in the same
+// instant (see the airburst branch in launchMortarVolley), each calling this function --
+// unbounded per-kill work (debris count, a fresh Audio() per kill) stacked across a
+// multi-kill burst was cheap for one kill but expensive enough across several at once to
+// stutter/hang a frame. MAX_DEBRIS_PARTICLES hard-caps the shared pool (trimming the oldest
+// first) and EXPLOSION_SFX_MIN_GAP_MS dedupes the explosion sound so a multi-kill burst plays
+// it once instead of once per kill; the visuals themselves still spawn per kill.
+const MAX_DEBRIS_PARTICLES = 140;
+const EXPLOSION_SFX_MIN_GAP_MS = 90;
+let lastExplosionSfxAt = -Infinity;
 function spawnDestructionEffect(x, y, label, color){
   const born = performance.now();
-  playSfx('explosion', 0.65);
+  if(born - lastExplosionSfxAt > EXPLOSION_SFX_MIN_GAP_MS){
+    lastExplosionSfxAt = born;
+    playSfx('explosion', 0.325);
+  }
   flashes.push({x, y, born, life:800, big:true});
   flashes.push({x, y, born: born+130, life:650, big:true});
-  for(let i=0;i<24;i++){
+  for(let i=0;i<14;i++){
     const ang = Math.random()*Math.PI*2;
     const spd = rnd(40, 150);
     debrisParticles.push({
       x, y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd*0.5 - rnd(25,70),
       born, life: rnd(800,1400), color,
     });
+  }
+  if(debrisParticles.length > MAX_DEBRIS_PARTICLES){
+    debrisParticles.splice(0, debrisParticles.length - MAX_DEBRIS_PARTICLES);
   }
   wreckSmokes.push({x, y, born, life:6000});
   if(label) killBanners.push({x, y, born, life:1900, text:label, color});
@@ -2581,7 +2598,7 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
 
   for(let i=0;i<count;i++){
     setTimeout(()=>{
-      playSfx('mortarFire', 0.55);
+      playSfx('mortarFire', 0.275);
       const ix = aimX + gauss()*dispersion;
       const iy = aimY + gauss()*dispersion;
       projectiles.push({
