@@ -929,7 +929,7 @@ function startStage(){
   debrisParticles = []; wreckSmokes = []; killBanners = [];
 
   document.getElementById('overlay').classList.remove('show');
-  log('sys','システム', `WAVE ${stage} / ${STAGE_COUNT} ― 目標${count}件を確認。天候: ${weather.label}(${weather.desc})。`);
+  log('sys','システム', `WAVE ${stage} / ${STAGE_COUNT} ― 目標${totalCount}件を確認。天候: ${weather.label}(${weather.desc})。`);
   if(stage===1){
     const co = PERSONNEL_ROSTER[0];
     log('sys','司令部', `戦闘団編成完了、総員100名。総指揮官: ${co.rank} ${co.name}。`);
@@ -2852,7 +2852,7 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
 }
 
 function commitDecision(){
-  if(!state || state.stageResolved || state.animating || state.snipeMortarStrikesPending>0 || state.placementPending) return;
+  if(!state || state.stageResolved || state.animating || state.snipeMortarStrikesPending>0 || state.placementPending || state.decoyPlacementPending) return;
 
   // A mortar whose queued shot can't be afforded only cancels THAT mortar's
   // order (reverts to standby) -- it must never block the whole decision
