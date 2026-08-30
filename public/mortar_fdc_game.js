@@ -514,6 +514,7 @@ const SFX_SRC = {
   combat: 'audio/combat.mp3',
   explosion: 'audio/explosion.mp3',
   mortarFire: 'audio/mortar_fire.mp3',
+  identify: 'audio/identify.mp3',
 };
 const bgmAudio = new Audio(SFX_SRC.bgm);
 bgmAudio.loop = true;
@@ -1350,6 +1351,7 @@ function clearScoutOrder(idx){
 function revealTarget(t){
   if(t.revealed) return false;
   t.revealed = true;
+  playSfx('identify', 0.4);
   return true;
 }
 function updateRevealed(){
