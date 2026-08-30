@@ -3789,8 +3789,6 @@ function renderDecisionPanel(){
     `; });
     return;
   }
-  const anyMortarFiring = state.mortars.some(m=>m.pendingFire);
-  const turnCost = anyMortarFiring ? 2 : 1;
   const disabled = state.animating;
   const queued = [];
   state.mortars.forEach((m,idx)=>{
@@ -3810,7 +3808,7 @@ function renderDecisionPanel(){
   holders.forEach(h=>{ h.innerHTML = `
     <div class="decision-box">
       ${summary ? `<div class="decision-summary">${summary}</div>` : ''}
-      <button class="btn primary decision-btn" ${disabled?'disabled':''} onclick="commitDecision()">決心 (${turnCost}ターン消費)</button>
+      <button class="btn primary decision-btn" ${disabled?'disabled':''} onclick="commitDecision()">決心</button>
       <div class="alert-row">
         <button class="btn alert-btn-red" ${disabled?'disabled':''} onclick="setAlertLevel('red')">赤警報</button>
         <button class="btn alert-btn-yellow" ${disabled?'disabled':''} onclick="setAlertLevel('yellow')">黄警報</button>
