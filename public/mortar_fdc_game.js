@@ -391,7 +391,12 @@ const MORTAR_CB_SHOTS_THRESHOLD = 3;
 const MORTAR_CB_DETECT_BASE = 0.3;
 const MORTAR_CB_WARN_TURNS = 2;
 const MORTAR_CB_STRIKE_DMG = [28, 42];
-const VISUAL_LERP_RATE = 0.12;
+// per user request: tracers/destruction effects/hit resolution all use the raw logical
+// position (obj.x/obj.y, or t.trueX/trueY), never the smoothed _visX/_visY the marker
+// actually renders at -- a slower rate here meant the marker visibly lagged behind where
+// combat was actually happening while a unit was moving. Raised from 0.12 so the marker
+// catches up to its real position much faster, without going all the way to an instant snap.
+const VISUAL_LERP_RATE = 0.35;
 const SUPPRESSION_TURNS = 3;
 const SUPPRESSION_NEARMISS_TURNS = 1;
 const SUPPRESSION_COUNTER_MULT = 0.3;
