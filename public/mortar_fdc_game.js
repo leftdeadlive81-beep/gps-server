@@ -4538,6 +4538,32 @@ function drawBoard(){
     }
   }
 
+  // mortar mainline (主線方位角) fans ― pale-yellow reference sector out to
+  // MORTAR_MAINLINE_RANGE_UNITS, drawn before the markers so they sit underneath. Purely a
+  // visual reference (see armMortarMainlineOrder) -- it doesn't affect targeting or fire.
+  // per user request: restored -- this is not the primitive that was meant to go (that was
+  // the 3D minimap's leftover box/cone/etc. meshes, see syncUnitMarkers3d).
+  state.mortars.forEach(mortar=>{
+    if(mortar.hp<=0 || mortar.mainlineAngle===null || mortar.mainlineAngle===undefined) return;
+    const mVisL = smoothVisualPos(mortar, mortar.x, mortar.y);
+    const originP = project(mVisL.x, mVisL.y);
+    const steps = 24;
+    ctx.beginPath();
+    ctx.moveTo(originP.x, originP.y);
+    for(let i=0;i<=steps;i++){
+      const ang = mortar.mainlineAngle - MORTAR_MAINLINE_HALF_FOV + (MORTAR_MAINLINE_HALF_FOV*2)*(i/steps);
+      const pL = bearingToXY(ang, MORTAR_MAINLINE_RANGE_UNITS, mVisL.x, mVisL.y);
+      const p = project(pL.x, pL.y);
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(232,210,58,0.047)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(232,210,58,0.167)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+
   // 擬陣地 (decoy positions) -- dashed diamond outline in the friendly color, plus a vertical
   // attrition bar. Selectable (see handleCanvasClick) to direct mortar fire at its exact,
   // known coordinates.
@@ -4599,6 +4625,33 @@ function drawBoard(){
 
     if(mAlive){
       drawAttritionBar(ctx, mVis.x+18, mVis.y-2, mortar.hp/mortar.maxHp);
+    }
+  });
+
+  // scout observation cones (約45度) ― drawn before the markers so they sit underneath
+  // per user request: restored -- this is not the primitive that was meant to go (that was
+  // the 3D minimap's leftover box/cone/etc. meshes, see syncUnitMarkers3d).
+  state.scouts.forEach(scout=>{
+    const scoutVisL = smoothVisualPos(scout, scout.x, scout.y);
+    const scoutVis = project(scoutVisL.x, scoutVisL.y);
+    if(unitAlive(scout)){
+      const coneLen = SCOUT_MAX_RANGE_UNITS;
+      const steps = 24;
+      ctx.beginPath();
+      ctx.moveTo(scoutVis.x, scoutVis.y);
+      for(let i=0;i<=steps;i++){
+        const halfFov = scoutHalfFov();
+        const ang = scout.watchAngle - halfFov + (halfFov*2)*(i/steps);
+        const pL = bearingToXY(ang, coneLen, scoutVisL.x, scoutVisL.y);
+        const p = project(pL.x, pL.y);
+        ctx.lineTo(p.x, p.y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(111,155,191,0.14)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(111,155,191,0.55)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
     }
   });
 
@@ -5964,24 +6017,14 @@ function syncUnitMarkers3d(){
 
   // per user request: friendly symbols unified to blue on the 3D minimap
   place('hq', state.hq.x, state.hq.y, 'box', state.hq.hp>0 ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
-  state.mortars.forEach((m,i)=>{
-    const p = smoothVisualPos(m, m.x, m.y);
-    place('mortar'+i, p.x, p.y, 'cone', m.hp>0 ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
-  });
-  state.scouts.forEach((s,i)=>{
-    const p = smoothVisualPos(s, s.x, s.y);
-    place('scout'+i, p.x, p.y, 'diamond', unitAlive(s) ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
-  });
-  state.squads.forEach((sq,i)=>{
-    const p = smoothVisualPos(sq, sq.x, sq.y);
-    const alive = sq.soldiers.some(s=>s.alive);
-    place('squad'+i, p.x, p.y, 'box', alive ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
-  });
-  state.snipers.forEach((sn,i)=>{
-    const p = smoothVisualPos(sn, sn.x, sn.y);
-    const alive = sn.soldiers.some(s=>s.alive);
-    place('sniper'+i, p.x, p.y, 'cylinder', alive ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
-  });
+  // per user request: mortar/scout/squad/sniper now have their own 2D icon image drawn on
+  // the overlay canvas (see drawUnitIcon in drawBoard()) -- the old 3D primitive mesh for
+  // each (cone/diamond/box/cylinder) was showing through behind/around that icon, so it's
+  // hidden here instead of placed.
+  state.mortars.forEach((m,i)=>{ seen['mortar'+i]=true; hideMarker3d('mortar'+i); });
+  state.scouts.forEach((s,i)=>{ seen['scout'+i]=true; hideMarker3d('scout'+i); });
+  state.squads.forEach((sq,i)=>{ seen['squad'+i]=true; hideMarker3d('squad'+i); });
+  state.snipers.forEach((sn,i)=>{ seen['sniper'+i]=true; hideMarker3d('sniper'+i); });
   state.targets.forEach((t,i)=>{
     const key = 'target'+t.id;
     if(t.destroyed){ place(key, t.trueX, t.trueY, 'sphere', 0x5c2a25, false); return; }
