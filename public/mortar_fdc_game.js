@@ -2496,6 +2496,7 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
     if(wasAlive && state.hq.hp<=0) spawnDestructionEffect(state.hq.x, state.hq.y, '指揮所 陥落!', FRIENDLY_MARK_COLOR);
   } else if(target.kind==='scout'){
     const scout = state.scouts[target.idx];
+    if(!scout) return;
     const aliveSoldiers = scout.soldiers.filter(s=>s.alive);
     if(aliveSoldiers.length>0){
       const victim = choice(aliveSoldiers);
@@ -2509,6 +2510,7 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
     }
   } else if(target.kind==='squad'){
     const sq = state.squads[target.idx];
+    if(!sq) return;
     const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
     if(aliveSoldiers.length>0){
       const victim = choice(aliveSoldiers);
@@ -2522,6 +2524,7 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
     }
   } else if(target.kind==='sniper'){
     const sn = state.snipers[target.idx];
+    if(!sn) return;
     const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
     if(aliveSoldiers.length>0){
       const victim = choice(aliveSoldiers);
@@ -2535,6 +2538,7 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
     }
   } else if(target.kind==='mortar'){
     const mortar = state.mortars[target.idx];
+    if(!mortar) return;
     const wasAlive = mortar.hp>0;
     mortar.hp = Math.max(0, mortar.hp-dmg);
     if(mortar.hp <= mortar.maxHp*0.2) state.hpDroppedLow = true;
