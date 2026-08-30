@@ -2864,7 +2864,12 @@ function toggleAutoCommit(){
     autoCommitTimer = null;
     log('sys','システム', '自動決心を停止。');
   } else {
-    autoCommitTimer = setInterval(()=>{ commitDecision(); }, 500);
+    autoCommitTimer = setInterval(()=>{
+      // per user request: pause auto-commit while any unit instruction panel is open, so it
+      // doesn't advance the turn out from under the player mid-decision
+      if(state.commandBox || state.enemyCommandBox || state.decoyCommandBox) return;
+      commitDecision();
+    }, 500);
     log('sys','システム', '自動決心を開始(0.5秒間隔)。');
   }
   render();
