@@ -4683,12 +4683,14 @@ function drawBoard(){
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
       // per user request: the squad marker is the custom infantry icon image (our side
       // only), drawn flat in screen space so it's unaffected by the 3D camera's orientation.
-      // Sized 3x up from the original 22px, and the old fallback-square primitive removed.
-      const ICON_SIZE = 66;
+      // Height pinned to ICON_H (3x the original 22px baseline); width follows the source
+      // image's own aspect ratio instead of a fixed square, since the image isn't square.
+      const ICON_H = 66;
       if(infantryIcon.complete && infantryIcon.naturalWidth>0){
+        const iconW = ICON_H * (infantryIcon.naturalWidth/infantryIcon.naturalHeight);
         ctx.save();
         if(aliveSoldiers.length===0) ctx.filter = 'grayscale(1) brightness(0.5)';
-        ctx.drawImage(infantryIcon, sqVis.x-ICON_SIZE/2, sqVis.y-ICON_SIZE/2, ICON_SIZE, ICON_SIZE);
+        ctx.drawImage(infantryIcon, sqVis.x-iconW/2, sqVis.y-ICON_H/2, iconW, ICON_H);
         ctx.restore();
       }
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, sqVis.x+32, sqVis.y, aliveSoldiers.length/sq.soldiers.length);
