@@ -5102,7 +5102,10 @@ const COMBAT_CALLOUTS = {
   irritation: ['動きが遅い、置いていくぞ！','なんでそんな場所に伏せてるんだ！','合図を見逃すな、集中しろ！','お前の射撃、味方に当たりそうだったぞ！','勝手に持ち場を離れるな！','そこは危険地帯だと言っただろ！','装備を忘れるとかあり得ない！','無線のチャンネル、間違えてるぞ！','お前、ちゃんと周り見てるのか！','足を引っ張るなら下がってろ！','新人だからって甘えるな！','お前の判断、いつも遅すぎるんだよ！','もっと声を出せ、聞こえないぞ！','なんでそっちに勝手に進んだ！','連携取れてないぞ、しっかりしろ！','お前が動くたびに位置がばれるんだよ！','無駄弾使うな、節約しろ！','そんな装備で来るなんて信じられない！','お前、寝てないのか、しっかりしろ！','言われたことだけやってりゃいいんだよ！'],
   outburst: ['もう嫌だ、こんな戦争！','なんでこんな所で死ななきゃいけないんだ！','家族のところに帰りたいだけなんだ！','お前にこの気持ちが分かるか！','仲間を見捨てるなんてできない！','誰かのために死ぬなんて意味あるのか！','もう何を信じればいいんだ！','これが正義だって言うのか！','お前は何も分かってない！','戦友を失ってなお戦えって言うのか！','命令だから仕方ないなんて言うな！','俺たちは駒じゃない！','もう誰も死なせたくないんだ！','なんでこんな作戦を許可したんだ！','怒りをぶつける相手を間違えるな！','お前まで俺を疑うのか！','信頼できるのはお前だけなんだ！','もう限界だと言ってるだろう！','終わったらすべて話し合おう、今は戦え！','絶対に、みんなで生きて帰るぞ！'],
 };
-const CALLOUT_DURATION_MS = 2000;
+const CALLOUT_DURATION_MS = 4000;
+// per user request: halves how often squad-member speech bubbles actually appear at all
+// (independent of which category/line gets picked once triggered) -- see unitSpeak.
+const CALLOUT_OCCURRENCE_CHANCE = 0.5;
 let activeCallouts = [];
 
 function calloutUnitRef(kind, idx){
@@ -5132,6 +5135,7 @@ function calloutSpeakerName(kind, idx){
   return `${person.name}${abbr}`;
 }
 function unitSpeak(kind, idx, category){
+  if(Math.random() >= CALLOUT_OCCURRENCE_CHANCE) return;
   const list = COMBAT_CALLOUTS[category];
   if(!list || !list.length) return;
   const name = calloutSpeakerName(kind, idx);
