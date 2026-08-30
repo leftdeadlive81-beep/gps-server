@@ -627,6 +627,7 @@ function addNewScout(){
 function unitAlive(u){ return unitAliveCount(u) > 0; }
 
 function initGame(){
+  if(autoCommitTimer){ clearInterval(autoCommitTimer); autoCommitTimer = null; }
   document.getElementById('overlay').classList.remove('show');
   document.getElementById('shop-overlay').classList.remove('show');
   state = {
@@ -2851,6 +2852,24 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
   }
 }
 
+// per user request: an "自動" toggle button beside 決心 that presses it automatically every
+// 0.5s until pressed again. commitDecision() already no-ops safely whenever it isn't valid to
+// commit (animating, stage resolved, placement pending, etc.), so the interval can just keep
+// firing blindly without needing its own state checks.
+let autoCommitTimer = null;
+function isAutoCommitRunning(){ return autoCommitTimer!==null; }
+function toggleAutoCommit(){
+  if(autoCommitTimer){
+    clearInterval(autoCommitTimer);
+    autoCommitTimer = null;
+    log('sys','システム', '自動決心を停止。');
+  } else {
+    autoCommitTimer = setInterval(()=>{ commitDecision(); }, 500);
+    log('sys','システム', '自動決心を開始(0.5秒間隔)。');
+  }
+  render();
+}
+
 function commitDecision(){
   if(!state || state.stageResolved || state.animating || state.snipeMortarStrikesPending>0 || state.placementPending || state.decoyPlacementPending) return;
 
@@ -4022,7 +4041,10 @@ function renderDecisionPanel(){
   holders.forEach(h=>{ h.innerHTML = `
     <div class="decision-box">
       ${summary ? `<div class="decision-summary">${summary}</div>` : ''}
-      <button class="btn primary decision-btn" ${disabled?'disabled':''} onclick="commitDecision()">決心</button>
+      <div class="row-2">
+        <button class="btn primary decision-btn" ${disabled?'disabled':''} onclick="commitDecision()">決心</button>
+        <button class="btn auto-commit-btn ${isAutoCommitRunning()?'active squad-order-btn':''}" onclick="toggleAutoCommit()">自動</button>
+      </div>
       <div class="alert-row">
         <button class="btn alert-btn-red" ${disabled?'disabled':''} onclick="setAlertLevel('red')">赤警報</button>
         <button class="btn alert-btn-yellow" ${disabled?'disabled':''} onclick="setAlertLevel('yellow')">黄警報</button>

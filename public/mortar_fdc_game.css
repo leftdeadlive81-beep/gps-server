@@ -142,8 +142,10 @@
     }
     .alert-decision-panel .decision-summary{display:none;}
     .alert-decision-panel .alert-row{display:contents;}
+    .alert-decision-panel .row-2{display:contents;}
     .alert-decision-panel .decision-btn{order:4; flex:1.3; padding:4px 4px; font-size:18px;}
     .alert-decision-panel .alert-row button{flex:1; padding:4px 2px; font-size:10.5px;}
+    .alert-decision-panel .auto-commit-btn{order:5; flex:0.9; padding:4px 2px; font-size:11px;}
   }
 
   .board-note{display:none;font-size:10px;color:var(--muted);margin:-2px 0 8px;flex:0 0 auto;}
