@@ -4348,6 +4348,36 @@ function drawAttritionBar(ctx, x, y, frac){
   ctx.fillRect(bx, by+(h-filledH), w, filledH);
 }
 
+// per user request: the FEBA line can be dragged directly, ordering every alive squad/scout
+// to advance or retreat to match. febaDragX is the live preview position while a drag is in
+// progress (null otherwise, see setupMapControls); febaLineScreenPts is the line's last-drawn
+// screen-space polyline, used to hit-test whether a mousedown/touchstart landed on the line.
+let febaDragX = null;
+let febaLineScreenPts = null;
+const FEBA_DRAG_HIT_TOLERANCE_PX = 16;
+function hitTestFebaLine(lx, ly){
+  if(!febaLineScreenPts) return false;
+  return febaLineScreenPts.some(p=>Math.hypot(p.x-lx, p.y-ly) <= FEBA_DRAG_HIT_TOLERANCE_PX);
+}
+// Commits a drag: every alive squad/scout gets a pendingDest at the new line's X (keeping its
+// own Y), reusing the same movement mechanism as an individual unit's "移動先を指定" order --
+// so it advances/retreats there over the following decision cycles like any other move order.
+function commitFebaDrag(newX){
+  const clampedX = clamp(newX, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+  let moved = 0;
+  state.squads.forEach(sq=>{
+    if(!sq.soldiers.some(s=>s.alive)) return;
+    sq.pendingDest = {x:clampedX, y:sq.y};
+    moved += 1;
+  });
+  state.scouts.forEach(sc=>{
+    if(!sc.soldiers.some(s=>s.alive)) return;
+    sc.pendingDest = {x:clampedX, y:sc.y};
+    moved += 1;
+  });
+  if(moved>0) log('sys','司令部', `FEBAを再指定。最前線部隊(${moved}個)へ新しい線への前進/後退を発令。`);
+}
+
 // FEBA (Forward Edge of the Battle Area / 戦闘地域前縁) ― X-coordinate of the
 // most advanced alive squad/scout, used to draw a reference line for how far
 // the front has pushed toward the enemy. Returns null if no maneuver unit is alive.
@@ -4429,8 +4459,14 @@ function drawBoard(){
   // alive squad/scout's X-coordinate. Sampled in world space and re-projected per
   // point (not a straight screen-space line) since the board renders via a 3D camera.
   {
-    const febaX = computeFebaX();
-    if(febaX !== null){
+    // per user request: draggable -- while a drag is in progress, follow the pointer
+    // (febaDragX) instead of the live computed position, so the line previews where it
+    // will end up before the move order is actually committed (see commitFebaDrag).
+    const dragging = febaDragX !== null;
+    const febaX = dragging ? febaDragX : computeFebaX();
+    if(febaX === null){
+      febaLineScreenPts = null;
+    } else {
       ctx.save();
       const steps = 24;
       const pts = [];
@@ -4438,13 +4474,16 @@ function drawBoard(){
         const y = CANVAS_H * (i/steps);
         pts.push(project(febaX, y));
       }
+      febaLineScreenPts = pts;
       const tracePath = ()=>{
         ctx.beginPath();
         pts.forEach((p,i)=>{ if(i===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); });
       };
       // per user request: made much more prominent -- a dark halo stroke underneath so the
       // line reads clearly against both light and dark terrain, a bolder/near-opaque dash on
-      // top, and a glow so it doesn't get lost among the map's other markers.
+      // top, and a glow so it doesn't get lost among the map's other markers. Turns amber
+      // while actively being dragged, to distinguish an uncommitted preview from the real line.
+      const lineColor = dragging ? '#ffcc4d' : '#ff5c47';
       tracePath();
       ctx.setLineDash([]);
       ctx.strokeStyle = 'rgba(20,8,6,0.85)';
@@ -4452,22 +4491,23 @@ function drawBoard(){
       ctx.stroke();
       tracePath();
       ctx.setLineDash([12,7]);
-      ctx.strokeStyle = '#ff5c47';
+      ctx.strokeStyle = lineColor;
       ctx.lineWidth = 3.5;
-      ctx.shadowColor = '#ff5c47';
+      ctx.shadowColor = lineColor;
       ctx.shadowBlur = 8;
       ctx.stroke();
       ctx.shadowBlur = 0;
       ctx.setLineDash([]);
 
       const labelP = project(febaX, 14);
+      const labelText = dragging ? 'FEBA ▸移動先' : 'FEBA';
       ctx.font = 'bold 14px "JetBrains Mono"';
       ctx.textAlign = 'center';
-      const labelW = ctx.measureText('FEBA').width;
+      const labelW = ctx.measureText(labelText).width;
       ctx.fillStyle = 'rgba(20,8,6,0.85)';
       ctx.fillRect(labelP.x-labelW/2-5, labelP.y-19, labelW+10, 18);
-      ctx.fillStyle = '#ff5c47';
-      ctx.fillText('FEBA', labelP.x, labelP.y-5);
+      ctx.fillStyle = lineColor;
+      ctx.fillText(labelText, labelP.x, labelP.y-5);
       ctx.restore();
     }
   }
@@ -5775,15 +5815,27 @@ function setupMapControls(){
   el.addEventListener('contextmenu', e=>e.preventDefault());
 
   let mode = null, lastX=0, lastY=0, dragGround=null;
+  // per user request: dragging the FEBA line directly orders every alive squad/scout to
+  // advance/retreat to match. Only engages on a plain left-button press that starts on the
+  // line itself, and only outside other click-driven modes (placement/order-arming) that a
+  // stray drag near the line could otherwise interfere with.
+  const febaDragEligible = ()=> !state.placementPending && !state.decoyPlacementPending && !state.orderMode;
   el.addEventListener('mousedown', e=>{
     mapDragMoved = false;
+    const rect = el.getBoundingClientRect();
+    const lx = e.clientX-rect.left, ly = e.clientY-rect.top;
+    if(e.button!==2 && febaDragEligible() && hitTestFebaLine(lx, ly)){
+      mode = 'feba';
+      febaDragX = computeFebaX();
+      mapFocusTarget = null;
+      return;
+    }
     mode = e.button===2 ? 'rotate' : 'pan';
     lastX = e.clientX; lastY = e.clientY;
     mapFocusTarget = null;
     decoyLongPressStart(e.clientX, e.clientY);
     if(mode==='pan'){
-      const rect = el.getBoundingClientRect();
-      dragGround = groundPlaneCanvasUnitAt(e.clientX-rect.left, e.clientY-rect.top);
+      dragGround = groundPlaneCanvasUnitAt(lx, ly);
     }
   });
   window.addEventListener('mousemove', e=>{
@@ -5792,7 +5844,11 @@ function setupMapControls(){
     const dx = e.clientX-lastX, dy = e.clientY-lastY;
     if(Math.abs(dx)>2 || Math.abs(dy)>2) mapDragMoved = true;
     lastX = e.clientX; lastY = e.clientY;
-    if(mode==='rotate'){
+    if(mode==='feba'){
+      const rect = el.getBoundingClientRect();
+      const g = groundPlaneCanvasUnitAt(e.clientX-rect.left, e.clientY-rect.top);
+      if(g) febaDragX = clamp(g.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+    } else if(mode==='rotate'){
       MAP_VIEW.azimuth -= dx*0.006;
       MAP_VIEW.polar = clamp(MAP_VIEW.polar - dy*0.005, MAP_POLAR_MIN, MAP_POLAR_MAX);
       updateCameraFromView();
@@ -5807,7 +5863,10 @@ function setupMapControls(){
       }
     }
   });
-  window.addEventListener('mouseup', ()=>{ mode = null; dragGround = null; decoyLongPressEnd(); });
+  window.addEventListener('mouseup', ()=>{
+    if(mode==='feba' && febaDragX!==null) commitFebaDrag(febaDragX);
+    mode = null; dragGround = null; febaDragX = null; decoyLongPressEnd();
+  });
 
   el.addEventListener('wheel', e=>{
     e.preventDefault();
@@ -5841,15 +5900,21 @@ function setupMapControls(){
   el.addEventListener('touchstart', e=>{
     mapFocusTarget = null;
     if(e.touches.length===1){
+      touchLastX=e.touches[0].clientX; touchLastY=e.touches[0].clientY;
+      const rect = el.getBoundingClientRect();
+      const lx = touchLastX-rect.left, ly = touchLastY-rect.top;
+      if(febaDragEligible() && hitTestFebaLine(lx, ly)){
+        touchMode='feba'; mapDragMoved=false;
+        febaDragX = computeFebaX();
+        return;
+      }
       // No preventDefault here: a plain tap (touchstart+touchend with no
       // movement) must still synthesize its native 'click' so unit selection
       // keeps working. touch-action:none on #board (CSS) already stops the
       // browser's native pan/zoom gesture from engaging over the map.
       touchMode='pan'; mapDragMoved=false;
-      touchLastX=e.touches[0].clientX; touchLastY=e.touches[0].clientY;
       decoyLongPressStart(touchLastX, touchLastY);
-      const rect = el.getBoundingClientRect();
-      dragGround = groundPlaneCanvasUnitAt(touchLastX-rect.left, touchLastY-rect.top);
+      dragGround = groundPlaneCanvasUnitAt(lx, ly);
     } else if(e.touches.length===2){
       // A second finger means this is a pinch/rotate gesture, never a tap, so
       // it's safe (and necessary, as a fallback if touch-action isn't fully
@@ -5865,7 +5930,15 @@ function setupMapControls(){
   }, {passive:false});
   el.addEventListener('touchmove', e=>{
     e.preventDefault();
-    if(touchMode==='pan' && e.touches.length===1){
+    if(touchMode==='feba' && e.touches.length===1){
+      const t = e.touches[0];
+      const dx = t.clientX-touchLastX, dy = t.clientY-touchLastY;
+      if(Math.abs(dx)>2 || Math.abs(dy)>2) mapDragMoved = true;
+      touchLastX = t.clientX; touchLastY = t.clientY;
+      const rect = el.getBoundingClientRect();
+      const g = groundPlaneCanvasUnitAt(touchLastX-rect.left, touchLastY-rect.top);
+      if(g) febaDragX = clamp(g.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+    } else if(touchMode==='pan' && e.touches.length===1){
       decoyLongPressMove(e.touches[0].clientX, e.touches[0].clientY);
       const dx = e.touches[0].clientX-touchLastX, dy = e.touches[0].clientY-touchLastY;
       if(Math.abs(dx)>2 || Math.abs(dy)>2) mapDragMoved = true;
@@ -5906,8 +5979,10 @@ function setupMapControls(){
       const rect = el.getBoundingClientRect();
       dragGround = groundPlaneCanvasUnitAt(touchLastX-rect.left, touchLastY-rect.top);
     } else if(e.touches.length===0){
-      touchMode=null; dragGround=null;
-      if(!mapDragMoved && e.changedTouches && e.changedTouches.length){
+      const wasFeba = touchMode==='feba';
+      if(wasFeba && febaDragX!==null) commitFebaDrag(febaDragX);
+      touchMode=null; dragGround=null; febaDragX=null;
+      if(!wasFeba && !mapDragMoved && e.changedTouches && e.changedTouches.length){
         const ct = e.changedTouches[0];
         const now = performance.now();
         const dist = Math.hypot(ct.clientX-lastTapX, ct.clientY-lastTapY);
