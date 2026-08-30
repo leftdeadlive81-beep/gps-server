@@ -961,6 +961,11 @@ let ripples = [];
 let projectiles = [];
 let flashes = [];
 let enemyTracers = [];
+// per user request: a bigger "destroyed" flourish (explosion+debris, rising wreck smoke,
+// a floating kill banner), shared by both sides -- see spawnDestructionEffect().
+let debrisParticles = [];
+let wreckSmokes = [];
+let killBanners = [];
 const FLIGHT_DURATION = 700;
 const LAUNCH_INTERVAL = 420;
 const ARC_HEIGHT = 90;
@@ -1044,6 +1049,7 @@ function initGame(){
     placementIndex: 0,
   };
   ripples = []; projectiles = []; flashes = []; enemyTracers = [];
+  debrisParticles = []; wreckSmokes = []; killBanners = [];
   document.getElementById('log').innerHTML='';
   log('sys', 'システム', `コンシム v${GAME_VERSION} 起動。難易度を選択せよ。`);
   renderDifficultyOverlay();
@@ -1288,6 +1294,7 @@ function startStage(){
     mortars: state.mortars, squads: state.squads, scouts: state.scouts, snipers: state.snipers,
   }));
   ripples = []; projectiles = []; flashes = []; enemyTracers = [];
+  debrisParticles = []; wreckSmokes = []; killBanners = [];
 
   document.getElementById('overlay').classList.remove('show');
   log('sys','システム', `WAVE ${stage} / ${STAGE_COUNT} ― 目標${count}件を確認。天候: ${weather.label}(${weather.desc})。`);
@@ -1911,6 +1918,25 @@ function onTargetDestroyed(t){
   unlockAchievement('firstBlood');
   if(t.type==='artillery') unlockAchievement('mortarHunter');
   speakRandomAliveUnit('morale');
+  spawnDestructionEffect(t.trueX, t.trueY, `${t.def.label} 撃破!`, ENEMY_MARK_COLOR);
+}
+
+// per user request: a bigger "destroyed" flourish shared by both sides -- an explosion ring
+// (flashes, tagged big:true) with flung debris, a rising column of black wreck smoke that
+// lingers a few seconds, and a floating kill banner in the destroyed side's mark color.
+function spawnDestructionEffect(x, y, label, color){
+  const born = performance.now();
+  flashes.push({x, y, born, life:550, big:true});
+  for(let i=0;i<10;i++){
+    const ang = Math.random()*Math.PI*2;
+    const spd = rnd(25, 85);
+    debrisParticles.push({
+      x, y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd*0.5 - rnd(15,45),
+      born, life: rnd(650,1050), color,
+    });
+  }
+  wreckSmokes.push({x, y, born, life:4200});
+  if(label) killBanners.push({x, y, born, life:1500, text:label, color});
 }
 
 function unlockAchievement(key){
@@ -2546,9 +2572,11 @@ function applyDamageToTarget(t, dmg){
 
 function damageFriendlyAsset(target, dmg, sourceLabel){
   if(target.kind==='hq'){
+    const wasAlive = state.hq.hp>0;
     state.hq.hp = Math.max(0, state.hq.hp-dmg);
     if(state.hq.hp <= state.hq.maxHp*0.3) state.hpDroppedLow = true;
     log('sys','被弾', `${sourceLabel}が<b>指揮所</b>を攻撃。被害 ${dmg}。`);
+    if(wasAlive && state.hq.hp<=0) spawnDestructionEffect(state.hq.x, state.hq.y, '指揮所 陥落!', FRIENDLY_MARK_COLOR);
   } else if(target.kind==='scout'){
     const scout = state.scouts[target.idx];
     const aliveSoldiers = scout.soldiers.filter(s=>s.alive);
@@ -2557,29 +2585,36 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
       victim.alive = false;
       log('sys','被弾', `${sourceLabel}が斥候${target.idx+1}を攻撃。<b>${victim.rank} ${victim.name}</b> 戦死。`);
       unitSpeak('scout', target.idx, 'injury');
+      if(aliveSoldiers.length===1) spawnDestructionEffect(scout.x, scout.y, `斥候${target.idx+1} 全滅!`, FRIENDLY_MARK_COLOR);
     }
   } else if(target.kind==='squad'){
-    const aliveSoldiers = state.squads[target.idx].soldiers.filter(s=>s.alive);
+    const sq = state.squads[target.idx];
+    const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
     if(aliveSoldiers.length>0){
       const victim = choice(aliveSoldiers);
       victim.alive = false;
       log('sys','被弾', `${sourceLabel}が第${target.idx+1}小隊を攻撃。<b>${victim.rank} ${victim.name}</b> 戦死。`);
       unitSpeak('squad', target.idx, 'injury');
+      if(aliveSoldiers.length===1) spawnDestructionEffect(sq.x, sq.y, `第${target.idx+1}小隊 全滅!`, FRIENDLY_MARK_COLOR);
     }
   } else if(target.kind==='sniper'){
-    const aliveSoldiers = state.snipers[target.idx].soldiers.filter(s=>s.alive);
+    const sn = state.snipers[target.idx];
+    const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
     if(aliveSoldiers.length>0){
       const victim = choice(aliveSoldiers);
       victim.alive = false;
       log('sys','被弾', `${sourceLabel}が狙撃${target.idx+1}班を攻撃。<b>${victim.rank} ${victim.name}</b> 戦死。`);
       unitSpeak('sniper', target.idx, 'injury');
+      if(aliveSoldiers.length===1) spawnDestructionEffect(sn.x, sn.y, `狙撃${target.idx+1}班 全滅!`, FRIENDLY_MARK_COLOR);
     }
   } else if(target.kind==='mortar'){
     const mortar = state.mortars[target.idx];
+    const wasAlive = mortar.hp>0;
     mortar.hp = Math.max(0, mortar.hp-dmg);
     if(mortar.hp <= mortar.maxHp*0.2) state.hpDroppedLow = true;
     log('sys','被弾', `${sourceLabel}が迫撃砲${target.idx+1}を攻撃。被害 ${dmg}。`);
     if(mortar.hp>0) unitSpeak('mortar', target.idx, 'warning');
+    else if(wasAlive) spawnDestructionEffect(mortar.x, mortar.y, `迫撃砲${target.idx+1} 戦闘不能!`, FRIENDLY_MARK_COLOR);
   }
 }
 
@@ -4775,19 +4810,72 @@ function drawBoard(){
     ctx.fill();
   });
 
-  // impact flashes
+  // impact flashes ― a "big" flash (destruction events, see spawnDestructionEffect) is a
+  // larger, whiter-hot version of the same ring+core rather than a separate visual language
   flashes.forEach(f=>{
     const p = (nowP-f.born)/f.life;
     const fp = project(f.x, f.y);
+    const scale = f.big ? 1.9 : 1;
     ctx.beginPath();
-    ctx.strokeStyle = `rgba(255,140,60,${1-p})`;
-    ctx.lineWidth = 2.5;
-    ctx.arc(fp.x, fp.y, 4+p*22, 0, Math.PI*2);
+    ctx.strokeStyle = f.big ? `rgba(255,235,205,${1-p})` : `rgba(255,140,60,${1-p})`;
+    ctx.lineWidth = f.big ? 3.5 : 2.5;
+    ctx.arc(fp.x, fp.y, (4+p*22)*scale, 0, Math.PI*2);
     ctx.stroke();
     ctx.beginPath();
-    ctx.fillStyle = `rgba(255,200,120,${(1-p)*0.8})`;
-    ctx.arc(fp.x, fp.y, Math.max(0,6-p*6), 0, Math.PI*2);
+    ctx.fillStyle = f.big ? `rgba(255,240,210,${(1-p)*0.85})` : `rgba(255,200,120,${(1-p)*0.8})`;
+    ctx.arc(fp.x, fp.y, Math.max(0,(f.big?13:6)-p*(f.big?13:6)), 0, Math.PI*2);
     ctx.fill();
+  });
+
+  // debris particles ― small fragments flung outward from a destruction, falling with gravity
+  debrisParticles = debrisParticles.filter(d=>nowP-d.born < d.life);
+  debrisParticles.forEach(d=>{
+    const t = (nowP-d.born)/1000;
+    const gx = d.x + d.vx*t;
+    const gy = d.y + d.vy*t + 55*t*t;
+    const dp = project(gx, gy);
+    const age = (nowP-d.born)/d.life;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, 1-age);
+    ctx.fillStyle = d.color || '#ffb45a';
+    ctx.beginPath();
+    ctx.arc(dp.x, dp.y, 2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  });
+
+  // wreck smoke ― a dark column that drifts up and fades over a few seconds, marking where
+  // something was destroyed
+  wreckSmokes = wreckSmokes.filter(w=>nowP-w.born < w.life);
+  wreckSmokes.forEach(w=>{
+    const age = (nowP-w.born)/w.life;
+    const wp = project(w.x, w.y - age*40);
+    const alpha = (1-age)*0.4;
+    if(alpha<=0) return;
+    [{dx:0,dy:0,r:14+age*10},{dx:-6,dy:-4,r:10+age*8},{dx:6,dy:-5,r:10+age*8}].forEach(pf=>{
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(28,26,24,${alpha})`;
+      ctx.arc(wp.x+pf.dx, wp.y+pf.dy, pf.r, 0, Math.PI*2);
+      ctx.fill();
+    });
+  });
+
+  // kill banners ― a floating "撃破!" (or friendly-loss equivalent) that rises and fades
+  killBanners = killBanners.filter(b=>nowP-b.born < b.life);
+  killBanners.forEach(b=>{
+    const age = (nowP-b.born)/b.life;
+    const bp = project(b.x, b.y - age*22);
+    const alpha = 1 - Math.max(0, (age-0.55)/0.45);
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+    ctx.font = 'bold 15px "JetBrains Mono"';
+    ctx.textAlign = 'center';
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 3;
+    ctx.strokeText(b.text, bp.x, bp.y);
+    ctx.fillStyle = b.color || LABEL_TEXT_COLOR;
+    ctx.fillText(b.text, bp.x, bp.y);
+    ctx.restore();
   });
 
   // ripples (recon ping animation)
@@ -5402,17 +5490,41 @@ function terrainCanvasUnitAt(px, py){
   return { x: (p.x-WORLD.originX)/WORLD.unitsPerCanvasUnit, y: (p.z-WORLD.originZ)/WORLD.unitsPerCanvasUnit };
 }
 
-function focusMapOn(cx, cy){
-  mapFocusTarget = { x: cx, y: cy };
+// zoom is optional -- when given, it's eased alongside the look-at point (see
+// toggleDoubleTapZoom, the only current caller that passes it).
+function focusMapOn(cx, cy, zoom){
+  mapFocusTarget = { x: cx, y: cy, zoom };
 }
 
 function updateMapFocusEase(){
   if(!mapFocusTarget) return;
   MAP_VIEW.cx += (mapFocusTarget.x-MAP_VIEW.cx)*0.15;
   MAP_VIEW.cy += (mapFocusTarget.y-MAP_VIEW.cy)*0.15;
-  if(Math.hypot(mapFocusTarget.x-MAP_VIEW.cx, mapFocusTarget.y-MAP_VIEW.cy) < 0.5) mapFocusTarget = null;
+  let zoomSettled = true;
+  if(mapFocusTarget.zoom!==undefined){
+    MAP_VIEW.zoom += (mapFocusTarget.zoom-MAP_VIEW.zoom)*0.15;
+    zoomSettled = Math.abs(mapFocusTarget.zoom-MAP_VIEW.zoom) < 0.01;
+  }
+  if(Math.hypot(mapFocusTarget.x-MAP_VIEW.cx, mapFocusTarget.y-MAP_VIEW.cy) < 0.5 && zoomSettled) mapFocusTarget = null;
   clampMapView();
   updateCameraFromView();
+}
+
+// per user request: double-tap/double-click zooms in on the tapped area; a second
+// double-tap/double-click returns to the original default view. groundPlaneCanvasUnitAt is
+// the same cheap flat-plane conversion already used for pan-dragging.
+let mapDoubleTapZoomed = false;
+const MAP_DOUBLETAP_ZOOM_LEVEL = 2.5;
+function toggleDoubleTapZoom(pxPixel, pyPixel){
+  if(mapDoubleTapZoomed){
+    focusMapOn(CANVAS_W/2, CANVAS_H/2, 1);
+    mapDoubleTapZoomed = false;
+  } else {
+    const g = groundPlaneCanvasUnitAt(pxPixel, pyPixel);
+    if(!g) return;
+    focusMapOn(g.x, g.y, MAP_DOUBLETAP_ZOOM_LEVEL);
+    mapDoubleTapZoomed = true;
+  }
 }
 
 function setupMapControls(){
@@ -5464,11 +5576,22 @@ function setupMapControls(){
     updateCameraFromView();
   }, {passive:false});
 
+  // per user request: double-click zooms in on the clicked area; a second double-click
+  // returns to the original default view (see toggleDoubleTapZoom).
+  el.addEventListener('dblclick', e=>{
+    const rect = el.getBoundingClientRect();
+    toggleDoubleTapZoom(e.clientX-rect.left, e.clientY-rect.top);
+  });
+
   // Single finger = pan (as before). Two fingers = pinch to zoom + twist/
   // vertical-drag to rotate/tilt, mirroring the desktop wheel=zoom and
   // right-drag=rotate gestures.
   let touchMode=null, touchLastX=0, touchLastY=0;
   let pinchStartDist=0, pinchStartZoom=1, twoTouchLastAngle=0, twoTouchLastMidY=0;
+  // per user request: manual double-tap detection for toggleDoubleTapZoom (mobile has no
+  // native 'dblclick' from two taps, unlike desktop)
+  const DOUBLETAP_MAX_INTERVAL_MS = 350, DOUBLETAP_MAX_DIST_PX = 30;
+  let lastTapTime = 0, lastTapX = 0, lastTapY = 0;
   const touchMid = touches => ({
     x:(touches[0].clientX+touches[1].clientX)/2,
     y:(touches[0].clientY+touches[1].clientY)/2,
@@ -5539,6 +5662,18 @@ function setupMapControls(){
       dragGround = groundPlaneCanvasUnitAt(touchLastX-rect.left, touchLastY-rect.top);
     } else if(e.touches.length===0){
       touchMode=null; dragGround=null;
+      if(!mapDragMoved && e.changedTouches && e.changedTouches.length){
+        const ct = e.changedTouches[0];
+        const now = performance.now();
+        const dist = Math.hypot(ct.clientX-lastTapX, ct.clientY-lastTapY);
+        if(now-lastTapTime < DOUBLETAP_MAX_INTERVAL_MS && dist < DOUBLETAP_MAX_DIST_PX){
+          const rect = el.getBoundingClientRect();
+          toggleDoubleTapZoom(ct.clientX-rect.left, ct.clientY-rect.top);
+          lastTapTime = 0;
+        } else {
+          lastTapTime = now; lastTapX = ct.clientX; lastTapY = ct.clientY;
+        }
+      }
     }
   });
   window.addEventListener('resize', resizeThree);
