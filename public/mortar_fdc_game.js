@@ -284,7 +284,6 @@ const SCOUT_FORMATION_OFFSETS = [
 const SNIPER_FORMATION_OFFSETS = [
   {dx:-14,dy:-8},{dx:0,dy:-12},{dx:14,dy:-8},{dx:-8,dy:9},{dx:8,dy:9},
 ];
-const SNIPER_RANGE_M = 500;
 const SCOUT_ADVANCE_LIMIT_X = 1100;
 const SQUAD_RETREAT_LIMIT_X = 150;
 const SQUAD_ADVANCE_LIMIT_X = 620;
@@ -299,7 +298,9 @@ const SQUAD_FORCE_REVEAL_RANGE_M = 500;
 const SQUAD_FORCE_REVEAL_RANGE_UNITS = SQUAD_FORCE_REVEAL_RANGE_M / METERS_PER_UNIT;
 const ESTIMATE_MARKER_RADIUS_M = 500;
 const ESTIMATE_MARKER_RADIUS_UNITS = ESTIMATE_MARKER_RADIUS_M / METERS_PER_UNIT;
-const SNIPER_RANGE_UNITS = SNIPER_RANGE_M / METERS_PER_UNIT;
+// per user request: sniper effective range is 3x infantry's (squad) engagement range
+const SNIPER_RANGE_UNITS = SQUAD_ENGAGE_RANGE * 3;
+const SNIPER_RANGE_M = Math.round(SNIPER_RANGE_UNITS * METERS_PER_UNIT);
 const SNIPER_AIM_RANGE_M = 2000;
 const SNIPER_AIM_RANGE_UNITS = SNIPER_AIM_RANGE_M / METERS_PER_UNIT;
 const SNIPER_AIM_LINE_WIDTH_M = 20;
@@ -2020,6 +2021,23 @@ function findTargetOnSniperLine(sn){
   return best;
 }
 
+// Fallback auto-engagement used only when the player hasn't designated a
+// specific snipe target or aim line (see resolveSniperOrders) -- picks the
+// nearest detected, in-range, line-of-sight-clear enemy so snipers still
+// fight proactively instead of sitting idle waiting for manual orders.
+function findAutoSniperTarget(sn){
+  let best=null, bd=Infinity;
+  state.targets.forEach(t=>{
+    if(t.destroyed) return;
+    if(!isTargetDetected(t)) return;
+    const dist = Math.hypot(t.trueX-sn.x, t.trueY-sn.y);
+    if(dist > SNIPER_RANGE_UNITS) return;
+    if(!hasLineOfSight(sn.x, sn.y, t.trueX, t.trueY)) return;
+    if(dist<bd){ bd=dist; best=t; }
+  });
+  return best;
+}
+
 // A vehicle target caught on a sniper's aim line can't be engaged directly
 // (small arms vs. armor) -- the sniper instead calls it in, and the nearest
 // live mortar fires a single HEAT round at it, consuming 1 HEAT round from
@@ -2083,6 +2101,18 @@ function resolveSniperOrders(actionTurns){
         } else if(hasLineOfSight(sn.x, sn.y, lineTarget.trueX, lineTarget.trueY)){
           anyEvent = true;
           sniperEngageTarget(sn, lineTarget);
+        }
+      }
+
+      // per user request: auto-engage fallback -- only when the player hasn't
+      // designated a snipe target or aim line, so manual designation still takes priority.
+      const hasAimLine = sn.aimAngle!==null && sn.aimAngle!==undefined;
+      if(!sn.pendingSnipeTargetId && !hasAimLine){
+        const auto = findAutoSniperTarget(sn);
+        if(auto){
+          anyEvent = true;
+          if(auto.type==='vehicle') callInMortarHeatStrike(auto, sn);
+          else sniperEngageTarget(sn, auto);
         }
       }
     });
