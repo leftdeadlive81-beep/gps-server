@@ -408,6 +408,12 @@ const SUPPRESSION_COUNTER_MULT = 0.3;
 const SUPPRESSION_DUEL_DMG_BONUS = 1.5;
 const SUPPRESSION_CASUALTY_MULT = 0.4;
 const SUPPRESSION_MOVE_MULT = 0.5;
+// per user request: enemy AI behavior -- suppressed infantry has a chance each tick to
+// flinch back away from its goal instead of just advancing slower, and every infantry group
+// picks a persistent lateral offset from the main approach line so groups spread out and
+// press from multiple directions instead of funneling onto one point (see advanceEnemyInfantry).
+const SUPPRESSION_RETREAT_CHANCE = 0.35;
+const FLANK_OFFSET_RANGE_UNITS = 160;
 function isSuppressed(t){ return (t.suppressed||0) > 0; }
 const STANDING_ORDER_LABEL = {
   contact_hold: '接敵時: 防御',
@@ -2849,10 +2855,22 @@ function advanceEnemyInfantry(actionTurns){
           return;
         }
       }
-      const step = INFANTRY_MOVE_CAP * (t.speedMult||1) * (isSuppressed(t) ? SUPPRESSION_MOVE_MULT : 1);
+      const suppressed = isSuppressed(t);
+      const step = INFANTRY_MOVE_CAP * (t.speedMult||1) * (suppressed ? SUPPRESSION_MOVE_MULT : 1);
       if(t.trueX > minX){
-        const moveGoal = mergeAdjustedGoal(t, goal);
-        const next = terrainAwareStep(t.trueX, t.trueY, moveGoal.x, moveGoal.y, step);
+        // per user request: flanking -- each group keeps a persistent lateral offset from
+        // the main approach point so groups spread out and press from multiple angles
+        // instead of all funneling onto the exact same spot.
+        if(t._flankOffset===undefined) t._flankOffset = rnd(-FLANK_OFFSET_RANGE_UNITS, FLANK_OFFSET_RANGE_UNITS);
+        const flankGoal = {x: goal.x, y: clamp(goal.y + t._flankOffset, 30, CANVAS_H-30)};
+        const moveGoal = mergeAdjustedGoal(t, flankGoal);
+        // per user request: suppression retreat -- pinned down under fire, a suppressed
+        // group has a chance to flinch back away from its goal this tick instead of
+        // advancing (on top of the existing move-speed penalty).
+        const retreating = suppressed && Math.random() < SUPPRESSION_RETREAT_CHANCE;
+        const aimX = retreating ? t.trueX + (t.trueX-moveGoal.x) : moveGoal.x;
+        const aimY = retreating ? t.trueY + (t.trueY-moveGoal.y) : moveGoal.y;
+        const next = terrainAwareStep(t.trueX, t.trueY, aimX, aimY, step);
         t.trueX = Math.max(minX, next.x);
         t.trueY = clamp(next.y, 30, CANVAS_H-30);
         const dx = t.trueX-OP.x, dy = t.trueY-OP.y;
