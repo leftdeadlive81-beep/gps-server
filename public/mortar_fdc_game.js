@@ -502,6 +502,45 @@ let enemyTracers = [];
 let debrisParticles = [];
 let wreckSmokes = [];
 let killBanners = [];
+
+// per user request: BGM + sound effects. bgmAudio/combatAudio are single persistent,
+// looping <audio> elements (started/stopped as state changes); one-shot sfx (explosion,
+// mortar fire) each get a fresh Audio() instance per play so overlapping plays (several
+// kills in one proximity-fuse burst, a multi-round mortar volley) don't cut each other off.
+// .play() is wrapped in .catch(()=>{}) since browsers reject it until a user gesture has
+// occurred -- selectDifficulty() (the player's first click) is what actually starts the BGM.
+const SFX_SRC = {
+  bgm: 'audio/bgm.mp3',
+  combat: 'audio/combat.mp3',
+  explosion: 'audio/explosion.mp3',
+  mortarFire: 'audio/mortar_fire.mp3',
+};
+const bgmAudio = new Audio(SFX_SRC.bgm);
+bgmAudio.loop = true;
+bgmAudio.volume = 0.35;
+const combatAudio = new Audio(SFX_SRC.combat);
+combatAudio.loop = true;
+combatAudio.volume = 0.4;
+let bgmStarted = false;
+function startBgm(){
+  if(bgmStarted) return;
+  bgmStarted = true;
+  bgmAudio.play().catch(()=>{});
+}
+function playCombatAmbience(){
+  if(combatAudio.paused) combatAudio.play().catch(()=>{});
+}
+function stopCombatAmbience(){
+  if(!combatAudio.paused) combatAudio.pause();
+}
+function playSfx(name, volume){
+  const src = SFX_SRC[name];
+  if(!src) return;
+  const a = new Audio(src);
+  a.volume = volume!==undefined ? volume : 0.6;
+  a.play().catch(()=>{});
+}
+
 const FLIGHT_DURATION = 700;
 const LAUNCH_INTERVAL = 420;
 const ARC_HEIGHT = 90;
@@ -617,6 +656,7 @@ function selectDifficulty(key){
   state.fuzeUnlocked = {impact:true, proximity:true, delay:true};
   document.getElementById('difficulty-overlay').classList.remove('show');
   log('sys','システム', `難易度「${d.label}」で作戦開始。全弾種・信管を装備済み。`);
+  startBgm();
   openDeploymentChoice();
 }
 
@@ -1465,6 +1505,7 @@ function onTargetDestroyed(t){
 // in before settling.
 function spawnDestructionEffect(x, y, label, color){
   const born = performance.now();
+  playSfx('explosion', 0.65);
   flashes.push({x, y, born, life:800, big:true});
   flashes.push({x, y, born: born+130, life:650, big:true});
   for(let i=0;i<24;i++){
@@ -2505,6 +2546,10 @@ function resolveEnemyTurn(actionTurns){
   if(!hit && !infEvent && !sniperEvent && !advanced && !assaulted && !swarmed && !cbEvent){
     log('sys','敵ターン', '目立った動きなし。');
   }
+  // per user request: 交戦時のサウンド -- looping battlefield-combat ambience plays while
+  // squads/snipers are actively engaging this turn, and pauses again once nothing is
+  // actively engaging.
+  if(infEvent || sniperEvent) playCombatAmbience(); else stopCombatAmbience();
   state.targets.forEach(t=>{
     if(t.suppressed>0) t.suppressed = Math.max(0, t.suppressed-actionTurns);
   });
@@ -2536,6 +2581,7 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
 
   for(let i=0;i<count;i++){
     setTimeout(()=>{
+      playSfx('mortarFire', 0.55);
       const ix = aimX + gauss()*dispersion;
       const iy = aimY + gauss()*dispersion;
       projectiles.push({
