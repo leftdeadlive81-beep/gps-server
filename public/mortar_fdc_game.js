@@ -401,7 +401,11 @@ const MORTAR_CB_STRIKE_DMG = [56, 84]; // per user request: enemy attack power d
 // rate, so motion stays continuous for the whole gap between decisions and still finishes
 // (tracers/destruction effects use the raw logical position, never _visX/_visY) essentially
 // exactly when the next commit is due, matching auto-commit's cadence.
-const VISUAL_TWEEN_DURATION_MS = 480;
+// per user request: auto-commit's pace slowed to 70% of its previous speed -- the interval
+// scales inversely (500ms / 0.7), and the tween duration is kept at the same ~96% fraction
+// of it as before so marker motion still finishes just before the next tick.
+const AUTO_COMMIT_INTERVAL_MS = Math.round(500/0.7);
+const VISUAL_TWEEN_DURATION_MS = Math.round(AUTO_COMMIT_INTERVAL_MS*0.96);
 function smoothstep01(t){ return t*t*(3-2*t); }
 const SUPPRESSION_TURNS = 3;
 const SUPPRESSION_NEARMISS_TURNS = 1;
@@ -3152,8 +3156,8 @@ function toggleAutoCommit(){
       // doesn't advance the turn out from under the player mid-decision
       if(state.commandBox || state.enemyCommandBox || state.decoyCommandBox) return;
       commitDecision();
-    }, 500);
-    log('sys','システム', '自動決心を開始(0.5秒間隔)。');
+    }, AUTO_COMMIT_INTERVAL_MS);
+    log('sys','システム', `自動決心を開始(${(AUTO_COMMIT_INTERVAL_MS/1000).toFixed(2)}秒間隔)。`);
   }
   render();
 }
