@@ -852,6 +852,12 @@ function startStage(){
     };
   });
 
+  // Tear down every leftover 3D marker from whatever the previous state.targets held
+  // (normally already empty via resolveEnemyTurn's pruning, but retryStage() can jump
+  // here with a still-live previous wave abandoned mid-fight) so nothing orphaned lingers.
+  if(state.targets){
+    state.targets.forEach(t=>disposeMarker3d('target'+t.id));
+  }
   state.targets = targets;
   // per user request: destroyed targets are now pruned from state.targets during the wave
   // (see resolveEnemyTurn) rather than staying in the array flagged destroyed, so anything
@@ -2805,6 +2811,7 @@ function resolveEnemyTurn(actionTurns){
   // (and the per-tick/per-frame work that scans it) without bound. Prune here, once per
   // decision cycle, well after every resolve* pass above has finished reading it this tick.
   if(state.targets.some(t=>t.destroyed)){
+    state.targets.forEach(t=>{ if(t.destroyed) disposeMarker3d('target'+t.id); });
     state.targets = state.targets.filter(t=>!t.destroyed);
   }
 }
@@ -5838,6 +5845,18 @@ function getMarker3d(key, shape, colorHex){
 function hideMarker3d(key){
   const m = unitMarkers3d[key];
   if(m) m.visible = false;
+}
+// per user request: a destroyed target's marker was only ever hidden (visible=false),
+// never actually removed -- since target IDs keep climbing across a long session
+// (esp. with drones spawning continuously), unitMarkers3d/scene3d grew without bound.
+// This fully tears the mesh down so the slot doesn't linger forever once its target is gone.
+function disposeMarker3d(key){
+  const m = unitMarkers3d[key];
+  if(!m) return;
+  if(scene3d) scene3d.remove(m);
+  if(m.geometry) m.geometry.dispose();
+  if(m.material) m.material.dispose();
+  delete unitMarkers3d[key];
 }
 
 const FRIENDLY_MARK_COLOR_3D = 0x6f9bbf;
