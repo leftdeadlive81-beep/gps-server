@@ -1906,6 +1906,12 @@ function enemyCounterAttack(actionTurns){
       if(Math.random() < chance){
         const near = nearestFriendlyAsset(t.trueX, t.trueY, false);
         if(!near) return;
+        // per user request: fixed the range asymmetry where enemy infantry could snipe
+        // scouts/mortars/HQ from unlimited range here while friendly squads can only engage
+        // enemy infantry within SQUAD_ENGAGE_RANGE (see the duel loop in resolveSquadOrders).
+        // Artillery/vehicle/drone keep unlimited range -- indirect/stand-off fire is their
+        // whole identity, unlike infantry's expected close-range engagement.
+        if(t.type==='infantry' && near.dist > SQUAD_ENGAGE_RANGE) return;
         const [lo,hi] = COUNTER_DAMAGE[t.type];
         const armorMult = (near.kind==='mortar' && state.equipment.armor) ? 0.75 : 1;
         const altMult = altitudeBonus(t.trueX, t.trueY, near.x, near.y);
