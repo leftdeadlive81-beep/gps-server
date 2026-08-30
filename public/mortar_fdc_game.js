@@ -125,8 +125,30 @@ const NUM_SNIPERS = 3;
 const MORTAR_CREW_SIZE = 5;
 const NUM_MORTARS = 4;
 const RESERVE_SIZE = 10;
-const TOTAL_SOLDIERS = SQUAD_SIZE*NUM_SQUADS;
-const TOTAL_ROSTER = SQUAD_SIZE*NUM_SQUADS + SCOUT_SQUAD_SIZE*NUM_SCOUTS + SNIPER_SQUAD_SIZE*NUM_SNIPERS + MORTAR_CREW_SIZE*NUM_MORTARS + RESERVE_SIZE;
+// per user request: 擬陣地 (decoy positions) -- placed at the start of each wave (auto or
+// manual, player's choice), these lure enemy indirect fire/vehicle assaults away from real
+// assets (see the decoy lure weighting in nearestFriendlyAsset), more so at night. They have
+// their own HP and can be destroyed. Since the player places them, their coordinates are
+// known exactly -- selecting one lets a chosen mortar fire on that exact point (no
+// spotting-error correction needed, unlike firing at an enemy target).
+const MAX_DECOYS = 5;
+const DECOY_MAX_HP = 50;
+const DECOY_LURE_MULT_DAY = 0.6;
+const DECOY_LURE_MULT_NIGHT = 0.3;
+const DECOY_LONGPRESS_MS = 550;
+const DECOY_LONGPRESS_MOVE_TOLERANCE_PX = 10;
+// per user request: a wave-clear reward can add a whole new squad/scout team at runtime
+// (see addNewSquad/addNewScout), so these can no longer be fixed constants -- they're
+// recomputed from the live roster each time so the roster display/perfectSquad achievement
+// stay correct after a bonus unit joins.
+function totalSquadCapacity(){ return state.squads.reduce((s,sq)=>s+sq.soldiers.length, 0); }
+function totalRosterCapacity(){
+  return totalSquadCapacity()
+    + state.scouts.reduce((s,sc)=>s+sc.soldiers.length, 0)
+    + state.snipers.reduce((s,sn)=>s+sn.soldiers.length, 0)
+    + state.mortars.length*MORTAR_CREW_SIZE
+    + state.reserve;
+}
 
 const PERSONNEL_ROSTER = [
   {rank:'1等陸佐', name:'佐藤'},
@@ -574,6 +596,34 @@ function unitAvgVetLevel(soldiers){
   return alive.reduce((sum,s)=>sum+vetLevelOf(s), 0) / alive.length;
 }
 function unitAliveCount(u){ return u.soldiers.filter(s=>s.alive).length; }
+
+// per user request: one of the three wave-clear bonus choices adds a brand new squad/scout
+// team, over and above the fixed NUM_SQUADS/NUM_SCOUTS the campaign starts with. Their roster
+// is generated fresh (not drawn from state.reserveRoster, which stays reserved for replacing
+// casualties in existing units via 予備兵力要請) so picking this bonus never quietly drains
+// the reinforcement pool.
+function makeFreshRoster(size, prefix){
+  return Array.from({length:size}, (_,i)=>({rank:'2等陸士', name:`${prefix}${i+1}`}));
+}
+function addNewSquad(){
+  const id = state.squads.length;
+  state.squads.push({
+    id, order:'hold', pendingDest:null, huntTargetId:null, standingOrder:null,
+    x: FRIENDLY_INF_POS.x, y: clamp(FRIENDLY_INF_POS.y + rnd(-60,60), 30, CANVAS_H-30),
+    soldiers: makeSoldiers(makeFreshRoster(SQUAD_SIZE, '新兵')),
+    reinforceUsed:false, exposure: EXPOSURE_DEFAULT,
+  });
+  return id;
+}
+function addNewScout(){
+  const id = state.scouts.length;
+  state.scouts.push({
+    id, x: SCOUT_X, y: clamp(SCOUT_UPPER_Y + rnd(0, SCOUT_LOWER_Y-SCOUT_UPPER_Y), 20, CANVAS_H-20),
+    watchAngle: 90, soldiers: makeSoldiers(makeFreshRoster(SCOUT_SQUAD_SIZE, '新兵')),
+    pendingDest:null, pendingReconTargetId:null, exposure: SCOUT_EXPOSURE,
+  });
+  return id;
+}
 function unitAlive(u){ return unitAliveCount(u) > 0; }
 
 function initGame(){
@@ -624,6 +674,9 @@ function initGame(){
     placementPending: false,
     placementQueue: [],
     placementIndex: 0,
+    decoys: [],
+    decoyPlacementPending: false,
+    decoyCommandBox: null,
   };
   ripples = []; projectiles = []; flashes = []; enemyTracers = [];
   debrisParticles = []; wreckSmokes = []; killBanners = [];
@@ -881,6 +934,9 @@ function startStage(){
     const co = PERSONNEL_ROSTER[0];
     log('sys','司令部', `戦闘団編成完了、総員100名。総指揮官: ${co.rank} ${co.name}。`);
   }
+  state.decoys = [];
+  state.decoyPlacementPending = false;
+  state.decoyCommandBox = null;
   if(state.deploymentMode === 'manual'){
     state.placementQueue = buildPlacementQueue();
     state.placementIndex = 0;
@@ -892,6 +948,7 @@ function startStage(){
     log('op','斥候', '前線に展開完了。各斥候の観測方向を指示せよ。');
   }
   render();
+  if(!state.placementPending) openDecoyPlacementChoice();
 }
 
 function buildPlacementQueue(){
@@ -942,6 +999,55 @@ function finishPlacement(){
   state.placementPending = false;
   log('sys','司令部', '配置完了。作戦開始。');
   log('op','斥候', '前線に展開完了。各斥候の観測方向を指示せよ。');
+  render();
+  openDecoyPlacementChoice();
+}
+
+// 擬陣地 (decoy positions) -- placement flow. See MAX_DECOYS etc.
+function makeDecoy(x,y){ return {x, y, hp:DECOY_MAX_HP, maxHp:DECOY_MAX_HP, destroyed:false}; }
+function randomDecoySpot(){
+  return { x: rnd(SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X*0.8), y: rnd(30, CANVAS_H-30) };
+}
+function openDecoyPlacementChoice(){
+  const body = document.getElementById('decoy-placement-body');
+  body.innerHTML = `
+    <div class="shop-row">
+      <div><div class="label">自動設置</div><div class="sub">最大${MAX_DECOYS}箇所の擬陣地を自動配置する</div></div>
+      <div class="actions"><button class="btn primary" onclick="chooseDecoyPlacementMode('auto')">選択</button></div>
+    </div>
+    <div class="shop-row">
+      <div><div class="label">手動設置</div><div class="sub">地図を長押しして最大${MAX_DECOYS}箇所を自分で指定する</div></div>
+      <div class="actions"><button class="btn primary" onclick="chooseDecoyPlacementMode('manual')">選択</button></div>
+    </div>
+  `;
+  document.getElementById('decoy-placement-overlay').classList.add('show');
+}
+function chooseDecoyPlacementMode(mode){
+  document.getElementById('decoy-placement-overlay').classList.remove('show');
+  state.decoys = [];
+  if(mode==='auto'){
+    for(let i=0;i<MAX_DECOYS;i++){
+      const p = randomDecoySpot();
+      state.decoys.push(makeDecoy(p.x, p.y));
+    }
+    log('sys','工兵', `擬陣地を自動設置(${MAX_DECOYS}箇所)。`);
+  } else {
+    state.decoyPlacementPending = true;
+    log('sys','工兵', `擬陣地、手動設置モード。地図を長押しして最大${MAX_DECOYS}箇所を指定せよ。`);
+  }
+  render();
+}
+function placeDecoyAt(x, y){
+  if(!state.decoyPlacementPending || state.decoys.length>=MAX_DECOYS) return;
+  state.decoys.push(makeDecoy(clamp(x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X), clamp(y, 30, CANVAS_H-30)));
+  log('sys','工兵', `擬陣地を設置(${state.decoys.length}/${MAX_DECOYS})。`);
+  if(state.decoys.length>=MAX_DECOYS) finishDecoyPlacement();
+  render();
+}
+function finishDecoyPlacement(){
+  if(!state.decoyPlacementPending) return;
+  state.decoyPlacementPending = false;
+  log('sys','工兵', `擬陣地の設置完了(${state.decoys.length}箇所)。`);
   render();
 }
 
@@ -2146,10 +2252,17 @@ function nearestFriendlyAsset(x, y, includeSquads){
       if(sn.soldiers.some(s=>s.alive)) candidates.push({kind:'sniper', idx, x:sn.x, y:sn.y});
     });
   }
+  // per user request: 擬陣地 lure enemy indirect fire/vehicle assaults away from real assets
+  // -- scoring their distance as if it were much shorter makes them "win" nearest-target
+  // selection more often than a real asset at the same actual range, more so at night.
+  state.decoys.forEach((d,idx)=>{
+    if(!d.destroyed) candidates.push({kind:'decoy', idx, x:d.x, y:d.y});
+  });
+  const decoyLureMult = state.weather==='night' ? DECOY_LURE_MULT_NIGHT : DECOY_LURE_MULT_DAY;
   let best=null, bestScore=Infinity;
   candidates.forEach(c=>{
     const d = Math.hypot(x-c.x, y-c.y);
-    const score = c.kind==='hq' ? d*0.55 : d;
+    const score = c.kind==='hq' ? d*0.55 : c.kind==='decoy' ? d*decoyLureMult : d;
     if(score<bestScore){ bestScore=score; best={...c, dist:d}; }
   });
   return best;
@@ -2181,7 +2294,17 @@ function applyDamageToTarget(t, dmg){
 }
 
 function damageFriendlyAsset(target, dmg, sourceLabel){
-  if(target.kind==='hq'){
+  if(target.kind==='decoy'){
+    const d = state.decoys[target.idx];
+    if(!d || d.destroyed) return;
+    d.hp = Math.max(0, d.hp-dmg);
+    log('sys','被弾', `${sourceLabel}が擬陣地を攻撃。被害 ${dmg}。`);
+    if(d.hp<=0){
+      d.destroyed = true;
+      log('sys','被弾', `擬陣地が破壊された。`);
+      spawnDestructionEffect(d.x, d.y, '擬陣地 破壊', FRIENDLY_MARK_COLOR);
+    }
+  } else if(target.kind==='hq'){
     const wasAlive = state.hq.hp>0;
     state.hq.hp = Math.max(0, state.hq.hp-dmg);
     if(state.hq.hp <= state.hq.maxHp*0.3) state.hpDroppedLow = true;
@@ -2903,10 +3026,55 @@ function triggerWaveClearSequence(){
   setTimeout(()=>{
     playSfx('fanfare', 0.5);
     setTimeout(()=>{
-      handleStageClear();
+      // per user request: on top of the usual money reward, the player picks one of three
+      // bonuses (see showWaveRewardChoice/chooseWaveReward) before the WAVE CLEAR summary
+      // shows -- skipped on the final wave, since there's no next wave to carry a bonus into.
+      if(state.stage >= STAGE_COUNT){
+        handleStageClear();
+      } else {
+        showWaveRewardChoice();
+      }
       render();
     }, WAVE_CLEAR_FANFARE_HOLD_MS);
   }, WAVE_CLEAR_EFFECT_WAIT_MS);
+}
+
+function showWaveRewardChoice(){
+  const body = document.getElementById('wave-reward-body');
+  body.innerHTML = `
+    <div class="shop-row">
+      <div><div class="label">小隊を1個追加</div><div class="sub">新たな歩兵小隊(${SQUAD_SIZE}名)が編成され前線に加わる</div></div>
+      <div class="actions"><button class="btn primary" onclick="chooseWaveReward('squad')">選択</button></div>
+    </div>
+    <div class="shop-row">
+      <div><div class="label">斥候班を1個追加</div><div class="sub">新たな斥候班(${SCOUT_SQUAD_SIZE}名)が編成され前線に加わる</div></div>
+      <div class="actions"><button class="btn primary" onclick="chooseWaveReward('scout')">選択</button></div>
+    </div>
+    <div class="shop-row">
+      <div><div class="label">迫撃砲弾を補充</div><div class="sub">HE・HEATをランダムな数量だけ補給する</div></div>
+      <div class="actions"><button class="btn primary" onclick="chooseWaveReward('ammo')">選択</button></div>
+    </div>
+  `;
+  document.getElementById('wave-reward-overlay').classList.add('show');
+}
+
+function chooseWaveReward(kind){
+  document.getElementById('wave-reward-overlay').classList.remove('show');
+  if(kind==='squad'){
+    const id = addNewSquad();
+    log('fdc','増援', `WAVEクリアボーナス: 新編成の第${id+1}小隊(${SQUAD_SIZE}名)が前線に加わった。`);
+  } else if(kind==='scout'){
+    const id = addNewScout();
+    log('fdc','増援', `WAVEクリアボーナス: 新編成の斥候${id+1}班(${SCOUT_SQUAD_SIZE}名)が前線に加わった。`);
+  } else if(kind==='ammo'){
+    const he = Math.round(rnd(10,30));
+    const heat = Math.round(rnd(5,15));
+    state.ammo.he += he;
+    state.ammo.heat += heat;
+    log('fdc','補給', `WAVEクリアボーナス: 迫撃砲弾を補充。HE+${he}・HEAT+${heat}。`);
+  }
+  handleStageClear();
+  render();
 }
 
 function computeReward(){
@@ -2916,7 +3084,7 @@ function computeReward(){
   const ammoBonus = (state.ammo.he+state.ammo.heat)*6;
   const hpFrac = state.mortars.length ? state.mortars.reduce((s,m)=>s+m.hp/m.maxHp,0)/state.mortars.length : 0;
   const hpBonus = Math.round(hpFrac*300);
-  const infFrac = totalAliveSoldiers()/TOTAL_SOLDIERS;
+  const infFrac = totalAliveSoldiers()/totalSquadCapacity();
   const infBonus = Math.round(infFrac*150);
   const scoutFrac = state.scouts.length ? state.scouts.reduce((s,sc)=>s+unitAliveCount(sc)/sc.soldiers.length,0)/state.scouts.length : 0;
   const scoutBonus = Math.round(scoutFrac*100);
@@ -2930,7 +3098,7 @@ function computeReward(){
 
 function applyWaveResupply(){
   const hpFrac = state.mortars.length ? state.mortars.reduce((s,m)=>s+m.hp/m.maxHp,0)/state.mortars.length : 0;
-  const infFrac = totalAliveSoldiers()/TOTAL_SOLDIERS;
+  const infFrac = totalAliveSoldiers()/totalSquadCapacity();
   const scoutFrac = state.scouts.length ? state.scouts.reduce((s,sc)=>s+unitAliveCount(sc)/sc.soldiers.length,0)/state.scouts.length : 0;
   const sniperFrac = state.snipers.length ? state.snipers.reduce((s,sn)=>s+sn.soldiers.filter(x=>x.alive).length/sn.soldiers.length,0)/state.snipers.length : 0;
   const hqFrac = state.hq.hp/state.hq.maxHp;
@@ -2977,7 +3145,7 @@ function handleStageClear(){
   state.money += reward.total;
 
   if(state.mortars.every(m=>m.hp === m.maxHp) && state.hq.hp === state.hq.maxHp) unlockAchievement('flawlessStage');
-  if(totalAliveSoldiers() === TOTAL_SOLDIERS) unlockAchievement('perfectSquad');
+  if(totalAliveSoldiers() === totalSquadCapacity()) unlockAchievement('perfectSquad');
   const startAmmo = state.stageStartSnapshot.ammo.he + state.stageStartSnapshot.ammo.heat;
   const nowAmmo = state.ammo.he + state.ammo.heat;
   if(startAmmo>0 && nowAmmo >= startAmmo*0.5) unlockAchievement('ammoSaver');
@@ -3176,6 +3344,21 @@ function handleCanvasClick(evt){
     render();
     return;
   }
+
+  let decoyHit = -1, decoyBestD = Infinity;
+  state.decoys.forEach((d,idx)=>{
+    if(d.destroyed) return;
+    const dist = Math.hypot(d.x-px, d.y-py);
+    if(dist<=20 && dist<decoyBestD){ decoyBestD=dist; decoyHit=idx; }
+  });
+  if(decoyHit>=0){
+    state.decoyCommandBox = decoyHit;
+    state.commandBox = null;
+    state.enemyCommandBox = null;
+    render();
+    return;
+  }
+  state.decoyCommandBox = null;
 
   const enemyHit = findEnemyTargetAt(px, py);
   if(enemyHit){
@@ -3402,7 +3585,8 @@ function mortarBoxHtml(idx){
     } else {
       const brg = bearingBetween(mortar.x, mortar.y, aim.x, aim.y);
       const dist = Math.hypot(aim.x-mortar.x, aim.y-mortar.y);
-      infoHtml = `<div class="sel-target-info"><div class="row1"><span class="id">自由射撃座標</span></div><div class="meta">方位約${Math.round(brg)}° / 距離約${unitsToMeters(dist)}m(未確認地点)</div></div>`;
+      const isDecoyAim = aim.decoyIdx!==undefined && aim.decoyIdx!==null;
+      infoHtml = `<div class="sel-target-info"><div class="row1"><span class="id">${isDecoyAim ? `擬陣地${aim.decoyIdx+1}(座標既知)` : '自由射撃座標'}</span></div><div class="meta">方位約${Math.round(brg)}° / 距離約${unitsToMeters(dist)}m${isDecoyAim ? '' : '(未確認地点)'}</div></div>`;
     }
     bodyHtml = `
       <button class="btn ${armingTarget?'active squad-order-btn':''}" onclick="armMortarTargetOrder(${idx})" style="margin-bottom:8px;">攻撃地点設定</button>
@@ -3738,12 +3922,12 @@ function renderStats(){
   const aliveSquadPersonnel = totalAliveSoldiers();
   const aliveSniperPersonnel = state.snipers.reduce((s,sn)=>s+sn.soldiers.filter(x=>x.alive).length,0);
   const aliveTotal = aliveMortarPersonnel + aliveScoutPersonnel + aliveSquadPersonnel + aliveSniperPersonnel + state.reserve;
-  document.querySelector('#stat-roster .value').textContent = aliveTotal + ' / ' + TOTAL_ROSTER;
+  document.querySelector('#stat-roster .value').textContent = aliveTotal + ' / ' + totalRosterCapacity();
   document.getElementById('board-note').textContent = state.placementPending
     ? '手動配置モード ― 地図上の指定範囲内をクリックして、表示中のユニットの初期位置を指定してください'
     : '自軍は左側、敵軍は右側遠方に展開。ドラッグでパン・ホイールでズーム。目標をクリックして選択';
   document.getElementById('statbar-mini').textContent =
-    `WAVE ${state.stage}/${STAGE_COUNT} ・ 経過ターン${state.turns} ・ ¥${state.money.toLocaleString()} ・ 兵力${aliveTotal}/${TOTAL_ROSTER}`;
+    `WAVE ${state.stage}/${STAGE_COUNT} ・ 経過ターン${state.turns} ・ ¥${state.money.toLocaleString()} ・ 兵力${aliveTotal}/${totalRosterCapacity()}`;
 
   const revealed = state.targets.filter(t=>t.revealed && !t.destroyed);
   const byType = {};
@@ -3806,6 +3990,15 @@ function renderDecisionPanel(){
       <div class="decision-box">
         <div class="decision-summary">次に配置: <b>${item?item.label:'―'}</b>(残り${remaining})</div>
         <button class="btn" onclick="skipRemainingPlacement()">残りを既定配置で開始</button>
+      </div>
+    `; });
+    return;
+  }
+  if(state.decoyPlacementPending){
+    holders.forEach(h=>{ h.innerHTML = `
+      <div class="decision-box">
+        <div class="decision-summary">擬陣地を長押しで設置(${state.decoys.length}/${MAX_DECOYS})</div>
+        <button class="btn" onclick="finishDecoyPlacement()">設置完了</button>
       </div>
     `; });
     return;
@@ -4005,6 +4198,29 @@ function drawBoard(){
     ctx.strokeStyle = 'rgba(232,210,58,0.167)';
     ctx.lineWidth = 1;
     ctx.stroke();
+  });
+
+  // 擬陣地 (decoy positions) -- dashed diamond outline in the friendly color, plus a vertical
+  // attrition bar. Selectable (see handleCanvasClick) to direct mortar fire at its exact,
+  // known coordinates.
+  state.decoys.forEach((d,idx)=>{
+    if(d.destroyed) return;
+    const dp = project(d.x, d.y);
+    ctx.save();
+    ctx.translate(dp.x, dp.y);
+    ctx.beginPath();
+    ctx.setLineDash([3,2]);
+    ctx.strokeStyle = FRIENDLY_MARK_COLOR;
+    ctx.lineWidth = 2;
+    ctx.moveTo(0,-10); ctx.lineTo(9,0); ctx.lineTo(0,10); ctx.lineTo(-9,0); ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = LABEL_TEXT_COLOR;
+    ctx.font = '12px "JetBrains Mono"';
+    ctx.textAlign = 'center';
+    ctx.fillText(`擬陣地${idx+1}`, 0, 24);
+    ctx.restore();
+    drawAttritionBar(ctx, dp.x+16, dp.y, d.hp/d.maxHp);
   });
 
   // mortar markers (自軍, left side)
@@ -5208,6 +5424,33 @@ function toggleDoubleTapZoom(pxPixel, pyPixel){
   }
 }
 
+// per user request: long-press on the map places a 擬陣地 while manual placement is
+// pending (state.decoyPlacementPending). Shared by mouse and touch input below.
+let decoyLongPressTimer = null;
+let decoyLongPressX = 0, decoyLongPressY = 0, decoyLongPressMoved = false;
+function decoyLongPressStart(clientX, clientY){
+  if(!state || !state.decoyPlacementPending) return;
+  decoyLongPressX = clientX; decoyLongPressY = clientY; decoyLongPressMoved = false;
+  clearTimeout(decoyLongPressTimer);
+  decoyLongPressTimer = setTimeout(()=>{
+    if(decoyLongPressMoved || !state.decoyPlacementPending) return;
+    const el = document.getElementById('board');
+    const rect = el.getBoundingClientRect();
+    const px = decoyLongPressX-rect.left, py = decoyLongPressY-rect.top;
+    const g = threeReady ? terrainCanvasUnitAt(px, py) : {x:px/rect.width*CANVAS_W, y:py/rect.height*CANVAS_H};
+    if(g) placeDecoyAt(g.x, g.y);
+  }, DECOY_LONGPRESS_MS);
+}
+function decoyLongPressMove(clientX, clientY){
+  if(Math.hypot(clientX-decoyLongPressX, clientY-decoyLongPressY) > DECOY_LONGPRESS_MOVE_TOLERANCE_PX){
+    decoyLongPressMoved = true;
+    clearTimeout(decoyLongPressTimer);
+  }
+}
+function decoyLongPressEnd(){
+  clearTimeout(decoyLongPressTimer);
+}
+
 function setupMapControls(){
   // Attached to #board (the topmost overlay canvas) since it visually covers
   // #board3d and would otherwise swallow all pointer events before they reach it.
@@ -5221,12 +5464,14 @@ function setupMapControls(){
     mode = e.button===2 ? 'rotate' : 'pan';
     lastX = e.clientX; lastY = e.clientY;
     mapFocusTarget = null;
+    decoyLongPressStart(e.clientX, e.clientY);
     if(mode==='pan'){
       const rect = el.getBoundingClientRect();
       dragGround = groundPlaneCanvasUnitAt(e.clientX-rect.left, e.clientY-rect.top);
     }
   });
   window.addEventListener('mousemove', e=>{
+    decoyLongPressMove(e.clientX, e.clientY);
     if(!mode) return;
     const dx = e.clientX-lastX, dy = e.clientY-lastY;
     if(Math.abs(dx)>2 || Math.abs(dy)>2) mapDragMoved = true;
@@ -5246,7 +5491,7 @@ function setupMapControls(){
       }
     }
   });
-  window.addEventListener('mouseup', ()=>{ mode = null; dragGround = null; });
+  window.addEventListener('mouseup', ()=>{ mode = null; dragGround = null; decoyLongPressEnd(); });
 
   el.addEventListener('wheel', e=>{
     e.preventDefault();
@@ -5286,6 +5531,7 @@ function setupMapControls(){
       // browser's native pan/zoom gesture from engaging over the map.
       touchMode='pan'; mapDragMoved=false;
       touchLastX=e.touches[0].clientX; touchLastY=e.touches[0].clientY;
+      decoyLongPressStart(touchLastX, touchLastY);
       const rect = el.getBoundingClientRect();
       dragGround = groundPlaneCanvasUnitAt(touchLastX-rect.left, touchLastY-rect.top);
     } else if(e.touches.length===2){
@@ -5304,6 +5550,7 @@ function setupMapControls(){
   el.addEventListener('touchmove', e=>{
     e.preventDefault();
     if(touchMode==='pan' && e.touches.length===1){
+      decoyLongPressMove(e.touches[0].clientX, e.touches[0].clientY);
       const dx = e.touches[0].clientX-touchLastX, dy = e.touches[0].clientY-touchLastY;
       if(Math.abs(dx)>2 || Math.abs(dy)>2) mapDragMoved = true;
       touchLastX = e.touches[0].clientX; touchLastY = e.touches[0].clientY;
@@ -5334,6 +5581,7 @@ function setupMapControls(){
     }
   }, {passive:false});
   el.addEventListener('touchend', e=>{
+    decoyLongPressEnd();
     if(e.touches.length===1){
       // Dropping from two fingers to one: resume panning from the remaining
       // finger's current position instead of snapping/jumping.
@@ -5453,7 +5701,84 @@ function render(){
   renderDecisionPanel();
   renderCommandBox();
   renderEnemyCommandBox();
+  renderDecoyCommandBox();
   drawBoard();
+}
+
+function closeDecoyCommandBox(){
+  state.decoyCommandBox = null;
+  render();
+}
+function assignMortarFireAtDecoy(idx){
+  const mortar = state.mortars[idx];
+  const decoyIdx = state.decoyCommandBox;
+  const d = state.decoys[decoyIdx];
+  if(!mortar || mortar.hp<=0 || !d || d.destroyed) return;
+  if(mortar.order==='fire' && mortar.pendingFire && mortar.pendingFire.decoyIdx===decoyIdx){
+    mortar.pendingFire = null;
+    mortar.order = 'standby';
+    log('fdc','FDC', `迫撃砲${idx+1}、擬陣地への攻撃指示を解除。`);
+    render();
+    return;
+  }
+  mortar.pendingFire = {x:d.x, y:d.y, snappedId:null, decoyIdx};
+  mortar.order = 'fire';
+  mortar.pendingDest = null;
+  log('fdc','FDC', `迫撃砲${idx+1}、擬陣地${decoyIdx+1}周辺へ座標既知の精密射撃を指示。`);
+  render();
+}
+// per user request: selecting a 擬陣地 lets the player choose which mortar fires on its
+// exact (known) coordinates, and pick shell/fuze per mortar -- reuses updateFireConfig(),
+// the same function the mortar's own panel uses for its shell/fuze dropdowns.
+function renderDecoyCommandBox(){
+  const box = document.getElementById('decoy-command-box');
+  if(!box) return;
+  if(state.decoyCommandBox===null || state.decoyCommandBox===undefined){ box.style.display='none'; return; }
+  const idx = state.decoyCommandBox;
+  const d = state.decoys[idx];
+  if(!d || d.destroyed){
+    state.decoyCommandBox = null;
+    box.style.display='none';
+    return;
+  }
+  const pos = canvasToScreen(d.x, d.y);
+  const rows = state.mortars.map((m,mIdx)=>{
+    if(m.hp<=0) return '';
+    const active = m.order==='fire' && m.pendingFire && m.pendingFire.decoyIdx===idx;
+    return `
+      <div class="shop-row" style="align-items:flex-start;">
+        <div style="flex:1;">
+          <div class="label" style="font-size:11px;">迫撃砲${mIdx+1}</div>
+          <div class="row-2" style="margin-top:4px;">
+            <select onchange="updateFireConfig(${mIdx},'fireShell', this.value)">
+              <option value="he" ${m.fireShell==='he'?'selected':''}>榴弾(HE)</option>
+              <option value="heat" ${m.fireShell==='heat'?'selected':''}>対戦車榴弾(HEAT)</option>
+              <option value="smoke" ${m.fireShell==='smoke'?'selected':''}>発煙弾</option>
+              <option value="marker" ${m.fireShell==='marker'?'selected':''}>マーカー弾</option>
+              <option value="illum" ${m.fireShell==='illum'?'selected':''}>照明弾</option>
+            </select>
+            <select onchange="updateFireConfig(${mIdx},'fireFuze', this.value)">
+              <option value="impact" ${m.fireFuze==='impact'?'selected':''}>着発信管</option>
+              <option value="proximity" ${!state.fuzeUnlocked.proximity?'disabled':''} ${m.fireFuze==='proximity'?'selected':''}>近接信管</option>
+              <option value="delay" ${!state.fuzeUnlocked.delay?'disabled':''} ${m.fireFuze==='delay'?'selected':''}>遅延信管</option>
+            </select>
+          </div>
+        </div>
+        <div class="actions"><button class="btn ${active?'active squad-order-btn':''}" onclick="assignMortarFireAtDecoy(${mIdx})">${active?'照準中':'射撃'}</button></div>
+      </div>
+    `;
+  }).filter(Boolean).join('');
+  box.innerHTML = `
+    <div class="cb-head">
+      <span class="cb-title">擬陣地${idx+1} ― 座標既知</span>
+      <button class="cb-close" onclick="closeDecoyCommandBox()">×</button>
+    </div>
+    <div class="meta" style="margin-bottom:8px;">HP ${d.hp}/${d.maxHp} ・ この地点へ観測誤差なしで精密射撃可能</div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      ${rows || '<div class="empty-hint" style="padding:4px 0;">出撃可能な迫撃砲がありません</div>'}
+    </div>
+  `;
+  positionCommandBox(box, pos, 260);
 }
 
 function loop(){
