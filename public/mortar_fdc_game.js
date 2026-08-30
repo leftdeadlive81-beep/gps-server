@@ -108,7 +108,7 @@ const VEHICLE_ASSAULT_DAMAGE = [10,18];
 const DRONE_SPEED = 70;
 const DRONE_DETONATE_RANGE = 38;
 const DRONE_DETONATE_DAMAGE = [8,16];
-const INFANTRY_DRONE_LAUNCH_CHANCE = 0.16; // per action-tick, per live infantry unit not in contact
+const INFANTRY_DRONE_LAUNCH_CHANCE = 0.16/3; // per user request: drone spawn volume cut to 1/3
 const INFANTRY_DRONE_COOLDOWN_TICKS = 3;
 const INFANTRY_DRONE_SWARM_SIZE = [5, 8]; // a successful launch releases a whole swarm at once, not a single drone
 const MINE_DAMAGE = [8,18];
@@ -875,6 +875,16 @@ function startStage(){
   state.targetsSpawnedTotal = targets.length;
   state.selectedId = targets[0].id;
   state.turns = 0;
+
+  // per user request: a fully wiped-out unit (squad/scout/sniper/mortar) no longer lingers
+  // on the map as an inert "destroyed" marker into future waves -- discard it from the
+  // roster entirely at wave transition. HQ isn't included here: HQ reaching 0 HP is an
+  // immediate game-over (see checkEnd), so it can never still be at 0 HP by the time a new
+  // wave starts. No-op on the very first call (stage 1), since these arrays don't exist yet.
+  if(state.squads) state.squads = state.squads.filter(sq=>unitAlive(sq));
+  if(state.scouts) state.scouts = state.scouts.filter(s=>unitAlive(s));
+  if(state.snipers) state.snipers = state.snipers.filter(sn=>unitAlive(sn));
+  if(state.mortars) state.mortars = state.mortars.filter(m=>m.hp>0);
 
   if(stage===1){
     // first wave ― fresh deployment at full roster strength
