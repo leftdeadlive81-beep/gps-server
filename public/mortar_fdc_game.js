@@ -4681,18 +4681,15 @@ function drawBoard(){
       const sqVisL = smoothVisualPos(sq, sq.x, sq.y);
       const sqVis = project(sqVisL.x, sqVisL.y);
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
-      // per user request: the squad marker is now the custom infantry icon image (our side
+      // per user request: the squad marker is the custom infantry icon image (our side
       // only), drawn flat in screen space so it's unaffected by the 3D camera's orientation.
-      const ICON_SIZE = 22;
+      // Sized 3x up from the original 22px, and the old fallback-square primitive removed.
+      const ICON_SIZE = 66;
       if(infantryIcon.complete && infantryIcon.naturalWidth>0){
         ctx.save();
         if(aliveSoldiers.length===0) ctx.filter = 'grayscale(1) brightness(0.5)';
         ctx.drawImage(infantryIcon, sqVis.x-ICON_SIZE/2, sqVis.y-ICON_SIZE/2, ICON_SIZE, ICON_SIZE);
         ctx.restore();
-      } else {
-        // fallback square while the image is still loading
-        ctx.fillStyle = aliveSoldiers.length>0 ? FRIENDLY_MARK_COLOR : '#5c2a25';
-        ctx.fillRect(sqVis.x-7, sqVis.y-7, 14, 14);
       }
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, sqVis.x+32, sqVis.y, aliveSoldiers.length/sq.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
