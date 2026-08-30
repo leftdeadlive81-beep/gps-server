@@ -853,6 +853,12 @@ function startStage(){
   });
 
   state.targets = targets;
+  // per user request: destroyed targets are now pruned from state.targets during the wave
+  // (see resolveEnemyTurn) rather than staying in the array flagged destroyed, so anything
+  // that needs "how many enemies has this wave thrown in total" (reward par, achievements,
+  // the stat-left display, and drone ID generation below) must track it separately from
+  // state.targets.length, which now only reflects the currently-live count.
+  state.targetsSpawnedTotal = targets.length;
   state.selectedId = targets[0].id;
   state.turns = 0;
 
@@ -2422,8 +2428,9 @@ function spawnInfantryDrone(source){
   const dx = trueX-OP.x, dy = trueY-OP.y;
   const trueBearing = (Math.atan2(dx,-dy)*180/Math.PI+360)%360;
   const trueDistance = Math.sqrt(dx*dx+dy*dy);
+  state.targetsSpawnedTotal += 1;
   const drone = {
-    id: 'T'+(state.targets.length+1),
+    id: 'T'+state.targetsSpawnedTotal,
     type:'drone', def,
     trueX, trueY, trueBearing, trueDistance,
     hp, maxHp:hp,
@@ -2639,11 +2646,11 @@ function resolveDroneSwarm(actionTurns){
         } else {
           log('sys','回避', `${t.id}(ドローン)が自爆したが、${friendlyFireCandidateLabel(near)}は掩蔽率により被弾を免れた。`);
         }
-        t.trueX = rnd(ENEMY_SPAWN_MIN_X, ENEMY_SPAWN_MAX_X);
-        t.trueY = rnd(30, CANVAS_H-30);
-        const dx = t.trueX-OP.x, dy = t.trueY-OP.y;
-        t.trueBearing = (Math.atan2(dx,-dy)*180/Math.PI+360)%360;
-        t.trueDistance = Math.sqrt(dx*dx+dy*dy);
+        // per user request: a self-detonating drone is consumed by its own attack run
+        // rather than flying back to spawn to try again -- otherwise state.targets grows
+        // without bound over a long wave (see resolveEnemyTurn's end-of-tick pruning).
+        t.destroyed = true; t.hp = 0;
+        onTargetDestroyed(t);
       } else {
         const dx = near.x-t.trueX, dy = near.y-t.trueY;
         const dist = Math.hypot(dx,dy) || 1;
@@ -2793,6 +2800,13 @@ function resolveEnemyTurn(actionTurns){
   state.targets.forEach(t=>{
     if(t.suppressed>0) t.suppressed = Math.max(0, t.suppressed-actionTurns);
   });
+  // per user request: destroyed targets were never actually removed from state.targets
+  // (only flagged), so a long wave with heavy drone-swarm spawning could grow this array
+  // (and the per-tick/per-frame work that scans it) without bound. Prune here, once per
+  // decision cycle, well after every resolve* pass above has finished reading it this tick.
+  if(state.targets.some(t=>t.destroyed)){
+    state.targets = state.targets.filter(t=>!t.destroyed);
+  }
 }
 
 // per user request: a scout currently holding eyes-on the target (inScoutConeFor, not the
@@ -3209,7 +3223,7 @@ function chooseWaveReward(kind){
 
 function computeReward(){
   const base = 150 + state.stage*70;
-  const turnsPar = state.targets.length*6;
+  const turnsPar = state.targetsSpawnedTotal*6;
   const turnsBonus = Math.max(0, Math.round((turnsPar - state.turns) * 8));
   const ammoBonus = (state.ammo.he+state.ammo.heat)*6;
   const hpFrac = state.mortars.length ? state.mortars.reduce((s,m)=>s+m.hp/m.maxHp,0)/state.mortars.length : 0;
@@ -3279,7 +3293,7 @@ function handleStageClear(){
   const startAmmo = state.stageStartSnapshot.ammo.he + state.stageStartSnapshot.ammo.heat;
   const nowAmmo = state.ammo.he + state.ammo.heat;
   if(startAmmo>0 && nowAmmo >= startAmmo*0.5) unlockAchievement('ammoSaver');
-  if(state.turns <= state.targets.length*4) unlockAchievement('speedClear');
+  if(state.turns <= state.targetsSpawnedTotal*4) unlockAchievement('speedClear');
   if(state.hpDroppedLow) unlockAchievement('ironWall');
   if(state.money >= 5000) unlockAchievement('millionaire');
 
@@ -4046,7 +4060,7 @@ function renderStats(){
   document.querySelector('#stat-turns .value').textContent = state.turns;
   document.querySelector('#stat-money .value').textContent = '¥'+state.money.toLocaleString();
   const remainingTargets = state.targets.filter(t=>!t.destroyed).length;
-  document.getElementById('stat-left').textContent = remainingTargets + ' / ' + state.targets.length;
+  document.getElementById('stat-left').textContent = remainingTargets + ' / ' + state.targetsSpawnedTotal;
   const aliveMortarPersonnel = state.mortars.filter(m=>m.hp>0).length * MORTAR_CREW_SIZE;
   const aliveScoutPersonnel = state.scouts.reduce((s,sc)=>s+unitAliveCount(sc),0);
   const aliveSquadPersonnel = totalAliveSoldiers();
