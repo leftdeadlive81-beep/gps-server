@@ -4432,23 +4432,42 @@ function drawBoard(){
     const febaX = computeFebaX();
     if(febaX !== null){
       ctx.save();
-      ctx.beginPath();
-      ctx.setLineDash([10,6]);
-      ctx.strokeStyle = 'rgba(193,69,59,0.65)';
-      ctx.lineWidth = 2;
       const steps = 24;
+      const pts = [];
       for(let i=0;i<=steps;i++){
         const y = CANVAS_H * (i/steps);
-        const p = project(febaX, y);
-        if(i===0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+        pts.push(project(febaX, y));
       }
-      ctx.stroke();
+      const tracePath = ()=>{
+        ctx.beginPath();
+        pts.forEach((p,i)=>{ if(i===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); });
+      };
+      // per user request: made much more prominent -- a dark halo stroke underneath so the
+      // line reads clearly against both light and dark terrain, a bolder/near-opaque dash on
+      // top, and a glow so it doesn't get lost among the map's other markers.
+      tracePath();
       ctx.setLineDash([]);
+      ctx.strokeStyle = 'rgba(20,8,6,0.85)';
+      ctx.lineWidth = 6;
+      ctx.stroke();
+      tracePath();
+      ctx.setLineDash([12,7]);
+      ctx.strokeStyle = '#ff5c47';
+      ctx.lineWidth = 3.5;
+      ctx.shadowColor = '#ff5c47';
+      ctx.shadowBlur = 8;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.setLineDash([]);
+
       const labelP = project(febaX, 14);
-      ctx.fillStyle = 'rgba(193,69,59,0.9)';
-      ctx.font = 'bold 12px "JetBrains Mono"';
+      ctx.font = 'bold 14px "JetBrains Mono"';
       ctx.textAlign = 'center';
-      ctx.fillText('FEBA', labelP.x, labelP.y - 4);
+      const labelW = ctx.measureText('FEBA').width;
+      ctx.fillStyle = 'rgba(20,8,6,0.85)';
+      ctx.fillRect(labelP.x-labelW/2-5, labelP.y-19, labelW+10, 18);
+      ctx.fillStyle = '#ff5c47';
+      ctx.fillText('FEBA', labelP.x, labelP.y-5);
       ctx.restore();
     }
   }
