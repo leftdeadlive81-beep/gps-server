@@ -3064,7 +3064,7 @@ function commitDecision(){
   resolveMortarDecision();
   resolveEnemyTurn(turnCost);
 
-  if(allMortarsWiped() || allScoutsWiped() || allSquadsWiped()){
+  if(allMortarsWiped() || allSquadsWiped()){
     checkEnd(); render(); return;
   }
 
@@ -3154,11 +3154,6 @@ function checkEnd(){
   if(allMortarsWiped()){
     state.stageResolved = true;
     showStageFailed('hp');
-    return;
-  }
-  if(allScoutsWiped()){
-    state.stageResolved = true;
-    showStageFailed('scout');
     return;
   }
   if(state.squads.length>0 && allSquadsWiped()){
