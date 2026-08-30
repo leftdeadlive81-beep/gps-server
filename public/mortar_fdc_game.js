@@ -575,6 +575,9 @@ const sniperIcon = new Image();
 sniperIcon.src = 'icons/sniper.png';
 const scoutIcon = new Image();
 scoutIcon.src = 'icons/rcn.png';
+// per user request: enemy infantry group icon.
+const enemyInfantryIcon = new Image();
+enemyInfantryIcon.src = 'icons/e-infant.png';
 // Draws one of the custom unit-icon images centered at (cx,cy), flat in screen space (never
 // rotated to match the 3D camera), height pinned to targetH with width following the source
 // image's own aspect ratio. Grayed out when the unit has no survivors. Draws nothing (no
@@ -4829,15 +4832,10 @@ function drawBoard(){
       // estimated center marker ― one simple symbol per formation group
       let labelY = e.y+20;
       if(t.type==='infantry' && t.troops){
-        // per user request: dropped the per-soldier glyph scatter -- one marker (with an
-        // aggregate HP bar, same green/yellow/red convention as friendly units) now stands
-        // for the whole formation group instead of one symbol per living soldier.
+        // per user request: custom enemy infantry icon image in place of the plain circle --
+        // muted (grayscale) until identified, same treatment as a friendly unit with no survivors.
         const aliveTroops = t.troops.filter(s=>s.alive);
-        const color = t.revealed ? t.def.mark : '#8f9678';
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(e.x, e.y, 7, 0, Math.PI*2);
-        ctx.fill();
+        drawUnitIcon(ctx, enemyInfantryIcon, e.x, e.y, 33, !t.revealed);
         if(t.revealed) drawAttritionBar(ctx, e.x+14, e.y, t.hp/t.maxHp);
         labelY = e.y+26;
         if(t.revealed){
