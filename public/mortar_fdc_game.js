@@ -4402,7 +4402,12 @@ function drawAttritionBar(ctx, x, y, frac){
 let febaDragX = null;
 let febaLineScreenPts = null;
 const FEBA_DRAG_HIT_TOLERANCE_PX = 16;
+// per user request: temporarily disabled -- flip back to true to re-enable dragging.
+// The rest of the drag mechanism (setupMapControls, commitFebaDrag) is left in place;
+// this single flag just stops hitTestFebaLine from ever engaging a drag.
+const FEBA_DRAG_ENABLED = false;
 function hitTestFebaLine(lx, ly){
+  if(!FEBA_DRAG_ENABLED) return false;
   if(!febaLineScreenPts) return false;
   return febaLineScreenPts.some(p=>Math.hypot(p.x-lx, p.y-ly) <= FEBA_DRAG_HIT_TOLERANCE_PX);
 }
