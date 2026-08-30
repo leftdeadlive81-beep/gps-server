@@ -102,16 +102,17 @@ const CONTOUR_CELL = 22;
 const SHELLS = {he:'榴弾(HE)', heat:'対戦車榴弾(HEAT)', smoke:'発煙弾', marker:'マーカー弾', illum:'照明弾'};
 const FUZES  = {impact:'着発信管', proximity:'近接信管', delay:'遅延信管'};
 const COUNTER_CHANCE = {infantry:0.06, artillery:0.19, vehicle:0.05, drone:0.04};
-const COUNTER_DAMAGE = {infantry:[4,9], artillery:[14,24], vehicle:[5,9], drone:[2,5]};
+// per user request: enemy attack power doubled
+const COUNTER_DAMAGE = {infantry:[8,18], artillery:[28,48], vehicle:[10,18], drone:[4,10]};
 const VEHICLE_ASSAULT_RANGE = 100;
-const VEHICLE_ASSAULT_DAMAGE = [10,18];
+const VEHICLE_ASSAULT_DAMAGE = [20,36];
 const DRONE_SPEED = 70;
 const DRONE_DETONATE_RANGE = 38;
-const DRONE_DETONATE_DAMAGE = [8,16];
+const DRONE_DETONATE_DAMAGE = [16,32];
 const INFANTRY_DRONE_LAUNCH_CHANCE = 0.16/3; // per user request: drone spawn volume cut to 1/3
 const INFANTRY_DRONE_COOLDOWN_TICKS = 3;
 const INFANTRY_DRONE_SWARM_SIZE = [5, 8]; // a successful launch releases a whole swarm at once, not a single drone
-const MINE_DAMAGE = [8,18];
+const MINE_DAMAGE = [16,36]; // per user request: enemy attack power doubled
 const MINE_PLACEMENT_CHANCE = 0.12; // per enemy-turn resolution
 const MINE_MAX_ACTIVE = 4;
 const MERGE_HP_THRESHOLD = 0.4; // below this HP fraction, an enemy unit regroups toward the nearest surviving unit instead of advancing
@@ -390,7 +391,7 @@ const MORTAR_FIRE_CORRECTION_FRAC = 0.75;
 const MORTAR_CB_SHOTS_THRESHOLD = 3;
 const MORTAR_CB_DETECT_BASE = 0.3;
 const MORTAR_CB_WARN_TURNS = 2;
-const MORTAR_CB_STRIKE_DMG = [28, 42];
+const MORTAR_CB_STRIKE_DMG = [56, 84]; // per user request: enemy attack power doubled
 // per user request: switched from a frame-rate-dependent exponential lerp (which either
 // visibly lagged behind combat at a low rate, or converged in a fraction of a decision
 // interval and then sat frozen -- stutter-stepping in time with 自動's 0.5s auto-commit tick
@@ -908,7 +909,7 @@ function startStage(){
   const infantryGroups = buildEnemyInfantryGroups(stage);
   const otherCount = Math.min(2+Math.floor((stage-1)/3), 6);
   const diff = DIFFICULTIES[state.difficulty];
-  const hpMult = (1 + (stage-1)*0.08) * diff.hpMult;
+  const hpMult = (1 + (stage-1)*0.08) * diff.hpMult * 2; // per user request: enemy defense doubled
   state.weather = stage===1 ? 'clear' : choice(Object.keys(WEATHER_TYPES));
   const weather = WEATHER_TYPES[state.weather];
   const opticsMult = (state.equipment.optics ? 0.8 : 1) * weather.errMult;
@@ -2564,7 +2565,7 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
 // drone's durability.
 function spawnInfantryDrone(source){
   const def = TARGET_TYPES.drone;
-  const hpMult = (1 + (state.stage-1)*0.08) * DIFFICULTIES[state.difficulty].hpMult;
+  const hpMult = (1 + (state.stage-1)*0.08) * DIFFICULTIES[state.difficulty].hpMult * 2; // per user request: enemy defense doubled
   const hp = Math.round(def.hp * hpMult);
   const trueX = clamp(source.trueX + rnd(-20,20), 20, CANVAS_W-20);
   const trueY = clamp(source.trueY + rnd(-20,20), 20, CANVAS_H-20);
@@ -2844,7 +2845,7 @@ function advanceEnemyInfantry(actionTurns){
         const hqDist = Math.hypot(t.trueX-state.hq.x, t.trueY-state.hq.y);
         if(hqDist <= SQUAD_ENGAGE_RANGE){
           if(rollExposureHit(state.hq.exposure)){
-            const dmg = Math.round(rnd(3,8) * DIFFICULTIES[state.difficulty].counterMult);
+            const dmg = Math.round(rnd(6,16) * DIFFICULTIES[state.difficulty].counterMult); // per user request: enemy attack power doubled
             state.hq.hp = Math.max(0, state.hq.hp-dmg);
             if(state.hq.hp <= state.hq.maxHp*0.3) state.hpDroppedLow = true;
             log('sys','被弾', `${t.id} が指揮所に肉薄、突入攻撃(被害 ${dmg})。`);
