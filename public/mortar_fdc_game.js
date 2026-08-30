@@ -298,6 +298,13 @@ const SQUAD_FORCE_REVEAL_RANGE_M = 500;
 const SQUAD_FORCE_REVEAL_RANGE_UNITS = SQUAD_FORCE_REVEAL_RANGE_M / METERS_PER_UNIT;
 const ESTIMATE_MARKER_RADIUS_M = 500;
 const ESTIMATE_MARKER_RADIUS_UNITS = ESTIMATE_MARKER_RADIUS_M / METERS_PER_UNIT;
+// per user request: infantry's default anti-drone point defense -- any alive squad
+// automatically fires on any drone within this radius, always active regardless of
+// the squad's current order/standing order (see resolveSquadAntiDrone)
+const SQUAD_ANTI_DRONE_RANGE_M = 200;
+const SQUAD_ANTI_DRONE_RANGE_UNITS = SQUAD_ANTI_DRONE_RANGE_M / METERS_PER_UNIT;
+const SQUAD_ANTI_DRONE_HIT_CHANCE = 0.65;
+const SQUAD_ANTI_DRONE_DMG = [8,16];
 // per user request: sniper effective range is 3x infantry's (squad) engagement range
 const SNIPER_RANGE_UNITS = SQUAD_ENGAGE_RANGE * 3;
 const SNIPER_RANGE_M = Math.round(SNIPER_RANGE_UNITS * METERS_PER_UNIT);
@@ -2573,6 +2580,43 @@ function resolveVehicleAssault(actionTurns){
   return anyEvent;
 }
 
+// per user request: infantry's default anti-drone point defense. Runs before
+// resolveDroneSwarm each action tick so a squad gets a shot at a drone closing
+// in on it while it's still outside DRONE_DETONATE_RANGE, not just after the
+// fact -- independent of the squad's current order/standing order (always on).
+function resolveSquadAntiDrone(actionTurns){
+  let anyEvent = false;
+  for(let i=0;i<actionTurns;i++){
+    state.squads.forEach((sq, sqIdx)=>{
+      const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
+      if(aliveSoldiers.length===0) return;
+      state.targets.forEach(t=>{
+        if(t.destroyed || t.type!=='drone') return;
+        if(Math.hypot(t.trueX-sq.x, t.trueY-sq.y) > SQUAD_ANTI_DRONE_RANGE_UNITS) return;
+        anyEvent = true;
+        if(revealTarget(t)){
+          log('op','斥候', `${t.id} を至近距離で捕捉、<b>${t.def.label}</b>と識別。`);
+        }
+        if(Math.random() < SQUAD_ANTI_DRONE_HIT_CHANCE){
+          const dmg = Math.round(rnd(SQUAD_ANTI_DRONE_DMG[0], SQUAD_ANTI_DRONE_DMG[1]));
+          t.hp -= dmg;
+          enemyTracers.push({startX:sq.x, startY:sq.y, endX:t.trueX, endY:t.trueY, born:performance.now(), duration:150});
+          if(t.hp<=0 && !t.destroyed){
+            t.destroyed = true; t.hp = 0;
+            log('op','前線', `第${sqIdx+1}小隊が${t.id}を対空射撃で<b>撃墜</b>。`);
+            onTargetDestroyed(t);
+          } else {
+            log('op','前線', `第${sqIdx+1}小隊が${t.id}に対空射撃(効果 ${dmg})。`);
+          }
+        } else {
+          log('sys','対空', `第${sqIdx+1}小隊が${t.id}へ対空射撃するも外す。`);
+        }
+      });
+    });
+  }
+  return anyEvent;
+}
+
 function resolveDroneSwarm(actionTurns){
   const drones = state.targets.filter(t=>!t.destroyed && t.type==='drone');
   if(drones.length===0) return false;
@@ -2727,6 +2771,7 @@ function resolveEnemyTurn(actionTurns){
   const advanced = advanceEnemyInfantry(actionTurns);
   const repositioned = advanceEnemyArtillery(actionTurns);
   const assaulted = resolveVehicleAssault(actionTurns);
+  const antiDroned = resolveSquadAntiDrone(actionTurns);
   const swarmed = resolveDroneSwarm(actionTurns);
   const hit = enemyCounterAttack(actionTurns);
   const cbEvent = resolveMortarCounterBattery(actionTurns);
@@ -2738,13 +2783,13 @@ function resolveEnemyTurn(actionTurns){
   if(!allSnipersWiped()){
     sniperEvent = resolveSniperOrders(actionTurns);
   }
-  if(!hit && !infEvent && !sniperEvent && !advanced && !assaulted && !swarmed && !cbEvent){
+  if(!hit && !infEvent && !sniperEvent && !advanced && !assaulted && !swarmed && !cbEvent && !antiDroned){
     log('sys','敵ターン', '目立った動きなし。');
   }
   // per user request: 交戦時のサウンド -- looping battlefield-combat ambience plays while
   // squads/snipers are actively engaging this turn, and pauses again once nothing is
   // actively engaging.
-  if(infEvent || sniperEvent) playCombatAmbience(); else stopCombatAmbience();
+  if(infEvent || sniperEvent || antiDroned) playCombatAmbience(); else stopCombatAmbience();
   state.targets.forEach(t=>{
     if(t.suppressed>0) t.suppressed = Math.max(0, t.suppressed-actionTurns);
   });
