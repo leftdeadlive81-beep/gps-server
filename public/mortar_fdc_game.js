@@ -304,7 +304,10 @@ const SNIPER_AIM_RANGE_M = 2000;
 const SNIPER_AIM_RANGE_UNITS = SNIPER_AIM_RANGE_M / METERS_PER_UNIT;
 const SNIPER_AIM_LINE_WIDTH_M = 20;
 const SNIPER_AIM_LINE_WIDTH_UNITS = SNIPER_AIM_LINE_WIDTH_M / METERS_PER_UNIT;
-const SNIPER_DMG = [16,26];
+const SNIPER_DMG = [20,32];
+// per user request: HP fraction at/below which a connecting sniper shot executes the target
+// outright regardless of remaining HP (see sniperEngageTarget)
+const SNIPER_EXECUTE_HP_THRESHOLD = 0.3;
 // per user request: mortar's effective range (used for the 主線方位角 fan's length)
 const MORTAR_MAINLINE_RANGE_M = 6000;
 const MORTAR_MAINLINE_RANGE_UNITS = MORTAR_MAINLINE_RANGE_M / METERS_PER_UNIT;
@@ -1980,8 +1983,15 @@ function sniperEngageTarget(sn, t){
   const suppressionDmgMult = isSuppressed(t) ? SUPPRESSION_DUEL_DMG_BONUS : 1;
   const vetDmgMult = 1 + unitAvgVetLevel(sn.soldiers)*VET_DMG_BONUS_PER_LEVEL;
   const dmg = Math.round(rnd(SNIPER_DMG[0], SNIPER_DMG[1]) * strengthFrac * altMult * suppressionDmgMult * vetDmgMult);
-  applyDamageToTarget(t, dmg);
-  log('mortar','狙撃', `狙撃${sn.id+1}班、${t.id}に精密射撃(効果 ${dmg})。`);
+  // per user request: 処刑(execute) -- a target already worn down to
+  // SNIPER_EXECUTE_HP_THRESHOLD or below is finished off outright on a connecting hit,
+  // regardless of remaining HP. Makes snipers the dedicated finisher once mortars/squads
+  // have softened a target up, rather than just another (weaker) damage source.
+  const isExecute = t.maxHp>0 && (t.hp/t.maxHp) <= SNIPER_EXECUTE_HP_THRESHOLD;
+  applyDamageToTarget(t, isExecute ? t.hp : dmg);
+  log('mortar','狙撃', isExecute
+    ? `狙撃${sn.id+1}班、${t.id}へ<b>止めの一撃</b>。撃破を確認。`
+    : `狙撃${sn.id+1}班、${t.id}に精密射撃(効果 ${dmg})。`);
   enemyTracers.push({startX:sn.x, startY:sn.y, endX:t.trueX, endY:t.trueY, born:performance.now(), duration:180});
   if(t.hp<=0 && !t.destroyed){
     t.destroyed = true; t.hp = 0;
@@ -2701,6 +2711,14 @@ function resolveEnemyTurn(actionTurns){
   });
 }
 
+// per user request: a scout currently holding eyes-on the target (inScoutConeFor, not the
+// isTargetDetected-style inScoutCone which treats "no scouts left" as "everything visible" --
+// that fallback would perversely make every shot perfectly precise once all scouts are dead)
+// gives the mortar a full, error-free correction instead of the usual partial one. Gives
+// scouts a clear, high-value job: babysit the one target you need a guaranteed kill on.
+function scoutHasEyesOn(t){
+  return state.scouts.some(s=>inScoutConeFor(s,t));
+}
 function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVolleyDone){
   // shoot-and-scoot: every volley fired counts against the same-position streak (see
   // resolveMortarCounterBattery); resolveOneMortarDecision resets this back to 0 once the
@@ -2709,9 +2727,12 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
   // per user request: fire aimed at an identified target is corrected part of the way from
   // the raw (error-prone) spotted estimate toward the target's true position -- see
   // MORTAR_FIRE_CORRECTION_FRAC. A manually-clicked bare coordinate (no snappedTarget) has no
-  // true position to correct toward, so it's unaffected.
-  const aimX = snappedTarget ? aim.x + (snappedTarget.trueX-aim.x)*MORTAR_FIRE_CORRECTION_FRAC : aim.x;
-  const aimY = snappedTarget ? aim.y + (snappedTarget.trueY-aim.y)*MORTAR_FIRE_CORRECTION_FRAC : aim.y;
+  // true position to correct toward, so it's unaffected. A scout actively watching the target
+  // right now (see scoutHasEyesOn) instead gets the full 100% correction.
+  const scoutGuided = !!(snappedTarget && scoutHasEyesOn(snappedTarget));
+  const correctionFrac = scoutGuided ? 1 : MORTAR_FIRE_CORRECTION_FRAC;
+  const aimX = snappedTarget ? aim.x + (snappedTarget.trueX-aim.x)*correctionFrac : aim.x;
+  const aimY = snappedTarget ? aim.y + (snappedTarget.trueY-aim.y)*correctionFrac : aim.y;
   const dispersion = computeDispersionAt() * WEATHER_TYPES[state.weather].dispersionMult * (SHELL_DISPERSION_MULT[shell]||1);
   const base = 25;
 
@@ -2720,6 +2741,7 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
   const aimLabel = snappedTarget ? snappedTarget.id : `座標(方位${Math.round(brg)}°/距離${unitsToMeters(dist)}m)`;
   log('fdc','FDC', `迫撃砲${mortar.id+1}: ${aimLabel} へ射撃要求。${SHELLS[shell]}・${FUZES[fuze]}・${count}発。`);
   log('mortar','迫撃砲班', `迫撃砲${mortar.id+1} 了解。${count}発装填、撃て!`);
+  if(scoutGuided) log('op','斥候', `${snappedTarget.id} を観測中、着弾修正データを送る。`);
 
   let pending = count;
   let hitAny = false;
