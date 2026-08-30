@@ -2990,6 +2990,39 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
             return;
           }
           const killRadius = SHELL_KILL_RADIUS_UNITS[shell];
+          // per user request: proximity-fused HE bursts in the air, so it catches every drone
+          // within the kill radius at once instead of only ever downing one drone per round --
+          // the intended counter to a whole swarm arriving together. Every other shell/fuze
+          // (and proximity HE against anything that isn't a drone) keeps the normal
+          // single-nearest-target resolution below.
+          const isProximityAirburst = shell==='he' && fuze==='proximity';
+          const dronesInBurst = isProximityAirburst
+            ? state.targets.filter(target=>!target.destroyed && target.type==='drone' && Math.hypot(ix-target.trueX, iy-target.trueY)<=killRadius)
+            : [];
+          if(dronesInBurst.length>0){
+            hitAny = true;
+            dronesInBurst.forEach(target=>{
+              const wasFullHp = target.hp === target.maxHp;
+              const dmg = Math.round(base*effectMultiplier(shell, fuze, target.type));
+              applyDamageToTarget(target, dmg);
+              target.impacts.push({x:ix,y:iy});
+              target.suppressed = SUPPRESSION_TURNS;
+              if(wasFullHp && target.hp<=0) unlockAchievement('oneShotKill');
+              if(target.hp<=0 && !target.destroyed){
+                target.destroyed = true;
+                target.hp = 0;
+                onTargetDestroyed(target);
+              }
+            });
+            log('mortar','観測', `弾着${i+1}: <b>空中炸裂</b>。近接信管がドローン${dronesInBurst.length}機を同時に捕捉、一掃した。`);
+            pending -= 1;
+            if(pending <= 0){
+              finalizeVolley(snappedTarget, hitAny, volleyImpacts);
+              onVolleyDone();
+            }
+            render();
+            return;
+          }
           let hitTarget = null, nearMiss = false;
           state.targets.forEach(target=>{
             if(target.destroyed || hitTarget) return;
@@ -3721,7 +3754,7 @@ function mortarBoxHtml(idx){
           <label>信管</label>
           <select onchange="updateFireConfig(${idx},'fireFuze', this.value)">
             <option value="impact" ${mortar.fireFuze==='impact'?'selected':''}>着発信管</option>
-            <option value="proximity" ${!state.fuzeUnlocked.proximity?'disabled':''} ${mortar.fireFuze==='proximity'?'selected':''}>近接信管${!state.fuzeUnlocked.proximity?'(未解放)':''}</option>
+            <option value="proximity" ${!state.fuzeUnlocked.proximity?'disabled':''} ${mortar.fireFuze==='proximity'?'selected':''}>近接信管 ― 榴弾併用でドローン群を一斉撃破${!state.fuzeUnlocked.proximity?'(未解放)':''}</option>
             <option value="delay" ${!state.fuzeUnlocked.delay?'disabled':''} ${mortar.fireFuze==='delay'?'selected':''}>遅延信管${!state.fuzeUnlocked.delay?'(未解放)':''}</option>
           </select>
         </div>
