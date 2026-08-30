@@ -379,7 +379,7 @@ const SHELL_DISPERSION_MULT = {heat:0.6};
 // effective aiming bias specifically for mortar fire, without touching the shared
 // bearingErr/distErr estimate used elsewhere (sniper aiming, the UI uncertainty circle,
 // squad/sniper approach).
-const MORTAR_FIRE_CORRECTION_FRAC = 0.5;
+const MORTAR_FIRE_CORRECTION_FRAC = 0.75;
 // per user request ("面白くなる要素" -> 対砲兵レーダー/Shoot & Scoot): firing repeatedly from the
 // same position risks the enemy's counter-battery radar triangulating it. Once a mortar has
 // fired more than MORTAR_CB_SHOTS_THRESHOLD volleys without relocating, each further volley
@@ -804,8 +804,11 @@ function startStage(){
   state.weather = stage===1 ? 'clear' : choice(Object.keys(WEATHER_TYPES));
   const weather = WEATHER_TYPES[state.weather];
   const opticsMult = (state.equipment.optics ? 0.8 : 1) * weather.errMult;
-  const bearingErrBase = (45 + (stage-1)*2) * opticsMult;
-  const distErrBase = (180 + (stage-1)*8) * opticsMult;
+  // per user request: eased the growth of observation error over stages -- both the base
+  // error and its per-stage growth were roughly halved (bearing 45->30 base, +2->+1/stage;
+  // distance 180->120 base, +8->+4/stage) so unguided fire misses by less at high stages.
+  const bearingErrBase = (30 + (stage-1)*1) * opticsMult;
+  const distErrBase = (120 + (stage-1)*4) * opticsMult;
   const totalCount = infantryGroups.length + otherCount;
   const spots = generateSpots(totalCount);
   const otherTypes = pickTypesForCount(otherCount, stage);
@@ -4051,11 +4054,20 @@ function renderEnemyCommandBox(){
     return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignSquadHunt(${idx})">第${idx+1}小隊に攻撃させる${active?'(攻撃中)':''}</button>`;
   }).filter(Boolean).join('');
   const allBtns = mortarBtns + squadBtns;
+  // per user request: make the fire-correction mechanic visible before the player commits a
+  // volley -- without a scout holding eyes-on, mortar fire only closes MORTAR_FIRE_CORRECTION_FRAC
+  // of the observation error, so show how much miss margin (in meters) is still expected.
+  const guided = scoutHasEyesOn(t);
+  const residualErrM = Math.round(unitsToMeters(t.distErr) * (1-MORTAR_FIRE_CORRECTION_FRAC));
+  const precisionHtml = guided
+    ? `<div class="meta" style="margin-bottom:8px;color:var(--green-id);">斥候が観測中 ― 迫撃砲は精密射撃(誤差なし)</div>`
+    : `<div class="meta" style="margin-bottom:8px;color:var(--amber);">未観測 ― 迫撃砲は着弾誤差約${residualErrM}m(斥候をこの目標に向けると誤差なしに)</div>`;
   box.innerHTML = `
     <div class="cb-head">
       <span class="cb-title">${t.id} ― ${t.revealed?t.def.label:'識別不能'}</span>
       <button class="cb-close" onclick="closeEnemyCommandBox()">×</button>
     </div>
+    ${precisionHtml}
     <div class="meta" style="margin-bottom:8px;">この目標を攻撃させるユニットを選択:</div>
     <div style="display:flex;flex-direction:column;gap:6px;">
       ${allBtns || '<div class="empty-hint" style="padding:4px 0;">出撃可能なユニットがありません</div>'}
