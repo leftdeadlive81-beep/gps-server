@@ -12,7 +12,7 @@
 <div class="wrap">
   <div class="panel statbar-panel">
     <div class="panel-title statbar-header" onclick="toggleStatbar()">
-      <span>作戦ステータス ― STATUS <span style="color:var(--muted);font-weight:400;">v0.2</span></span>
+      <span>STATUS <span style="color:var(--muted);font-weight:400;">v0.2</span></span>
       <span class="statbar-mini" id="statbar-mini">-- </span>
       <span class="statbar-caret" id="statbar-caret">▸</span>
     </div>
@@ -52,7 +52,10 @@
       <div class="log" id="log"></div>
     </div>
     <div class="panel status-panel">
-      <div class="panel-title">部隊稼働状況</div>
+      <div class="panel-title force-list-header" onclick="toggleForceList()">
+        <span>部隊稼働状況</span>
+        <span class="force-list-caret" id="force-list-caret">▸</span>
+      </div>
       <div class="force-list" id="force-list"></div>
       <div class="self-ammo-line" id="self-ammo-line">弾薬: --</div>
     </div>

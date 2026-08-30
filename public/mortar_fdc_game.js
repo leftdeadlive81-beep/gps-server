@@ -1458,22 +1458,25 @@ function onTargetDestroyed(t){
   spawnDestructionEffect(t.trueX, t.trueY, `${t.def.label} 撃破!`, ENEMY_MARK_COLOR);
 }
 
-// per user request: a bigger "destroyed" flourish shared by both sides -- an explosion ring
-// (flashes, tagged big:true) with flung debris, a rising column of black wreck smoke that
-// lingers a few seconds, and a floating kill banner in the destroyed side's mark color.
+// per user request: a MUCH bigger, more dramatic "destroyed" flourish shared by both sides --
+// a double-pulse explosion ring (flashes, tagged big:true, staggered so it reads as a
+// boom-BOOM rather than one flat flash), a large flung debris shower, a rising column of
+// black wreck smoke that lingers for several seconds, and a floating kill banner that pops
+// in before settling.
 function spawnDestructionEffect(x, y, label, color){
   const born = performance.now();
-  flashes.push({x, y, born, life:550, big:true});
-  for(let i=0;i<10;i++){
+  flashes.push({x, y, born, life:800, big:true});
+  flashes.push({x, y, born: born+130, life:650, big:true});
+  for(let i=0;i<24;i++){
     const ang = Math.random()*Math.PI*2;
-    const spd = rnd(25, 85);
+    const spd = rnd(40, 150);
     debrisParticles.push({
-      x, y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd*0.5 - rnd(15,45),
-      born, life: rnd(650,1050), color,
+      x, y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd*0.5 - rnd(25,70),
+      born, life: rnd(800,1400), color,
     });
   }
-  wreckSmokes.push({x, y, born, life:4200});
-  if(label) killBanners.push({x, y, born, life:1500, text:label, color});
+  wreckSmokes.push({x, y, born, life:6000});
+  if(label) killBanners.push({x, y, born, life:1900, text:label, color});
 }
 
 function unlockAchievement(key){
@@ -1489,6 +1492,13 @@ function unlockAchievement(key){
 function toggleStatbar(){
   const content = document.getElementById('statbar-content');
   const caret = document.getElementById('statbar-caret');
+  const expanded = content.classList.toggle('expanded');
+  caret.textContent = expanded ? '▾' : '▸';
+}
+
+function toggleForceList(){
+  const content = document.getElementById('force-list');
+  const caret = document.getElementById('force-list-caret');
   const expanded = content.classList.toggle('expanded');
   caret.textContent = expanded ? '▾' : '▸';
 }
@@ -3808,6 +3818,24 @@ function drawEstimatedPositionMarker(ctx, t){
   ctx.fillText(`${t.id} 見積もり位置`, m.x, m.y-12);
 }
 
+// per user request: a thin vertical attrition bar (3-4px wide) shown beside every friendly
+// unit marker (指揮所/迫撃砲/斥候/小隊/狙撃班), replacing the old horizontal HP bars that used
+// to sit above HQ/mortar/scout only (squads/snipers previously had no bar at all -- just the
+// alive-count text). Fills bottom-to-top, colored green/yellow/red by the same tiers used for
+// the individual enemy-soldier gauges (frac>0.5 healthy, >0.25 hurt, else critical).
+function drawAttritionBar(ctx, x, y, frac){
+  const w = 4, h = 26;
+  const bx = x - w/2, by = y - h/2;
+  frac = clamp(frac, 0, 1);
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(bx-1, by-1, w+2, h+2);
+  ctx.fillStyle = '#232a18';
+  ctx.fillRect(bx, by, w, h);
+  const filledH = h*frac;
+  ctx.fillStyle = frac>0.5 ? '#7fc76b' : frac>0.25 ? '#e0b84a' : '#d9524a';
+  ctx.fillRect(bx, by+(h-filledH), w, filledH);
+}
+
 function drawBoard(){
   const cv = document.getElementById('board');
   const ctx = cv.getContext('2d');
@@ -3867,15 +3895,7 @@ function drawBoard(){
     ctx.restore();
 
     if(hqAlive){
-      const hpPct = clamp(hq.hp/hq.maxHp, 0, 1);
-      const barW=54, barH=6;
-      const bx = hqP.x-barW/2, by = hqP.y-38;
-      ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.fillRect(bx-1,by-1,barW+2,barH+2);
-      ctx.fillStyle = '#3a4128';
-      ctx.fillRect(bx,by,barW,barH);
-      ctx.fillStyle = hpPct>0.3 ? FRIENDLY_MARK_COLOR : '#f0715f';
-      ctx.fillRect(bx,by,barW*hpPct,barH);
+      drawAttritionBar(ctx, hqP.x+20, hqP.y-6, hq.hp/hq.maxHp);
     }
   }
 
@@ -3942,15 +3962,7 @@ function drawBoard(){
     ctx.restore();
 
     if(mAlive){
-      const hpPct = clamp(mortar.hp/mortar.maxHp, 0, 1);
-      const barW=56, barH=6;
-      const bx = mVis.x-barW/2, by = mVis.y-34;
-      ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.fillRect(bx-1,by-1,barW+2,barH+2);
-      ctx.fillStyle = '#3a4128';
-      ctx.fillRect(bx,by,barW,barH);
-      ctx.fillStyle = hpPct>0.3 ? FRIENDLY_MARK_COLOR : '#f0715f';
-      ctx.fillRect(bx,by,barW*hpPct,barH);
+      drawAttritionBar(ctx, mVis.x+18, mVis.y-2, mortar.hp/mortar.maxHp);
     }
   });
 
@@ -4023,15 +4035,7 @@ function drawBoard(){
     ctx.restore();
 
     if(scoutAlive){
-      const hpPct = clamp(aliveCount/scout.soldiers.length, 0, 1);
-      const barW=46, barH=5;
-      const bx = scoutVis.x-barW/2, by = scoutVis.y-30;
-      ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.fillRect(bx-1,by-1,barW+2,barH+2);
-      ctx.fillStyle = '#3a4128';
-      ctx.fillRect(bx,by,barW,barH);
-      ctx.fillStyle = hpPct>0.3 ? FRIENDLY_MARK_COLOR : '#f0715f';
-      ctx.fillRect(bx,by,barW*hpPct,barH);
+      drawAttritionBar(ctx, scoutVis.x+18, scoutVis.y, aliveCount/scout.soldiers.length);
     }
   });
 
@@ -4050,6 +4054,7 @@ function drawBoard(){
         ctx.arc(pos.x, pos.y, 3.2, 0, Math.PI*2);
         ctx.fill();
       });
+      if(aliveSoldiers.length>0) drawAttritionBar(ctx, sqVis.x+32, sqVis.y, aliveSoldiers.length/sq.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
       ctx.textAlign='center';
@@ -4090,6 +4095,7 @@ function drawBoard(){
         ctx.arc(pos.x, pos.y, 3, 0, Math.PI*2);
         ctx.fill();
       });
+      if(aliveSoldiers.length>0) drawAttritionBar(ctx, snVis.x+20, snVis.y, aliveSoldiers.length/sn.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
       ctx.textAlign='center';
@@ -4386,23 +4392,25 @@ function drawBoard(){
   });
 
   // impact flashes ― a "big" flash (destruction events, see spawnDestructionEffect) is a
-  // larger, whiter-hot version of the same ring+core rather than a separate visual language
+  // much larger, whiter-hot version of the same ring+core rather than a separate visual
+  // language; spawnDestructionEffect pushes two staggered big flashes per kill for a
+  // boom-BOOM double pulse instead of one flat pop.
   flashes.forEach(f=>{
     const p = (nowP-f.born)/f.life;
     const fp = project(f.x, f.y);
-    const scale = f.big ? 1.9 : 1;
+    const scale = f.big ? 3.4 : 1;
     ctx.beginPath();
     ctx.strokeStyle = f.big ? `rgba(255,235,205,${1-p})` : `rgba(255,140,60,${1-p})`;
-    ctx.lineWidth = f.big ? 3.5 : 2.5;
-    ctx.arc(fp.x, fp.y, (4+p*22)*scale, 0, Math.PI*2);
+    ctx.lineWidth = f.big ? 5 : 2.5;
+    ctx.arc(fp.x, fp.y, (6+p*38)*scale, 0, Math.PI*2);
     ctx.stroke();
     ctx.beginPath();
-    ctx.fillStyle = f.big ? `rgba(255,240,210,${(1-p)*0.85})` : `rgba(255,200,120,${(1-p)*0.8})`;
-    ctx.arc(fp.x, fp.y, Math.max(0,(f.big?13:6)-p*(f.big?13:6)), 0, Math.PI*2);
+    ctx.fillStyle = f.big ? `rgba(255,240,210,${(1-p)*0.9})` : `rgba(255,200,120,${(1-p)*0.8})`;
+    ctx.arc(fp.x, fp.y, Math.max(0,(f.big?22:6)-p*(f.big?22:6)), 0, Math.PI*2);
     ctx.fill();
   });
 
-  // debris particles ― small fragments flung outward from a destruction, falling with gravity
+  // debris particles ― fragments flung outward from a destruction, falling with gravity
   debrisParticles = debrisParticles.filter(d=>nowP-d.born < d.life);
   debrisParticles.forEach(d=>{
     const t = (nowP-d.born)/1000;
@@ -4414,20 +4422,23 @@ function drawBoard(){
     ctx.globalAlpha = Math.max(0, 1-age);
     ctx.fillStyle = d.color || '#ffb45a';
     ctx.beginPath();
-    ctx.arc(dp.x, dp.y, 2, 0, Math.PI*2);
+    ctx.arc(dp.x, dp.y, 3.5, 0, Math.PI*2);
     ctx.fill();
     ctx.restore();
   });
 
-  // wreck smoke ― a dark column that drifts up and fades over a few seconds, marking where
-  // something was destroyed
+  // wreck smoke ― a dark column that drifts up and fades over several seconds, marking
+  // where something was destroyed
   wreckSmokes = wreckSmokes.filter(w=>nowP-w.born < w.life);
   wreckSmokes.forEach(w=>{
     const age = (nowP-w.born)/w.life;
-    const wp = project(w.x, w.y - age*40);
-    const alpha = (1-age)*0.4;
+    const wp = project(w.x, w.y - age*55);
+    const alpha = (1-age)*0.58;
     if(alpha<=0) return;
-    [{dx:0,dy:0,r:14+age*10},{dx:-6,dy:-4,r:10+age*8},{dx:6,dy:-5,r:10+age*8}].forEach(pf=>{
+    [
+      {dx:0,dy:0,r:24+age*16},{dx:-10,dy:-6,r:18+age*13},{dx:10,dy:-8,r:18+age*13},
+      {dx:-16,dy:6,r:14+age*10},{dx:15,dy:8,r:14+age*10},
+    ].forEach(pf=>{
       ctx.beginPath();
       ctx.fillStyle = `rgba(28,26,24,${alpha})`;
       ctx.arc(wp.x+pf.dx, wp.y+pf.dy, pf.r, 0, Math.PI*2);
@@ -4435,21 +4446,27 @@ function drawBoard(){
     });
   });
 
-  // kill banners ― a floating "撃破!" (or friendly-loss equivalent) that rises and fades
+  // kill banners ― a floating "撃破!" (or friendly-loss equivalent) that pops in big, then
+  // settles, rises and fades
   killBanners = killBanners.filter(b=>nowP-b.born < b.life);
   killBanners.forEach(b=>{
     const age = (nowP-b.born)/b.life;
-    const bp = project(b.x, b.y - age*22);
-    const alpha = 1 - Math.max(0, (age-0.55)/0.45);
+    const bp = project(b.x, b.y - age*30);
+    const alpha = 1 - Math.max(0, (age-0.6)/0.4);
+    const popIn = 200;
+    const elapsedMs = nowP-b.born;
+    const popScale = elapsedMs<popIn ? 1.7 - 0.7*(elapsedMs/popIn) : 1;
     ctx.save();
     ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
-    ctx.font = 'bold 15px "JetBrains Mono"';
+    ctx.translate(bp.x, bp.y);
+    ctx.scale(popScale, popScale);
+    ctx.font = 'bold 20px "JetBrains Mono"';
     ctx.textAlign = 'center';
     ctx.strokeStyle = 'rgba(0,0,0,0.6)';
     ctx.lineWidth = 3;
-    ctx.strokeText(b.text, bp.x, bp.y);
+    ctx.strokeText(b.text, 0, 0);
     ctx.fillStyle = b.color || LABEL_TEXT_COLOR;
-    ctx.fillText(b.text, bp.x, bp.y);
+    ctx.fillText(b.text, 0, 0);
     ctx.restore();
   });
 
