@@ -4465,7 +4465,12 @@ function drawBoard(){
     ctx.beginPath();
     ctx.strokeStyle = f.big ? `rgba(255,235,205,${1-p})` : `rgba(255,140,60,${1-p})`;
     ctx.lineWidth = f.big ? 5 : 2.5;
-    ctx.arc(fp.x, fp.y, (6+p*38)*scale, 0, Math.PI*2);
+    // spawnDestructionEffect schedules a second flash with born set ~130ms in the future
+    // (for the boom-BOOM double pulse) -- until that time arrives, p is negative here, and
+    // without clamping to 0 this radius goes negative too. ctx.arc() throws on a negative
+    // radius, which was silently killing the whole requestAnimationFrame loop (the map
+    // freezing) on every single kill, not just multi-kill bursts.
+    ctx.arc(fp.x, fp.y, Math.max(0, (6+p*38)*scale), 0, Math.PI*2);
     ctx.stroke();
     ctx.beginPath();
     ctx.fillStyle = f.big ? `rgba(255,240,210,${(1-p)*0.9})` : `rgba(255,200,120,${(1-p)*0.8})`;
