@@ -809,15 +809,16 @@ function startStage(){
       s.pendingDest = null; s.pendingReconTargetId = null;
     });
     state.mortars.forEach(m=>{
-      m.order = 'standby'; m.pendingFire = null; m.pendingDest = null; m.mainlineAngle = null;
+      m.order = 'standby'; m.pendingFire = null; m.pendingDest = null; m.mainlineAngle = null; m.preAlertOrder = null;
     });
     state.squads.forEach(sq=>{
-      sq.order = 'hold'; sq.pendingDest = null; sq.huntTargetId = null; sq.reinforceUsed = false;
+      sq.order = 'hold'; sq.pendingDest = null; sq.huntTargetId = null; sq.reinforceUsed = false; sq.preAlertOrder = null;
     });
     state.snipers.forEach(sn=>{
-      sn.order = 'hold'; sn.pendingDest = null; sn.pendingSnipeTargetId = null; sn.aimAngle = null; sn.reinforceUsed = false;
+      sn.order = 'hold'; sn.pendingDest = null; sn.pendingSnipeTargetId = null; sn.aimAngle = null; sn.reinforceUsed = false; sn.preAlertOrder = null;
     });
   }
+  state.alertLevel = null;
   state.animating = false;
   state.stageResolved = false;
   state.hpDroppedLow = false;
@@ -3735,8 +3736,46 @@ function renderDecisionPanel(){
     <div class="decision-box">
       ${summary ? `<div class="decision-summary">${summary}</div>` : ''}
       <button class="btn primary decision-btn" ${disabled?'disabled':''} onclick="commitDecision()">決心 (${turnCost}ターン消費)</button>
+      <div class="alert-row">
+        <button class="btn alert-btn-red" ${disabled?'disabled':''} onclick="setAlertLevel('red')">赤警報</button>
+        <button class="btn alert-btn-yellow" ${disabled?'disabled':''} onclick="setAlertLevel('yellow')">黄警報</button>
+        <button class="btn alert-btn-white" ${disabled?'disabled':''} onclick="setAlertLevel('white')">白警報</button>
+      </div>
     </div>
   `; });
+}
+
+// per user request: 赤警報 puts every combat unit (小隊/狙撃班/迫撃砲) on a defensive
+// stance; 黄警報 puts only infantry (小隊) on a defensive stance; 白警報 releases
+// everyone back to whatever order they had right before the alert was raised. Each
+// unit's pre-alert order is stashed in .preAlertOrder the first time it's put on alert,
+// and only restored (and cleared) when that unit is actually released -- so escalating
+// 黄警報 -> 赤警報 doesn't clobber the order infantry had before 黄警報 was raised, and
+// de-escalating 赤警報 -> 黄警報 correctly releases snipers/mortars while leaving
+// infantry on hold.
+function applyAlertToUnit(unit, wantHold, holdOrder){
+  if(wantHold){
+    if(unit.preAlertOrder===undefined || unit.preAlertOrder===null) unit.preAlertOrder = unit.order;
+    unit.order = holdOrder;
+  } else if(unit.preAlertOrder!==undefined && unit.preAlertOrder!==null){
+    unit.order = unit.preAlertOrder;
+    unit.preAlertOrder = null;
+  }
+}
+function setAlertLevel(level){
+  if(!state || state.stageResolved || state.animating) return;
+  const wantInfantryHold = level==='red' || level==='yellow';
+  const wantWideHold = level==='red';
+  state.squads.forEach(sq=>applyAlertToUnit(sq, wantInfantryHold, 'hold'));
+  state.snipers.forEach(sn=>applyAlertToUnit(sn, wantWideHold, 'hold'));
+  state.mortars.forEach(m=>{
+    applyAlertToUnit(m, wantWideHold, 'standby');
+    if(wantWideHold) m.pendingFire = null;
+  });
+  state.alertLevel = level;
+  const label = level==='red' ? '赤警報 ― 全部隊、防御態勢' : level==='yellow' ? '黄警報 ― 歩兵、防御態勢' : '白警報 ― 平常態勢に復帰';
+  log('sys','司令部', `━━━ ${label} ━━━`);
+  render();
 }
 
 
