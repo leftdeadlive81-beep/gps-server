@@ -22,7 +22,7 @@
       <div class="stat" id="stat-weather"><div class="label">天候</div><div class="value">--</div></div>
       <div class="stat" id="stat-achievements" style="cursor:pointer;" onclick="openAchievements()"><div class="label">実績</div><div class="value">--</div></div>
       <div class="stat" id="stat-turns"><div class="label">経過ターン</div><div class="value">--</div></div>
-      <div class="stat" id="stat-money"><div class="label">所持金</div><div class="value">--</div></div>
+      <div class="stat" id="stat-money" style="cursor:pointer;" onclick="openShop()"><div class="label">所持金</div><div class="value">--</div></div>
       <div class="stat" id="stat-roster"><div class="label">総兵力</div><div class="value">--</div></div>
     </div>
   </div>
@@ -83,6 +83,8 @@
   <div class="card shop-card">
     <h2>武器商人 ― WEAPON DEALER</h2>
     <div id="shop-body"></div>
+    <div style="height:10px"></div>
+    <button class="btn primary" onclick="closeShop()">閉じる</button>
   </div>
 </div>
 

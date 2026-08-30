@@ -1106,9 +1106,16 @@ function retryStage(){
   startStage();
 }
 
+// per user request: revived as an anytime-accessible purchase menu (opened by clicking the
+// 所持金 stat) rather than a pre-wave-only step -- closeShop() just hides the overlay, it no
+// longer doubles as "confirm and deploy" (see deployStage(), now only reached via the
+// deployment-mode/wave-clear-reward flow, never through this overlay).
 function openShop(){
   renderShop();
   document.getElementById('shop-overlay').classList.add('show');
+}
+function closeShop(){
+  document.getElementById('shop-overlay').classList.remove('show');
 }
 
 function renderShop(){
@@ -1119,7 +1126,7 @@ function renderShop(){
 
   document.getElementById('shop-body').innerHTML = `
     <div class="shop-money">所持金 ¥${state.money.toLocaleString()}</div>
-    <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">WAVE ${state.stage} / ${STAGE_COUNT} 出撃準備 ― 現有弾薬 HE ${state.ammo.he} ／ HEAT ${state.ammo.heat}</p>
+    <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">WAVE ${state.stage} / ${STAGE_COUNT} ― 現有弾薬 HE ${state.ammo.he} ／ HEAT ${state.ammo.heat}</p>
 
     <div class="shop-row">
       <div><div class="label">榴弾 (HE) ${AMMO_PACK}発</div><div class="sub">¥${PRICE_HE}/発</div></div>
@@ -1156,9 +1163,6 @@ function renderShop(){
         </div>
       `;
     }).join('')}
-
-    <div style="height:10px"></div>
-    <button class="btn primary" onclick="deployStage()">出撃 (DEPLOY) ― WAVE ${state.stage}</button>
   `;
 }
 
@@ -1167,6 +1171,7 @@ function buyEquipment(key){
   state.money -= PRICE_EQUIP[key];
   state.equipment[key] = true;
   renderShop();
+  renderStats();
 }
 
 function buyAmmo(type, qty){
@@ -1175,6 +1180,7 @@ function buyAmmo(type, qty){
   state.money -= price;
   state.ammo[type] += qty;
   renderShop();
+  renderStats();
 }
 
 function unlockFuze(name){
@@ -1182,6 +1188,7 @@ function unlockFuze(name){
   state.money -= PRICE_FUZE;
   state.fuzeUnlocked[name] = true;
   renderShop();
+  renderStats();
 }
 
 function deployStage(){
