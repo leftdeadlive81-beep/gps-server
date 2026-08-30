@@ -4538,30 +4538,6 @@ function drawBoard(){
     }
   }
 
-  // mortar mainline (主線方位角) fans ― pale-yellow reference sector out to
-  // MORTAR_MAINLINE_RANGE_UNITS, drawn before the markers so they sit underneath. Purely a
-  // visual reference (see armMortarMainlineOrder) -- it doesn't affect targeting or fire.
-  state.mortars.forEach(mortar=>{
-    if(mortar.hp<=0 || mortar.mainlineAngle===null || mortar.mainlineAngle===undefined) return;
-    const mVisL = smoothVisualPos(mortar, mortar.x, mortar.y);
-    const originP = project(mVisL.x, mVisL.y);
-    const steps = 24;
-    ctx.beginPath();
-    ctx.moveTo(originP.x, originP.y);
-    for(let i=0;i<=steps;i++){
-      const ang = mortar.mainlineAngle - MORTAR_MAINLINE_HALF_FOV + (MORTAR_MAINLINE_HALF_FOV*2)*(i/steps);
-      const pL = bearingToXY(ang, MORTAR_MAINLINE_RANGE_UNITS, mVisL.x, mVisL.y);
-      const p = project(pL.x, pL.y);
-      ctx.lineTo(p.x, p.y);
-    }
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(232,210,58,0.047)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(232,210,58,0.167)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  });
-
   // 擬陣地 (decoy positions) -- dashed diamond outline in the friendly color, plus a vertical
   // attrition bar. Selectable (see handleCanvasClick) to direct mortar fire at its exact,
   // known coordinates.
@@ -4623,31 +4599,6 @@ function drawBoard(){
 
     if(mAlive){
       drawAttritionBar(ctx, mVis.x+18, mVis.y-2, mortar.hp/mortar.maxHp);
-    }
-  });
-
-  // scout observation cones (約45度) ― drawn before the markers so they sit underneath
-  state.scouts.forEach(scout=>{
-    const scoutVisL = smoothVisualPos(scout, scout.x, scout.y);
-    const scoutVis = project(scoutVisL.x, scoutVisL.y);
-    if(unitAlive(scout)){
-      const coneLen = SCOUT_MAX_RANGE_UNITS;
-      const steps = 24;
-      ctx.beginPath();
-      ctx.moveTo(scoutVis.x, scoutVis.y);
-      for(let i=0;i<=steps;i++){
-        const halfFov = scoutHalfFov();
-        const ang = scout.watchAngle - halfFov + (halfFov*2)*(i/steps);
-        const pL = bearingToXY(ang, coneLen, scoutVisL.x, scoutVisL.y);
-        const p = project(pL.x, pL.y);
-        ctx.lineTo(p.x, p.y);
-      }
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(111,155,191,0.14)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(111,155,191,0.55)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
     }
   });
 
