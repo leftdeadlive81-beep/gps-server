@@ -285,10 +285,10 @@ const SNIPER_FORMATION_OFFSETS = [
   {dx:-14,dy:-8},{dx:0,dy:-12},{dx:14,dy:-8},{dx:-8,dy:9},{dx:8,dy:9},
 ];
 const SNIPER_RANGE_M = 500;
-const SCOUT_ADVANCE_LIMIT_X = 700;
+const SCOUT_ADVANCE_LIMIT_X = 1100;
 const SQUAD_RETREAT_LIMIT_X = 150;
 const SQUAD_ADVANCE_LIMIT_X = 620;
-const SQUAD_ASSAULT_LIMIT_X = 950;
+const SQUAD_ASSAULT_LIMIT_X = 1150;
 const SQUAD_ENGAGE_RANGE = 100;
 const DETECTION_RANGE = {infantry:100, artillery:50};
 const MAP_WIDTH_KM = 10;
@@ -1442,13 +1442,13 @@ function clearSquadDest(idx){
 function armScoutMoveOrder(idx){
   state.orderMode = {kind:'scout-move', idx};
   state.commandBox = null;
-  unitSpeak('scout', idx, 'order');
+  unitSpeakOrder('scout', idx);
   render();
 }
 function armScoutReconOrder(idx){
   state.orderMode = {kind:'scout-recon', idx};
   state.commandBox = null;
-  unitSpeak('scout', idx, 'order');
+  unitSpeakOrder('scout', idx);
   render();
 }
 function clearScoutOrder(idx){
@@ -1549,7 +1549,7 @@ function setMortarOrder(idx, order){
   const mortar = state.mortars[idx];
   if(!mortar || !MORTAR_ORDER_LABEL[order]) return;
   mortar.order = order;
-  unitSpeak('mortar', idx, 'order');
+  unitSpeakOrder('mortar', idx);
   if(order==='fire'){
     mortar.pendingDest = null;
     state.orderMode = null;
@@ -1931,7 +1931,7 @@ function resolveSquadOrders(actionTurns){
           victim.alive = false;
           log('sys','前線', `第${sqIdx+1}小隊、${t.id}との交戦で<b>${victim.rank} ${victim.name}</b> 戦死。残存 ${sq.soldiers.filter(s=>s.alive).length}/${sq.soldiers.length}名。`);
           enemyTracers.push({startX:e.x, startY:e.y, endX:sq.x, endY:sq.y, born:performance.now(), duration:280});
-          unitSpeak('squad', sqIdx, 'injury');
+          unitSpeakInjury('squad', sqIdx);
         }
       });
     });
@@ -2093,14 +2093,14 @@ function resolveSniperOrders(actionTurns){
 function setSquadOrder(idx, order){
   if(!state.squads[idx]) return;
   state.squads[idx].order = order;
-  unitSpeak('squad', idx, 'order');
+  unitSpeakOrder('squad', idx);
   render();
 }
 
 function setSniperOrder(idx, order){
   if(!state.snipers[idx]) return;
   state.snipers[idx].order = order;
-  unitSpeak('sniper', idx, 'order');
+  unitSpeakOrder('sniper', idx);
   render();
 }
 function setStandingOrder(kind, idx, value){
@@ -2137,7 +2137,7 @@ function armSniperAimOrder(idx){
   if(!sn) return;
   state.orderMode = {kind:'sniper-aim', idx};
   state.commandBox = null;
-  unitSpeak('sniper', idx, 'order');
+  unitSpeakOrder('sniper', idx);
   render();
 }
 function clearSniperAim(idx){
@@ -2154,7 +2154,7 @@ function armMortarMainlineOrder(idx){
   if(!mortar) return;
   state.orderMode = {kind:'mortar-mainline', idx};
   state.commandBox = null;
-  unitSpeak('mortar', idx, 'order');
+  unitSpeakOrder('mortar', idx);
   render();
 }
 function clearMortarMainline(idx){
@@ -2328,8 +2328,11 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
       const victim = choice(aliveSoldiers);
       victim.alive = false;
       log('sys','被弾', `${sourceLabel}が斥候${target.idx+1}を攻撃。<b>${victim.rank} ${victim.name}</b> 戦死。`);
-      unitSpeak('scout', target.idx, 'injury');
-      if(aliveSoldiers.length===1) spawnDestructionEffect(scout.x, scout.y, `斥候${target.idx+1} 全滅!`, FRIENDLY_MARK_COLOR);
+      unitSpeakInjury('scout', target.idx);
+      if(aliveSoldiers.length===1){
+        spawnDestructionEffect(scout.x, scout.y, `斥候${target.idx+1} 全滅!`, FRIENDLY_MARK_COLOR);
+        speakRandomAliveUnit('outburst');
+      }
     }
   } else if(target.kind==='squad'){
     const sq = state.squads[target.idx];
@@ -2338,8 +2341,11 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
       const victim = choice(aliveSoldiers);
       victim.alive = false;
       log('sys','被弾', `${sourceLabel}が第${target.idx+1}小隊を攻撃。<b>${victim.rank} ${victim.name}</b> 戦死。`);
-      unitSpeak('squad', target.idx, 'injury');
-      if(aliveSoldiers.length===1) spawnDestructionEffect(sq.x, sq.y, `第${target.idx+1}小隊 全滅!`, FRIENDLY_MARK_COLOR);
+      unitSpeakInjury('squad', target.idx);
+      if(aliveSoldiers.length===1){
+        spawnDestructionEffect(sq.x, sq.y, `第${target.idx+1}小隊 全滅!`, FRIENDLY_MARK_COLOR);
+        speakRandomAliveUnit('outburst');
+      }
     }
   } else if(target.kind==='sniper'){
     const sn = state.snipers[target.idx];
@@ -2348,8 +2354,11 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
       const victim = choice(aliveSoldiers);
       victim.alive = false;
       log('sys','被弾', `${sourceLabel}が狙撃${target.idx+1}班を攻撃。<b>${victim.rank} ${victim.name}</b> 戦死。`);
-      unitSpeak('sniper', target.idx, 'injury');
-      if(aliveSoldiers.length===1) spawnDestructionEffect(sn.x, sn.y, `狙撃${target.idx+1}班 全滅!`, FRIENDLY_MARK_COLOR);
+      unitSpeakInjury('sniper', target.idx);
+      if(aliveSoldiers.length===1){
+        spawnDestructionEffect(sn.x, sn.y, `狙撃${target.idx+1}班 全滅!`, FRIENDLY_MARK_COLOR);
+        speakRandomAliveUnit('outburst');
+      }
     }
   } else if(target.kind==='mortar'){
     const mortar = state.mortars[target.idx];
@@ -2935,7 +2944,7 @@ function commitDecision(){
   state.illumFlares.forEach(f=>{ f.turnsLeft -= 1; });
   state.illumFlares = state.illumFlares.filter(f=>f.turnsLeft>0);
 
-  speakRandomAliveUnit('coordination');
+  speakCoordination();
   log('sys','司令部', '━━━ 決心 ━━━');
   resolveScoutDecision();
   resolveMortarDecision();
@@ -3528,7 +3537,7 @@ function assignSquadHunt(idx){
   sq.order = 'hunt';
   sq.huntTargetId = target.id;
   sq.pendingDest = null;
-  unitSpeak('squad', idx, 'order');
+  unitSpeakOrder('squad', idx);
   log('sys','前線', `第${idx+1}小隊、${target.id} を攻撃目標に指示。接敵まで前進する。`);
   render();
 }
@@ -3562,7 +3571,7 @@ function assignMortarFire(idx){
   mortar.order = 'fire';
   mortar.pendingDest = null;
   state.selectedId = target.id;
-  unitSpeak('mortar', idx, 'order');
+  unitSpeakOrder('mortar', idx);
   log('fdc','FDC', `迫撃砲${idx+1}、${target.id} を攻撃目標に指示。${SHELLS[mortar.fireShell]}・${FUZES[mortar.fireFuze]}・${mortar.fireCount}発を自動選択。`);
   render();
 }
@@ -4948,8 +4957,12 @@ const COMBAT_CALLOUTS = {
   ammo: ['弾切れだ！','弾をくれ！','予備弾倉！','リロード中！','銃が壊れた！','無線が繋がらない！','燃料が切れた！'],
   morale: ['諦めるな！','行けるぞ！','頑張れ！','まだやれる！','負けるな！','仲間を信じろ！','一緒に生き延びるぞ！','家族のために！','祖国のために！','俺たちならできる！'],
   coordination: ['こちら応答せよ！','状況を報告しろ！','位置を教えろ！','目標確認！','座標を送れ！','こちら小隊！','了解！','確認した！','進捗はどうだ！','応援を呼べ！'],
-  panic: ['逃げろ！','どうすればいい！','もうダメだ！','終わりだ！','助けてくれ！','誰かいないのか！','こっちに来い！','何が起きてる！','パニックになるな！','落ち着け！'],
+  panic: ['逃げろ！','どうすればいい！','もうダメだ！','終わりだ！','助けてくれ！','誰かいないのか！','こっちに来い！','何が起きてる！','パニックになるな！','落ち着け！','もう無理だ、俺は撤退する！','落ち着け、パニックになるな！','死にたくない、こんな場所嫌だ！','お前が弱気になったら全員がやられる！','怖いのはみんな同じだ！','もう弾がない、どうしろって言うんだ！','泣き言を言ってる暇はない！','お前だけ逃げるつもりか！','仲間を置いていけない！','これ以上は正気の沙汰じゃない！','震えてる場合か、銃を構えろ！','もう限界だ、体が動かない！','気をしっかり持て、まだ終わってない！','みんな死ぬ気か、正気に戻れ！','怖がってばかりじゃ生き残れないぞ！','俺を置いていくな、頼む！','感情論はやめろ、冷静に判断しろ！','こんな状況で冷静でいられるか！','お前まで取り乱すな！','大丈夫だ、絶対に生きて帰るぞ！'],
   victory: ['やったぞ！','制圧完了！','敵を撃退した！','安全確保！','戦闘終了！','全員無事か！','生きてるか！','帰るぞ！','よくやった！','任務完了！'],
+  defyOrder: ['そんな命令、誰が出したんだ！','無茶を言うな、あの位置からじゃ援護できない！','本部は現場を分かってない！','今から迂回してたら間に合わない！','勝手に突っ込むな、隊列を乱すな！','お前が先に行けって言ったんだろ！','作戦変更なんて聞いてないぞ！','誰の判断だ、これは！','撤退の指示はまだ出てない！','待て、それは自殺行為だ！','お前の独断でみんな危険にさらされてる！','命令通りにやったら全滅する！','なんで確認もせず突撃した！','無線が通じてないのはお前のせいだろ！','そっちのルートは危険だと言ったはずだ！','指揮官、判断が遅すぎます！','これ以上前進する意味があるのか！','勝手な行動は許さんぞ！','誰が指揮を執ってるんだ、はっきりしろ！','机上の作戦と現場は違うんだよ！'],
+  blame: ['お前が索敵をサボったからだろ！','弾薬の管理、お前の担当だったよな！','なんで援護に来なかった！','そっちが先に発砲したんじゃないか！','お前のミスで仲間が撃たれたんだぞ！','言い訳はいい、状況を見ろ！','誰のせいでもない、今は動くしかない！','お前が地図を読み違えたんだろう！','装備の点検、ちゃんとやったのか！','連絡が遅れたのはお前の落ち度だ！','なんで俺のせいにする！','みんなお前を頼りにしてたのに！','お前が油断したから見つかったんだ！','言われた通りにやっただけだ！','経験不足のくせに口を出すな！','新兵のミスをかばうのも限界がある！','こっちは必死にやってるんだ、文句を言うな！','お前が命令を無視したせいだ！','今更誰が悪いか議論してる場合か！','後で報告書に書いてやる、覚えとけ！'],
+  irritation: ['動きが遅い、置いていくぞ！','なんでそんな場所に伏せてるんだ！','合図を見逃すな、集中しろ！','お前の射撃、味方に当たりそうだったぞ！','勝手に持ち場を離れるな！','そこは危険地帯だと言っただろ！','装備を忘れるとかあり得ない！','無線のチャンネル、間違えてるぞ！','お前、ちゃんと周り見てるのか！','足を引っ張るなら下がってろ！','新人だからって甘えるな！','お前の判断、いつも遅すぎるんだよ！','もっと声を出せ、聞こえないぞ！','なんでそっちに勝手に進んだ！','連携取れてないぞ、しっかりしろ！','お前が動くたびに位置がばれるんだよ！','無駄弾使うな、節約しろ！','そんな装備で来るなんて信じられない！','お前、寝てないのか、しっかりしろ！','言われたことだけやってりゃいいんだよ！'],
+  outburst: ['もう嫌だ、こんな戦争！','なんでこんな所で死ななきゃいけないんだ！','家族のところに帰りたいだけなんだ！','お前にこの気持ちが分かるか！','仲間を見捨てるなんてできない！','誰かのために死ぬなんて意味あるのか！','もう何を信じればいいんだ！','これが正義だって言うのか！','お前は何も分かってない！','戦友を失ってなお戦えって言うのか！','命令だから仕方ないなんて言うな！','俺たちは駒じゃない！','もう誰も死なせたくないんだ！','なんでこんな作戦を許可したんだ！','怒りをぶつける相手を間違えるな！','お前まで俺を疑うのか！','信頼できるのはお前だけなんだ！','もう限界だと言ってるだろう！','終わったらすべて話し合おう、今は戦え！','絶対に、みんなで生きて帰るぞ！'],
 };
 const CALLOUT_DURATION_MS = 2000;
 let activeCallouts = [];
@@ -5003,6 +5016,18 @@ function randomAliveUnitRef(){
 function speakRandomAliveUnit(category){
   const ref = randomAliveUnitRef();
   if(ref) unitSpeak(ref.kind, ref.idx, category);
+}
+// Wraps the plain 'order'/'injury'/'coordination' callouts with a chance of pulling from
+// the "言い争い" (argument/conflict) vocabulary instead, so orders sometimes draw pushback,
+// casualties sometimes draw blame, and radio chatter sometimes draws irritation.
+function unitSpeakOrder(kind, idx){
+  unitSpeak(kind, idx, Math.random()<0.2 ? 'defyOrder' : 'order');
+}
+function unitSpeakInjury(kind, idx){
+  unitSpeak(kind, idx, Math.random()<0.3 ? 'blame' : 'injury');
+}
+function speakCoordination(){
+  speakRandomAliveUnit(Math.random()<0.25 ? 'irritation' : 'coordination');
 }
 function drawCallouts(ctx){
   const now = performance.now();
