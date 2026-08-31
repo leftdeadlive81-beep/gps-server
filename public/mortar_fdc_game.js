@@ -806,11 +806,64 @@ function initGame(){
     decoys: [],
     decoyPlacementPending: false,
     decoyCommandBox: null,
+    selectedMap: 'map1',
   };
   ripples = []; projectiles = []; flashes = []; enemyTracers = [];
   debrisParticles = []; wreckSmokes = []; killBanners = [];
   document.getElementById('log').innerHTML='';
-  log('sys', 'システム', `コンシム v${GAME_VERSION} 起動。難易度を選択せよ。`);
+  log('sys', 'システム', `コンシム v${GAME_VERSION} 起動。マップを選択せよ。`);
+  renderMapSelectOverlay();
+  document.getElementById('map-select-overlay').classList.add('show');
+}
+
+// per user request: map selection -- lets the player pick which real-world terrain to
+// deploy on before difficulty selection. Each map's raw GLB/texture/roads base64 lives in
+// its own globally-scoped const (see mapcreate/*.js); MAPS below just points at whichever
+// set is active for a given key so the rest of the 3D-loading code (initThree/
+// applyTerrainTextureOverride/buildRealRoads) doesn't need to know about individual maps.
+const MAPS = {
+  map1: {
+    label: '日出生台演習場',
+    sub: '既存マップ',
+    hasData: ()=> typeof TERRAIN_GLB_BASE64 !== 'undefined',
+    glb: ()=> TERRAIN_GLB_BASE64,
+    texture: ()=> (typeof TERRAIN_TEXTURE_BASE64!=='undefined' ? TERRAIN_TEXTURE_BASE64 : null),
+    roads: ()=> (typeof ROADS_RAW_DATA!=='undefined' ? ROADS_RAW_DATA : []),
+  },
+  map2: {
+    label: '新演習場(MGRS 52SGB02898868)',
+    sub: '新規マップ',
+    hasData: ()=> typeof TERRAIN_GLB_BASE64_MAP2 !== 'undefined',
+    glb: ()=> TERRAIN_GLB_BASE64_MAP2,
+    texture: ()=> (typeof TERRAIN_TEXTURE_BASE64_MAP2!=='undefined' ? TERRAIN_TEXTURE_BASE64_MAP2 : null),
+    roads: ()=> (typeof ROADS_RAW_DATA_MAP2!=='undefined' ? ROADS_RAW_DATA_MAP2 : []),
+  },
+};
+
+function renderMapSelectOverlay(){
+  const body = document.getElementById('map-select-body');
+  body.innerHTML = Object.keys(MAPS).map(key=>{
+    const m = MAPS[key];
+    const available = m.hasData();
+    return `
+      <div class="shop-row">
+        <div>
+          <div class="label">${m.label}</div>
+          <div class="sub">${available ? m.sub : 'データ未読み込み'}</div>
+        </div>
+        <div class="actions"><button class="btn primary" ${available?'':'disabled'} onclick="selectMap('${key}')">選択</button></div>
+      </div>
+    `;
+  }).join('');
+}
+
+function selectMap(key){
+  const m = MAPS[key];
+  if(!m || !m.hasData()) return;
+  state.selectedMap = key;
+  document.getElementById('map-select-overlay').classList.remove('show');
+  log('sys','システム', `マップ「${m.label}」を選択。難易度を選択せよ。`);
+  loadSelectedTerrain();
   renderDifficultyOverlay();
   document.getElementById('difficulty-overlay').classList.add('show');
 }
@@ -5414,9 +5467,9 @@ const WORLD = { originX: 0, originZ: 0, unitsPerCanvasUnit: 1, minY: 0, maxY: 0,
 const unitMarkers3d = {};
 let mapFocusTarget = null;
 
-function applyTerrainTextureOverride(root){
-  if(typeof TERRAIN_TEXTURE_BASE64 === 'undefined' || !TERRAIN_TEXTURE_BASE64) return;
-  const dataUrl = 'data:image/jpeg;base64,'+TERRAIN_TEXTURE_BASE64;
+function applyTerrainTextureOverride(root, textureBase64){
+  if(!textureBase64) return;
+  const dataUrl = 'data:image/jpeg;base64,'+textureBase64;
   const loader = new THREE.TextureLoader();
   loader.load(dataUrl, tex=>{
     tex.flipY = false;
@@ -5434,10 +5487,14 @@ function applyTerrainTextureOverride(root){
   });
 }
 
+// Sets up the renderer/scene/camera/lights, which are the same regardless of which map
+// is eventually chosen. Runs once at page load. The actual terrain GLB is NOT loaded here
+// -- that depends on the player's map choice (see selectMap()) and happens in
+// loadSelectedTerrain(), called once that choice is made.
 function initThree(){
   const canvas3d = document.getElementById('board3d');
-  if(typeof THREE === 'undefined' || !THREE.GLTFLoader || typeof TERRAIN_GLB_BASE64 === 'undefined'){
-    console.warn('3D地形(Three.js/地形データ)を読み込めませんでした。地図は表示されません。');
+  if(typeof THREE === 'undefined' || !THREE.GLTFLoader){
+    console.warn('3D地形(Three.js)を読み込めませんでした。地図は表示されません。');
     return;
   }
   renderer3d = new THREE.WebGLRenderer({ canvas: canvas3d, antialias:true });
@@ -5458,10 +5515,25 @@ function initThree(){
   scene3d.add(sun);
 
   resizeThree();
+}
+
+// per user request: loads the terrain GLB/texture/roads for whichever map the player
+// picked (state.selectedMap, see MAPS/selectMap()). Called once after map selection.
+function loadSelectedTerrain(){
+  if(typeof THREE === 'undefined' || !THREE.GLTFLoader || !scene3d){
+    console.warn('3D地形(Three.js)を読み込めませんでした。地図は表示されません。');
+    return;
+  }
+  const mapConf = MAPS[state.selectedMap];
+  const glbBase64 = mapConf && mapConf.glb();
+  if(!glbBase64){
+    console.warn('地形データが見つかりませんでした。地図は表示されません。');
+    return;
+  }
 
   let arrayBuffer;
   try{
-    const binStr = atob(TERRAIN_GLB_BASE64);
+    const binStr = atob(glbBase64);
     const bytes = new Uint8Array(binStr.length);
     for(let i=0;i<binStr.length;i++) bytes[i] = binStr.charCodeAt(i);
     arrayBuffer = bytes.buffer;
@@ -5474,7 +5546,7 @@ function initThree(){
   loader.parse(arrayBuffer, '', (gltf)=>{
     terrainObject3d = gltf.scene;
     scene3d.add(terrainObject3d);
-    applyTerrainTextureOverride(terrainObject3d);
+    applyTerrainTextureOverride(terrainObject3d, mapConf.texture());
 
     const box = new THREE.Box3().setFromObject(terrainObject3d);
     const sizeX = box.max.x-box.min.x, sizeZ = box.max.z-box.min.z;
@@ -5488,11 +5560,11 @@ function initThree(){
     WORLD.originZ = cz - fieldH/2;
 
     buildHeightGrid();
-    buildRealRoads();
+    buildRealRoads(mapConf.roads());
     threeReady = true;
     resizeThree();
   }, (err)=>{
-    console.error('地形モデル(hijuudai.glb)の読み込みに失敗しました', err);
+    console.error('地形モデルの読み込みに失敗しました', err);
   });
 }
 
@@ -5524,15 +5596,15 @@ function buildHeightGrid(){
 // polylines. Uses the terrain mesh node's own accumulated world matrix
 // (localToWorld) rather than a hand-derived scale/rotation, so it stays correct
 // regardless of exactly how the GLB was authored/exported.
-function buildRealRoads(){
-  if(typeof ROADS_RAW_DATA === 'undefined' || !terrainObject3d) return;
+function buildRealRoads(roadsRawData){
+  if(!roadsRawData || !terrainObject3d) return;
   let meshNode = null;
   terrainObject3d.traverse(o=>{ if(o.isMesh && !meshNode) meshNode = o; });
   if(!meshNode) return;
   meshNode.updateWorldMatrix(true, false);
   const v = new THREE.Vector3();
   REAL_ROADS_CANVAS.length = 0;
-  ROADS_RAW_DATA.forEach(way=>{
+  roadsRawData.forEach(way=>{
     const poly = way.points.map(pt=>{
       v.set(pt.x, pt.z, 0);
       meshNode.localToWorld(v);
