@@ -822,6 +822,14 @@ function initGame(){
 // set is active for a given key so the rest of the 3D-loading code (initThree/
 // applyTerrainTextureOverride/buildRealRoads) doesn't need to know about individual maps.
 const MAPS = {
+  map3: {
+    label: '新演習場2',
+    sub: '新規マップ',
+    hasData: ()=> typeof TERRAIN_GLB_BASE64_MAP3 !== 'undefined',
+    glb: ()=> TERRAIN_GLB_BASE64_MAP3,
+    texture: ()=> (typeof TERRAIN_TEXTURE_BASE64_MAP3!=='undefined' ? TERRAIN_TEXTURE_BASE64_MAP3 : null),
+    roads: ()=> (typeof ROADS_RAW_DATA_MAP3!=='undefined' ? ROADS_RAW_DATA_MAP3 : []),
+  },
   map1: {
     label: '日出生台演習場',
     sub: '既存マップ',
