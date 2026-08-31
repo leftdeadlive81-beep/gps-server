@@ -5378,7 +5378,16 @@ const MAP_VIEW = {
 };
 const MAP_ZOOM_MIN = 0.35, MAP_ZOOM_MAX = 5;
 const MAP_POLAR_MIN = 0.12, MAP_POLAR_MAX = 1.45;
-const WORLD = { originX: 0, originZ: 0, unitsPerCanvasUnit: 1, minY: 0, maxY: 0, refY: 0 };
+// scaleX/scaleZ are independent (not a single uniform unitsPerCanvasUnit) so that
+// canvas-unit space (0..CANVAS_W, 0..CANVAS_H) always covers the FULL loaded terrain
+// mesh in both directions, whatever its real-world aspect ratio happens to be. A single
+// shared scale (picked via Math.min so the field fits inside the mesh without distortion)
+// left a large strip of terrain north and south of the playable field on any map whose
+// aspect ratio didn't closely match CANVAS_W:CANVAS_H (2.826:1) -- that strip was still
+// rendered (so it looked like part of the map) but was outside canvas-unit space, so no
+// order could ever move a unit into it. That read as units hitting an invisible wall well
+// short of the map's visible top/bottom edge.
+const WORLD = { originX: 0, originZ: 0, scaleX: 1, scaleZ: 1, minY: 0, maxY: 0, refY: 0 };
 const unitMarkers3d = {};
 let mapFocusTarget = null;
 
@@ -5467,12 +5476,10 @@ function loadSelectedTerrain(){
     const sizeX = box.max.x-box.min.x, sizeZ = box.max.z-box.min.z;
     WORLD.minY = box.min.y; WORLD.maxY = box.max.y;
     WORLD.refY = (box.min.y+box.max.y)/2;
-    const scale = Math.min(sizeX/CANVAS_W, sizeZ/CANVAS_H);
-    WORLD.unitsPerCanvasUnit = scale;
-    const fieldW = CANVAS_W*scale, fieldH = CANVAS_H*scale;
-    const cx = (box.min.x+box.max.x)/2, cz = (box.min.z+box.max.z)/2;
-    WORLD.originX = cx - fieldW/2;
-    WORLD.originZ = cz - fieldH/2;
+    WORLD.scaleX = sizeX/CANVAS_W;
+    WORLD.scaleZ = sizeZ/CANVAS_H;
+    WORLD.originX = box.min.x;
+    WORLD.originZ = box.min.z;
 
     buildHeightGrid();
     buildRealRoads(mapConf.roads());
@@ -5491,8 +5498,8 @@ function buildHeightGrid(){
   const COLS = 70, ROWS = 40;
   const rc = new THREE.Raycaster();
   const minX = WORLD.originX, minZ = WORLD.originZ;
-  const stepX = (CANVAS_W*WORLD.unitsPerCanvasUnit)/(COLS-1);
-  const stepZ = (CANVAS_H*WORLD.unitsPerCanvasUnit)/(ROWS-1);
+  const stepX = (CANVAS_W*WORLD.scaleX)/(COLS-1);
+  const stepZ = (CANVAS_H*WORLD.scaleZ)/(ROWS-1);
   const values = new Float32Array(COLS*ROWS);
   for(let r=0;r<ROWS;r++){
     for(let c=0;c<COLS;c++){
@@ -5525,8 +5532,8 @@ function buildRealRoads(roadsRawData){
       v.set(pt.x, pt.z, 0);
       meshNode.localToWorld(v);
       return {
-        x: (v.x-WORLD.originX)/WORLD.unitsPerCanvasUnit,
-        y: (v.z-WORLD.originZ)/WORLD.unitsPerCanvasUnit,
+        x: (v.x-WORLD.originX)/WORLD.scaleX,
+        y: (v.z-WORLD.originZ)/WORLD.scaleZ,
       };
     });
     REAL_ROADS_CANVAS.push(poly);
@@ -5665,7 +5672,7 @@ function advanceAlongPath(fromX, fromY, path, stepLen){
 }
 
 function canvasUnitToWorldXZ(cx, cy){
-  return { x: WORLD.originX + cx*WORLD.unitsPerCanvasUnit, z: WORLD.originZ + cy*WORLD.unitsPerCanvasUnit };
+  return { x: WORLD.originX + cx*WORLD.scaleX, z: WORLD.originZ + cy*WORLD.scaleZ };
 }
 function terrainHeightAt(cx, cy){
   if(!HEIGHT_GRID.values) return WORLD.refY||0;
@@ -5705,8 +5712,8 @@ function updateCameraFromView(){
   const look = canvasUnitToWorldXZ(MAP_VIEW.cx, MAP_VIEW.cy);
   const lookY = terrainHeightAt(MAP_VIEW.cx, MAP_VIEW.cy);
   camera3d.aspect = (MAP_VIEW.containerW||1)/(MAP_VIEW.containerH||1);
-  const fieldW = (CANVAS_W*WORLD.unitsPerCanvasUnit) || 200;
-  const fieldH = (CANVAS_H*WORLD.unitsPerCanvasUnit) || 200;
+  const fieldW = (CANVAS_W*WORLD.scaleX) || 200;
+  const fieldH = (CANVAS_H*WORLD.scaleZ) || 200;
   const diag = Math.hypot(fieldW, fieldH);
 
   const applyDist = (d)=>{
@@ -5793,7 +5800,7 @@ function groundPlaneCanvasUnitAt(px, py){
   }
   const hitX = camera3d.position.x + dir.x*t;
   const hitZ = camera3d.position.z + dir.z*t;
-  return { x: (hitX-WORLD.originX)/WORLD.unitsPerCanvasUnit, y: (hitZ-WORLD.originZ)/WORLD.unitsPerCanvasUnit };
+  return { x: (hitX-WORLD.originX)/WORLD.scaleX, y: (hitZ-WORLD.originZ)/WORLD.scaleZ };
 }
 
 // Precise mesh raycast, used only for clicks (infrequent enough to afford it).
@@ -5806,7 +5813,7 @@ function terrainCanvasUnitAt(px, py){
   const hits = rc.intersectObject(terrainObject3d, true);
   if(!hits.length) return groundPlaneCanvasUnitAt(px,py);
   const p = hits[0].point;
-  return { x: (p.x-WORLD.originX)/WORLD.unitsPerCanvasUnit, y: (p.z-WORLD.originZ)/WORLD.unitsPerCanvasUnit };
+  return { x: (p.x-WORLD.originX)/WORLD.scaleX, y: (p.z-WORLD.originZ)/WORLD.scaleZ };
 }
 
 // zoom is optional -- when given, it's eased alongside the look-at point (see
@@ -6033,7 +6040,7 @@ function setupMapControls(){
 
 function makeMarkerMesh3d(shape, colorHex){
   let geo;
-  const s = ()=> Math.max(0.6, WORLD.unitsPerCanvasUnit*10);
+  const s = ()=> Math.max(0.6, (WORLD.scaleX+WORLD.scaleZ)/2*10);
   if(shape==='cone') geo = new THREE.ConeGeometry(s()*0.55, s()*1.3, 8);
   else if(shape==='diamond') geo = new THREE.OctahedronGeometry(s()*0.7);
   else if(shape==='box') geo = new THREE.BoxGeometry(s()*0.9, s()*0.7, s()*0.9);
@@ -6080,7 +6087,7 @@ function syncUnitMarkers3d(){
     const m = getMarker3d(key, shape, colorHex);
     const h = terrainHeightAt(cx, cy);
     const {x,z} = canvasUnitToWorldXZ(cx, cy);
-    m.position.set(x, h + WORLD.unitsPerCanvasUnit*6, z);
+    m.position.set(x, h + (WORLD.scaleX+WORLD.scaleZ)/2*6, z);
     m.visible = true;
   };
 
