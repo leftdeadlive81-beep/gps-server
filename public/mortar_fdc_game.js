@@ -822,6 +822,14 @@ function initGame(){
 // set is active for a given key so the rest of the 3D-loading code (initThree/
 // applyTerrainTextureOverride/buildRealRoads) doesn't need to know about individual maps.
 const MAPS = {
+  map4: {
+    label: '新演習場',
+    sub: '新規マップ',
+    hasData: ()=> typeof TERRAIN_GLB_BASE64_MAP4 !== 'undefined',
+    glb: ()=> TERRAIN_GLB_BASE64_MAP4,
+    texture: ()=> (typeof TERRAIN_TEXTURE_BASE64_MAP4!=='undefined' ? TERRAIN_TEXTURE_BASE64_MAP4 : null),
+    roads: ()=> (typeof ROADS_RAW_DATA_MAP4!=='undefined' ? ROADS_RAW_DATA_MAP4 : []),
+  },
   map3: {
     label: '新演習場2',
     sub: '新規マップ',
@@ -5797,33 +5805,47 @@ function updateCameraFromView(){
   const look = canvasUnitToWorldXZ(MAP_VIEW.cx, MAP_VIEW.cy);
   const lookY = terrainHeightAt(MAP_VIEW.cx, MAP_VIEW.cy);
   camera3d.aspect = (MAP_VIEW.containerW||1)/(MAP_VIEW.containerH||1);
-  // per user request: fixed a bug where the camera distance was fit to
-  // Math.max(CANVAS_W,CANVAS_H)*scale -- since CANVAS_W(1300) > CANVAS_H(460)
-  // unconditionally, Math.max ALWAYS picked CANVAS_W, so the camera was framed to fit
-  // the map's WIDTH only. This happened to look fine on the original map (whose
-  // real-world north-south extent was small relative to its east-west extent, so it
-  // fit inside the width-framed view with margin to spare), but any map with a
-  // meaningfully large north-south extent (including a properly widened map matched to
-  // the canvas aspect ratio) had its far north/south edges pushed outside the camera's
-  // actual vertical field of view -- units there were logically fine but never
-  // rendered/reachable by click. Now computes the distance needed to fit BOTH the
-  // field's width and height within the camera's real FOV/aspect, and uses whichever is
-  // larger so both dimensions are guaranteed to fit.
-  const fovRad = camera3d.fov*Math.PI/180;
   const fieldW = (CANVAS_W*WORLD.unitsPerCanvasUnit) || 200;
   const fieldH = (CANVAS_H*WORLD.unitsPerCanvasUnit) || 200;
-  const distForHeight = (fieldH*0.9/MAP_VIEW.zoom) / (2*Math.tan(fovRad/2));
-  const distForWidth = (fieldW*0.9/MAP_VIEW.zoom) / (2*Math.tan(fovRad/2)*camera3d.aspect);
-  const dist = Math.max(distForHeight, distForWidth);
-  const camX = look.x + dist*Math.sin(MAP_VIEW.polar)*Math.sin(MAP_VIEW.azimuth);
-  const camY = lookY + dist*Math.cos(MAP_VIEW.polar);
-  const camZ = look.z + dist*Math.sin(MAP_VIEW.polar)*Math.cos(MAP_VIEW.azimuth);
-  camera3d.position.set(camX, camY, camZ);
-  camera3d.up.set(0,1,0);
-  camera3d.lookAt(look.x, lookY, look.z);
-  camera3d.near = Math.max(1, dist*0.02);
-  camera3d.far = dist + (WORLD.maxY-WORLD.minY) + 8000;
-  camera3d.updateProjectionMatrix();
+  const diag = Math.hypot(fieldW, fieldH);
+
+  const applyDist = (d)=>{
+    const camX = look.x + d*Math.sin(MAP_VIEW.polar)*Math.sin(MAP_VIEW.azimuth);
+    const camY = lookY + d*Math.cos(MAP_VIEW.polar);
+    const camZ = look.z + d*Math.sin(MAP_VIEW.polar)*Math.cos(MAP_VIEW.azimuth);
+    camera3d.position.set(camX, camY, camZ);
+    camera3d.up.set(0,1,0);
+    camera3d.lookAt(look.x, lookY, look.z);
+    camera3d.near = Math.max(1, d*0.02);
+    camera3d.far = d + (WORLD.maxY-WORLD.minY) + 8000;
+    camera3d.updateProjectionMatrix();
+  };
+
+  // per user request: an analytical distance-from-FOV estimate (fit width/height into
+  // the camera's cone at distance d) isn't reliable for a TILTED camera -- the ground
+  // footprint of an oblique perspective camera is a trapezoid, not a simple cone, so
+  // the near edge and far edge of the view cover very different amounts of ground per
+  // screen-pixel. That mismatch was still clipping the FEBA line and units near the
+  // map's north/south edges after switching to a width+height-aware estimate. Instead,
+  // start from a reasonable estimate and back the camera off step by step, actually
+  // re-projecting the map's 4 corners each time, until all of them land on-screen and
+  // in front of the camera -- this is correct regardless of tilt/FOV/aspect quirks.
+  let dist = (diag*0.9)/MAP_VIEW.zoom;
+  applyDist(dist);
+  for(let i=0;i<20;i++){
+    const corners = [[0,0],[CANVAS_W,0],[0,CANVAS_H],[CANVAS_W,CANVAS_H],[CANVAS_W/2,0],[CANVAS_W/2,CANVAS_H]];
+    let allOk = true;
+    for(const [cx,cy] of corners){
+      const p = project(cx,cy);
+      if(!p.visible || p.x<0 || p.x>MAP_VIEW.containerW || p.y<0 || p.y>MAP_VIEW.containerH){
+        allOk = false;
+        break;
+      }
+    }
+    if(allOk) break;
+    dist *= 1.15;
+    applyDist(dist);
+  }
 }
 
 function resizeThree(){
