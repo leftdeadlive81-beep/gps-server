@@ -817,17 +817,16 @@ function initGame(){
 }
 
 // per user request: map selection -- lets the player pick which real-world terrain to
-// deploy on before difficulty selection. Each map's raw GLB/texture/roads base64 lives in
-// its own globally-scoped const (see mapcreate/*.js); MAPS below just points at whichever
-// set is active for a given key so the rest of the 3D-loading code (initThree/
-// applyTerrainTextureOverride/buildRealRoads) doesn't need to know about individual maps.
+// deploy on before difficulty selection. Each map's raw GLB/roads base64 lives in its own
+// globally-scoped const (see mapcreate/*.js); MAPS below just points at whichever set is
+// active for a given key so the rest of the 3D-loading code (initThree/buildRealRoads)
+// doesn't need to know about individual maps.
 const MAPS = {
   map4: {
     label: '新演習場',
     sub: '新規マップ',
     hasData: ()=> typeof TERRAIN_GLB_BASE64_MAP4 !== 'undefined',
     glb: ()=> TERRAIN_GLB_BASE64_MAP4,
-    texture: ()=> (typeof TERRAIN_TEXTURE_BASE64_MAP4!=='undefined' ? TERRAIN_TEXTURE_BASE64_MAP4 : null),
     roads: ()=> (typeof ROADS_RAW_DATA_MAP4!=='undefined' ? ROADS_RAW_DATA_MAP4 : []),
   },
   map3: {
@@ -835,7 +834,6 @@ const MAPS = {
     sub: '新規マップ',
     hasData: ()=> typeof TERRAIN_GLB_BASE64_MAP3 !== 'undefined',
     glb: ()=> TERRAIN_GLB_BASE64_MAP3,
-    texture: ()=> (typeof TERRAIN_TEXTURE_BASE64_MAP3!=='undefined' ? TERRAIN_TEXTURE_BASE64_MAP3 : null),
     roads: ()=> (typeof ROADS_RAW_DATA_MAP3!=='undefined' ? ROADS_RAW_DATA_MAP3 : []),
   },
   map1: {
@@ -843,7 +841,6 @@ const MAPS = {
     sub: '既存マップ',
     hasData: ()=> typeof TERRAIN_GLB_BASE64 !== 'undefined',
     glb: ()=> TERRAIN_GLB_BASE64,
-    texture: ()=> (typeof TERRAIN_TEXTURE_BASE64!=='undefined' ? TERRAIN_TEXTURE_BASE64 : null),
     roads: ()=> (typeof ROADS_RAW_DATA!=='undefined' ? ROADS_RAW_DATA : []),
   },
   map2: {
@@ -851,7 +848,6 @@ const MAPS = {
     sub: '新規マップ',
     hasData: ()=> typeof TERRAIN_GLB_BASE64_MAP2 !== 'undefined',
     glb: ()=> TERRAIN_GLB_BASE64_MAP2,
-    texture: ()=> (typeof TERRAIN_TEXTURE_BASE64_MAP2!=='undefined' ? TERRAIN_TEXTURE_BASE64_MAP2 : null),
     roads: ()=> (typeof ROADS_RAW_DATA_MAP2!=='undefined' ? ROADS_RAW_DATA_MAP2 : []),
   },
 };
@@ -5391,23 +5387,16 @@ const WORLD = { originX: 0, originZ: 0, scaleX: 1, scaleZ: 1, minY: 0, maxY: 0, 
 const unitMarkers3d = {};
 let mapFocusTarget = null;
 
-function applyTerrainTextureOverride(root, textureBase64){
-  if(!textureBase64) return;
-  const dataUrl = 'data:image/jpeg;base64,'+textureBase64;
-  const loader = new THREE.TextureLoader();
-  loader.load(dataUrl, tex=>{
-    tex.flipY = false;
-    if('encoding' in tex) tex.encoding = THREE.sRGBEncoding;
-    if('colorSpace' in tex) tex.colorSpace = THREE.SRGBColorSpace;
-    tex.needsUpdate = true;
-    root.traverse(o=>{
-      if(o.isMesh && o.material){
-        const mats = Array.isArray(o.material) ? o.material : [o.material];
-        mats.forEach(m=>{ m.map = tex; m.needsUpdate = true; });
-      }
-    });
-  }, undefined, err=>{
-    console.error('差し替えテクスチャの読み込みに失敗しました', err);
+// per user request: the aerial-photo texture is replaced by a flat olive/khaki tactical-map
+// color (still shaded by the scene's lighting, so terrain relief/contours stay readable via
+// shadow, just without photo-level visual noise). The GLB's own texture data is ignored.
+const TERRAIN_FLAT_COLOR = 0x5c6b3f;
+function applyTerrainTextureOverride(root){
+  root.traverse(o=>{
+    if(o.isMesh && o.material){
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      mats.forEach(m=>{ m.map = null; m.color = new THREE.Color(TERRAIN_FLAT_COLOR); m.needsUpdate = true; });
+    }
   });
 }
 
@@ -5424,9 +5413,8 @@ function initThree(){
   renderer3d = new THREE.WebGLRenderer({ canvas: canvas3d, antialias:true });
   renderer3d.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
   renderer3d.setClearColor(0x11140d, 1);
-  // The terrain texture is tagged sRGBEncoding (see applyTerrainTextureOverride);
-  // without matching output encoding on the renderer the final image comes out
-  // noticeably darker/duller than the source texture.
+  // Without matching sRGB output encoding, lit colors (the flat terrain color, unit
+  // markers, etc.) come out noticeably darker/duller than authored.
   if('outputEncoding' in renderer3d) renderer3d.outputEncoding = THREE.sRGBEncoding;
   scene3d = new THREE.Scene();
 
@@ -5441,7 +5429,7 @@ function initThree(){
   resizeThree();
 }
 
-// per user request: loads the terrain GLB/texture/roads for whichever map the player
+// per user request: loads the terrain GLB/roads for whichever map the player
 // picked (state.selectedMap, see MAPS/selectMap()). Called once after map selection.
 function loadSelectedTerrain(){
   if(typeof THREE === 'undefined' || !THREE.GLTFLoader || !scene3d){
@@ -5470,7 +5458,7 @@ function loadSelectedTerrain(){
   loader.parse(arrayBuffer, '', (gltf)=>{
     terrainObject3d = gltf.scene;
     scene3d.add(terrainObject3d);
-    applyTerrainTextureOverride(terrainObject3d, mapConf.texture());
+    applyTerrainTextureOverride(terrainObject3d);
 
     const box = new THREE.Box3().setFromObject(terrainObject3d);
     const sizeX = box.max.x-box.min.x, sizeZ = box.max.z-box.min.z;
