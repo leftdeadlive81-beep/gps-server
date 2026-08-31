@@ -5782,9 +5782,15 @@ function groundPlaneCanvasUnitAt(px, py){
   const ndcY = -(py/MAP_VIEW.containerH)*2+1;
   const vec = new THREE.Vector3(ndcX, ndcY, 0.5).unproject(camera3d);
   const dir = vec.sub(camera3d.position).normalize();
-  if(Math.abs(dir.y) < 1e-6) return null;
-  const t = (WORLD.refY - camera3d.position.y)/dir.y;
-  if(t<0) return null;
+  const t = Math.abs(dir.y) < 1e-6 ? -1 : (WORLD.refY - camera3d.position.y)/dir.y;
+  if(t<0){
+    // The click's ray never crosses the ground plane in front of the camera (e.g. a
+    // point above the horizon in a tilted view). Rather than reporting no position at
+    // all -- which silently drops the move/fire order the click was meant to issue --
+    // fall back to a plain screen-fraction mapping onto canvas-unit space so every
+    // on-map click still resolves to *some* clampable position.
+    return { x: (px/MAP_VIEW.containerW)*CANVAS_W, y: (py/MAP_VIEW.containerH)*CANVAS_H };
+  }
   const hitX = camera3d.position.x + dir.x*t;
   const hitZ = camera3d.position.z + dir.z*t;
   return { x: (hitX-WORLD.originX)/WORLD.unitsPerCanvasUnit, y: (hitZ-WORLD.originZ)/WORLD.unitsPerCanvasUnit };
