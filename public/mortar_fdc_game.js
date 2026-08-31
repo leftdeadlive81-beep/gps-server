@@ -4531,6 +4531,22 @@ function drawBoard(){
     });
   }
 
+  // per user request: topographic-map-style contour lines (see buildContourLines()),
+  // drawn the same way roads were above -- reprojected each frame, segments whose
+  // endpoints fall off-screen just aren't drawn rather than being connected through.
+  if(CONTOUR_LINES_CANVAS.length){
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(150,110,55,0.55)';
+    ctx.lineWidth = 1;
+    CONTOUR_LINES_CANVAS.forEach(seg=>{
+      const p0 = project(seg.x1, seg.y1), p1 = project(seg.x2, seg.y2);
+      if(!p0.visible || !p1.visible) return;
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+    });
+    ctx.stroke();
+  }
+
   // HQ marker (指揮所) ― fixed at the screen's left edge; mission-critical, enemies specifically target it
   {
     const hq = state.hq;
@@ -5360,6 +5376,10 @@ let threeReady = false;
 let cameraNeedsInitialFit = true;
 let scene3d, camera3d, renderer3d, terrainObject3d;
 const HEIGHT_GRID = { cols:0, rows:0, values:null, minX:0, minZ:0, stepX:1, stepZ:1 };
+// per user request: topographic-map-style contour lines, generated from the same real
+// elevation data as HEIGHT_GRID (see buildContourLines()). Canvas-unit line segments,
+// re-projected and drawn each frame in drawBoard() like the (now-suppressed) road overlay.
+const CONTOUR_LINES_CANVAS = [];
 // On phones, start the camera rotated -90 deg so the friendly<->enemy axis
 // (canvas X: friendly at low X, enemy at high X) reads bottom-to-top on
 // screen (friendly near/bottom, enemy far/top) instead of the desktop's
@@ -5387,10 +5407,10 @@ const WORLD = { originX: 0, originZ: 0, scaleX: 1, scaleZ: 1, minY: 0, maxY: 0, 
 const unitMarkers3d = {};
 let mapFocusTarget = null;
 
-// per user request: the aerial-photo texture is replaced by a flat olive/khaki tactical-map
-// color (still shaded by the scene's lighting, so terrain relief/contours stay readable via
-// shadow, just without photo-level visual noise). The GLB's own texture data is ignored.
-const TERRAIN_FLAT_COLOR = 0x5c6b3f;
+// per user request: topographic-map style -- flat pale parchment terrain (like a paper
+// map's background) with brown contour lines drawn over it (see CONTOUR_LINES_CANVAS /
+// buildContourLines() / drawBoard()). The GLB's own aerial-photo texture data is ignored.
+const TERRAIN_FLAT_COLOR = 0xf2ead2;
 function applyTerrainTextureOverride(root){
   root.traverse(o=>{
     if(o.isMesh && o.material){
@@ -5470,6 +5490,7 @@ function loadSelectedTerrain(){
     WORLD.originZ = box.min.z;
 
     buildHeightGrid();
+    buildContourLines();
     buildRealRoads(mapConf.roads());
     threeReady = true;
     cameraNeedsInitialFit = true;
@@ -5500,6 +5521,63 @@ function buildHeightGrid(){
   HEIGHT_GRID.cols = COLS; HEIGHT_GRID.rows = ROWS; HEIGHT_GRID.values = values;
   HEIGHT_GRID.minX = minX; HEIGHT_GRID.minZ = minZ;
   HEIGHT_GRID.stepX = stepX; HEIGHT_GRID.stepZ = stepZ;
+}
+
+// Picks a "nice" (1/2/5 x 10^n) contour interval that yields roughly 10 contour lines
+// across the map's real elevation range, the way a paper topographic map's contour
+// interval is chosen relative to the terrain's relief.
+function niceContourInterval(range){
+  if(!(range>0)) return 10;
+  const raw = range/10;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw/mag;
+  const nice = norm<1.5 ? 1 : norm<3.5 ? 2 : norm<7.5 ? 5 : 10;
+  return nice*mag;
+}
+
+// per user request: topographic-map-style contour lines, traced from the same real
+// elevation data as HEIGHT_GRID via a simplified marching-squares pass over its grid
+// (each cell's 4 edges are checked independently for a level crossing and paired off in
+// the order found -- this can occasionally split a saddle cell "wrong", which is
+// invisible at this line weight/zoom). Segments are stored in canvas-unit space so
+// drawBoard() can re-project and draw them exactly like any other map element.
+function buildContourLines(){
+  CONTOUR_LINES_CANVAS.length = 0;
+  if(!HEIGHT_GRID.values) return;
+  const {cols, rows, values, minX, minZ, stepX, stepZ} = HEIGHT_GRID;
+  const range = WORLD.maxY-WORLD.minY;
+  const interval = niceContourInterval(range);
+  if(!(interval>0)) return;
+  const v = (r,c)=> values[r*cols+c];
+  const toCanvas = (wx, wz)=> ({ x:(wx-WORLD.originX)/WORLD.scaleX, y:(wz-WORLD.originZ)/WORLD.scaleZ });
+  const firstLevel = Math.ceil(WORLD.minY/interval)*interval;
+  for(let level=firstLevel; level<=WORLD.maxY; level+=interval){
+    for(let r=0; r<rows-1; r++){
+      for(let c=0; c<cols-1; c++){
+        const a=v(r,c), b=v(r,c+1), cc=v(r+1,c+1), d=v(r+1,c);
+        const ax=minX+c*stepX, az=minZ+r*stepZ;
+        const bx=minX+(c+1)*stepX, bz=az;
+        const cx2=bx, cz2=minZ+(r+1)*stepZ;
+        const dx=ax, dz=cz2;
+        const pts = [];
+        const tryEdge = (v0,v1,x0,z0,x1,z1)=>{
+          if((v0<level)!==(v1<level)){
+            const t = (level-v0)/(v1-v0);
+            pts.push({x:x0+(x1-x0)*t, z:z0+(z1-z0)*t});
+          }
+        };
+        tryEdge(a,b, ax,az, bx,bz);
+        tryEdge(b,cc, bx,bz, cx2,cz2);
+        tryEdge(cc,d, cx2,cz2, dx,dz);
+        tryEdge(d,a, dx,dz, ax,az);
+        for(let i=0; i+1<pts.length; i+=2){
+          const p0 = toCanvas(pts[i].x, pts[i].z);
+          const p1 = toCanvas(pts[i+1].x, pts[i+1].z);
+          CONTOUR_LINES_CANVAS.push({x1:p0.x, y1:p0.y, x2:p1.x, y2:p1.y});
+        }
+      }
+    }
+  }
 }
 
 // Converts the real OSM road network (mapcreate/roads_data.js, raw local terrain
