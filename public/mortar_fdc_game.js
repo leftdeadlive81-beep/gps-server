@@ -5357,6 +5357,11 @@ function drawCallouts(ctx){
 // stays correctly placed no matter how the camera is rotated/tilted/panned.
 let mapDragMoved = false;
 let threeReady = false;
+// True right after a map (re)loads, until updateCameraFromView() has picked a
+// default zoom that fits the whole map on screen. Only used once per map load --
+// forcing this fit on every call (as a previous version did) fights the user's
+// own zoom, since zooming in necessarily pushes the map's corners off-screen.
+let cameraNeedsInitialFit = true;
 let scene3d, camera3d, renderer3d, terrainObject3d;
 const HEIGHT_GRID = { cols:0, rows:0, values:null, minX:0, minZ:0, stepX:1, stepZ:1 };
 // On phones, start the camera rotated -90 deg so the friendly<->enemy axis
@@ -5472,6 +5477,7 @@ function loadSelectedTerrain(){
     buildHeightGrid();
     buildRealRoads(mapConf.roads());
     threeReady = true;
+    cameraNeedsInitialFit = true;
     resizeThree();
   }, (err)=>{
     console.error('地形モデルの読み込みに失敗しました', err);
@@ -5715,31 +5721,36 @@ function updateCameraFromView(){
     camera3d.updateProjectionMatrix();
   };
 
-  // per user request: an analytical distance-from-FOV estimate (fit width/height into
-  // the camera's cone at distance d) isn't reliable for a TILTED camera -- the ground
-  // footprint of an oblique perspective camera is a trapezoid, not a simple cone, so
-  // the near edge and far edge of the view cover very different amounts of ground per
-  // screen-pixel. That mismatch was still clipping units near the map's north/south
-  // edges after switching to a width+height-aware estimate. Instead,
-  // start from a reasonable estimate and back the camera off step by step, actually
-  // re-projecting the map's 4 corners each time, until all of them land on-screen and
-  // in front of the camera -- this is correct regardless of tilt/FOV/aspect quirks.
-  let dist = (diag*0.9)/MAP_VIEW.zoom;
-  applyDist(dist);
-  for(let i=0;i<20;i++){
-    const corners = [[0,0],[CANVAS_W,0],[0,CANVAS_H],[CANVAS_W,CANVAS_H],[CANVAS_W/2,0],[CANVAS_W/2,CANVAS_H]];
-    let allOk = true;
-    for(const [cx,cy] of corners){
-      const p = project(cx,cy);
-      if(!p.visible || p.x<0 || p.x>MAP_VIEW.containerW || p.y<0 || p.y>MAP_VIEW.containerH){
-        allOk = false;
-        break;
+  // Once per map load, pick a default zoom that fits the whole map on screen. An
+  // analytical FOV-based estimate isn't reliable for a TILTED camera -- the ground
+  // footprint of an oblique perspective camera is a trapezoid, not a simple cone --
+  // so this backs the camera off step by step, actually re-projecting the map's
+  // corners each time, until all of them land on-screen. This must run only ONCE
+  // (not on every call): forcing the whole map to stay on-screen on every update
+  // fights the user's own zoom, since zooming in necessarily pushes the map's
+  // corners off-screen -- that was the bug that made the zoom controls stop working.
+  if(cameraNeedsInitialFit && MAP_VIEW.containerW && MAP_VIEW.containerH){
+    let fitDist = diag*0.9;
+    applyDist(fitDist);
+    for(let i=0;i<20;i++){
+      const corners = [[0,0],[CANVAS_W,0],[0,CANVAS_H],[CANVAS_W,CANVAS_H],[CANVAS_W/2,0],[CANVAS_W/2,CANVAS_H]];
+      let allOk = true;
+      for(const [cx,cy] of corners){
+        const p = project(cx,cy);
+        if(!p.visible || p.x<0 || p.x>MAP_VIEW.containerW || p.y<0 || p.y>MAP_VIEW.containerH){
+          allOk = false;
+          break;
+        }
       }
+      if(allOk) break;
+      fitDist *= 1.15;
+      applyDist(fitDist);
     }
-    if(allOk) break;
-    dist *= 1.15;
-    applyDist(dist);
+    MAP_VIEW.zoom = clamp((diag*0.9)/fitDist, MAP_ZOOM_MIN, MAP_ZOOM_MAX);
+    cameraNeedsInitialFit = false;
   }
+
+  applyDist((diag*0.9)/MAP_VIEW.zoom);
 }
 
 function resizeThree(){
