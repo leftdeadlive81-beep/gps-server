@@ -806,7 +806,7 @@ function initGame(){
     decoys: [],
     decoyPlacementPending: false,
     decoyCommandBox: null,
-    selectedMap: 'map1',
+    selectedMap: 'map5',
   };
   ripples = []; projectiles = []; flashes = []; enemyTracers = [];
   debrisParticles = []; wreckSmokes = []; killBanners = [];
@@ -817,38 +817,19 @@ function initGame(){
 }
 
 // per user request: map selection -- lets the player pick which real-world terrain to
-// deploy on before difficulty selection. Each map's raw GLB/roads base64 lives in its own
-// globally-scoped const (see mapcreate/*.js); MAPS below just points at whichever set is
-// active for a given key so the rest of the 3D-loading code (initThree/buildRealRoads)
-// doesn't need to know about individual maps.
+// deploy on before difficulty selection. Each map's raw GLB/texture/roads base64 lives in
+// its own globally-scoped const (see mapcreate/*.js); MAPS below just points at whichever
+// set is active for a given key so the rest of the 3D-loading code (initThree/
+// applyTerrainTextureOverride/buildRealRoads) doesn't need to know about individual maps.
+// A map's texture is optional (texture() may return null) -- see applyTerrainTextureOverride.
 const MAPS = {
-  map4: {
+  map5: {
     label: '新演習場',
     sub: '新規マップ',
-    hasData: ()=> typeof TERRAIN_GLB_BASE64_MAP4 !== 'undefined',
-    glb: ()=> TERRAIN_GLB_BASE64_MAP4,
-    roads: ()=> (typeof ROADS_RAW_DATA_MAP4!=='undefined' ? ROADS_RAW_DATA_MAP4 : []),
-  },
-  map3: {
-    label: '新演習場2',
-    sub: '新規マップ',
-    hasData: ()=> typeof TERRAIN_GLB_BASE64_MAP3 !== 'undefined',
-    glb: ()=> TERRAIN_GLB_BASE64_MAP3,
-    roads: ()=> (typeof ROADS_RAW_DATA_MAP3!=='undefined' ? ROADS_RAW_DATA_MAP3 : []),
-  },
-  map1: {
-    label: '日出生台演習場',
-    sub: '既存マップ',
-    hasData: ()=> typeof TERRAIN_GLB_BASE64 !== 'undefined',
-    glb: ()=> TERRAIN_GLB_BASE64,
-    roads: ()=> (typeof ROADS_RAW_DATA!=='undefined' ? ROADS_RAW_DATA : []),
-  },
-  map2: {
-    label: '新演習場(MGRS 52SGB02898868)',
-    sub: '新規マップ',
-    hasData: ()=> typeof TERRAIN_GLB_BASE64_MAP2 !== 'undefined',
-    glb: ()=> TERRAIN_GLB_BASE64_MAP2,
-    roads: ()=> (typeof ROADS_RAW_DATA_MAP2!=='undefined' ? ROADS_RAW_DATA_MAP2 : []),
+    hasData: ()=> typeof TERRAIN_GLB_BASE64_MAP5 !== 'undefined',
+    glb: ()=> TERRAIN_GLB_BASE64_MAP5,
+    texture: ()=> (typeof TERRAIN_TEXTURE_BASE64_MAP5!=='undefined' ? TERRAIN_TEXTURE_BASE64_MAP5 : null),
+    roads: ()=> (typeof ROADS_RAW_DATA_MAP5!=='undefined' ? ROADS_RAW_DATA_MAP5 : []),
   },
 };
 
@@ -5407,16 +5388,38 @@ const WORLD = { originX: 0, originZ: 0, scaleX: 1, scaleZ: 1, minY: 0, maxY: 0, 
 const unitMarkers3d = {};
 let mapFocusTarget = null;
 
-// per user request: topographic-map style -- flat pale parchment terrain (like a paper
-// map's background) with brown contour lines drawn over it (see CONTOUR_LINES_CANVAS /
-// buildContourLines() / drawBoard()). The GLB's own aerial-photo texture data is ignored.
+// per user request: topographic-map style. When a map ships real texture data (now GSI's
+// 淡色地図/"pale" tiles rather than the old aerial photo -- see mapcreate/gsi_terrain_to_obj.py),
+// that texture is applied directly; brown contour lines (CONTOUR_LINES_CANVAS, drawn in
+// drawBoard()) are layered over it either way, matching how a real topo map combines a
+// muted base map with contour lines. Maps that ship no texture data fall back to a flat
+// pale parchment color so contours still read clearly against something texture-like.
 const TERRAIN_FLAT_COLOR = 0xf2ead2;
-function applyTerrainTextureOverride(root){
-  root.traverse(o=>{
-    if(o.isMesh && o.material){
-      const mats = Array.isArray(o.material) ? o.material : [o.material];
-      mats.forEach(m=>{ m.map = null; m.color = new THREE.Color(TERRAIN_FLAT_COLOR); m.needsUpdate = true; });
-    }
+function applyTerrainTextureOverride(root, textureBase64){
+  if(!textureBase64){
+    root.traverse(o=>{
+      if(o.isMesh && o.material){
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach(m=>{ m.map = null; m.color = new THREE.Color(TERRAIN_FLAT_COLOR); m.needsUpdate = true; });
+      }
+    });
+    return;
+  }
+  const dataUrl = 'data:image/jpeg;base64,'+textureBase64;
+  const loader = new THREE.TextureLoader();
+  loader.load(dataUrl, tex=>{
+    tex.flipY = false;
+    if('encoding' in tex) tex.encoding = THREE.sRGBEncoding;
+    if('colorSpace' in tex) tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    root.traverse(o=>{
+      if(o.isMesh && o.material){
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach(m=>{ m.map = tex; m.color = new THREE.Color(0xffffff); m.needsUpdate = true; });
+      }
+    });
+  }, undefined, err=>{
+    console.error('差し替えテクスチャの読み込みに失敗しました', err);
   });
 }
 
@@ -5449,7 +5452,7 @@ function initThree(){
   resizeThree();
 }
 
-// per user request: loads the terrain GLB/roads for whichever map the player
+// per user request: loads the terrain GLB/texture/roads for whichever map the player
 // picked (state.selectedMap, see MAPS/selectMap()). Called once after map selection.
 function loadSelectedTerrain(){
   if(typeof THREE === 'undefined' || !THREE.GLTFLoader || !scene3d){
@@ -5478,7 +5481,7 @@ function loadSelectedTerrain(){
   loader.parse(arrayBuffer, '', (gltf)=>{
     terrainObject3d = gltf.scene;
     scene3d.add(terrainObject3d);
-    applyTerrainTextureOverride(terrainObject3d);
+    applyTerrainTextureOverride(terrainObject3d, mapConf.texture());
 
     const box = new THREE.Box3().setFromObject(terrainObject3d);
     const sizeX = box.max.x-box.min.x, sizeZ = box.max.z-box.min.z;
