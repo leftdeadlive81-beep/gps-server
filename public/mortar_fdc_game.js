@@ -5457,8 +5457,13 @@ function initThree(){
   camera3d = new THREE.PerspectiveCamera(45, 1, 1, 100000);
   scene3d.add(camera3d);
 
-  scene3d.add(new THREE.AmbientLight(0xffffff, 0.95));
-  const sun = new THREE.DirectionalLight(0xfff4e0, 1.05);
+  // per user request: darkened alongside TERRAIN_TEXTURE_BRIGHTNESS -- the renderer uses no
+  // tone mapping, so any pixel whose light*color exceeds 1.0 just clips to flat white. The
+  // old light levels (0.95 ambient + 1.05 directional) were high enough that sun-facing
+  // terrain clipped white regardless of how dark material.color was, masking the brightness
+  // change entirely. Lower levels here leave headroom for material.color to actually show.
+  scene3d.add(new THREE.AmbientLight(0xffffff, 0.55));
+  const sun = new THREE.DirectionalLight(0xfff4e0, 0.6);
   sun.position.set(600, 1200, 400);
   scene3d.add(sun);
 
