@@ -593,6 +593,14 @@ enemyInfantryIcon.src = 'icons/e-infant.png';
 // rotated to match the 3D camera), height pinned to targetH with width following the source
 // image's own aspect ratio. Grayed out when the unit has no survivors. Draws nothing (no
 // fallback primitive) until the image itself has finished loading.
+// per user request: unit icons scale with the map's camera zoom (MAP_VIEW.zoom) instead of
+// staying a fixed pixel size regardless of how far in/out the player has zoomed. Uses sqrt
+// of zoom (not zoom directly) so the size change feels proportionate rather than extreme --
+// zoom already ranges MAP_ZOOM_MIN..MAP_ZOOM_MAX (0.35..5), and clamping the multiplier here
+// separately keeps icons from ever shrinking to unreadable or ballooning to oversized.
+function scaledIconH(baseH){
+  return baseH * clamp(Math.sqrt(MAP_VIEW.zoom), 0.6, 2.2);
+}
 function drawUnitIcon(ctx, img, cx, cy, targetH, dead){
   if(!img.complete || !img.naturalWidth) return;
   const w = targetH * (img.naturalWidth/img.naturalHeight);
@@ -4612,7 +4620,7 @@ function drawBoard(){
     ctx.save();
     ctx.translate(mVis.x,mVis.y);
     // per user request: custom mortar icon image (our side only) in place of the old triangle
-    drawUnitIcon(ctx, mortarIcon, 0, 0, 33, !mAlive);
+    drawUnitIcon(ctx, mortarIcon, 0, 0, scaledIconH(33), !mAlive);
     // shoot-and-scoot: a pulsing red ring while a counter-battery strike is inbound, so the
     // threat reads clearly on the map itself and not just in the mortar's own panel
     if(mAlive && mortar.cbWarnTurns!==null && mortar.cbWarnTurns!==undefined){
@@ -4704,7 +4712,7 @@ function drawBoard(){
     ctx.save();
     ctx.translate(scoutVis.x, scoutVis.y);
     // per user request: custom scout icon image (our side only) in place of the cross+circle glyph
-    drawUnitIcon(ctx, scoutIcon, 0, 0, 33, !scoutAlive);
+    drawUnitIcon(ctx, scoutIcon, 0, 0, scaledIconH(33), !scoutAlive);
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign='center';
@@ -4730,7 +4738,7 @@ function drawBoard(){
       const sqVisL = smoothVisualPos(sq, sq.x, sq.y);
       const sqVis = project(sqVisL.x, sqVisL.y);
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
-      drawUnitIcon(ctx, infantryIcon, sqVis.x, sqVis.y, 33, aliveSoldiers.length===0);
+      drawUnitIcon(ctx, infantryIcon, sqVis.x, sqVis.y, scaledIconH(33), aliveSoldiers.length===0);
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, sqVis.x+32, sqVis.y, aliveSoldiers.length/sq.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
@@ -4764,7 +4772,7 @@ function drawBoard(){
       const snVis = project(snVisL.x, snVisL.y);
       const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
       // per user request: custom sniper icon image (our side only) in place of the triangle
-      drawUnitIcon(ctx, sniperIcon, snVis.x, snVis.y, 33, aliveSoldiers.length===0);
+      drawUnitIcon(ctx, sniperIcon, snVis.x, snVis.y, scaledIconH(33), aliveSoldiers.length===0);
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, snVis.x+20, snVis.y, aliveSoldiers.length/sn.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
@@ -4842,7 +4850,7 @@ function drawBoard(){
         // per user request: custom enemy infantry icon image in place of the plain circle --
         // muted (grayscale) until identified, same treatment as a friendly unit with no survivors.
         const aliveTroops = t.troops.filter(s=>s.alive);
-        drawUnitIcon(ctx, enemyInfantryIcon, e.x, e.y, 33, !t.revealed);
+        drawUnitIcon(ctx, enemyInfantryIcon, e.x, e.y, scaledIconH(33), !t.revealed);
         if(t.revealed) drawAttritionBar(ctx, e.x+14, e.y, t.hp/t.maxHp);
         labelY = e.y+26;
         if(t.revealed){
