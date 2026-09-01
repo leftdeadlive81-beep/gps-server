@@ -5404,7 +5404,7 @@ const MAP_VIEW = {
   zoom: 1, azimuth: MAP_INITIAL_AZIMUTH, polar: 0.6, // orbit distance factor / horizontal / tilt angle (rad)
   containerW: 1, containerH: 1,
 };
-const MAP_ZOOM_MIN = 0.35, MAP_ZOOM_MAX = 5;
+const MAP_ZOOM_MIN = 0.35, MAP_ZOOM_MAX = 9; // per user request: allow zooming in further (was 5)
 const MAP_POLAR_MIN = 0.12, MAP_POLAR_MAX = 1.45;
 // scaleX/scaleZ are independent (not a single uniform unitsPerCanvasUnit) so that
 // canvas-unit space (0..CANVAS_W, 0..CANVAS_H) always covers the FULL loaded terrain
