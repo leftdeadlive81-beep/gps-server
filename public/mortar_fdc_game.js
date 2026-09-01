@@ -811,7 +811,7 @@ function initGame(){
     decoys: [],
     decoyPlacementPending: false,
     decoyCommandBox: null,
-    selectedMap: 'map5',
+    selectedMap: 'map6',
   };
   ripples = []; projectiles = []; flashes = []; enemyTracers = [];
   debrisParticles = []; wreckSmokes = []; killBanners = [];
@@ -836,14 +836,6 @@ const MAPS = {
     glb: ()=> TERRAIN_GLB_BASE64_MAP6,
     texture: ()=> (typeof TERRAIN_TEXTURE_BASE64_MAP6!=='undefined' ? TERRAIN_TEXTURE_BASE64_MAP6 : null),
     roads: ()=> (typeof ROADS_RAW_DATA_MAP6!=='undefined' ? ROADS_RAW_DATA_MAP6 : []),
-  },
-  map5: {
-    label: '新演習場',
-    sub: '新規マップ',
-    hasData: ()=> typeof TERRAIN_GLB_BASE64_MAP5 !== 'undefined',
-    glb: ()=> TERRAIN_GLB_BASE64_MAP5,
-    texture: ()=> (typeof TERRAIN_TEXTURE_BASE64_MAP5!=='undefined' ? TERRAIN_TEXTURE_BASE64_MAP5 : null),
-    roads: ()=> (typeof ROADS_RAW_DATA_MAP5!=='undefined' ? ROADS_RAW_DATA_MAP5 : []),
   },
 };
 
@@ -5548,12 +5540,18 @@ function loadSelectedTerrain(){
     WORLD.originX = box.min.x;
     WORLD.originZ = box.min.z;
 
-    buildHeightGrid();
-    buildContourLines();
-    buildRealRoads(mapConf.roads());
-    threeReady = true;
-    cameraNeedsInitialFit = true;
-    resizeThree();
+    // per user request: buildHeightGrid's 2800 unaccelerated raycasts (plus the contour/road
+    // setup) are heavy enough to visibly freeze the page for a moment -- deferring them one
+    // animation frame lets the browser actually paint the current screen first, so the freeze
+    // (still the same total work) doesn't land in the same tick as the map selection click.
+    requestAnimationFrame(()=>{
+      buildHeightGrid();
+      buildContourLines();
+      buildRealRoads(mapConf.roads());
+      threeReady = true;
+      cameraNeedsInitialFit = true;
+      resizeThree();
+    });
   }, (err)=>{
     console.error('地形モデルの読み込みに失敗しました', err);
   });
