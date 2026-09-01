@@ -6354,7 +6354,13 @@ function loop(){
 document.getElementById('board').addEventListener('click', handleCanvasClick);
 loadAchievements();
 renderAudioSettingsPanel();
-initGame();
+// initThree() must run before initGame() -- initGame() eagerly calls loadSelectedTerrain()
+// for the default map so it preloads while the setup screen is up, and that needs scene3d
+// (set up by initThree()) to already exist. Calling them in the other order left scene3d
+// undefined on first load, so loadSelectedTerrain() silently bailed out and no map ever
+// appeared until the player re-triggered it (e.g. by picking a map, which initThree() had
+// long since finished setting up by then).
 initThree();
+initGame();
 setupMapControls();
 loop();
