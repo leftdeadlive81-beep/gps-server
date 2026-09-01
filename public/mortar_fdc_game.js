@@ -693,14 +693,14 @@ function playSfx(name, volume){
   a.play().catch(()=>{});
 }
 
-const FLIGHT_DURATION = 700;
+const FLIGHT_DURATION = 1400; // per user request: half the previous flight speed (was 700)
 const LAUNCH_INTERVAL = 420;
 // per user request: real world-space apex height (same units as terrain elevation, already
 // reflecting TERRAIN_RELIEF_EXAGGERATION) rather than a fixed screen-pixel offset -- a pixel
 // offset applied after projecting the ground point doesn't grow/shrink with terrain relief
 // along the flight path, so on hilly terrain the "arc" reads as hugging the ground instead of
 // flying above it. Projecting a real elevated point (see projectAtHeight) always clears it.
-const ARC_HEIGHT = 350;
+const ARC_HEIGHT = 700; // per user request: higher apex than before (was 350)
 
 function rnd(a,b){ return a + Math.random()*(b-a); }
 function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
