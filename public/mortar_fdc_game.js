@@ -4657,27 +4657,38 @@ function drawBoard(){
   // scout observation cones (約45度) ― drawn before the markers so they sit underneath
   // per user request: restored -- this is not the primitive that was meant to go (that was
   // the 3D minimap's leftover box/cone/etc. meshes, see syncUnitMarkers3d).
+  //
+  // per user request: drawn as a true circular arc in SCREEN space (not by projecting a
+  // ground-plane wedge through the tilted 3D camera). Projecting the wedge made its apparent
+  // width depend on which way it faced -- a tilted perspective camera foreshortens anything
+  // extending away from it, so a ground-plane fan aimed toward the far/near side of the map
+  // (screen up/down) rendered visibly narrower than the same fan aimed east/west (screen
+  // left/right), even though the underlying detection angle (scoutHalfFov()) never changes.
+  // Projecting just the center bearing (for facing direction and reach) and then drawing a
+  // literal circular wedge around it keeps the on-screen shape consistent in every direction.
   state.scouts.forEach(scout=>{
     const scoutVisL = smoothVisualPos(scout, scout.x, scout.y);
     const scoutVis = project(scoutVisL.x, scoutVisL.y);
     if(unitAlive(scout)){
       const coneLen = SCOUT_MAX_RANGE_UNITS;
-      const steps = 24;
-      ctx.beginPath();
-      ctx.moveTo(scoutVis.x, scoutVis.y);
-      for(let i=0;i<=steps;i++){
-        const halfFov = scoutHalfFov();
-        const ang = scout.watchAngle - halfFov + (halfFov*2)*(i/steps);
-        const pL = bearingToXY(ang, coneLen, scoutVisL.x, scoutVisL.y);
-        const p = project(pL.x, pL.y);
-        ctx.lineTo(p.x, p.y);
+      const halfFov = scoutHalfFov();
+      const farL = bearingToXY(scout.watchAngle, coneLen, scoutVisL.x, scoutVisL.y);
+      const farP = project(farL.x, farL.y);
+      const dx = farP.x-scoutVis.x, dy = farP.y-scoutVis.y;
+      const radius = Math.hypot(dx, dy);
+      if(radius > 0.01){
+        const screenAngle = Math.atan2(dy, dx);
+        const halfFovRad = halfFov*Math.PI/180;
+        ctx.beginPath();
+        ctx.moveTo(scoutVis.x, scoutVis.y);
+        ctx.arc(scoutVis.x, scoutVis.y, radius, screenAngle-halfFovRad, screenAngle+halfFovRad);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(111,155,191,0.14)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(111,155,191,0.55)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
       }
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(111,155,191,0.14)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(111,155,191,0.55)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
     }
   });
 
