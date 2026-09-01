@@ -4652,52 +4652,49 @@ function drawBoard(){
   // per user request: restored -- this is not the primitive that was meant to go (that was
   // the 3D minimap's leftover box/cone/etc. meshes, see syncUnitMarkers3d).
   //
-  // per user request: drawn as a true circular arc in SCREEN space (not by projecting a
-  // ground-plane wedge through the tilted 3D camera). Projecting the wedge made its apparent
-  // width depend on which way it faced -- a tilted perspective camera foreshortens anything
-  // extending away from it, so a ground-plane fan aimed toward the far/near side of the map
-  // (screen up/down) rendered visibly narrower than the same fan aimed east/west (screen
-  // left/right), even though the underlying detection angle (scoutHalfFov()) never changes.
-  // The RADIUS has the same problem if it's taken from projecting a single far-away point
-  // along the facing bearing -- that point is just as foreshortened as the wedge was, so the
-  // cone would still stretch/shrink by facing direction (only now as a whole, not just its
-  // width). Instead, sample several small, nearby offsets around the scout (cheap -- 8 points
-  // at a few canvas-units out) and use the LARGEST resulting screen distance as the local
-  // pixels-per-canvas-unit rate: that's the least-foreshortened sampled direction, so scaling
-  // coneLen by it gives a radius that doesn't depend on which way the scout happens to face.
-  // Only the center bearing's projected ANGLE (not its distance) is still used, for facing.
+  // per user request: drawn as a ground-plane wedge again (projected through the real 3D
+  // camera per point), NOT as a screen-space arc -- a screen-space arc kept its apparent size
+  // constant, but under a near-horizontal camera it pointed the wedge toward the horizon
+  // (i.e. up into the sky on screen) instead of laying it along the ground, since "far along
+  // the ground" and "toward the vanishing point" become nearly the same screen direction at a
+  // grazing viewing angle. A real ground-plane wedge can never point into the sky.
+  //
+  // What IS fixed here vs. the original ground-plane version: bearingToXY's sin/cos assumed
+  // canvas-unit X and Y cover equal real-world distances, which stopped being true once
+  // WORLD.scaleX/scaleZ became independent per-axis (see canvasUnitToWorldXZ) -- on any map
+  // whose real terrain isn't exactly canvas-aspect-shaped, that made a canvas-space "circle"
+  // project as a real-world ELLIPSE, so the cone reached a different real distance north/south
+  // than east/west even before the camera saw it. Scaling the north/south (Y) component by
+  // scaleX/scaleZ below cancels that out, so the wedge is a true circle in real-world meters.
+  // The remaining direction-dependent foreshortening once the tilted camera renders that true
+  // circle is normal, correct 3D perspective (the same reason distant objects look smaller) --
+  // not something to eliminate.
   state.scouts.forEach(scout=>{
     const scoutVisL = smoothVisualPos(scout, scout.x, scout.y);
     const scoutVis = project(scoutVisL.x, scoutVisL.y);
     if(unitAlive(scout)){
       const coneLen = SCOUT_MAX_RANGE_UNITS;
       const halfFov = scoutHalfFov();
-      const farL = bearingToXY(scout.watchAngle, coneLen, scoutVisL.x, scoutVisL.y);
-      const farP = project(farL.x, farL.y);
-      const facingDx = farP.x-scoutVis.x, facingDy = farP.y-scoutVis.y;
-      const sampleR = 5;
-      let pxPerUnit = 0;
-      for(let k=0;k<8;k++){
-        const sampleL = bearingToXY((k/8)*360, sampleR, scoutVisL.x, scoutVisL.y);
-        const sampleP = project(sampleL.x, sampleL.y);
-        const d = Math.hypot(sampleP.x-scoutVis.x, sampleP.y-scoutVis.y);
-        if(d > pxPerUnit) pxPerUnit = d;
+      const steps = 24;
+      const aniso = (WORLD.scaleZ>0.0001) ? (WORLD.scaleX/WORLD.scaleZ) : 1;
+      ctx.beginPath();
+      ctx.moveTo(scoutVis.x, scoutVis.y);
+      for(let i=0;i<=steps;i++){
+        const ang = scout.watchAngle - halfFov + (halfFov*2)*(i/steps);
+        const rad = ang*Math.PI/180;
+        const pL = {
+          x: scoutVisL.x + coneLen*Math.sin(rad),
+          y: scoutVisL.y - coneLen*aniso*Math.cos(rad),
+        };
+        const p = project(pL.x, pL.y);
+        ctx.lineTo(p.x, p.y);
       }
-      pxPerUnit /= sampleR;
-      const radius = pxPerUnit * coneLen;
-      if(radius > 0.01 && (facingDx!==0 || facingDy!==0)){
-        const screenAngle = Math.atan2(facingDy, facingDx);
-        const halfFovRad = halfFov*Math.PI/180;
-        ctx.beginPath();
-        ctx.moveTo(scoutVis.x, scoutVis.y);
-        ctx.arc(scoutVis.x, scoutVis.y, radius, screenAngle-halfFovRad, screenAngle+halfFovRad);
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(111,155,191,0.14)';
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(111,155,191,0.55)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(111,155,191,0.14)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(111,155,191,0.55)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
     }
   });
 
