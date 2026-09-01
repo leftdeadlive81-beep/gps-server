@@ -384,3 +384,4 @@
   .shop-row .label{font-size:13px;font-weight:700;}
   .shop-row .sub{font-size:11px;color:var(--muted);margin-top:2px;}
   .shop-row .actions button{width:auto;padding:7px 12px;font-size:12px;white-space:nowrap;}
+  .shop-row.selected{border-color:var(--amber);}

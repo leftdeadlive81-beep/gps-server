@@ -543,7 +543,7 @@ function effectMultiplier(shell, fuze, type){
 // per user request: firing at an identified target auto-loads the shell/fuze/round-count
 // combo effectMultiplier() rates best for that target type, instead of just reusing whatever
 // the mortar's panel was last left on. Falls back to 'impact' if the ideal fuze somehow isn't
-// unlocked yet (impact is always unlocked, see selectDifficulty).
+// unlocked yet (impact is always unlocked, see startSetup).
 const MORTAR_BEST_LOADOUT = {
   infantry:  {shell:'he',   fuze:'proximity', count:3},
   vehicle:   {shell:'heat', fuze:'impact',    count:2},
@@ -607,7 +607,7 @@ function drawUnitIcon(ctx, img, cx, cy, targetH, dead){
 // mortar fire) each get a fresh Audio() instance per play so overlapping plays (several
 // kills in one proximity-fuse burst, a multi-round mortar volley) don't cut each other off.
 // .play() is wrapped in .catch(()=>{}) since browsers reject it until a user gesture has
-// occurred -- selectDifficulty() (the player's first click) is what actually starts the BGM.
+// occurred -- startSetup() (the player's first click) is what actually starts the BGM.
 const SFX_SRC = {
   combat: 'audio/combat.mp3',
   explosion: 'audio/explosion.mp3',
@@ -811,9 +811,10 @@ function initGame(){
   ripples = []; projectiles = []; flashes = []; enemyTracers = [];
   debrisParticles = []; wreckSmokes = []; killBanners = [];
   document.getElementById('log').innerHTML='';
-  log('sys', 'システム', `コンシム v${GAME_VERSION} 起動。マップを選択せよ。`);
+  log('sys', 'システム', `コンシム v${GAME_VERSION} 起動。マップと配置方法を選択し、作戦を開始せよ。`);
   renderMapSelectOverlay();
   document.getElementById('map-select-overlay').classList.add('show');
+  if(MAPS[state.selectedMap] && MAPS[state.selectedMap].hasData()) loadSelectedTerrain();
 }
 
 // per user request: map selection -- lets the player pick which real-world terrain to
@@ -841,18 +842,33 @@ const MAPS = {
   },
 };
 
+// per user request: difficulty selection removed (always 'normal', set directly in
+// initGame()'s state and applied in startSetup()) and map/deployment-mode selection merged
+// into one screen -- both are just highlighted by clicking, with a single 作戦開始 button
+// to confirm and start, rather than each choice being its own overlay in sequence.
+const DEPLOYMENT_MODES = {
+  auto:   {label:'自動配置', sub:'既定の隊形で各ユニットを自動的に展開する'},
+  manual: {label:'手動配置', sub:'地図をクリックして全ユニットの初期位置を1つずつ指定する'},
+};
+
 function renderMapSelectOverlay(){
+  renderMapSelectBody();
+  renderDeploymentSelectBody();
+}
+
+function renderMapSelectBody(){
   const body = document.getElementById('map-select-body');
   body.innerHTML = Object.keys(MAPS).map(key=>{
     const m = MAPS[key];
     const available = m.hasData();
+    const selected = state.selectedMap===key;
     return `
-      <div class="shop-row">
+      <div class="shop-row ${selected?'selected':''}">
         <div>
           <div class="label">${m.label}</div>
           <div class="sub">${available ? m.sub : 'データ未読み込み'}</div>
         </div>
-        <div class="actions"><button class="btn primary" ${available?'':'disabled'} onclick="selectMap('${key}')">選択</button></div>
+        <div class="actions"><button class="btn primary" ${available?'':'disabled'} onclick="selectMap('${key}')">${selected?'選択中':'選択'}</button></div>
       </div>
     `;
   }).join('');
@@ -861,67 +877,45 @@ function renderMapSelectOverlay(){
 function selectMap(key){
   const m = MAPS[key];
   if(!m || !m.hasData()) return;
+  const changed = state.selectedMap!==key;
   state.selectedMap = key;
-  document.getElementById('map-select-overlay').classList.remove('show');
-  log('sys','システム', `マップ「${m.label}」を選択。難易度を選択せよ。`);
-  loadSelectedTerrain();
-  renderDifficultyOverlay();
-  document.getElementById('difficulty-overlay').classList.add('show');
+  renderMapSelectBody();
+  if(changed) loadSelectedTerrain();
 }
 
-function renderDifficultyOverlay(){
-  const body = document.getElementById('difficulty-body');
-  body.innerHTML = Object.keys(DIFFICULTIES).map(key=>{
-    const d = DIFFICULTIES[key];
+function renderDeploymentSelectBody(){
+  const body = document.getElementById('deployment-select-body');
+  body.innerHTML = Object.keys(DEPLOYMENT_MODES).map(key=>{
+    const d = DEPLOYMENT_MODES[key];
+    const selected = state.deploymentMode===key;
     return `
-      <div class="shop-row">
+      <div class="shop-row ${selected?'selected':''}">
         <div>
           <div class="label">${d.label}</div>
-          <div class="sub">初期資金¥${d.startMoney} ・ 弾薬HE${d.startHe}/HEAT${d.startHeat} ・ 敵HP×${d.hpMult} ・ 反撃×${d.counterMult}</div>
+          <div class="sub">${d.sub}</div>
         </div>
-        <div class="actions"><button class="btn primary" onclick="selectDifficulty('${key}')">選択</button></div>
+        <div class="actions"><button class="btn primary" onclick="selectDeploymentMode('${key}')">${selected?'選択中':'選択'}</button></div>
       </div>
     `;
   }).join('');
 }
 
-function selectDifficulty(key){
-  const d = DIFFICULTIES[key];
-  if(!d) return;
-  state.difficulty = key;
+function selectDeploymentMode(key){
+  if(!DEPLOYMENT_MODES[key]) return;
+  state.deploymentMode = key;
+  renderDeploymentSelectBody();
+}
+
+function startSetup(){
+  const m = MAPS[state.selectedMap];
+  if(!m || !m.hasData()) return;
+  const d = DIFFICULTIES[state.difficulty];
   state.money = d.startMoney;
   state.ammo = {he:d.startHe, heat:d.startHeat};
   state.fuzeUnlocked = {impact:true, proximity:true, delay:true};
-  document.getElementById('difficulty-overlay').classList.remove('show');
-  log('sys','システム', `難易度「${d.label}」で作戦開始。全弾種・信管を装備済み。`);
+  document.getElementById('map-select-overlay').classList.remove('show');
+  log('sys','システム', `マップ「${m.label}」・${DEPLOYMENT_MODES[state.deploymentMode].label}で作戦開始。全弾種・信管を装備済み。`);
   startBgm();
-  openDeploymentChoice();
-}
-
-function openDeploymentChoice(){
-  const body = document.getElementById('deployment-body');
-  body.innerHTML = `
-    <div class="shop-row">
-      <div>
-        <div class="label">自動配置</div>
-        <div class="sub">既定の隊形で各ユニットを自動的に展開する</div>
-      </div>
-      <div class="actions"><button class="btn primary" onclick="chooseDeploymentMode('auto')">選択</button></div>
-    </div>
-    <div class="shop-row">
-      <div>
-        <div class="label">手動配置</div>
-        <div class="sub">地図をクリックして全ユニットの初期位置を1つずつ指定する</div>
-      </div>
-      <div class="actions"><button class="btn primary" onclick="chooseDeploymentMode('manual')">選択</button></div>
-    </div>
-  `;
-  document.getElementById('deployment-overlay').classList.add('show');
-}
-
-function chooseDeploymentMode(mode){
-  state.deploymentMode = mode;
-  document.getElementById('deployment-overlay').classList.remove('show');
   deployStage();
 }
 
@@ -4664,8 +4658,14 @@ function drawBoard(){
   // extending away from it, so a ground-plane fan aimed toward the far/near side of the map
   // (screen up/down) rendered visibly narrower than the same fan aimed east/west (screen
   // left/right), even though the underlying detection angle (scoutHalfFov()) never changes.
-  // Projecting just the center bearing (for facing direction and reach) and then drawing a
-  // literal circular wedge around it keeps the on-screen shape consistent in every direction.
+  // The RADIUS has the same problem if it's taken from projecting a single far-away point
+  // along the facing bearing -- that point is just as foreshortened as the wedge was, so the
+  // cone would still stretch/shrink by facing direction (only now as a whole, not just its
+  // width). Instead, sample several small, nearby offsets around the scout (cheap -- 8 points
+  // at a few canvas-units out) and use the LARGEST resulting screen distance as the local
+  // pixels-per-canvas-unit rate: that's the least-foreshortened sampled direction, so scaling
+  // coneLen by it gives a radius that doesn't depend on which way the scout happens to face.
+  // Only the center bearing's projected ANGLE (not its distance) is still used, for facing.
   state.scouts.forEach(scout=>{
     const scoutVisL = smoothVisualPos(scout, scout.x, scout.y);
     const scoutVis = project(scoutVisL.x, scoutVisL.y);
@@ -4674,10 +4674,19 @@ function drawBoard(){
       const halfFov = scoutHalfFov();
       const farL = bearingToXY(scout.watchAngle, coneLen, scoutVisL.x, scoutVisL.y);
       const farP = project(farL.x, farL.y);
-      const dx = farP.x-scoutVis.x, dy = farP.y-scoutVis.y;
-      const radius = Math.hypot(dx, dy);
-      if(radius > 0.01){
-        const screenAngle = Math.atan2(dy, dx);
+      const facingDx = farP.x-scoutVis.x, facingDy = farP.y-scoutVis.y;
+      const sampleR = 5;
+      let pxPerUnit = 0;
+      for(let k=0;k<8;k++){
+        const sampleL = bearingToXY((k/8)*360, sampleR, scoutVisL.x, scoutVisL.y);
+        const sampleP = project(sampleL.x, sampleL.y);
+        const d = Math.hypot(sampleP.x-scoutVis.x, sampleP.y-scoutVis.y);
+        if(d > pxPerUnit) pxPerUnit = d;
+      }
+      pxPerUnit /= sampleR;
+      const radius = pxPerUnit * coneLen;
+      if(radius > 0.01 && (facingDx!==0 || facingDy!==0)){
+        const screenAngle = Math.atan2(facingDy, facingDx);
         const halfFovRad = halfFov*Math.PI/180;
         ctx.beginPath();
         ctx.moveTo(scoutVis.x, scoutVis.y);
