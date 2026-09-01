@@ -5409,7 +5409,10 @@ const TERRAIN_FLAT_COLOR = 0xf2ead2;
 // display -- so a naive 0.5 here only looks like 0.5^(1/2.2) =~ 73% brightness on screen,
 // not 50%. This value is chosen so the DISPLAYED brightness comes out to the requested
 // fraction: linear = displayed_fraction ^ 2.2 (0.22 =~ a true 50%-as-bright appearance).
-const TERRAIN_TEXTURE_BRIGHTNESS = 0.05;
+const TERRAIN_TEXTURE_BRIGHTNESS = 0.1;
+// per user request: exaggerates vertical relief (hills/mountains read twice as tall/steep).
+// Applied via a wrapping group's Y scale -- see loadSelectedTerrain().
+const TERRAIN_RELIEF_EXAGGERATION = 2;
 function applyTerrainTextureOverride(root, textureBase64){
   if(!textureBase64){
     root.traverse(o=>{
@@ -5500,7 +5503,17 @@ function loadSelectedTerrain(){
   const loader = new THREE.GLTFLoader();
   loader.parse(arrayBuffer, '', (gltf)=>{
     terrainObject3d = gltf.scene;
-    scene3d.add(terrainObject3d);
+    // per user request: exaggerates vertical relief. Scaling terrainObject3d's own Y
+    // wouldn't reliably mean "world-up" -- the GLB node carries a baked-in 90deg rotation
+    // (Blender's Z-up -> Three's Y-up), and local scale is applied before that rotation, so
+    // a direct .scale.y would partly stretch the wrong world axis. Wrapping it in an
+    // unrotated parent group and scaling THAT group's Y instead guarantees the scale applies
+    // in world-vertical space regardless of the child's own rotation.
+    const terrainRig = new THREE.Group();
+    terrainRig.scale.y = TERRAIN_RELIEF_EXAGGERATION;
+    terrainRig.add(terrainObject3d);
+    scene3d.add(terrainRig);
+    terrainRig.updateMatrixWorld(true);
     applyTerrainTextureOverride(terrainObject3d, mapConf.texture());
 
     const box = new THREE.Box3().setFromObject(terrainObject3d);
