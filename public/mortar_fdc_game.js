@@ -5403,6 +5403,11 @@ let mapFocusTarget = null;
 // muted base map with contour lines. Maps that ship no texture data fall back to a flat
 // pale parchment color so contours still read clearly against something texture-like.
 const TERRAIN_FLAT_COLOR = 0xf2ead2;
+// per user request: darkens the terrain texture uniformly without editing the image files.
+// MeshStandardMaterial multiplies its texture by material.color per-pixel in the shader, so
+// a gray instead of white here scales the whole texture's brightness (1.0 = unchanged;
+// lower = darker). Applies automatically to every map's texture, present or future.
+const TERRAIN_TEXTURE_BRIGHTNESS = 0.8;
 function applyTerrainTextureOverride(root, textureBase64){
   if(!textureBase64){
     root.traverse(o=>{
@@ -5423,7 +5428,7 @@ function applyTerrainTextureOverride(root, textureBase64){
     root.traverse(o=>{
       if(o.isMesh && o.material){
         const mats = Array.isArray(o.material) ? o.material : [o.material];
-        mats.forEach(m=>{ m.map = tex; m.color = new THREE.Color(0xffffff); m.needsUpdate = true; });
+        mats.forEach(m=>{ m.map = tex; m.color = new THREE.Color(TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TEXTURE_BRIGHTNESS); m.needsUpdate = true; });
       }
     });
   }, undefined, err=>{
