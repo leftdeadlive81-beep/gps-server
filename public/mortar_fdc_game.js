@@ -823,6 +823,14 @@ function initGame(){
 // applyTerrainTextureOverride/buildRealRoads) doesn't need to know about individual maps.
 // A map's texture is optional (texture() may return null) -- see applyTerrainTextureOverride.
 const MAPS = {
+  map6: {
+    label: '演習場',
+    sub: '新規マップ',
+    hasData: ()=> typeof TERRAIN_GLB_BASE64_MAP6 !== 'undefined',
+    glb: ()=> TERRAIN_GLB_BASE64_MAP6,
+    texture: ()=> (typeof TERRAIN_TEXTURE_BASE64_MAP6!=='undefined' ? TERRAIN_TEXTURE_BASE64_MAP6 : null),
+    roads: ()=> (typeof ROADS_RAW_DATA_MAP6!=='undefined' ? ROADS_RAW_DATA_MAP6 : []),
+  },
   map5: {
     label: '新演習場',
     sub: '新規マップ',
