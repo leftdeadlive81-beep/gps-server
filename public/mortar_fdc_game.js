@@ -695,7 +695,12 @@ function playSfx(name, volume){
 
 const FLIGHT_DURATION = 700;
 const LAUNCH_INTERVAL = 420;
-const ARC_HEIGHT = 90;
+// per user request: real world-space apex height (same units as terrain elevation, already
+// reflecting TERRAIN_RELIEF_EXAGGERATION) rather than a fixed screen-pixel offset -- a pixel
+// offset applied after projecting the ground point doesn't grow/shrink with terrain relief
+// along the flight path, so on hilly terrain the "arc" reads as hugging the ground instead of
+// flying above it. Projecting a real elevated point (see projectAtHeight) always clears it.
+const ARC_HEIGHT = 350;
 
 function rnd(a,b){ return a + Math.random()*(b-a); }
 function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
@@ -4952,15 +4957,16 @@ function drawBoard(){
     });
   }
 
-  // flying projectiles ― arced trajectory (ground track projected through the 3D camera;
-  // the arc "hop" itself stays a simple screen-space offset, as in the original 2D view)
+  // flying projectiles ― arced trajectory. The arc's height is a real world-space offset
+  // above the terrain at each sampled point (projectAtHeight), not a flat screen-pixel nudge
+  // -- see ARC_HEIGHT's comment for why that matters on hilly terrain.
   const nowP = performance.now();
   projectiles.forEach(p=>{
     const prog = clamp((nowP-p.born)/p.duration, 0, 1);
     const gx = p.startX + (p.endX-p.startX)*prog;
     const gy = p.startY + (p.endY-p.startY)*prog;
-    const gp = project(gx, gy);
-    const x = gp.x, y = gp.y - Math.sin(prog*Math.PI)*ARC_HEIGHT;
+    const gp = projectAtHeight(gx, gy, Math.sin(prog*Math.PI)*ARC_HEIGHT);
+    const x = gp.x, y = gp.y;
     const startG = project(p.startX, p.startY);
     const endG = project(p.endX, p.endY);
 
@@ -4973,8 +4979,8 @@ function drawBoard(){
       const tt = k/arcSteps;
       const agx = p.startX + (p.endX-p.startX)*tt;
       const agy = p.startY + (p.endY-p.startY)*tt;
-      const agp = project(agx, agy);
-      const ax = agp.x, ay = agp.y - Math.sin(tt*Math.PI)*ARC_HEIGHT;
+      const agp = projectAtHeight(agx, agy, Math.sin(tt*Math.PI)*ARC_HEIGHT);
+      const ax = agp.x, ay = agp.y;
       if(k===0) ctx.moveTo(ax,ay); else ctx.lineTo(ax,ay);
     }
     ctx.strokeStyle = 'rgba(217,164,65,0.4)';
@@ -4999,8 +5005,8 @@ function drawBoard(){
       const tp = clamp(prog-k*0.04,0,1);
       const tgx = p.startX + (p.endX-p.startX)*tp;
       const tgy = p.startY + (p.endY-p.startY)*tp;
-      const tgp = project(tgx, tgy);
-      const tx = tgp.x, ty = tgp.y - Math.sin(tp*Math.PI)*ARC_HEIGHT;
+      const tgp = projectAtHeight(tgx, tgy, Math.sin(tp*Math.PI)*ARC_HEIGHT);
+      const tx = tgp.x, ty = tgp.y;
       ctx.beginPath();
       ctx.fillStyle = `rgba(217,164,65,${0.35-k*0.1})`;
       ctx.arc(tx,ty,3-k*0.5,0,Math.PI*2);
@@ -5810,9 +5816,16 @@ function terrainHeightAt(cx, cy){
 // Returns {x,y,visible} in real CSS pixels relative to the board-wrap container.
 let _projForward = null, _projToPoint = null;
 function project(cx, cy){
+  return projectAtHeight(cx, cy, 0);
+}
+// Like project(), but adds extraH (real world-space units, same frame as terrainHeightAt's
+// output -- i.e. already reflecting TERRAIN_RELIEF_EXAGGERATION) on top of the terrain height
+// before projecting. Used for anything that flies above the ground, like mortar arcs -- see
+// their per-user-request comment for why a screen-pixel offset doesn't work for that.
+function projectAtHeight(cx, cy, extraH){
   if(!threeReady || !camera3d) return { x:cx, y:cy, visible:true };
   if(!_projForward){ _projForward = new THREE.Vector3(); _projToPoint = new THREE.Vector3(); }
-  const h = terrainHeightAt(cx,cy);
+  const h = terrainHeightAt(cx,cy) + extraH;
   const {x,z} = canvasUnitToWorldXZ(cx,cy);
   const worldPt = new THREE.Vector3(x, h, z);
   camera3d.getWorldDirection(_projForward);
