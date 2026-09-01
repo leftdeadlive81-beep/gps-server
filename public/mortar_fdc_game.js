@@ -5404,10 +5404,12 @@ let mapFocusTarget = null;
 // pale parchment color so contours still read clearly against something texture-like.
 const TERRAIN_FLAT_COLOR = 0xf2ead2;
 // per user request: darkens the terrain texture uniformly without editing the image files.
-// MeshStandardMaterial multiplies its texture by material.color per-pixel in the shader, so
-// a gray instead of white here scales the whole texture's brightness (1.0 = unchanged;
-// lower = darker). Applies automatically to every map's texture, present or future.
-const TERRAIN_TEXTURE_BRIGHTNESS = 0.5;
+// MeshStandardMaterial multiplies its texture by material.color per-pixel in LINEAR color
+// space, but the renderer's sRGB output encoding then gamma-corrects the result for
+// display -- so a naive 0.5 here only looks like 0.5^(1/2.2) =~ 73% brightness on screen,
+// not 50%. This value is chosen so the DISPLAYED brightness comes out to the requested
+// fraction: linear = displayed_fraction ^ 2.2 (0.22 =~ a true 50%-as-bright appearance).
+const TERRAIN_TEXTURE_BRIGHTNESS = 0.05;
 function applyTerrainTextureOverride(root, textureBase64){
   if(!textureBase64){
     root.traverse(o=>{
