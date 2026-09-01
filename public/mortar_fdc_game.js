@@ -5407,7 +5407,7 @@ const TERRAIN_FLAT_COLOR = 0xf2ead2;
 // MeshStandardMaterial multiplies its texture by material.color per-pixel in the shader, so
 // a gray instead of white here scales the whole texture's brightness (1.0 = unchanged;
 // lower = darker). Applies automatically to every map's texture, present or future.
-const TERRAIN_TEXTURE_BRIGHTNESS = 0.8;
+const TERRAIN_TEXTURE_BRIGHTNESS = 0.5;
 function applyTerrainTextureOverride(root, textureBase64){
   if(!textureBase64){
     root.traverse(o=>{
