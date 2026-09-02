@@ -103,6 +103,7 @@ const TARGET_TYPES = {
   artillery: {label:'砲兵',         hp:100, radius:16, mark:ENEMY_MARK_COLOR},
   vehicle:   {label:'装甲車',       hp:95,  radius:18, mark:ENEMY_MARK_COLOR},
   drone:     {label:'ドローン',     hp:12,  radius:20, mark:ENEMY_MARK_COLOR},
+  heli:      {label:'戦闘ヘリ',     hp:150, radius:22, mark:ENEMY_MARK_COLOR},
 };
 const DRONE_INTRO_STAGE = 3;
 const CONTOUR_LEVELS = [0.25, 0.5, 0.75, 1.0, 1.25];
@@ -120,6 +121,16 @@ const DRONE_DETONATE_DAMAGE = [16,32];
 const INFANTRY_DRONE_LAUNCH_CHANCE = 0.16/3; // per user request: drone spawn volume cut to 1/3
 const INFANTRY_DRONE_COOLDOWN_TICKS = 3;
 const INFANTRY_DRONE_SWARM_SIZE = [5, 8]; // a successful launch releases a whole swarm at once, not a single drone
+// per user request: 1機の敵戦闘ヘリ ― ヒットアンドアウェイ(接近→攻撃→離脱→待機を繰り返す)専用の
+// AI状態機械(resolveHeliAssault)で動く、装甲車/砲兵/ドローンとは別系統の単発ユニット。
+// COUNTER_CHANCE/COUNTER_DAMAGE には意図的に加えない -- 汎用の enemyCounterAttack が任意の距離
+// からいつでも撃ってくると、離脱フェーズの意味(安全距離を取るまで無力)が薄れてしまうため。
+const HELI_EXPOSURE = 65; // 高機動 -- 被弾しにくい(値が高いほど当たりにくい exposure の仕様に準拠)
+const HELI_ENGAGE_RANGE = 260; // 装甲車(100)より長い、ヘリの空対地スタンドオフ距離
+const HELI_WITHDRAW_DIST = 380; // 離脱フェーズはこの距離だけ攻撃地点から離れるまで継続
+const HELI_ATTACK_BURST = 2; // 1回の接近で連続して行う攻撃回数
+const HELI_COOLDOWN_TICKS = 5; // 離脱完了後、再接近を始めるまでの待機ターン数
+const HELI_ATTACK_DAMAGE = [18, 34];
 const MINE_DAMAGE = [16,36]; // per user request: enemy attack power doubled
 const MINE_PLACEMENT_CHANCE = 0.12; // per enemy-turn resolution
 const MINE_MAX_ACTIVE = 4;
@@ -349,6 +360,7 @@ const INFANTRY_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.infantry);
 const SNIPER_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.sniper);
 const MORTAR_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.mortar) * 0.25; // per user request: mortar move speed to 1/4
 const TANK_MOVE_CAP = VEHICLE_MOVE_CAP * 0.6; // faster than infantry/sniper, slower than the enemy vehicle's full road speed
+const HELI_MOVE_CAP = VEHICLE_MOVE_CAP * 1.8; // flies -- faster than any ground vehicle, ignores roads
 const ARTILLERY_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.artillery) * 0.5; // per user request: enemy artillery move speed halved
 const ARTILLERY_STANDOFF_RANGE_M = 300; // artillery repositions closer but holds once within this range of its nearest target
 const ARTILLERY_STANDOFF_RANGE_UNITS = ARTILLERY_STANDOFF_RANGE_M / METERS_PER_UNIT;
@@ -1030,6 +1042,32 @@ function generateSpots(n){
   return spots;
 }
 
+// per user request: exactly 1 enemy attack helicopter, always present (unlike
+// vehicle/artillery/drone counts, this doesn't scale with stage) -- built separately from the
+// main spots.map() pool below and given its own fixed 'HELI' id plus the extra AI-state
+// fields resolveHeliAssault() needs (heliPhase/heliCooldown/heliBurstLeft/heliAnchor).
+function buildHeliTarget(hpMult, bearingErrBase, distErrBase){
+  const spot = generateSpots(1)[0];
+  const def = TARGET_TYPES.heli;
+  const hp = Math.round(def.hp*hpMult);
+  const dx = spot.x-OP.x, dy = spot.y-OP.y;
+  const trueBearing = (Math.atan2(dx,-dy)*180/Math.PI+360)%360;
+  const trueDistance = Math.sqrt(dx*dx+dy*dy);
+  return {
+    id:'HELI', type:'heli', def,
+    trueX:spot.x, trueY:spot.y,
+    trueBearing, trueDistance,
+    hp, maxHp:hp,
+    destroyed:false, revealed:false, reconCount:0,
+    bearingErr:bearingErrBase, distErr:distErrBase,
+    bOffset: rnd(-1,1), dOffset: rnd(-1,1),
+    impacts:[], troops:null, formationOffsets:null, formationName:null, speedMult:1,
+    suppressed:0,
+    exposure: HELI_EXPOSURE,
+    heliPhase:'approach', heliCooldown:0, heliBurstLeft:HELI_ATTACK_BURST, heliAnchor:null,
+  };
+}
+
 // per user request: friendly forces must start confined to a real 1km x 1km box on the
 // map's west (left) edge, regardless of which map's real-world scale is currently loaded.
 // WORLD.scaleX/scaleZ (meters per canvas-unit, independent per axis -- see canvasUnitToWorldXZ)
@@ -1120,6 +1158,8 @@ function startStage(){
       exposure: EXPOSURE_DEFAULT,
     };
   });
+
+  targets.push(buildHeliTarget(hpMult, bearingErrBase, distErrBase));
 
   // Tear down every leftover 3D marker from whatever the previous state.targets held
   // (normally already empty via resolveEnemyTurn's pruning, but retryStage() can jump
@@ -1263,6 +1303,7 @@ function startStage(){
 
   document.getElementById('overlay').classList.remove('show');
   log('sys','システム', `WAVE ${stage} / ${STAGE_COUNT} ― 目標${totalCount}件を確認。天候: ${weather.label}(${weather.desc})。`);
+  log('sys','警報', '戦闘ヘリ1機を確認。ヒットアンドアウェイ戦術(接近→攻撃→離脱)に警戒せよ。');
   if(stage===1){
     const co = PERSONNEL_ROSTER[0];
     log('sys','司令部', `戦闘団編成完了、総員100名。総指揮官: ${co.rank} ${co.name}。`);
@@ -3413,6 +3454,86 @@ function resolveVehicleAssault(actionTurns){
   return anyEvent;
 }
 
+// per user request: the enemy attack helicopter's ヒットアンドアウェイ (hit-and-run) AI --
+// a 4-phase loop per heli, cycled through by heliPhase:
+//   'approach' -- closes in on the nearest friendly asset until within HELI_ENGAGE_RANGE.
+//   'attack'   -- fires HELI_ATTACK_BURST times at that asset (one per action tick).
+//   'withdraw' -- flies directly away from the point it just attacked until clear of it by
+//                 HELI_WITHDRAW_DIST, ignoring roads/terrain (HELI_MOVE_CAP is a straight-line cap).
+//   cooldown (heliCooldown>0) -- sits idle once clear, then re-enters 'approach' and repeats.
+// Unlike resolveVehicleAssault (which just holds and slugs it out once in range), the heli
+// never lingers in range -- it always disengages after its burst, which is the whole point of
+// the requested behavior (and why 'heli' is deliberately absent from COUNTER_CHANCE/
+// COUNTER_DAMAGE -- that generic ranged-harassment roll would otherwise let it keep hitting
+// targets from anywhere at any time, defeating the withdraw phase).
+function resolveHeliAssault(actionTurns){
+  const helis = state.targets.filter(t=>!t.destroyed && t.type==='heli');
+  if(helis.length===0) return false;
+  let anyEvent = false;
+  for(let i=0;i<actionTurns;i++){
+    helis.forEach(h=>{
+      if(h.destroyed) return;
+      const recomputeBearing = ()=>{
+        const dx = h.trueX-OP.x, dy = h.trueY-OP.y;
+        h.trueBearing = (Math.atan2(dx,-dy)*180/Math.PI+360)%360;
+        h.trueDistance = Math.sqrt(dx*dx+dy*dy);
+      };
+      if(h.heliCooldown>0){
+        h.heliCooldown -= 1;
+        return;
+      }
+      if(h.heliPhase==='withdraw'){
+        const dx = h.trueX-h.heliAnchor.x, dy = h.trueY-h.heliAnchor.y;
+        const dist = Math.hypot(dx,dy) || 1;
+        const fleeX = h.trueX + (dx/dist)*500, fleeY = h.trueY + (dy/dist)*500;
+        const next = terrainAwareStep(h.trueX, h.trueY, fleeX, fleeY, HELI_MOVE_CAP);
+        h.trueX = next.x; h.trueY = clamp(next.y, 30, CANVAS_H-30);
+        recomputeBearing();
+        anyEvent = true;
+        if(Math.hypot(h.trueX-h.heliAnchor.x, h.trueY-h.heliAnchor.y) >= HELI_WITHDRAW_DIST){
+          h.heliPhase = 'approach';
+          h.heliCooldown = HELI_COOLDOWN_TICKS;
+          h.heliBurstLeft = HELI_ATTACK_BURST;
+          log('sys','警報', `${h.id}(戦闘ヘリ)、安全距離まで離脱。再攻撃に備え待機。`);
+        }
+        return;
+      }
+      const near = nearestFriendlyAsset(h.trueX, h.trueY, true);
+      if(!near) return;
+      if(near.dist > HELI_ENGAGE_RANGE){
+        h.heliPhase = 'approach';
+        const next = terrainAwareStep(h.trueX, h.trueY, near.x, near.y, HELI_MOVE_CAP);
+        h.trueX = next.x; h.trueY = clamp(next.y, 30, CANVAS_H-30);
+        recomputeBearing();
+        anyEvent = true;
+        return;
+      }
+      // in range -- attack
+      h.heliPhase = 'attack';
+      anyEvent = true;
+      const e = estPos(h);
+      if(revealTarget(h)){
+        log('op','斥候', `${h.id} が接近、<b>${h.def.label}</b>と識別。`);
+      }
+      if(rollExposureHit(getUnitExposure(near))){
+        const altMult = altitudeBonus(h.trueX, h.trueY, near.x, near.y);
+        const dmg = Math.round(rnd(HELI_ATTACK_DAMAGE[0], HELI_ATTACK_DAMAGE[1]) * altMult);
+        damageFriendlyAsset(near, dmg, `${h.id}(戦闘ヘリ)の攻撃`);
+        enemyTracers.push({startX:e.x, startY:e.y, endX:near.x, endY:near.y, born:performance.now(), duration:260});
+      } else {
+        log('sys','回避', `${h.id}(戦闘ヘリ)の攻撃を受けたが、${friendlyFireCandidateLabel(near)}は掩蔽率により被弾を免れた。`);
+      }
+      h.heliBurstLeft -= 1;
+      if(h.heliBurstLeft<=0){
+        h.heliPhase = 'withdraw';
+        h.heliAnchor = {x:near.x, y:near.y};
+        log('sys','警報', `${h.id}(戦闘ヘリ)、攻撃を終え離脱を開始。`);
+      }
+    });
+  }
+  return anyEvent;
+}
+
 // per user request: infantry's default anti-drone point defense. Runs before
 // resolveDroneSwarm each action tick so a squad gets a shot at a drone closing
 // in on it while it's still outside DRONE_DETONATE_RANGE, not just after the
@@ -3616,6 +3737,7 @@ function resolveEnemyTurn(actionTurns){
   const advanced = advanceEnemyInfantry(actionTurns);
   const repositioned = advanceEnemyArtillery(actionTurns);
   const assaulted = resolveVehicleAssault(actionTurns);
+  const heliEvent = resolveHeliAssault(actionTurns);
   const antiDroned = resolveSquadAntiDrone(actionTurns);
   const swarmed = resolveDroneSwarm(actionTurns);
   const hit = enemyCounterAttack(actionTurns);
@@ -3632,13 +3754,13 @@ function resolveEnemyTurn(actionTurns){
   if(!allTanksWiped()){
     tankEvent = resolveTankOrders(actionTurns);
   }
-  if(!hit && !infEvent && !sniperEvent && !tankEvent && !advanced && !assaulted && !swarmed && !cbEvent && !antiDroned){
+  if(!hit && !infEvent && !sniperEvent && !tankEvent && !advanced && !assaulted && !heliEvent && !swarmed && !cbEvent && !antiDroned){
     log('sys','敵ターン', '目立った動きなし。');
   }
   // per user request: 交戦時のサウンド -- looping battlefield-combat ambience plays while
   // squads/snipers are actively engaging this turn, and pauses again once nothing is
   // actively engaging.
-  if(infEvent || sniperEvent || tankEvent || antiDroned) playCombatAmbience(); else stopCombatAmbience();
+  if(infEvent || sniperEvent || tankEvent || antiDroned || heliEvent) playCombatAmbience(); else stopCombatAmbience();
   state.targets.forEach(t=>{
     if(t.suppressed>0) t.suppressed = Math.max(0, t.suppressed-actionTurns);
   });
@@ -5716,6 +5838,31 @@ function drawBoard(){
           ctx.textAlign='center';
           ctx.fillText(t.def.label, e.x, labelY);
         }
+      } else if(t.type==='heli'){
+        // per user request: 戦闘ヘリ -- fuselage ellipse + rotor bar + tail boom, distinct
+        // from the plain circle/diamond used by ground vehicles/drones (no icon asset exists).
+        const hcolor = t.revealed ? t.def.mark : '#8f9678';
+        ctx.save();
+        ctx.translate(e.x, e.y);
+        ctx.strokeStyle = hcolor;
+        ctx.fillStyle = hcolor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-11,0); ctx.lineTo(11,0);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 7, 4, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(-7,0); ctx.lineTo(-14,-4);
+        ctx.stroke();
+        ctx.restore();
+        if(t.revealed){
+          ctx.fillStyle = LABEL_TEXT_COLOR;
+          ctx.font = '14px "JetBrains Mono"';
+          ctx.textAlign='center';
+          ctx.fillText(t.def.label, e.x, labelY);
+        }
       } else {
         ctx.fillStyle = t.revealed ? t.def.mark : '#8f9678';
         ctx.beginPath();
@@ -7084,7 +7231,7 @@ function syncUnitMarkers3d(){
     if(!isTargetDetected(t)){ place(key, 0, 0, 'sphere', 0, false); return; }
     const eLogical = estPos(t);
     const e = smoothVisualPos(t, eLogical.x, eLogical.y);
-    const shape = t.type==='vehicle' ? 'box' : t.type==='artillery' ? 'cylinder' : t.type==='drone' ? 'diamond' : 'sphere';
+    const shape = t.type==='vehicle' ? 'box' : t.type==='artillery' ? 'cylinder' : t.type==='drone' ? 'diamond' : t.type==='heli' ? 'cone' : 'sphere';
     place(key, e.x, e.y, shape, t.revealed ? (TARGET_TYPE_COLOR[t.type]||0xc1453b) : 0x8f9678, true);
   });
 
