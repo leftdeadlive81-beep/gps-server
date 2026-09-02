@@ -19,36 +19,13 @@
     --font-mono:'JetBrains Mono',monospace;
   }
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;height:100%;}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;}
   body{
-    background:
-      radial-gradient(ellipse at 30% -10%, #1e2416 0%, transparent 60%),
-      var(--bg);
+    background:var(--bg);
     color:var(--ink);
     font-family:var(--font-body);
-    height:100vh;
-    padding:14px;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    overflow:auto;
-  }
-  .wrap{
-    max-width:1800px;width:100%;
-    display:flex;flex-direction:column;
-    flex:1;min-height:0;
-  }
-  @media (max-width:1100px){
-    body{height:auto;min-height:100vh;overflow:visible;display:block;padding:18px;}
-    .wrap{display:block;max-width:1520px;margin:0 auto;}
   }
 
-  .panel{
-    background:var(--panel);
-    border:1px solid var(--edge);
-    border-radius:4px;
-    padding:14px;
-  }
   .panel-title{
     font-family:var(--font-mono);
     font-size:11px;letter-spacing:2px;color:var(--amber-dim);
@@ -57,117 +34,24 @@
     flex:0 0 auto;
   }
 
-  .statbar{
-    display:flex;gap:7px;flex-wrap:wrap;
+  /* ============================================================
+     per user request: full-screen map UI (this is a mobile-first
+     game) -- .board-wrap fills the entire viewport and everything
+     else (stats/log/force-status/decision controls) floats over it
+     as HUD bars and slide-up drawers, instead of sharing page space
+     with the map the way the old side-by-side/stacked panels did.
+     ============================================================ */
+
+  .board-wrap{
+    position:fixed; inset:0; overflow:hidden;
+    background:#0d0f09;
   }
-  .stat{
-    flex:1;min-width:82px;
-    background:var(--panel-2);border:1px solid var(--edge-dim);
-    border-radius:3px;padding:6px 8px;
-  }
-  .stat .label{font-size:9.5px;color:var(--muted);letter-spacing:.5px;}
-  .stat .value{font-family:var(--font-mono);font-size:17px;font-weight:700;color:var(--ink);}
-  .stat.warn .value{color:var(--red);}
-
-  /* per user request: compacted vertically -- this panel is collapsed by default, so its
-     header row is the only part normally on screen and doesn't need the full .panel padding */
-  .statbar-panel{flex:0 0 auto;margin-bottom:6px;padding:5px 12px;}
-  .statbar-header{
-    display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;
-    margin-bottom:0;
-  }
-  .statbar-header:hover{color:var(--amber);}
-  .statbar-mini{
-    font-family:var(--font-mono);font-size:11.5px;color:var(--ink);
-    margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  }
-  .statbar-caret{font-size:10px;color:var(--amber-dim);flex:0 0 auto;}
-  #statbar-content{display:none;margin-top:10px;}
-  #statbar-content.expanded{display:flex;}
-
-  .board-title-header{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;}
-  .board-title-header:hover{color:var(--amber);}
-  .board-note-hint{
-    font-family:var(--font-mono);font-size:10px;color:var(--amber-dim);
-    margin-left:auto;flex:0 0 auto;text-transform:none;letter-spacing:.5px;
-  }
-
-  .bottombar{
-    display:flex;gap:12px;flex:0 0 auto;
-  }
-  .bottombar .log-panel{flex:1.7 1 0;min-width:0;}
-  .status-panel{flex:1 1 0;min-width:0;}
-  .decision-panel{flex:1 1 0;min-width:0;}
-
-  @media (max-width:1100px){
-    .bottombar{flex-direction:column;}
-    .board-panel{display:block;flex:none;}
-    canvas{height:auto;flex:none;}
-    /* .board-wrap's children (#board3d/#board) are all position:absolute, so
-       without an explicit height here the wrap collapses to 0px once it's no
-       longer stretched by a flex parent (.board-panel switches to display:block
-       above) -- the 3D map would render nothing on tablet/phone widths. */
-    .board-wrap{height:min(58vh, 620px); min-height:260px;}
-  }
-
-  /* per user request: replaces the old map-floating decision overlay -- on phone widths
-     (see @media(max-width:600px) below) this becomes a normal in-flow panel sitting between
-     the map and the radio log, showing 赤警報/黄警報/白警報/決心 as one row of 4 buttons
-     (in that left-to-right order, via the "order" reassignment below -- the DOM order stays
-     決心 then the alert row since renderDecisionPanel() writes identical markup into every
-     .decision-panel-holder, alert-decision-panel's included). Hidden outside phone widths. */
-  .alert-decision-panel{display:none;}
-
-  @media (max-width:600px){
-    body{padding:8px;}
-    .panel{padding:10px;}
-    .board-wrap{height:min(50vh, 460px); min-height:220px;}
-    .enemy-overlay{width:auto; max-width:34vw; padding:5px 7px; top:6px; right:6px;}
-    .eo-count{font-size:15px;}
-    .map-fullscreen-btn{width:28px; height:28px; left:6px; bottom:6px; font-size:13px;}
-    .statbar{gap:5px;}
-    .stat{min-width:70px; padding:5px 6px;}
-    .stat .value{font-size:15px;}
-    .squad-orders{grid-template-columns:repeat(2,1fr);}
-    .scout-controls{grid-template-columns:repeat(2,1fr);}
-    .btn, select{padding:10px 9px; font-size:13.5px;}
-    .decision-btn{padding:12px 9px; font-size:14px;}
-    .command-box{padding:9px 10px;}
-
-    .decision-panel{display:none;}
-    .alert-decision-panel{display:block; padding:4px 10px; margin-bottom:5px;}
-    .alert-decision-panel .decision-box{
-      display:flex; flex-direction:row; align-items:stretch; gap:5px;
-      background:none; border:none; padding:0; margin-bottom:0;
-    }
-    .alert-decision-panel .decision-summary{display:none;}
-    .alert-decision-panel .alert-row-label{display:none;}
-    .alert-decision-panel .alert-row{display:contents;}
-    .alert-decision-panel .row-2{display:contents;}
-    .alert-decision-panel .decision-btn{order:4; flex:1.3; padding:4px 4px; font-size:18px;}
-    .alert-decision-panel .alert-row button{flex:1; padding:4px 2px; font-size:10.5px;}
-    .alert-decision-panel .auto-commit-btn{order:5; flex:0.9; padding:4px 2px; font-size:11px;}
-  }
-
-  .board-note{display:none;font-size:10px;color:var(--muted);margin:-2px 0 8px;flex:0 0 auto;}
-  .board-note.expanded{display:block;}
-
-  .board-panel{display:flex;flex-direction:column;min-height:0;flex:1 1 auto;margin-bottom:12px;}
-
-  /* min-height:0 alone lets this shrink to almost nothing on a wide-but-vertically-short
-     window (e.g. a non-maximized desktop browser) since nothing else in .bottombar shrinks
-     first -- that squeezed the whole 3D map (and every unit in it) into a sliver a few
-     hundred CSS px tall, which read as units being unable to reach the map's top/bottom
-     edges even though they'd actually moved there. A floor keeps the map usable; body's
-     overflow:auto (above) lets the page scroll instead of clipping content if that floor
-     doesn't fit. */
-  .board-wrap{position:relative;flex:1 1 auto;min-height:320px;display:flex;background:#0d0f09;border:1px solid var(--edge-dim);border-radius:2px;overflow:hidden;}
-
   #board3d{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;}
   #board{position:absolute;inset:0;width:100%;height:100%;display:block;background:transparent;touch-action:none;}
 
   .enemy-overlay{
-    position:absolute; top:8px; right:8px; width:132px; max-width:38vw; max-height:calc(100% - 16px);
+    position:absolute; top:calc(46px + env(safe-area-inset-top)); right:8px; z-index:41;
+    width:132px; max-width:38vw; max-height:calc(100% - 60px - env(safe-area-inset-top));
     overflow-y:auto; pointer-events:none;
     background:rgba(18,21,13,0.86); border:1px solid var(--red-dim); border-radius:4px;
     padding:6px 8px; backdrop-filter:blur(2px);
@@ -178,15 +62,157 @@
   }
   .eo-count{font-family:var(--font-mono);font-size:17px;font-weight:700;color:var(--ink);margin-bottom:3px;}
 
-  .map-fullscreen-btn{
-    position:absolute; left:8px; bottom:8px; z-index:46;
-    width:30px; height:30px; padding:0;
-    border:1px solid var(--edge-dim); border-radius:6px;
-    background:rgba(18,21,13,0.86); color:var(--ink); font-size:14px; line-height:1;
-    display:flex; align-items:center; justify-content:center; cursor:pointer;
-    backdrop-filter:blur(2px);
+  /* --- top HUD bar: brand + condensed stat summary + drawer/utility icons, always
+     visible; tapping it expands the full stat grid beneath it. --- */
+  .hud-top{
+    position:absolute; top:0; left:0; right:0; z-index:40;
+    background:rgba(18,21,13,0.9); border-bottom:1px solid var(--edge-dim);
+    backdrop-filter:blur(3px);
+    padding:8px 10px; padding-top:calc(8px + env(safe-area-inset-top));
   }
-  .map-fullscreen-btn:hover{background:rgba(30,36,20,0.92); border-color:var(--amber-dim); color:var(--amber);}
+  .hud-top-row{display:flex;align-items:center;gap:8px;}
+  .hud-brand{
+    font-family:var(--font-display);letter-spacing:1px;color:var(--amber);font-size:14px;
+    text-transform:uppercase;cursor:pointer;user-select:none;white-space:nowrap;flex:0 0 auto;
+  }
+  .hud-version{color:var(--muted);font-weight:400;font-size:11px;}
+  .statbar-mini{
+    font-family:var(--font-mono);font-size:11px;color:var(--ink);cursor:pointer;user-select:none;
+    margin-left:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto;min-width:0;
+  }
+  .statbar-caret{font-size:10px;color:var(--amber-dim);flex:0 0 auto;cursor:pointer;user-select:none;}
+  .hud-icon-btn{
+    position:relative; flex:0 0 auto; width:32px;height:32px;padding:0;
+    border:1px solid var(--edge-dim); border-radius:6px;
+    background:var(--panel-2); color:var(--ink); font-size:14px; line-height:1;
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .hud-icon-btn:hover{background:var(--edge-dim); border-color:var(--amber-dim); color:var(--amber);}
+  .hud-icon-badge{
+    position:absolute; top:-4px; right:-4px; min-width:14px; height:14px; padding:0 3px;
+    background:var(--red); color:#fff; border-radius:7px;
+    font-family:var(--font-mono); font-size:9px; font-weight:700; line-height:14px;
+  }
+  .hud-icon-badge:empty{display:none;}
+
+  .statbar{display:none;gap:6px;flex-wrap:wrap;margin-top:8px;}
+  .statbar.expanded{display:flex;}
+  .stat{
+    flex:1;min-width:82px;
+    background:var(--panel-2);border:1px solid var(--edge-dim);
+    border-radius:3px;padding:6px 8px;
+  }
+  .stat .label{font-size:9.5px;color:var(--muted);letter-spacing:.5px;}
+  .stat .value{font-family:var(--font-mono);font-size:17px;font-weight:700;color:var(--ink);}
+  .stat.warn .value{color:var(--red);}
+
+  /* --- "使い方" hint, toggled by the ? icon; a small floating card instead of an
+     always-in-flow header note now that there's no panel header to hang it off. --- */
+  .board-note{
+    display:none; position:absolute; top:calc(52px + env(safe-area-inset-top)); left:8px; right:8px; z-index:41;
+    max-width:360px;
+    font-size:11px;color:var(--muted); line-height:1.5;
+    background:rgba(18,21,13,0.92); border:1px solid var(--edge-dim); border-radius:4px;
+    padding:8px 10px; backdrop-filter:blur(2px);
+  }
+  .board-note.expanded{display:block;}
+
+  /* --- bottom HUD bar: the 決心/警報 controls, always visible over the map (this is
+     the same flattened single-row layout the old phone-width .alert-decision-panel
+     used, just unconditional now instead of gated to <600px, since the whole game is
+     full-screen-map-first regardless of viewport width). --- */
+  .hud-bottom{
+    position:fixed; left:0; right:0; bottom:0; z-index:42;
+    background:rgba(18,21,13,0.92); border-top:1px solid var(--edge-dim);
+    backdrop-filter:blur(3px);
+    padding:8px 8px; padding-bottom:calc(8px + env(safe-area-inset-bottom));
+  }
+  .hud-bottom .decision-box{
+    display:flex; flex-direction:row; align-items:stretch; gap:5px;
+    background:none; border:none; padding:0; margin-bottom:0;
+  }
+  .hud-bottom .decision-summary{display:none;}
+  .hud-bottom .alert-row-label{display:none;}
+  .hud-bottom .alert-row{display:contents;}
+  .hud-bottom .row-2{display:contents;}
+  .hud-bottom .decision-btn{order:4; flex:1.3; padding:12px 6px; font-size:16px;}
+  .hud-bottom .alert-row button{flex:1; padding:12px 3px; font-size:11px;}
+  .hud-bottom .auto-commit-btn{order:5; flex:0.9; padding:12px 3px; font-size:11px;}
+
+  .map-fullscreen-btn{width:32px;height:32px;}
+
+  /* --- slide-up drawers (通信記録 / 部隊稼働状況), opened via the hud-top icon
+     buttons (see toggleDrawer()). Only one open at a time. --- */
+  .drawer{
+    position:fixed; left:0; right:0; bottom:0; z-index:49;
+    max-height:65vh;
+    background:var(--panel); border-top:1px solid var(--edge); border-radius:10px 10px 0 0;
+    box-shadow:0 -6px 24px rgba(0,0,0,0.55);
+    transform:translateY(105%); transition:transform .22s ease;
+    display:flex; flex-direction:column;
+    padding:12px 14px; padding-bottom:calc(14px + env(safe-area-inset-bottom));
+  }
+  .drawer.open{transform:translateY(0);}
+  .drawer-header{
+    display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;
+    font-size:13px;font-weight:700;color:var(--amber);flex:0 0 auto;
+  }
+  .drawer-close{
+    background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;
+    width:auto;padding:2px 6px;line-height:1;
+  }
+  .drawer-close:hover{color:var(--ink);}
+  .drawer-backdrop{
+    position:fixed; inset:0; z-index:48; background:rgba(0,0,0,0.4);
+    opacity:0; pointer-events:none; transition:opacity .2s;
+  }
+  .drawer-backdrop.show{opacity:1; pointer-events:auto;}
+
+  .self-ammo-line{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);margin-top:8px;flex:0 0 auto;}
+
+  .force-list{display:flex;flex-direction:column;gap:5px;overflow-y:auto;padding-right:2px;flex:1 1 auto;min-height:0;}
+  .force-row{display:flex;align-items:center;gap:7px;}
+  .force-row .force-label{
+    width:46px;flex:0 0 auto;font-family:var(--font-mono);font-size:10.5px;color:var(--muted);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .force-row .hpbar{flex:1 1 auto;height:6px;margin-top:0;}
+  .force-row .force-pct{
+    width:36px;flex:0 0 auto;text-align:right;
+    font-family:var(--font-mono);font-size:10.5px;color:var(--ink);
+  }
+  .force-row.dead .force-label, .force-row.dead .force-pct{color:var(--red);}
+  .force-row.selectable{cursor:pointer;border-radius:3px;margin:-2px -4px;padding:2px 4px;}
+  .force-row.selectable:hover{background:var(--panel-2);}
+  .force-row.selectable:hover .force-label{color:var(--amber);}
+
+  .log{
+    background:#0d0f09;border:1px solid var(--edge-dim);border-radius:4px;
+    overflow-y:auto;padding:10px 12px;
+    font-family:var(--font-mono);font-size:12.5px;line-height:1.7;
+    scroll-behavior:smooth;
+    flex:1 1 auto;min-height:0;
+  }
+  .log .l-op{color:#8fbf7a;}
+  .log .l-fdc{color:var(--amber);}
+  .log .l-mortar{color:#7fb2d9;}
+  .log .l-sys{color:var(--muted);font-style:italic;}
+  .log b{opacity:.8;font-weight:700;}
+
+  .empty-hint{color:var(--muted);font-size:13px;text-align:center;padding:20px 6px;}
+
+  /* per user request: BGM/SE on-off settings, folded into the 部隊稼働状況 drawer
+     (a low-frequency setting doesn't need its own always-visible panel) */
+  .audio-settings-panel{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:0 0 auto;
+    margin-top:10px;padding-top:10px;border-top:1px dashed var(--edge);
+  }
+  .audio-settings-label{
+    font-family:var(--font-mono);font-size:11px;letter-spacing:1.5px;color:var(--amber-dim);
+    text-transform:uppercase;
+  }
+  .audio-toggle-btn{width:auto;padding:6px 14px;font-size:12px;}
+  .audio-toggle-btn.active{background:var(--amber-dim);border-color:var(--amber);color:#1a1608;}
 
   .command-box{
     position:fixed; z-index:60; width:230px; max-width:90vw;
@@ -211,14 +237,6 @@
     padding:9px 10px;margin-bottom:14px;
   }
   .decision-summary{font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;}
-
-  /* per user request: 決心 reads as the primary/frequent action -- larger, bolder, and
-     given more of row-2's width than the secondary 自動 toggle beside it (previously
-     both were flex:1, same visual weight as a once-per-turn alert button). Scoped to
-     .decision-panel (the non-mobile layout) so it can't win a specificity tie against
-     the phone-width .alert-decision-panel's own flex ratios below, which flatten this
-     same markup into a differently-proportioned single row and must stay in control there. */
-  .decision-panel .row-2 > .decision-btn{flex:1.6 1 0;}
   .decision-btn{font-size:16px;padding:13px 9px;letter-spacing:1px;box-shadow:0 0 0 1px rgba(217,164,65,0.25);}
 
   /* 自動 is a mode toggle, not the primary action -- an outline/ghost look by default so
@@ -226,43 +244,10 @@
   .auto-commit-btn{background:transparent;border-color:var(--edge-dim);color:var(--muted);}
   .auto-commit-btn:hover:not(:disabled){background:var(--panel-2);color:var(--ink);border-color:var(--edge);}
 
-  /* per user request: labels + visually separates the 赤/黄/白警報 cluster as a secondary,
-     less-frequent group below the primary 決心/自動 row rather than reading as equally
-     important siblings of it. Hidden on the phone-width alert-decision-panel (see its
-     rules below), which already reads its own flattened button row without this label. */
   .alert-row-label{
     font-family:var(--font-mono);font-size:9.5px;letter-spacing:1.5px;color:var(--muted);
     text-transform:uppercase;margin-top:10px;padding-top:8px;border-top:1px dashed var(--edge);
   }
-
-  .self-ammo-line{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);margin-top:8px;}
-
-  /* per user request: 部隊稼働状況 is folded away by default (the on-map per-unit attrition
-     bars now cover the at-a-glance case), same collapse pattern as .statbar-header */
-  .force-list-header{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;}
-  .force-list-header:hover{color:var(--amber);}
-  .force-list-badge{
-    font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--red);
-    margin-left:auto;
-  }
-  .force-list-caret{font-size:10px;color:var(--amber-dim);flex:0 0 auto;}
-  #force-list{display:none;}
-  #force-list.expanded{display:flex;}
-  .force-list{flex-direction:column;gap:5px;max-height:120px;overflow-y:auto;padding-right:2px;}
-  .force-row{display:flex;align-items:center;gap:7px;}
-  .force-row .force-label{
-    width:46px;flex:0 0 auto;font-family:var(--font-mono);font-size:10.5px;color:var(--muted);
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  }
-  .force-row .hpbar{flex:1 1 auto;height:6px;margin-top:0;}
-  .force-row .force-pct{
-    width:36px;flex:0 0 auto;text-align:right;
-    font-family:var(--font-mono);font-size:10.5px;color:var(--ink);
-  }
-  .force-row.dead .force-label, .force-row.dead .force-pct{color:var(--red);}
-  .force-row.selectable{cursor:pointer;border-radius:3px;margin:-2px -4px;padding:2px 4px;}
-  .force-row.selectable:hover{background:var(--panel-2);}
-  .force-row.selectable:hover .force-label{color:var(--amber);}
 
   .roster-list{max-height:110px;overflow-y:auto;margin-bottom:8px;border-top:1px dashed var(--edge);padding-top:6px;}
   .roster-row{display:flex;justify-content:space-between;gap:6px;font-family:var(--font-mono);font-size:10.5px;padding:1px 0;}
@@ -344,7 +329,6 @@
   .row-2{display:flex;gap:8px;}
   .row-2 > div, .row-2 > button{flex:1;}
 
-  /* per user request: small 赤/黄/白警報 buttons under the 決心 button */
   .alert-row{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:6px;}
   .alert-row button{padding:6px 2px;font-size:11px;}
   .alert-btn-red{background:#5c2a25;border-color:var(--red);color:#f2d9d5;}
@@ -353,37 +337,6 @@
   .alert-btn-yellow:hover:not(:disabled){background:var(--amber);color:#1a1608;}
   .alert-btn-white{background:var(--edge-dim);border-color:var(--edge);color:var(--ink);}
   .alert-btn-white:hover:not(:disabled){background:var(--edge);}
-
-  .log{
-    background:#0d0f09;border:1px solid var(--edge-dim);border-radius:4px;
-    height:120px;overflow-y:auto;padding:10px 12px;
-    font-family:var(--font-mono);font-size:12.5px;line-height:1.7;
-    scroll-behavior:smooth;
-  }
-  @media (max-width:1100px){ .log{height:170px;} }
-  /* Placed after the max-width:1100px override above (not inside the earlier
-     max-width:600px block elsewhere in this stylesheet) so it wins the
-     cascade on phone widths -- equal-specificity rules resolve by source
-     order, and a rule appearing earlier in the file loses to one below it
-     even when both are wrapped in @media blocks that both match. */
-  @media (max-width:600px){ .log{height:85px;} }
-  .log .l-op{color:#8fbf7a;}
-  .log .l-fdc{color:var(--amber);}
-  .log .l-mortar{color:#7fb2d9;}
-  .log .l-sys{color:var(--muted);font-style:italic;}
-  .log b{opacity:.8;font-weight:700;}
-
-  .empty-hint{color:var(--muted);font-size:13px;text-align:center;padding:20px 6px;}
-
-  /* per user request: BGM/SE on-off settings panel, pinned to the very bottom of the screen */
-  .audio-settings-panel-wrap{margin-top:8px;padding:8px 14px;}
-  .audio-settings-panel{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
-  .audio-settings-label{
-    font-family:var(--font-mono);font-size:11px;letter-spacing:1.5px;color:var(--amber-dim);
-    text-transform:uppercase;
-  }
-  .audio-toggle-btn{width:auto;padding:6px 14px;font-size:12px;}
-  .audio-toggle-btn.active{background:var(--amber-dim);border-color:var(--amber);color:#1a1608;}
 
   .overlay{
     position:fixed;inset:0;background:rgba(10,12,7,.85);
@@ -394,6 +347,7 @@
   .overlay .card{
     background:var(--panel);border:1px solid var(--amber);border-radius:6px;
     padding:28px 34px;text-align:center;max-width:380px;
+    max-height:85vh;overflow-y:auto;
   }
   .overlay .card h2{
     font-family:var(--font-display);letter-spacing:2px;color:var(--amber);
@@ -401,11 +355,6 @@
   }
   .overlay .card p{color:var(--muted);font-size:13px;margin-bottom:16px;}
 
-  /* per user request: every overlay (shop/achievements/briefing/reward/decoy/mission-result)
-     previously shared one identical amber card, so the six screens read as interchangeable.
-     A per-kind accent color (border + h2 + kicker) and a small mono "kicker" label above the
-     title -- matching the game's existing panel-title typographic language -- gives each one
-     its own identity at a glance without touching the overall dark olive/amber palette. */
   .overlay-kicker{
     font-family:var(--font-mono);font-size:10.5px;letter-spacing:3px;text-transform:uppercase;
     color:var(--amber-dim);margin-bottom:6px;
@@ -422,8 +371,6 @@
   .card.accent-red{border-color:var(--red);}
   .card.accent-red h2{color:var(--red);}
   .card.accent-red .overlay-kicker{color:var(--red);}
-  /* wave-reward only: a soft glow instead of a hue change -- it's still a "gain something"
-     screen like the shop (amber), just a one-off celebratory moment rather than a browsable list. */
   .card.card-glow{box-shadow:0 0 30px rgba(217,164,65,0.35);}
 
   .shop-card{max-width:520px;width:100%;}
@@ -438,9 +385,6 @@
   .shop-row .actions button{width:auto;padding:7px 12px;font-size:12px;white-space:nowrap;}
   .shop-row.selected{border-color:var(--amber);}
 
-  /* per user request: achievements read as a service record, not a shop list -- a
-     left accent bar (green once unlocked, muted otherwise) plus a small status tag
-     replaces plain opacity dimming as the unlocked/locked signal. */
   .achievements-progress{font-family:var(--font-mono);font-size:12px;color:var(--muted);margin-bottom:12px;}
   .shop-row.ach-unlocked{border-left:3px solid var(--green-id);}
   .shop-row.ach-locked{border-left:3px solid var(--edge-dim);opacity:.6;}
@@ -448,9 +392,16 @@
   .ach-status.unlocked{color:var(--green-id);}
   .ach-status.locked{color:var(--muted);}
 
-  /* per user request: each WAVEクリアボーナス option gets the same accent color its unit
-     type wears elsewhere (squad=blue, scout=green) so the choice reads at a glance instead
-     of as three identical rows; ammo keeps amber, matching the shop's own ammo rows. */
   .shop-row.reward-squad{border-left:3px solid var(--blue-id);}
   .shop-row.reward-scout{border-left:3px solid var(--green-id);}
   .shop-row.reward-ammo{border-left:3px solid var(--amber);}
+
+  @media (max-width:600px){
+    .hud-brand{font-size:12px;}
+    .hud-icon-btn{width:28px;height:28px;font-size:12px;}
+    .enemy-overlay{width:auto; max-width:34vw;}
+    .eo-count{font-size:15px;}
+    .squad-orders{grid-template-columns:repeat(2,1fr);}
+    .scout-controls{grid-template-columns:repeat(2,1fr);}
+    .command-box{padding:9px 10px;}
+  }

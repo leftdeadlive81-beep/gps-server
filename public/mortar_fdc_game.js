@@ -1878,18 +1878,31 @@ function toggleStatbar(){
   caret.textContent = expanded ? '▾' : '▸';
 }
 
-function toggleForceList(){
-  const content = document.getElementById('force-list');
-  const caret = document.getElementById('force-list-caret');
-  const expanded = content.classList.toggle('expanded');
-  caret.textContent = expanded ? '▾' : '▸';
+function toggleBoardNote(){
+  document.getElementById('board-note').classList.toggle('expanded');
 }
 
-function toggleBoardNote(){
-  const note = document.getElementById('board-note');
-  const hint = document.getElementById('board-note-caret');
-  const expanded = note.classList.toggle('expanded');
-  hint.textContent = expanded ? '▾ 使い方' : '▸ 使い方';
+// per user request: full-screen map UI -- 通信記録/部隊稼働状況 are now slide-up drawers
+// (opened via the hud-top icon buttons) instead of always-visible side panels, since the
+// map itself now fills the whole screen. Only one drawer is open at a time; opening a
+// second one closes whichever was already open rather than stacking them.
+function toggleDrawer(name){
+  const drawer = document.getElementById(name+'-drawer');
+  const backdrop = document.getElementById('drawer-backdrop');
+  if(!drawer || !backdrop) return;
+  const wasOpen = drawer.classList.contains('open');
+  document.querySelectorAll('.drawer.open').forEach(d=>d.classList.remove('open'));
+  if(wasOpen){
+    backdrop.classList.remove('show');
+  } else {
+    drawer.classList.add('open');
+    backdrop.classList.add('show');
+  }
+}
+
+function closeAllDrawers(){
+  document.querySelectorAll('.drawer.open').forEach(d=>d.classList.remove('open'));
+  document.getElementById('drawer-backdrop').classList.remove('show');
 }
 
 function toggleMapFullscreen(){

@@ -1,20 +1,39 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>コンシム ― FDC PLOTTING BOARD v0.2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Stencil:wght@700;800&family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="mortar_fdc_game.css">
 </head>
 <body>
-<div class="wrap">
-  <div class="panel statbar-panel">
-    <div class="panel-title statbar-header" onclick="toggleStatbar()">
-      <span>STATUS <span style="color:var(--muted);font-weight:400;">v0.2</span></span>
-      <span class="statbar-mini" id="statbar-mini">-- </span>
-      <span class="statbar-caret" id="statbar-caret">▸</span>
+
+<div class="board-wrap">
+  <canvas id="board3d"></canvas>
+  <canvas id="board" width="1300" height="460"></canvas>
+
+  <div class="enemy-overlay">
+    <div class="eo-head">敵状 ― CONTACTS</div>
+    <div class="eo-count" id="stat-left">--</div>
+    <div class="enemy-breakdown" id="enemy-breakdown"></div>
+  </div>
+
+  <!-- per user request: full-screen map UI for the mobile-first game -- every other panel
+       (stats/log/force-status/decision) now floats over the map instead of sharing page
+       space with it. The top bar holds the always-visible brand/summary row plus drawer/
+       utility icon buttons; tapping it (or the summary text) expands the full stat grid
+       below it. -->
+  <div class="hud-top">
+    <div class="hud-top-row">
+      <span class="hud-brand" onclick="toggleStatbar()">コンシム <span class="hud-version">v0.2</span></span>
+      <span class="statbar-mini" id="statbar-mini" onclick="toggleStatbar()">-- </span>
+      <span class="statbar-caret" id="statbar-caret" onclick="toggleStatbar()">▸</span>
+      <button class="hud-icon-btn" onclick="toggleDrawer('log')" title="通信記録">📋</button>
+      <button class="hud-icon-btn" onclick="toggleDrawer('status')" title="部隊稼働状況">👥<span class="hud-icon-badge" id="force-list-badge"></span></button>
+      <button class="hud-icon-btn" onclick="toggleBoardNote()" title="使い方">?</button>
+      <button class="hud-icon-btn" id="mapFullscreenBtn" onclick="toggleMapFullscreen()" title="全画面表示にする">⛶</button>
     </div>
     <div class="statbar" id="statbar-content">
       <div class="stat" id="stat-stage"><div class="label">WAVE</div><div class="value">--</div></div>
@@ -27,54 +46,32 @@
     </div>
   </div>
 
-  <div class="panel board-panel">
-    <div class="panel-title board-title-header" onclick="toggleBoardNote()">
-      <span>Plotting Board ― 戦況図</span>
-      <span class="board-note-hint" id="board-note-caret">▸ 使い方</span>
-    </div>
-    <div class="board-note" id="board-note">自軍は左側、敵軍は右側遠方に展開。ドラッグでパン・ホイールでズーム。目標をクリックして選択</div>
-    <div class="board-wrap">
-      <canvas id="board3d"></canvas>
-      <canvas id="board" width="1300" height="460"></canvas>
-      <div class="enemy-overlay">
-        <div class="eo-head">敵状 ― CONTACTS</div>
-        <div class="eo-count" id="stat-left">--</div>
-        <div class="enemy-breakdown" id="enemy-breakdown"></div>
-      </div>
-      <button class="map-fullscreen-btn" id="mapFullscreenBtn" onclick="toggleMapFullscreen()" title="全画面表示にする">⛶</button>
-    </div>
-  </div>
+  <div class="board-note" id="board-note">自軍は左側、敵軍は右側遠方に展開。ドラッグでパン・ホイールでズーム。目標をクリックして選択</div>
 
-  <!-- per user request: スマホ版のみ、地図パネルと通信記録パネルの間にこのパネルを表示し、
-       赤警報/黄警報/白警報/決心を横一列に並べる(旧・地図上フローティング表示から変更) -->
-  <div class="panel alert-decision-panel">
+  <div class="hud-bottom">
     <div class="decision-panel-holder"></div>
   </div>
-
-  <div class="bottombar">
-    <div class="panel log-panel">
-      <div class="panel-title">通信記録 ― Radio Log</div>
-      <div class="log" id="log"></div>
-    </div>
-    <div class="panel status-panel">
-      <div class="panel-title force-list-header" onclick="toggleForceList()">
-        <span>部隊稼働状況</span>
-        <span class="force-list-badge" id="force-list-badge"></span>
-        <span class="force-list-caret" id="force-list-caret">▸</span>
-      </div>
-      <div class="force-list" id="force-list"></div>
-      <div class="self-ammo-line" id="self-ammo-line">弾薬: --</div>
-    </div>
-    <div class="panel decision-panel">
-      <div class="panel-title">自軍 ― FDC / Fire Control</div>
-      <div class="decision-panel-holder"></div>
-    </div>
-  </div>
-
-  <div class="panel audio-settings-panel-wrap">
-    <div id="audio-settings-panel" class="audio-settings-panel"></div>
-  </div>
 </div>
+
+<div class="drawer" id="log-drawer">
+  <div class="drawer-header">
+    <span>通信記録 ― Radio Log</span>
+    <button class="drawer-close" onclick="toggleDrawer('log')">✕</button>
+  </div>
+  <div class="log" id="log"></div>
+</div>
+
+<div class="drawer" id="status-drawer">
+  <div class="drawer-header">
+    <span>部隊稼働状況</span>
+    <button class="drawer-close" onclick="toggleDrawer('status')">✕</button>
+  </div>
+  <div class="force-list" id="force-list"></div>
+  <div class="self-ammo-line" id="self-ammo-line">弾薬: --</div>
+  <div class="audio-settings-panel" id="audio-settings-panel"></div>
+</div>
+
+<div class="drawer-backdrop" id="drawer-backdrop" onclick="closeAllDrawers()"></div>
 
 <div class="overlay" id="overlay">
   <div class="card" id="overlay-card">
