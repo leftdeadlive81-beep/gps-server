@@ -2464,6 +2464,8 @@ const SMART_ACTIONS = {
     {key:'retreat', label:'後退', kind:'instant'},
     {key:'move', label:'移動(精密指定)', kind:'map'},
     {key:'hunt_target', label:'攻撃目標指定', kind:'target'},
+    {key:'spread', label:'間隔をとれ', kind:'instant'},
+    {key:'mass', label:'密集せよ', kind:'instant'},
   ],
   sniper: [
     {key:'advance', label:'前進', kind:'instant'},
@@ -2547,6 +2549,25 @@ function randomMoveOffsetCanvasUnits(meters){
   };
 }
 
+// Like randomMoveOffsetCanvasUnits, but along a given canvas-unit direction (fromDx,fromDy)
+// instead of a random one -- e.g. "away from the group's centroid" for 間隔をとれ/密集せよ.
+// Converts to real-world meters first so the direction is a straight line in real space
+// (not skewed by WORLD.scaleX/scaleZ possibly differing per axis), then a true `meters`
+// distance along it, then back to canvas units. Falls back to a random direction if the
+// input vector is ~zero (e.g. a squad sitting exactly on the centroid already).
+function directedMoveOffsetCanvasUnits(fromDx, fromDy, meters){
+  const scaleX = WORLD.scaleX||1, scaleZ = WORLD.scaleZ||1;
+  let worldDx = fromDx*scaleX, worldDz = fromDy*scaleZ;
+  let worldDist = Math.hypot(worldDx, worldDz);
+  if(worldDist < 0.01){
+    const ang = Math.random()*Math.PI*2;
+    worldDx = Math.sin(ang); worldDz = Math.cos(ang); worldDist = 1;
+  }
+  const ux = worldDx/worldDist, uz = worldDz/worldDist;
+  return { dx: (ux*meters)/scaleX, dy: (uz*meters)/scaleZ, worldDist };
+}
+const SQUAD_FORMATION_ADJUST_M = 50;
+
 function applySmartMortarScatter(){
   const idxs = resolveSmartUnitIdxs('mortar', 'all');
   idxs.forEach(idx=>{
@@ -2570,6 +2591,16 @@ function applySmartOrder(targetId){
   const typeDef = SMART_UNIT_TYPES[unitType];
   const idxs = resolveSmartUnitIdxs(unitType, smartWizard.unitScope);
   const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
+  // per user request: 間隔をとれ/密集せよ move each squad toward/away from the group's own
+  // centroid (computed once, from every squad in this order) rather than a fixed point.
+  let squadCentroid = null;
+  if(unitType==='squad' && (actionKey==='spread' || actionKey==='mass')){
+    const pts = idxs.map(i=>state.squads[i]);
+    squadCentroid = {
+      x: pts.reduce((s,sq)=>s+sq.x,0)/pts.length,
+      y: pts.reduce((s,sq)=>s+sq.y,0)/pts.length,
+    };
+  }
   idxs.forEach(idx=>{
     if(unitType==='mortar'){
       const m = state.mortars[idx];
@@ -2593,6 +2624,14 @@ function applySmartOrder(targetId){
         sq.order = 'hunt';
         sq.huntTargetId = target.id;
         sq.pendingDest = null;
+      } else if(actionKey==='spread' || actionKey==='mass'){
+        const away = directedMoveOffsetCanvasUnits(sq.x-squadCentroid.x, sq.y-squadCentroid.y, SQUAD_FORMATION_ADJUST_M);
+        const {dx, dy} = actionKey==='spread' ? away
+          : {dx: -away.dx*Math.min(1, away.worldDist/SQUAD_FORMATION_ADJUST_M), dy: -away.dy*Math.min(1, away.worldDist/SQUAD_FORMATION_ADJUST_M)};
+        sq.pendingDest = {
+          x: clamp(sq.x+dx, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X),
+          y: clamp(sq.y+dy, 30, CANVAS_H-30),
+        };
       }
     } else if(unitType==='sniper'){
       const sn = state.snipers[idx];
@@ -3521,7 +3560,7 @@ function toggleAutoCommit(){
   if(autoCommitTimer){
     clearInterval(autoCommitTimer);
     autoCommitTimer = null;
-    log('sys','システム', '自動決心を停止。');
+    log('sys','システム', '状況を停止。');
   } else {
     autoCommitTimer = setInterval(()=>{
       // per user request: pause auto-commit while any unit instruction panel is open, so it
@@ -3529,7 +3568,7 @@ function toggleAutoCommit(){
       if(state.commandBox || state.enemyCommandBox || state.decoyCommandBox) return;
       commitDecision();
     }, AUTO_COMMIT_INTERVAL_MS);
-    log('sys','システム', `自動決心を開始(${(AUTO_COMMIT_INTERVAL_MS/1000).toFixed(2)}秒間隔)。`);
+    log('sys','システム', `状況開始(${(AUTO_COMMIT_INTERVAL_MS/1000).toFixed(2)}秒間隔で進行)。`);
   }
   render();
 }
@@ -4759,10 +4798,7 @@ function renderDecisionPanel(){
   holders.forEach(h=>{ h.innerHTML = `
     <div class="decision-box">
       ${summary ? `<div class="decision-summary">${summary}</div>` : ''}
-      <div class="row-2">
-        <button class="btn primary decision-btn" ${disabled?'disabled':''} onclick="commitDecision()">決心</button>
-        <button class="btn auto-commit-btn ${isAutoCommitRunning()?'active squad-order-btn':''}" onclick="toggleAutoCommit()">自動</button>
-      </div>
+      <button class="btn primary decision-btn" ${disabled?'disabled':''} onclick="toggleAutoCommit()">${isAutoCommitRunning()?'状況中':'状況開始'}</button>
       <div class="alert-row-label">警報レベル</div>
       <div class="alert-row">
         <button class="btn alert-btn-red" ${disabled?'disabled':''} onclick="setAlertLevel('red')">赤警報</button>

@@ -117,27 +117,24 @@
   }
   .board-note.expanded{display:block;}
 
-  /* --- bottom HUD bar: the 決心/警報 controls, always visible over the map (this is
-     the same flattened single-row layout the old phone-width .alert-decision-panel
-     used, just unconditional now instead of gated to <600px, since the whole game is
-     full-screen-map-first regardless of viewport width). --- */
+  /* --- bottom HUD bar: the 状況開始/警報 controls, always visible over the map. --- */
   .hud-bottom{
     position:fixed; left:0; right:0; bottom:0; z-index:42;
     background:rgba(18,21,13,0.92); border-top:1px solid var(--edge-dim);
     backdrop-filter:blur(3px);
     padding:8px 8px; padding-bottom:calc(8px + env(safe-area-inset-bottom));
   }
+  /* per user request: 決心/自動 merged into a single 状況開始/状況中 toggle button, given
+     its own full-width row; the 赤/黄/白警報 buttons sit in a compact row underneath. */
   .hud-bottom .decision-box{
-    display:flex; flex-direction:row; align-items:stretch; gap:5px;
+    display:flex; flex-direction:column; gap:6px;
     background:none; border:none; padding:0; margin-bottom:0;
   }
   .hud-bottom .decision-summary{display:none;}
   .hud-bottom .alert-row-label{display:none;}
-  .hud-bottom .alert-row{display:contents;}
-  .hud-bottom .row-2{display:contents;}
-  .hud-bottom .decision-btn{order:4; flex:1.3; padding:12px 6px; font-size:16px;}
-  .hud-bottom .alert-row button{flex:1; padding:12px 3px; font-size:11px;}
-  .hud-bottom .auto-commit-btn{order:5; flex:0.9; padding:12px 3px; font-size:11px;}
+  .hud-bottom .decision-btn{width:100%;}
+  .hud-bottom .alert-row{display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-top:0;}
+  .hud-bottom .alert-row button{padding:10px 3px; font-size:11px;}
 
   .map-fullscreen-btn{width:32px;height:32px;}
 
@@ -254,11 +251,6 @@
   }
   .decision-summary{font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;}
   .decision-btn{font-size:16px;padding:13px 9px;letter-spacing:1px;box-shadow:0 0 0 1px rgba(217,164,65,0.25);}
-
-  /* 自動 is a mode toggle, not the primary action -- an outline/ghost look by default so
-     it doesn't visually compete with 決心's solid fill; still goes solid amber once active. */
-  .auto-commit-btn{background:transparent;border-color:var(--edge-dim);color:var(--muted);}
-  .auto-commit-btn:hover:not(:disabled){background:var(--panel-2);color:var(--ink);border-color:var(--edge);}
 
   .alert-row-label{
     font-family:var(--font-mono);font-size:9.5px;letter-spacing:1.5px;color:var(--muted);
