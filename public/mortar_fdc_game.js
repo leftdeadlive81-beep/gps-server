@@ -951,6 +951,18 @@ function generateSpots(n){
   return spots;
 }
 
+// per user request: friendly forces must start confined to a real 1km x 1km box on the
+// map's west (left) edge, regardless of which map's real-world scale is currently loaded.
+// WORLD.scaleX/scaleZ (meters per canvas-unit, independent per axis -- see canvasUnitToWorldXZ)
+// are only known once the terrain has loaded, so this is computed fresh here in startStage()
+// rather than baked into the HQ_X/SCOUT_X/etc. constants, which are in fixed canvas-unit
+// space and would otherwise describe a real-world box that grows or shrinks with the map.
+function deployBoxSize(){
+  const w = clamp(1000/(WORLD.scaleX||1), 40, CANVAS_W*0.6);
+  const h = clamp(1000/(WORLD.scaleZ||1), 40, CANVAS_H*0.9);
+  return {w, h};
+}
+
 function startStage(){
   const stage = state.stage;
   pickWaveBgm();
@@ -1053,20 +1065,32 @@ function startStage(){
   if(state.mortars) state.mortars = state.mortars.filter(m=>m.hp>0);
 
   if(stage===1){
-    // first wave ― fresh deployment at full roster strength
+    // first wave ― fresh deployment at full roster strength, confined to a real 1km x 1km
+    // box on the map's west edge (see deployBoxSize()). Reuses the original constants'
+    // relative left-to-right ordering (HQ, mortars, scouts, snipers, squads) and vertical
+    // spread pattern, rescaled to fit inside the box for whatever map is currently loaded.
+    const {w: deployBoxW, h: deployBoxH} = deployBoxSize();
+    const origSpanX = FRIENDLY_INF_POS.x - HQ_X;
+    const deployXScale = origSpanX>0 ? deployBoxW/origSpanX : 1;
+    const deployX = origX => HQ_X + (origX-HQ_X)*deployXScale;
+    const origSpanY = SCOUT_LOWER_Y - SCOUT_UPPER_Y;
+    const deployYScale = origSpanY>0 ? deployBoxH/origSpanY : 1;
+    const deployYMid = CANVAS_H/2;
+    const deployYMin = deployYMid - deployBoxH/2, deployYMax = deployYMid + deployBoxH/2;
+
     state.scouts = Array.from({length:NUM_SCOUTS}, (_,i)=>{
-      const scoutMidY = (SCOUT_UPPER_Y+SCOUT_LOWER_Y)/2;
-      const scoutStep = (NUM_SCOUTS>1 ? (SCOUT_LOWER_Y-SCOUT_UPPER_Y)/(NUM_SCOUTS-1) : 0) * INITIAL_DEPLOY_SPACING_MULT;
-      const sy = clamp(scoutMidY + (i-(NUM_SCOUTS-1)/2)*scoutStep, 20, CANVAS_H-20);
+      const scoutX = deployX(SCOUT_X);
+      const scoutStep = (NUM_SCOUTS>1 ? (SCOUT_LOWER_Y-SCOUT_UPPER_Y)/(NUM_SCOUTS-1) : 0) * INITIAL_DEPLOY_SPACING_MULT * deployYScale;
+      const sy = clamp(deployYMid + (i-(NUM_SCOUTS-1)/2)*scoutStep, deployYMin, deployYMax);
       return {
-        id: i, x: SCOUT_X, y: sy,
-        watchAngle: bearingBetween(SCOUT_X, sy, centroidX, centroidY),
+        id: i, x: scoutX, y: sy,
+        watchAngle: bearingBetween(scoutX, sy, centroidX, centroidY),
         soldiers: makeSoldiers(ROSTER_SCOUT_TEAMS[i]), pendingDest: null, pendingReconTargetId: null,
         exposure: SCOUT_EXPOSURE,
       };
     });
     state.mortars = Array.from({length:NUM_MORTARS}, (_,i)=>({
-      id:i, x:OP_HOME_X, y:clamp(OP_HOME_Y+(i-(NUM_MORTARS-1)/2)*40*INITIAL_DEPLOY_SPACING_MULT, 30, CANVAS_H-30), hp:100, maxHp:100,
+      id:i, x:deployX(OP_HOME_X), y:clamp(deployYMid+(i-(NUM_MORTARS-1)/2)*40*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax), hp:100, maxHp:100,
       order:'standby', pendingFire:null, pendingDest:null,
       fireShell:'he', fireFuze:'impact', fireCount:2,
       mainlineAngle: null,
@@ -1080,8 +1104,8 @@ function startStage(){
       pendingDest: null,
       huntTargetId: null,
       standingOrder: null,
-      x: FRIENDLY_INF_POS.x,
-      y: clamp(FRIENDLY_INF_POS.y + (si-(NUM_SQUADS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT, 30, CANVAS_H-30),
+      x: deployX(FRIENDLY_INF_POS.x),
+      y: clamp(deployYMid + (si-(NUM_SQUADS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax),
       soldiers: makeSoldiers(ROSTER_SQUADS[si]),
       reinforceUsed: false,
       exposure: EXPOSURE_DEFAULT,
@@ -1093,8 +1117,8 @@ function startStage(){
       pendingSnipeTargetId: null,
       aimAngle: null,
       standingOrder: null,
-      x: SNIPER_POS.x,
-      y: clamp(SNIPER_POS.y + (si-(NUM_SNIPERS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT, 30, CANVAS_H-30),
+      x: deployX(SNIPER_POS.x),
+      y: clamp(deployYMid + (si-(NUM_SNIPERS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax),
       soldiers: makeSoldiers(ROSTER_SNIPER_TEAMS[si]),
       reinforceUsed: false,
       exposure: EXPOSURE_DEFAULT,
