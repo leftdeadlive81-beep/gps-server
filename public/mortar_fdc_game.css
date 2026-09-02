@@ -168,6 +168,22 @@
   }
   .drawer-backdrop.show{opacity:1; pointer-events:auto;}
 
+  /* per user request: one-handed "スマート操作" command wizard entry point -- a thumb-
+     reachable circular button floating just above the 決心/警報 bar (hud-bottom), right
+     side by default since the example flow (迫撃砲→全隊→移動→実施せよ) is a right-thumb
+     reach on most phones. */
+  .smart-order-fab{
+    position:fixed; right:14px; z-index:43;
+    bottom:calc(64px + env(safe-area-inset-bottom));
+    width:60px; height:60px; padding:0; border-radius:50%;
+    background:var(--amber-dim); border:2px solid var(--amber); color:#1a1608;
+    font-family:var(--font-body); font-size:13px; font-weight:700; letter-spacing:1px;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 4px 14px rgba(0,0,0,0.5); cursor:pointer;
+  }
+  .smart-order-fab:hover{background:var(--amber);}
+  #smart-order-body{flex:1 1 auto; min-height:0; overflow-y:auto; padding-right:2px;}
+
   .self-ammo-line{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);margin-top:8px;flex:0 0 auto;}
 
   .force-list{display:flex;flex-direction:column;gap:5px;overflow-y:auto;padding-right:2px;flex:1 1 auto;min-height:0;}

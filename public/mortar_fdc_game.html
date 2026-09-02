@@ -53,6 +53,18 @@
   </div>
 </div>
 
+<!-- per user request: one-handed "スマート操作" command wizard (誰が→対象→何を→
+     どのように→実施せよ), floating above the 決心/警報 bar for thumb reach. -->
+<button class="smart-order-fab" onclick="openSmartOrder()">指示</button>
+
+<div class="drawer" id="smart-order-drawer">
+  <div class="drawer-header">
+    <span id="smart-order-title">スマート操作</span>
+    <button class="drawer-close" onclick="closeSmartOrder()">✕</button>
+  </div>
+  <div id="smart-order-body"></div>
+</div>
+
 <div class="drawer" id="log-drawer">
   <div class="drawer-header">
     <span>通信記録 ― Radio Log</span>

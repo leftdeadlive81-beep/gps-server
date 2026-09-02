@@ -797,6 +797,7 @@ function initGame(){
     reserve: RESERVE_SIZE,
     reserveRoster: ROSTER_RESERVE_INITIAL.slice(),
     orderMode: null,
+    smartOrderMode: null,
     weather: 'clear',
     terrain: [],
     contours: null,
@@ -2421,6 +2422,222 @@ function setStandingOrder(kind, idx, value){
   unit.standingOrder = value || null;
   render();
 }
+
+// ============================================================
+// per user request: "スマート操作" -- a one-handed-friendly wizard (誰が→対象→何を→
+// どのように→実施せよ) that covers the same orders as each unit's individual command
+// box, but lets the player pick a unit TYPE and either "全隊" (every alive unit of that
+// type) or one specific unit, then apply one action to all of them at once, without
+// having to find and tap each unit's tiny on-map icon first. Orders that are just an
+// enum (stance changes, target selection from the known-targets list) apply immediately
+// on confirmation; orders that need a map location (precise move) close the wizard and
+// arm state.smartOrderMode so the next map tap applies to every selected unit (see
+// handleCanvasClick). smartWizard itself is pure UI navigation state, not game state --
+// it doesn't need to survive a reload any more than which command-box tab was open.
+// ============================================================
+let smartWizard = {step:1, unitType:null, unitScope:null, actionKey:null};
+
+const SMART_UNIT_TYPES = {
+  mortar: {label:'迫撃砲', list:()=>state.mortars, isAlive:m=>m.hp>0, nameOf:i=>`迫撃砲${i+1}`},
+  scout:  {label:'斥候',   list:()=>state.scouts,  isAlive:s=>unitAliveCount(s)>0, nameOf:i=>`斥候${i+1}`},
+  squad:  {label:'小隊',   list:()=>state.squads,  isAlive:sq=>sq.soldiers.some(s=>s.alive), nameOf:i=>`第${i+1}小隊`},
+  sniper: {label:'狙撃',   list:()=>state.snipers, isAlive:sn=>sn.soldiers.some(s=>s.alive), nameOf:i=>`狙撃${i+1}班`},
+};
+
+// kind: 'instant' (no further input, just a confirm step) / 'target' (pick from known
+// enemy targets, applies immediately on pick) / 'map' (closes the wizard, next map tap
+// applies to every selected unit)
+const SMART_ACTIONS = {
+  mortar: [
+    {key:'fire_target', label:'攻撃(目標選択)', kind:'target'},
+    {key:'move', label:'移動', kind:'map'},
+    {key:'standby', label:'待機', kind:'instant'},
+  ],
+  scout: [
+    {key:'move', label:'移動', kind:'map'},
+    {key:'recon', label:'偵察目標指定', kind:'target'},
+  ],
+  squad: [
+    {key:'advance', label:'前進', kind:'instant'},
+    {key:'hold', label:'防御', kind:'instant'},
+    {key:'assault', label:'突撃', kind:'instant'},
+    {key:'retreat', label:'後退', kind:'instant'},
+    {key:'move', label:'移動(精密指定)', kind:'map'},
+    {key:'hunt_target', label:'攻撃目標指定', kind:'target'},
+  ],
+  sniper: [
+    {key:'advance', label:'前進', kind:'instant'},
+    {key:'hold', label:'防御', kind:'instant'},
+    {key:'retreat', label:'後退', kind:'instant'},
+    {key:'move', label:'移動(精密指定)', kind:'map'},
+    {key:'snipe_target', label:'狙撃目標指定', kind:'target'},
+  ],
+};
+
+// Shared by both the wizard's own apply step and handleCanvasClick's smartOrderMode
+// branch (map-kind actions), so the two never resolve a different unit set.
+function resolveSmartUnitIdxs(unitType, unitScope){
+  const typeDef = SMART_UNIT_TYPES[unitType];
+  if(!typeDef) return [];
+  const list = typeDef.list();
+  if(unitScope==='all') return list.map((u,i)=>i).filter(i=>typeDef.isAlive(list[i]));
+  const idx = parseInt(unitScope, 10);
+  return (list[idx] && typeDef.isAlive(list[idx])) ? [idx] : [];
+}
+
+function openSmartOrder(){
+  smartWizard = {step:1, unitType:null, unitScope:null, actionKey:null};
+  renderSmartOrder();
+  document.getElementById('smart-order-drawer').classList.add('open');
+  document.getElementById('drawer-backdrop').classList.add('show');
+}
+function closeSmartOrder(){
+  document.getElementById('smart-order-drawer').classList.remove('open');
+  document.getElementById('drawer-backdrop').classList.remove('show');
+}
+function smartOrderBack(){
+  if(smartWizard.step>1) smartWizard.step -= 1;
+  renderSmartOrder();
+}
+function smartOrderPickType(key){
+  smartWizard.unitType = key;
+  smartWizard.step = 2;
+  renderSmartOrder();
+}
+function smartOrderPickScope(scope){
+  smartWizard.unitScope = scope;
+  smartWizard.step = 3;
+  renderSmartOrder();
+}
+function smartOrderPickAction(key){
+  smartWizard.actionKey = key;
+  const def = SMART_ACTIONS[smartWizard.unitType].find(a=>a.key===key);
+  if(def.kind==='map'){
+    state.smartOrderMode = {unitType:smartWizard.unitType, unitScope:smartWizard.unitScope, actionKey:key};
+    closeSmartOrder();
+    log('sys','システム', '地図をタップして移動先を指定してください。');
+    return;
+  }
+  smartWizard.step = 4;
+  renderSmartOrder();
+}
+function smartOrderPickTarget(targetId){
+  applySmartOrder(targetId);
+}
+function smartOrderConfirmInstant(){
+  applySmartOrder(null);
+}
+
+function applySmartOrder(targetId){
+  const unitType = smartWizard.unitType;
+  const actionKey = smartWizard.actionKey;
+  const typeDef = SMART_UNIT_TYPES[unitType];
+  const idxs = resolveSmartUnitIdxs(unitType, smartWizard.unitScope);
+  const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
+  idxs.forEach(idx=>{
+    if(unitType==='mortar'){
+      const m = state.mortars[idx];
+      if(actionKey==='standby') setMortarOrder(idx, 'standby');
+      else if(actionKey==='fire_target' && target){
+        const e = estPosFromMortar(m, target);
+        m.pendingFire = {x:e.x, y:e.y, snappedId:target.id};
+        applyBestMortarLoadout(m, target);
+        m.order = 'fire';
+      }
+    } else if(unitType==='scout'){
+      const s = state.scouts[idx];
+      if(actionKey==='recon' && target){
+        s.pendingReconTargetId = target.id;
+        s.pendingDest = null;
+      }
+    } else if(unitType==='squad'){
+      const sq = state.squads[idx];
+      if(['advance','hold','assault','retreat'].includes(actionKey)) setSquadOrder(idx, actionKey);
+      else if(actionKey==='hunt_target' && target){
+        sq.order = 'hunt';
+        sq.huntTargetId = target.id;
+        sq.pendingDest = null;
+      }
+    } else if(unitType==='sniper'){
+      const sn = state.snipers[idx];
+      if(['advance','hold','retreat'].includes(actionKey)) setSniperOrder(idx, actionKey);
+      else if(actionKey==='snipe_target' && target){
+        sn.pendingSnipeTargetId = target.id;
+      }
+    }
+  });
+  const actionDef = SMART_ACTIONS[unitType].find(a=>a.key===actionKey);
+  log('sys','司令部', `スマート操作: ${typeDef.label} ${idxs.length}隊に「${actionDef.label}」を指示。`);
+  closeSmartOrder();
+  render();
+}
+
+function renderSmartOrder(){
+  const titleEl = document.getElementById('smart-order-title');
+  const body = document.getElementById('smart-order-body');
+  if(!body) return;
+  const step = smartWizard.step;
+  const backBtn = step>1 ? `<button class="btn" onclick="smartOrderBack()" style="margin-bottom:10px;">◄ 戻る</button>` : '';
+  titleEl.textContent = `スマート操作 (${step}/4)`;
+
+  if(step===1){
+    body.innerHTML = `
+      <div class="meta" style="margin-bottom:8px;">誰が行動しますか?</div>
+      ${Object.keys(SMART_UNIT_TYPES).map(key=>{
+        const t = SMART_UNIT_TYPES[key];
+        const aliveCount = t.list().filter((u,i)=>t.isAlive(u)).length;
+        return `<div class="shop-row"><div><div class="label">${t.label}</div><div class="sub">${aliveCount}隊が活動可能</div></div>
+          <div class="actions"><button class="btn primary" ${aliveCount<=0?'disabled':''} onclick="smartOrderPickType('${key}')">選択</button></div></div>`;
+      }).join('')}
+    `;
+    return;
+  }
+  if(step===2){
+    const typeDef = SMART_UNIT_TYPES[smartWizard.unitType];
+    const list = typeDef.list();
+    const aliveIdxs = list.map((u,i)=>i).filter(i=>typeDef.isAlive(list[i]));
+    body.innerHTML = backBtn + `
+      <div class="meta" style="margin-bottom:8px;">${typeDef.label} ― どの部隊ですか?</div>
+      <div class="shop-row"><div><div class="label">全隊</div><div class="sub">活動可能な${typeDef.label}全${aliveIdxs.length}隊</div></div>
+        <div class="actions"><button class="btn primary" onclick="smartOrderPickScope('all')">選択</button></div></div>
+      ${aliveIdxs.map(i=>`<div class="shop-row"><div><div class="label">${typeDef.nameOf(i)}</div></div>
+        <div class="actions"><button class="btn primary" onclick="smartOrderPickScope('${i}')">選択</button></div></div>`).join('')}
+    `;
+    return;
+  }
+  if(step===3){
+    const actions = SMART_ACTIONS[smartWizard.unitType];
+    body.innerHTML = backBtn + `
+      <div class="meta" style="margin-bottom:8px;">何をさせますか?</div>
+      ${actions.map(a=>`<div class="shop-row"><div><div class="label">${a.label}</div></div>
+        <div class="actions"><button class="btn primary" onclick="smartOrderPickAction('${a.key}')">選択</button></div></div>`).join('')}
+    `;
+    return;
+  }
+  if(step===4){
+    const actionDef = SMART_ACTIONS[smartWizard.unitType].find(a=>a.key===smartWizard.actionKey);
+    if(actionDef.kind==='target'){
+      const knownTargets = state.targets.filter(t=>!t.destroyed && isTargetDetected(t));
+      body.innerHTML = backBtn + `
+        <div class="meta" style="margin-bottom:8px;">どの目標ですか?</div>
+        ${knownTargets.length ? knownTargets.map(t=>`<div class="shop-row"><div>
+          <div class="label">${t.id}</div><div class="sub">${t.revealed?t.def.label:'識別不能'}</div></div>
+          <div class="actions"><button class="btn primary" onclick="smartOrderPickTarget('${t.id}')">選択</button></div></div>`).join('')
+          : '<div class="empty-hint">捕捉中の目標がありません</div>'}
+      `;
+    } else {
+      // 'instant' -- nothing more to pick, just confirm and fire
+      body.innerHTML = backBtn + `
+        <div class="decision-box">
+          <div class="decision-summary">${SMART_UNIT_TYPES[smartWizard.unitType].label}(${smartWizard.unitScope==='all'?'全隊':SMART_UNIT_TYPES[smartWizard.unitType].nameOf(parseInt(smartWizard.unitScope,10))})に「${actionDef.label}」を指示します。</div>
+          <button class="btn primary decision-btn" onclick="smartOrderConfirmInstant()" style="width:100%;">実施せよ</button>
+        </div>
+      `;
+    }
+    return;
+  }
+}
+
 function armSniperMoveOrder(idx){
   if(!state.snipers[idx]) return;
   state.orderMode = {kind:'sniper-move', idx};
@@ -3680,6 +3897,35 @@ function handleCanvasClick(evt){
 
   if(state.placementPending){
     handlePlacementClick(px, py);
+    return;
+  }
+
+  // per user request: "スマート操作" move orders (誰が→対象→移動) apply to every unit
+  // resolved by resolveSmartUnitIdxs at once, using the exact same per-type zone clamps
+  // as each unit's own individual move-order handling below.
+  if(state.smartOrderMode){
+    const mode = state.smartOrderMode;
+    state.smartOrderMode = null;
+    const idxs = resolveSmartUnitIdxs(mode.unitType, mode.unitScope);
+    idxs.forEach(idx=>{
+      if(mode.unitType==='mortar'){
+        const m = state.mortars[idx];
+        m.order = 'move'; m.pendingFire = null;
+        m.pendingDest = { x: clamp(px, MORTAR_ZONE_MIN_X, MORTAR_ZONE_MAX_X), y: clamp(py, 30, CANVAS_H-30) };
+      } else if(mode.unitType==='scout'){
+        const s = state.scouts[idx];
+        s.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SCOUT_ADVANCE_LIMIT_X), y: clamp(py, 20, CANVAS_H-20) };
+        s.pendingReconTargetId = null;
+      } else if(mode.unitType==='squad'){
+        const sq = state.squads[idx];
+        sq.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+      } else if(mode.unitType==='sniper'){
+        const sn = state.snipers[idx];
+        sn.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+      }
+    });
+    log('sys','司令部', `スマート操作: ${SMART_UNIT_TYPES[mode.unitType].label} ${idxs.length}隊に移動目標を指示。`);
+    render();
     return;
   }
 
