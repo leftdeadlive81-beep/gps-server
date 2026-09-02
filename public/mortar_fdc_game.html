@@ -20,6 +20,10 @@
     <div class="enemy-breakdown" id="enemy-breakdown"></div>
   </div>
 
+  <!-- per user request: 左上のミニマップ -- 戦場全体を俯瞰し、着弾/被弾(戦闘)が起きている
+       地点をホットスポットとして表示。クリックするとその地点へカメラがフォーカスする。 -->
+  <canvas id="minimap" class="minimap" width="160" height="57"></canvas>
+
   <!-- per user request: full-screen map UI for the mobile-first game -- every other panel
        (stats/log/force-status/decision) now floats over the map instead of sharing page
        space with it. The top bar holds the always-visible brand/summary row plus drawer/

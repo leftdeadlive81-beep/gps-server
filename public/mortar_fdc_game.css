@@ -62,6 +62,13 @@
   }
   .eo-count{font-family:var(--font-mono);font-size:17px;font-weight:700;color:var(--ink);margin-bottom:3px;}
 
+  .minimap{
+    position:absolute; top:calc(46px + env(safe-area-inset-top)); left:8px; z-index:41;
+    width:160px; height:57px;
+    background:rgba(18,21,13,0.86); border:1px solid var(--edge-dim); border-radius:4px;
+    cursor:pointer; touch-action:none;
+  }
+
   /* --- top HUD bar: brand + condensed stat summary + drawer/utility icons, always
      visible; tapping it expands the full stat grid beneath it. --- */
   .hud-top{

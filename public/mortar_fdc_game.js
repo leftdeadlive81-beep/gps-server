@@ -5399,6 +5399,80 @@ function drawSelectionRing(ctx, x, y, active, r){
   ctx.stroke();
 }
 
+// per user request: 左上のミニマップ -- 全体マップ(canvas-unit空間 0..CANVAS_W /
+// 0..CANVAS_H)を俯瞰表示し、戦闘中の着弾/被弾(既存の flashes 配列 -- 迫撃砲弾着、敵の反撃、
+// 車両/ヘリの攻撃など全ての被弾エフェクトが共通で積まれる)をホットスポットとして重ねる。
+// クリック/タップした地点は handleMinimapClick が focusMapOn() へ渡し、3D カメラをそこへ
+// パンさせる(既存のダブルタップズームと同じ仕組みを再利用)。
+function drawMinimap(){
+  const cv = document.getElementById('minimap');
+  if(!cv || !state) return;
+  const ctx = cv.getContext('2d');
+  const w = cv.width, h = cv.height;
+  ctx.clearRect(0,0,w,h);
+  const sx = wx => (wx/CANVAS_W)*w;
+  const sy = wy => (wy/CANVAS_H)*h;
+
+  const friendlyPts = [];
+  if(state.hq && state.hq.hp>0) friendlyPts.push([state.hq.x, state.hq.y]);
+  state.mortars.forEach(m=>{ if(m.hp>0) friendlyPts.push([m.x, m.y]); });
+  state.tanks.forEach(tk=>{ if(tk.hp>0) friendlyPts.push([tk.x, tk.y]); });
+  state.scouts.forEach(s=>{ if(unitAlive(s)) friendlyPts.push([s.x, s.y]); });
+  state.squads.forEach(sq=>{ if(sq.soldiers.some(s=>s.alive)) friendlyPts.push([sq.x, sq.y]); });
+  state.snipers.forEach(sn=>{ if(sn.soldiers.some(s=>s.alive)) friendlyPts.push([sn.x, sn.y]); });
+  ctx.fillStyle = FRIENDLY_MARK_COLOR;
+  friendlyPts.forEach(([x,y])=>{
+    ctx.beginPath();
+    ctx.arc(sx(x), sy(y), 1.6, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  ctx.fillStyle = ENEMY_MARK_COLOR;
+  state.targets.forEach(t=>{
+    if(t.destroyed || !isTargetDetected(t)) return;
+    const e = estPos(t);
+    ctx.beginPath();
+    ctx.arc(sx(e.x), sy(e.y), 1.6, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // combat hotspots -- any still-live flash (impact/hit effect) reads as "fighting is
+  // happening here right now", pulsing/fading exactly in step with the flash it mirrors.
+  const now = performance.now();
+  flashes.forEach(f=>{
+    const age = now-f.born;
+    if(age>f.life) return;
+    const frac = 1-(age/f.life);
+    ctx.beginPath();
+    ctx.fillStyle = `rgba(240,113,95,${(0.25+0.55*frac).toFixed(2)})`;
+    ctx.arc(sx(f.x), sy(f.y), (f.big?4.5:3)*(0.6+0.6*frac), 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // rough current-viewport rectangle, so the minimap also shows where the main camera is
+  // currently looking, not just where units/combat are.
+  const viewW = clamp(w/MAP_VIEW.zoom, 8, w);
+  const viewH = clamp(h/MAP_VIEW.zoom, 6, h);
+  ctx.strokeStyle = 'rgba(217,164,65,0.8)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(sx(MAP_VIEW.cx)-viewW/2, sy(MAP_VIEW.cy)-viewH/2, viewW, viewH);
+}
+
+// Converts a click/tap on the minimap canvas into canvas-unit space (a plain linear
+// scale, unlike the main board's ray-cast against the 3D terrain -- the minimap is a flat
+// top-down projection of the same 0..CANVAS_W/0..CANVAS_H space) and pans the main camera
+// there via focusMapOn (zoom left unchanged -- "focus there", not "zoom in there").
+function handleMinimapClick(e){
+  if(!state || anyOverlayShown()) return;
+  const cv = document.getElementById('minimap');
+  const rect = cv.getBoundingClientRect();
+  const clientX = e.touches && e.touches.length ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches && e.touches.length ? e.touches[0].clientY : e.clientY;
+  const wx = clamp(((clientX-rect.left)/rect.width)*CANVAS_W, 0, CANVAS_W);
+  const wy = clamp(((clientY-rect.top)/rect.height)*CANVAS_H, 0, CANVAS_H);
+  focusMapOn(wx, wy);
+}
+
 function drawBoard(){
   const cv = document.getElementById('board');
   const ctx = cv.getContext('2d');
@@ -7398,12 +7472,14 @@ function loop(){
   }
   if(!anyOverlayShown()){
     if(state) drawBoard();
+    if(state) drawMinimap();
     renderThreeFrame();
   }
   requestAnimationFrame(loop);
 }
 
 document.getElementById('board').addEventListener('click', handleCanvasClick);
+document.getElementById('minimap').addEventListener('click', handleMinimapClick);
 // per user request: right-click is used for map rotation (see setupMapControls), and the
 // browser's native context menu popping up anywhere else on the page during play (log panel,
 // buttons, stat bar, etc.) is equally unwanted, so suppress it page-wide rather than just on
