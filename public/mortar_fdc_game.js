@@ -328,7 +328,7 @@ function kmhToUnitsPerTurn(kmh){ return (kmh*1000/60) / METERS_PER_UNIT; }
 const VEHICLE_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.vehicle);
 const INFANTRY_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.infantry);
 const SNIPER_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.sniper);
-const MORTAR_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.mortar);
+const MORTAR_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.mortar) * 0.25; // per user request: mortar move speed to 1/4
 const ARTILLERY_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.artillery) * 0.5; // per user request: enemy artillery move speed halved
 const ARTILLERY_STANDOFF_RANGE_M = 300; // artillery repositions closer but holds once within this range of its nearest target
 const ARTILLERY_STANDOFF_RANGE_UNITS = ARTILLERY_STANDOFF_RANGE_M / METERS_PER_UNIT;
@@ -2512,6 +2512,13 @@ function smartOrderPickScope(scope){
 function smartOrderPickAction(key){
   smartWizard.actionKey = key;
   const def = SMART_ACTIONS[smartWizard.unitType].find(a=>a.key===key);
+  // per user request: 迫撃砲+全隊+移動 doesn't wait for a map tap -- sending every mortar to
+  // one shared point clusters them into an easy counter-battery target, so instead each
+  // mortar scatters 100m in its own random direction, applied immediately.
+  if(smartWizard.unitType==='mortar' && key==='move' && smartWizard.unitScope==='all'){
+    applySmartMortarScatter();
+    return;
+  }
   if(def.kind==='map'){
     state.smartOrderMode = {unitType:smartWizard.unitType, unitScope:smartWizard.unitScope, actionKey:key};
     closeSmartOrder();
@@ -2526,6 +2533,35 @@ function smartOrderPickTarget(targetId){
 }
 function smartOrderConfirmInstant(){
   applySmartOrder(null);
+}
+
+// Converts a real-world distance (meters) in a random direction into a canvas-unit {dx,dy}
+// offset, correctly accounting for WORLD.scaleX/scaleZ possibly differing per axis (see
+// canvasUnitToWorldXZ) -- dividing by the respective axis scale keeps the offset a true
+// circle in real meters regardless of any X/Z anisotropy in the loaded map.
+function randomMoveOffsetCanvasUnits(meters){
+  const ang = Math.random()*Math.PI*2;
+  return {
+    dx: (meters*Math.sin(ang))/(WORLD.scaleX||1),
+    dy: (meters*Math.cos(ang))/(WORLD.scaleZ||1),
+  };
+}
+
+function applySmartMortarScatter(){
+  const idxs = resolveSmartUnitIdxs('mortar', 'all');
+  idxs.forEach(idx=>{
+    const m = state.mortars[idx];
+    const {dx, dy} = randomMoveOffsetCanvasUnits(100);
+    m.order = 'move';
+    m.pendingFire = null;
+    m.pendingDest = {
+      x: clamp(m.x+dx, MORTAR_ZONE_MIN_X, MORTAR_ZONE_MAX_X),
+      y: clamp(m.y+dy, 30, CANVAS_H-30),
+    };
+  });
+  log('sys','司令部', `スマート操作: 迫撃砲 全${idxs.length}隊に分散移動(各隊ランダム方向へ100m)を指示。`);
+  closeSmartOrder();
+  render();
 }
 
 function applySmartOrder(targetId){
