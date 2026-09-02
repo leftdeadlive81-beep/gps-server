@@ -133,6 +133,17 @@ const SNIPER_SQUAD_SIZE = 5;
 const NUM_SNIPERS = 3;
 const MORTAR_CREW_SIZE = 5;
 const NUM_MORTARS = 4;
+// per user request: 2 friendly tanks -- HP-based like mortars (no named crew roster), but
+// with squad-like orders/direct-fire combat since they fight on the ground like infantry.
+const NUM_TANKS = 2;
+const TANK_MAX_HP = 220;
+const TANK_POS = {x: 320, y: 230};
+const TANK_EXPOSURE = 65; // armored -- harder to hit than a foot unit at EXPOSURE_DEFAULT (50)
+const TANK_ENGAGE_RANGE = 150;
+const TANK_DUEL_DMG_TO_ENEMY = [18, 32];
+const TANK_INCOMING_DMG = [8, 20];
+const TANK_REPAIR_HP_PER_CALL = 30;
+const TANK_REPAIR_COST_PER_HP = 40;
 const RESERVE_SIZE = 10;
 // per user request: 擬陣地 (decoy positions) -- placed at the start of each wave (auto or
 // manual, player's choice), these lure enemy indirect fire/vehicle assaults away from real
@@ -337,6 +348,7 @@ const VEHICLE_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.vehicle);
 const INFANTRY_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.infantry);
 const SNIPER_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.sniper);
 const MORTAR_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.mortar) * 0.25; // per user request: mortar move speed to 1/4
+const TANK_MOVE_CAP = VEHICLE_MOVE_CAP * 0.6; // faster than infantry/sniper, slower than the enemy vehicle's full road speed
 const ARTILLERY_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.artillery) * 0.5; // per user request: enemy artillery move speed halved
 const ARTILLERY_STANDOFF_RANGE_M = 300; // artillery repositions closer but holds once within this range of its nearest target
 const ARTILLERY_STANDOFF_RANGE_UNITS = ARTILLERY_STANDOFF_RANGE_M / METERS_PER_UNIT;
@@ -617,6 +629,31 @@ function drawUnitIcon(ctx, img, cx, cy, targetH, dead){
   ctx.drawImage(img, cx-w/2, cy-targetH/2, w, targetH);
   ctx.restore();
 }
+// per user request: 戦車 (tank) marker -- no icon image asset exists for armor, so this is a
+// vector-drawn hull rectangle + turret circle + barrel line instead of drawUnitIcon's PNG blit.
+function drawTankIcon(ctx, cx, cy, size, dead){
+  const w = size*1.6, h = size*0.9;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.fillStyle = dead ? '#5c2a25' : FRIENDLY_MARK_COLOR;
+  ctx.strokeStyle = dead ? '#3a1b18' : '#3d5a70';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(-w/2, -h/2, w, h, 3);
+  else ctx.rect(-w/2, -h/2, w, h);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, -h*0.1, size*0.32, 0, Math.PI*2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(0, -h*0.1);
+  ctx.lineTo(w*0.55, -h*0.1);
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.restore();
+}
 
 // per user request: BGM + sound effects. bgmAudio/combatAudio are single persistent,
 // looping <audio> elements (started/stopped as state changes); one-shot sfx (explosion,
@@ -795,6 +832,7 @@ function initGame(){
       exposure: EXPOSURE_DEFAULT,
     })),
     squads: [],
+    tanks: [],
     scouts: Array.from({length:NUM_SCOUTS}, (_,i)=>({
       id:i, x:SCOUT_X, y:SCOUT_UPPER_Y+i*40, watchAngle:90,
       soldiers: makeSoldiers(ROSTER_SCOUT_TEAMS[i]), pendingDest:null, pendingReconTargetId:null,
@@ -1111,6 +1149,7 @@ function startStage(){
   if(state.scouts) state.scouts = state.scouts.filter(s=>unitAlive(s));
   if(state.snipers) state.snipers = state.snipers.filter(sn=>unitAlive(sn));
   if(state.mortars) state.mortars = state.mortars.filter(m=>m.hp>0);
+  if(state.tanks) state.tanks = state.tanks.filter(tk=>tk.hp>0);
 
   if(stage===1){
     // first wave ― fresh deployment at full roster strength, confined to a real 1km x 1km
@@ -1171,6 +1210,16 @@ function startStage(){
       reinforceUsed: false,
       exposure: EXPOSURE_DEFAULT,
     }));
+    state.tanks = Array.from({length:NUM_TANKS}, (_,i)=>({
+      id: i,
+      order: 'hold',
+      pendingDest: null,
+      huntTargetId: null,
+      x: deployX(TANK_POS.x),
+      y: clamp(deployYMid + (i-(NUM_TANKS-1)/2)*60*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax),
+      hp: TANK_MAX_HP, maxHp: TANK_MAX_HP,
+      exposure: TANK_EXPOSURE,
+    }));
     state.hq = {x:HQ_X, y:HQ_Y, hp:HQ_MAX_HP, maxHp:HQ_MAX_HP, exposure:EXPOSURE_DEFAULT, coverBuilt:false};
     state.reserve = RESERVE_SIZE;
     state.reserveRoster = ROSTER_RESERVE_INITIAL.slice();
@@ -1191,6 +1240,9 @@ function startStage(){
     });
     state.snipers.forEach(sn=>{
       sn.order = 'hold'; sn.pendingDest = null; sn.pendingSnipeTargetId = null; sn.aimAngle = null; sn.reinforceUsed = false; sn.preAlertOrder = null;
+    });
+    state.tanks.forEach(tk=>{
+      tk.order = 'hold'; tk.pendingDest = null; tk.huntTargetId = null;
     });
     state.hq.coverBuilt = false;
   }
@@ -1702,6 +1754,17 @@ function rotateScout(idx, delta){
 function armSquadMoveOrder(idx){
   state.orderMode = {kind:'squad', idx};
   state.commandBox = null;
+  render();
+}
+function armTankMoveOrder(idx){
+  state.orderMode = {kind:'tank-move', idx};
+  state.commandBox = null;
+  render();
+}
+function clearTankDest(idx){
+  if(!state.tanks[idx]) return;
+  state.tanks[idx].pendingDest = null;
+  state.orderMode = null;
   render();
 }
 function clearSquadDest(idx){
@@ -2236,6 +2299,111 @@ function resolveSquadOrders(actionTurns){
   return anyEvent;
 }
 
+// per user request: 2 friendly tanks. Movement mirrors applySquadMovement (advance/retreat/
+// hunt), but combat is HP-based like a mortar taking damage rather than squad's per-soldier
+// casualty rolls, since tanks don't carry a tracked soldiers roster.
+function applyTankMovement(tank, idx){
+  if(tank.pendingDest){
+    const next = terrainAwareStep(tank.x, tank.y, tank.pendingDest.x, tank.pendingDest.y, TANK_MOVE_CAP);
+    tank.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+    tank.y = clamp(next.y, 30, CANVAS_H-30);
+    checkMineTrigger('tank', idx, tank.x, tank.y);
+    if(Math.hypot(tank.x-tank.pendingDest.x, tank.y-tank.pendingDest.y) < 12){
+      tank.pendingDest = null;
+      log('sys','前線', `戦車${idx+1}、指定地点に到着。`);
+    }
+    return;
+  }
+  if(tank.order==='advance'){
+    const next = terrainAwareStep(tank.x, tank.y, SQUAD_ADVANCE_LIMIT_X, tank.y, TANK_MOVE_CAP);
+    tank.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
+    tank.y = clamp(next.y, 30, CANVAS_H-30);
+  } else if(tank.order==='retreat'){
+    const next = terrainAwareStep(tank.x, tank.y, TANK_POS.x, TANK_POS.y, TANK_MOVE_CAP);
+    tank.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
+    tank.y = clamp(next.y, 30, CANVAS_H-30);
+  } else if(tank.order==='hunt' && tank.huntTargetId){
+    const target = state.targets.find(t=>t.id===tank.huntTargetId);
+    if(!target || target.destroyed){
+      tank.huntTargetId = null;
+      tank.order = 'hold';
+      log('sys','前線', `戦車${idx+1}、攻撃目標を喪失(撃破/消失)。待機に移行。`);
+    } else {
+      const e = estPos(target);
+      const dist = Math.hypot(e.x-tank.x, e.y-tank.y);
+      if(dist > TANK_ENGAGE_RANGE*0.8){
+        const next = terrainAwareStep(tank.x, tank.y, e.x, e.y, TANK_MOVE_CAP);
+        tank.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+        tank.y = clamp(next.y, 30, CANVAS_H-30);
+      }
+    }
+  }
+  checkMineTrigger('tank', idx, tank.x, tank.y);
+}
+
+function allTanksWiped(){
+  return !state.tanks.length || state.tanks.every(tk=>tk.hp<=0);
+}
+
+function resolveTankOrders(actionTurns){
+  let anyEvent = false;
+  for(let i=0;i<actionTurns;i++){
+    state.tanks.forEach((tank, idx)=>{
+      if(tank.hp<=0) return;
+      applyTankMovement(tank, idx);
+
+      let engageTargets = state.targets.filter(t=>!t.destroyed && (t.type==='infantry' || t.type==='vehicle'));
+      if(tank.order==='hunt' && tank.huntTargetId){
+        const huntTarget = state.targets.find(t=>t.id===tank.huntTargetId && !t.destroyed);
+        if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
+      }
+      if(engageTargets.length===0) return;
+      let dmgMult=1, incomingMult=1;
+      if(tank.order==='hunt'){ dmgMult=1.5; incomingMult=1.3; }
+      else if(tank.order==='hold'){ dmgMult=0.9; incomingMult=0.7; }
+      else if(tank.order==='retreat'){ dmgMult=0.5; incomingMult=0.6; }
+
+      engageTargets.forEach(t=>{
+        if(t.destroyed || tank.hp<=0) return;
+        const e = estPos(t);
+        const dist = Math.hypot(e.x-tank.x, e.y-tank.y);
+        if(dist > TANK_ENGAGE_RANGE) return;
+        if(revealTarget(t)){
+          log('op','斥候', `戦車${idx+1}が${t.id}と交戦、<b>${t.def.label}</b>と識別。`);
+        }
+        const suppressed = isSuppressed(t);
+        const tankAltMult = altitudeBonus(tank.x, tank.y, t.trueX, t.trueY);
+        const suppressionDmgMult = suppressed ? SUPPRESSION_DUEL_DMG_BONUS : 1;
+        const enemyExposureMult = exposureNormalizedMult(t.exposure);
+        const dmgToEnemy = Math.round(rnd(TANK_DUEL_DMG_TO_ENEMY[0], TANK_DUEL_DMG_TO_ENEMY[1]) * dmgMult * tankAltMult * suppressionDmgMult * enemyExposureMult);
+        applyDamageToTarget(t, dmgToEnemy);
+        anyEvent = true;
+        enemyTracers.push({startX:tank.x, startY:tank.y, endX:e.x, endY:e.y, born:performance.now(), duration:220});
+        if(t.hp<=0 && !t.destroyed){
+          t.destroyed = true; t.hp = 0;
+          log('op','斥候', `${t.id} 戦車${idx+1}との交戦で撃破を確認。`);
+          onTargetDestroyed(t);
+        }
+        const enemyAltMult = altitudeBonus(t.trueX, t.trueY, tank.x, tank.y);
+        const suppressionCasualtyMult = suppressed ? SUPPRESSION_CASUALTY_MULT : 1;
+        const hitChance = (0.10 + state.stage*0.006) * incomingMult * enemyAltMult * suppressionCasualtyMult * exposureNormalizedMult(getUnitExposure({kind:'tank', idx}));
+        if(Math.random() < hitChance){
+          const dmg = Math.round(rnd(TANK_INCOMING_DMG[0], TANK_INCOMING_DMG[1]));
+          const wasAlive = tank.hp>0;
+          tank.hp = Math.max(0, tank.hp-dmg);
+          log('sys','前線', `戦車${idx+1}、${t.id}との交戦で被弾(-${dmg}HP、残り${tank.hp}/${tank.maxHp})。`);
+          enemyTracers.push({startX:e.x, startY:e.y, endX:tank.x, endY:tank.y, born:performance.now(), duration:280});
+          if(wasAlive && tank.hp<=0){
+            log('sys','前線', `戦車${idx+1}、撃破される。`);
+            spawnDestructionEffect(tank.x, tank.y, `戦車${idx+1} 撃破!`, FRIENDLY_MARK_COLOR);
+          }
+        }
+      });
+    });
+  }
+  return anyEvent;
+}
+
 function applySniperMovement(sn){
   if(sn.pendingDest){
     const next = terrainAwareStep(sn.x, sn.y, sn.pendingDest.x, sn.pendingDest.y, SNIPER_MOVE_CAP);
@@ -2419,6 +2587,12 @@ function setSquadOrder(idx, order){
   render();
 }
 
+function setTankOrder(idx, order){
+  if(!state.tanks[idx]) return;
+  state.tanks[idx].order = order;
+  render();
+}
+
 function setSniperOrder(idx, order){
   if(!state.snipers[idx]) return;
   state.snipers[idx].order = order;
@@ -2451,6 +2625,7 @@ const SMART_UNIT_TYPES = {
   scout:  {label:'斥候',   list:()=>state.scouts,  isAlive:s=>unitAliveCount(s)>0, nameOf:i=>`斥候${i+1}`},
   squad:  {label:'小隊',   list:()=>state.squads,  isAlive:sq=>sq.soldiers.some(s=>s.alive), nameOf:i=>`第${i+1}小隊`},
   sniper: {label:'狙撃',   list:()=>state.snipers, isAlive:sn=>sn.soldiers.some(s=>s.alive), nameOf:i=>`狙撃${i+1}班`},
+  tank:   {label:'戦車',   list:()=>state.tanks,   isAlive:tk=>tk.hp>0, nameOf:i=>`戦車${i+1}`},
 };
 
 // kind: 'instant' (no further input, just a confirm step) / 'target' (pick from known
@@ -2482,6 +2657,13 @@ const SMART_ACTIONS = {
     {key:'retreat', label:'後退', kind:'instant'},
     {key:'move', label:'移動(精密指定)', kind:'map'},
     {key:'snipe_target', label:'狙撃目標指定', kind:'target'},
+  ],
+  tank: [
+    {key:'advance', label:'前進', kind:'instant'},
+    {key:'hold', label:'防御', kind:'instant'},
+    {key:'retreat', label:'後退', kind:'instant'},
+    {key:'move', label:'移動(精密指定)', kind:'map'},
+    {key:'hunt_target', label:'攻撃目標指定', kind:'target'},
   ],
 };
 
@@ -2647,6 +2829,14 @@ function applySmartOrder(targetId){
       if(['advance','hold','retreat'].includes(actionKey)) setSniperOrder(idx, actionKey);
       else if(actionKey==='snipe_target' && target){
         sn.pendingSnipeTargetId = target.id;
+      }
+    } else if(unitType==='tank'){
+      const tk = state.tanks[idx];
+      if(['advance','hold','retreat'].includes(actionKey)) setTankOrder(idx, actionKey);
+      else if(actionKey==='hunt_target' && target){
+        tk.order = 'hunt';
+        tk.huntTargetId = target.id;
+        tk.pendingDest = null;
       }
     }
   });
@@ -2864,6 +3054,7 @@ function hqBoxHtml(){
 function friendlyFireCandidateLabel(c){
   if(c.kind==='hq') return '指揮所';
   if(c.kind==='mortar') return `迫撃砲${c.idx+1}`;
+  if(c.kind==='tank') return `戦車${c.idx+1}`;
   if(c.kind==='scout') return `斥候${c.idx+1}`;
   if(c.kind==='squad') return `第${c.idx+1}小隊`;
   return `狙撃${c.idx+1}班`;
@@ -2872,6 +3063,7 @@ function checkFriendlyFireAt(ix, iy, killRadius){
   const candidates = [];
   if(state.hq.hp>0) candidates.push({kind:'hq', idx:0, x:state.hq.x, y:state.hq.y});
   state.mortars.forEach((m,idx)=>{ if(m.hp>0) candidates.push({kind:'mortar', idx, x:m.x, y:m.y}); });
+  state.tanks.forEach((tk,idx)=>{ if(tk.hp>0) candidates.push({kind:'tank', idx, x:tk.x, y:tk.y}); });
   state.scouts.forEach((s,idx)=>{ if(unitAlive(s)) candidates.push({kind:'scout', idx, x:s.x, y:s.y}); });
   state.squads.forEach((sq,idx)=>{ if(sq.soldiers.some(s=>s.alive)) candidates.push({kind:'squad', idx, x:sq.x, y:sq.y}); });
   state.snipers.forEach((sn,idx)=>{ if(sn.soldiers.some(s=>s.alive)) candidates.push({kind:'sniper', idx, x:sn.x, y:sn.y}); });
@@ -2889,6 +3081,7 @@ function checkFriendlyFireAt(ix, iy, killRadius){
 function getUnitExposure(candidate){
   if(candidate.kind==='hq') return state.hq.exposure;
   if(candidate.kind==='mortar') return state.mortars[candidate.idx].exposure;
+  if(candidate.kind==='tank') return state.tanks[candidate.idx].exposure;
   if(candidate.kind==='scout'){
     const u = state.scouts[candidate.idx];
     return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL;
@@ -2922,6 +3115,9 @@ function nearestFriendlyAsset(x, y, includeSquads){
     });
     state.snipers.forEach((sn,idx)=>{
       if(sn.soldiers.some(s=>s.alive)) candidates.push({kind:'sniper', idx, x:sn.x, y:sn.y});
+    });
+    state.tanks.forEach((tk,idx)=>{
+      if(tk.hp>0) candidates.push({kind:'tank', idx, x:tk.x, y:tk.y});
     });
   }
   // per user request: 擬陣地 lure enemy indirect fire/vehicle assaults away from real assets
@@ -3033,6 +3229,14 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
     log('sys','被弾', `${sourceLabel}が迫撃砲${target.idx+1}を攻撃。被害 ${dmg}。`);
     if(mortar.hp>0) unitSpeak('mortar', target.idx, 'warning');
     else if(wasAlive) spawnDestructionEffect(mortar.x, mortar.y, `迫撃砲${target.idx+1} 戦闘不能!`, FRIENDLY_MARK_COLOR);
+  } else if(target.kind==='tank'){
+    const tank = state.tanks[target.idx];
+    if(!tank) return;
+    const wasAlive = tank.hp>0;
+    tank.hp = Math.max(0, tank.hp-dmg);
+    if(tank.hp <= tank.maxHp*0.2) state.hpDroppedLow = true;
+    log('sys','被弾', `${sourceLabel}が戦車${target.idx+1}を攻撃。被害 ${dmg}。`);
+    if(wasAlive && tank.hp<=0) spawnDestructionEffect(tank.x, tank.y, `戦車${target.idx+1} 撃破!`, FRIENDLY_MARK_COLOR);
   }
 }
 
@@ -3424,13 +3628,17 @@ function resolveEnemyTurn(actionTurns){
   if(!allSnipersWiped()){
     sniperEvent = resolveSniperOrders(actionTurns);
   }
-  if(!hit && !infEvent && !sniperEvent && !advanced && !assaulted && !swarmed && !cbEvent && !antiDroned){
+  let tankEvent = false;
+  if(!allTanksWiped()){
+    tankEvent = resolveTankOrders(actionTurns);
+  }
+  if(!hit && !infEvent && !sniperEvent && !tankEvent && !advanced && !assaulted && !swarmed && !cbEvent && !antiDroned){
     log('sys','敵ターン', '目立った動きなし。');
   }
   // per user request: 交戦時のサウンド -- looping battlefield-combat ambience plays while
   // squads/snipers are actively engaging this turn, and pauses again once nothing is
   // actively engaging.
-  if(infEvent || sniperEvent || antiDroned) playCombatAmbience(); else stopCombatAmbience();
+  if(infEvent || sniperEvent || tankEvent || antiDroned) playCombatAmbience(); else stopCombatAmbience();
   state.targets.forEach(t=>{
     if(t.suppressed>0) t.suppressed = Math.max(0, t.suppressed-actionTurns);
   });
@@ -4054,6 +4262,9 @@ function handleCanvasClick(evt){
       } else if(mode.unitType==='sniper'){
         const sn = state.snipers[idx];
         sn.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+      } else if(mode.unitType==='tank'){
+        const tk = state.tanks[idx];
+        tk.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
       }
     });
     log('sys','司令部', `スマート操作: ${SMART_UNIT_TYPES[mode.unitType].label} ${idxs.length}隊に移動目標を指示。`);
@@ -4072,6 +4283,15 @@ function handleCanvasClick(evt){
           y: clamp(py, 30, CANVAS_H-30),
         };
         log('sys','前線', `第${mode.idx+1}小隊に移動目標を指示。`);
+      }
+    } else if(mode.kind==='tank-move'){
+      const tank = state.tanks[mode.idx];
+      if(tank){
+        tank.pendingDest = {
+          x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X),
+          y: clamp(py, 30, CANVAS_H-30),
+        };
+        log('sys','前線', `戦車${mode.idx+1}に移動目標を指示。`);
       }
     } else if(mode.kind==='scout-move'){
       const scout = state.scouts[mode.idx];
@@ -4250,6 +4470,13 @@ function findFriendlyUnitAt(px, py){
     const my = m._visY!==undefined ? m._visY : m.y;
     if(Math.hypot(mx-px, my-py) <= HIT_R) return {kind:'mortar', idx:i};
   }
+  for(let i=0;i<state.tanks.length;i++){
+    const tk = state.tanks[i];
+    if(tk.hp<=0) continue;
+    const tx = tk._visX!==undefined ? tk._visX : tk.x;
+    const ty = tk._visY!==undefined ? tk._visY : tk.y;
+    if(Math.hypot(tx-px, ty-py) <= HIT_R) return {kind:'tank', idx:i};
+  }
   for(let i=0;i<state.squads.length;i++){
     const sq = state.squads[i];
     if(!sq.soldiers.some(s=>s.alive)) continue;
@@ -4304,6 +4531,44 @@ function clearSquadHunt(idx){
   if(!sq) return;
   sq.huntTargetId = null;
   if(sq.order==='hunt') sq.order = 'hold';
+  render();
+}
+function assignTankHunt(idx){
+  const tank = state.tanks[idx];
+  if(!tank || tank.hp<=0) return;
+  const targetId = state.enemyCommandBox;
+  const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
+  if(!target) return;
+  if(tank.order==='hunt' && tank.huntTargetId===target.id){
+    clearTankHunt(idx);
+    log('sys','前線', `戦車${idx+1}、${target.id}への攻撃指示を解除。`);
+    return;
+  }
+  tank.order = 'hunt';
+  tank.huntTargetId = target.id;
+  tank.pendingDest = null;
+  log('sys','前線', `戦車${idx+1}、${target.id} を攻撃目標に指示。接敵まで前進する。`);
+  render();
+}
+function clearTankHunt(idx){
+  const tank = state.tanks[idx];
+  if(!tank) return;
+  tank.huntTargetId = null;
+  if(tank.order==='hunt') tank.order = 'hold';
+  render();
+}
+function repairTank(idx){
+  const tank = state.tanks[idx];
+  if(!state || state.stageResolved || !tank || tank.hp<=0 || tank.hp>=tank.maxHp) return;
+  const restoreHp = Math.min(TANK_REPAIR_HP_PER_CALL, tank.maxHp-tank.hp);
+  const cost = Math.round(TANK_REPAIR_COST_PER_HP*restoreHp);
+  if(state.money < cost){ log('sys','システム','資金が不足しています。'); return; }
+  state.money -= cost;
+  tank.hp = Math.min(tank.maxHp, tank.hp+restoreHp);
+  state.turns += 1;
+  log('sys','工兵', `戦車${idx+1}、応急修復完了(+${restoreHp}HP)。¥${cost}を消費(現在HP ${tank.hp}/${tank.maxHp})。`);
+  resolveEnemyTurn(1);
+  checkEnd();
   render();
 }
 
@@ -4580,6 +4845,37 @@ function squadBoxHtml(idx){
   `;
 }
 
+function tankBoxHtml(idx){
+  const tank = state.tanks[idx];
+  const dead = tank.hp<=0;
+  const btns = ['advance','hold','retreat'].map(o=>
+    `<button class="btn squad-order-btn ${tank.order===o?'active':''}" ${dead?'disabled':''} onclick="setTankOrder(${idx},'${o}')">${ORDER_LABEL[o]}</button>`
+  ).join('');
+  const arming = state.orderMode && state.orderMode.kind==='tank-move' && state.orderMode.idx===idx;
+  const destStatus = arming ? '地図をクリックして移動先指定…' : (tank.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
+  const huntTarget = tank.huntTargetId ? state.targets.find(t=>t.id===tank.huntTargetId) : null;
+  const huntStatus = (huntTarget && !huntTarget.destroyed)
+    ? `攻撃目標: ${huntTarget.id} (${huntTarget.revealed?huntTarget.def.label:'識別不能'})`
+    : null;
+  if(dead) return `<div class="empty-hint" style="padding:4px 0;color:var(--red);">撃破</div>`;
+  const repairAmount = Math.min(TANK_REPAIR_HP_PER_CALL, tank.maxHp-tank.hp);
+  const repairCost = Math.round(TANK_REPAIR_COST_PER_HP*repairAmount);
+  const canRepair = tank.hp<tank.maxHp && state.money>=repairCost;
+  return `
+    <div class="meta">HP: ${tank.hp} / ${tank.maxHp}</div>
+    <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,tank.hp/tank.maxHp*100)}%"></div></div>
+    ${exposureMetaHtml(getUnitExposure({kind:'tank', idx}))}
+    <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
+    <div class="row-2" style="margin-bottom:6px;">
+      <button class="btn ${arming?'active squad-order-btn':''}" onclick="armTankMoveOrder(${idx})">移動先を指定</button>
+      <button class="btn" ${!tank.pendingDest?'disabled':''} onclick="clearTankDest(${idx})">解除</button>
+    </div>
+    <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
+    ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearTankHunt(${idx})">攻撃目標を解除</button>` : ''}
+    <button class="btn" ${canRepair?'':'disabled'} onclick="repairTank(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${tank.hp>=tank.maxHp?' ・ HP満タン':''}</button>
+  `;
+}
+
 function sniperBoxHtml(idx){
   const sn = state.snipers[idx];
   const alive = sn.soldiers.filter(s=>s.alive).length;
@@ -4649,6 +4945,12 @@ function renderCommandBox(){
     title = `第${state.commandBox.idx+1}小隊`;
     bodyHtml = squadBoxHtml(state.commandBox.idx);
     pos = canvasToScreen(sq._visX!==undefined?sq._visX:sq.x, sq._visY!==undefined?sq._visY:sq.y);
+  } else if(kind==='tank'){
+    const tank = state.tanks[state.commandBox.idx];
+    if(!tank || tank.hp<=0){ box.style.display='none'; return; }
+    title = `戦車${state.commandBox.idx+1}`;
+    bodyHtml = tankBoxHtml(state.commandBox.idx);
+    pos = canvasToScreen(tank._visX!==undefined?tank._visX:tank.x, tank._visY!==undefined?tank._visY:tank.y);
   } else if(kind==='sniper'){
     const sn = state.snipers[state.commandBox.idx];
     if(!sn){ box.style.display='none'; return; }
@@ -4712,7 +5014,12 @@ function renderEnemyCommandBox(){
     const active = sq.order==='hunt' && sq.huntTargetId===t.id;
     return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignSquadHunt(${idx})">第${idx+1}小隊に攻撃させる${active?'(攻撃中)':''}</button>`;
   }).filter(Boolean).join('');
-  const allBtns = mortarBtns + squadBtns;
+  const tankBtns = state.tanks.map((tank,idx)=>{
+    if(tank.hp<=0) return '';
+    const active = tank.order==='hunt' && tank.huntTargetId===t.id;
+    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignTankHunt(${idx})">戦車${idx+1}に攻撃させる${active?'(攻撃中)':''}</button>`;
+  }).filter(Boolean).join('');
+  const allBtns = mortarBtns + tankBtns + squadBtns;
   // per user request: make the fire-correction mechanic visible before the player commits a
   // volley -- without a scout holding eyes-on, mortar fire only closes MORTAR_FIRE_CORRECTION_FRAC
   // of the observation error, so show how much miss margin (in meters) is still expected.
@@ -4788,6 +5095,9 @@ function renderStats(){
   rows.push(forceRow('指揮所', state.hq.hp/state.hq.maxHp, state.hq.hp>0?Math.round(state.hq.hp/state.hq.maxHp*100)+'%':'陥落', 'var(--blue-id)'));
   state.mortars.forEach((m,i)=>{
     rows.push(forceRow(`迫${i+1}`, m.hp/m.maxHp, m.hp>0?Math.round(m.hp/m.maxHp*100)+'%':'不能', 'var(--blue-id)', 'mortar', i));
+  });
+  state.tanks.forEach((tk,i)=>{
+    rows.push(forceRow(`戦${i+1}`, tk.hp/tk.maxHp, tk.hp>0?Math.round(tk.hp/tk.maxHp*100)+'%':'撃破', 'var(--blue-id)', 'tank', i));
   });
   state.scouts.forEach((s,i)=>{
     const alive = unitAliveCount(s);
@@ -5215,6 +5525,48 @@ function drawBoard(){
 
     if(scoutAlive){
       drawAttritionBar(ctx, scoutVis.x+18, scoutVis.y, aliveCount/scout.soldiers.length);
+    }
+  });
+
+  // tank markers (自軍, left side) ― direct-fire armor, HP-based (no soldiers array), same
+  // marker pattern as mortars but with the vector-drawn drawTankIcon in place of an image icon.
+  state.tanks.forEach((tank, tIdx)=>{
+    const tVisL = smoothVisualPos(tank, tank.x, tank.y);
+    const tVis = project(tVisL.x, tVisL.y);
+    const tAlive = tank.hp>0;
+    ctx.save();
+    ctx.translate(tVis.x, tVis.y);
+    drawTankIcon(ctx, 0, 0, scaledIconH(16), !tAlive);
+    drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='tank' && state.commandBox.idx===tIdx);
+    ctx.fillStyle = LABEL_TEXT_COLOR;
+    ctx.font = '15px "JetBrains Mono"';
+    ctx.textAlign='center';
+    ctx.fillText(tAlive?`戦車${tank.id+1}`:`戦車${tank.id+1}(撃破)`, 0, 44);
+    if(tAlive){
+      const tOrderLabel = tank.pendingDest ? `${ORDER_LABEL[tank.order]}→移動` : ORDER_LABEL[tank.order];
+      ctx.fillStyle = LABEL_TEXT_COLOR;
+      ctx.font = 'bold 13px "JetBrains Mono"';
+      ctx.fillText(`[${tOrderLabel}]`, 0, 62);
+    }
+    ctx.restore();
+
+    if(tAlive){
+      drawAttritionBar(ctx, tVis.x+18, tVis.y-2, tank.hp/tank.maxHp);
+      if(tank.order==='hunt' && tank.huntTargetId){
+        const t = state.targets.find(x=>x.id===tank.huntTargetId);
+        if(t && !t.destroyed && isTargetDetected(t)){
+          const eL = estPos(t);
+          const e = project(eL.x, eL.y);
+          ctx.beginPath();
+          ctx.setLineDash([3,3]);
+          ctx.strokeStyle = 'rgba(193,69,59,0.35)';
+          ctx.lineWidth = 1;
+          ctx.moveTo(tVis.x, tVis.y);
+          ctx.lineTo(e.x, e.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
     }
   });
 
@@ -6722,6 +7074,7 @@ function syncUnitMarkers3d(){
   // each (cone/diamond/box/cylinder) was showing through behind/around that icon, so it's
   // hidden here instead of placed.
   state.mortars.forEach((m,i)=>{ seen['mortar'+i]=true; hideMarker3d('mortar'+i); });
+  state.tanks.forEach((tk,i)=>{ seen['tank'+i]=true; hideMarker3d('tank'+i); });
   state.scouts.forEach((s,i)=>{ seen['scout'+i]=true; hideMarker3d('scout'+i); });
   state.squads.forEach((sq,i)=>{ seen['squad'+i]=true; hideMarker3d('squad'+i); });
   state.snipers.forEach((sn,i)=>{ seen['sniper'+i]=true; hideMarker3d('sniper'+i); });
