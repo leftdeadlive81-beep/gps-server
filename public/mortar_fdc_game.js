@@ -459,15 +459,20 @@ const MORTAR_CB_STRIKE_DMG = [56, 84]; // per user request: enemy attack power d
 // interval and then sat frozen -- stutter-stepping in time with 自動's 0.5s auto-commit tick
 // -- to a time-based tween matched to that same interval. Every call whose target has moved
 // starts a fresh tween from the marker's current (possibly still in-flight) visual position
-// to the new one, taking VISUAL_TWEEN_DURATION_MS of *wall-clock* time regardless of frame
+// to the new one, taking visualTweenDurationMs() of *wall-clock* time regardless of frame
 // rate, so motion stays continuous for the whole gap between decisions and still finishes
 // (tracers/destruction effects use the raw logical position, never _visX/_visY) essentially
 // exactly when the next commit is due, matching auto-commit's cadence.
-// per user request: auto-commit's pace slowed to 70% of its previous speed -- the interval
-// scales inversely (500ms / 0.7), and the tween duration is kept at the same ~96% fraction
-// of it as before so marker motion still finishes just before the next tick.
-const AUTO_COMMIT_INTERVAL_MS = Math.round(500/0.7);
-const VISUAL_TWEEN_DURATION_MS = Math.round(AUTO_COMMIT_INTERVAL_MS*0.96);
+// per user request: player-selectable 低速/通常/高速 pace instead of one fixed interval --
+// 通常 is 1 full second, 低速 double that, 高速 half. tween duration keeps the same ~96%
+// fraction of whichever interval is active (see visualTweenDurationMs()) so marker motion
+// still finishes just before the next tick, at any speed.
+const GAME_SPEED_INTERVALS = { slow: 2000, normal: 1000, fast: 500 };
+const GAME_SPEED_LABEL = { slow: '低速', normal: '通常', fast: '高速' };
+function visualTweenDurationMs(){
+  const ms = GAME_SPEED_INTERVALS[(state && state.gameSpeed) || 'normal'];
+  return Math.round(ms*0.96);
+}
 function smoothstep01(t){ return t*t*(3-2*t); }
 const SUPPRESSION_TURNS = 3;
 const SUPPRESSION_NEARMISS_TURNS = 1;
@@ -507,7 +512,7 @@ function smoothVisualPos(obj, targetX, targetY){
     obj._tweenToX = targetX; obj._tweenToY = targetY;
     obj._tweenStartAt = now;
   }
-  const t = clamp((now-obj._tweenStartAt)/VISUAL_TWEEN_DURATION_MS, 0, 1);
+  const t = clamp((now-obj._tweenStartAt)/visualTweenDurationMs(), 0, 1);
   const te = smoothstep01(t);
   obj._visX = obj._tweenFromX + (obj._tweenToX-obj._tweenFromX)*te;
   obj._visY = obj._tweenFromY + (obj._tweenToY-obj._tweenFromY)*te;
@@ -939,6 +944,7 @@ function initGame(){
     snipeMortarStrikesPending: 0,
     animating: false,
     stageResolved: false,
+    gameSpeed: 'normal',
     deploymentMode: 'auto',
     decoyPlacementMode: 'auto',
     placementPending: false,
@@ -4317,26 +4323,40 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
   }
 }
 
-// per user request: an "自動" toggle button beside 決心 that presses it automatically every
-// 0.5s until pressed again. commitDecision() already no-ops safely whenever it isn't valid to
-// commit (animating, stage resolved, placement pending, etc.), so the interval can just keep
-// firing blindly without needing its own state checks.
+// per user request: an "自動" toggle button beside 決心 that presses it automatically at a
+// player-selectable pace (see GAME_SPEED_INTERVALS/setGameSpeed) until pressed again.
+// commitDecision() already no-ops safely whenever it isn't valid to commit (animating, stage
+// resolved, placement pending, etc.), so the interval can just keep firing blindly without
+// needing its own state checks.
 let autoCommitTimer = null;
 function isAutoCommitRunning(){ return autoCommitTimer!==null; }
+function autoCommitTick(){
+  // per user request: pause auto-commit while any unit instruction panel is open, so it
+  // doesn't advance the turn out from under the player mid-decision
+  if(state.commandBox || state.enemyCommandBox || state.decoyCommandBox) return;
+  commitDecision();
+}
 function toggleAutoCommit(){
   if(autoCommitTimer){
     clearInterval(autoCommitTimer);
     autoCommitTimer = null;
     log('sys','システム', '状況を停止。');
   } else {
-    autoCommitTimer = setInterval(()=>{
-      // per user request: pause auto-commit while any unit instruction panel is open, so it
-      // doesn't advance the turn out from under the player mid-decision
-      if(state.commandBox || state.enemyCommandBox || state.decoyCommandBox) return;
-      commitDecision();
-    }, AUTO_COMMIT_INTERVAL_MS);
-    log('sys','システム', `状況開始(${(AUTO_COMMIT_INTERVAL_MS/1000).toFixed(2)}秒間隔で進行)。`);
+    autoCommitTimer = setInterval(autoCommitTick, GAME_SPEED_INTERVALS[state.gameSpeed]);
+    log('sys','システム', `状況開始(${GAME_SPEED_LABEL[state.gameSpeed]}・${(GAME_SPEED_INTERVALS[state.gameSpeed]/1000).toFixed(2)}秒間隔で進行)。`);
   }
+  render();
+}
+// per user request: 低速/通常/高速 の進行速度切り替え -- 状況中に変更した場合は、その場で
+// 現在のタイマーを新しい間隔で再スタートする(次の状況開始まで待たせない)。
+function setGameSpeed(speed){
+  if(!state || !GAME_SPEED_INTERVALS[speed] || state.gameSpeed===speed) return;
+  state.gameSpeed = speed;
+  if(autoCommitTimer){
+    clearInterval(autoCommitTimer);
+    autoCommitTimer = setInterval(autoCommitTick, GAME_SPEED_INTERVALS[speed]);
+  }
+  log('sys','システム', `進行速度を${GAME_SPEED_LABEL[speed]}(${(GAME_SPEED_INTERVALS[speed]/1000).toFixed(2)}秒間隔)に変更。`);
   render();
 }
 
@@ -5713,6 +5733,12 @@ function renderDecisionPanel(){
     <div class="decision-box">
       ${summary ? `<div class="decision-summary">${summary}</div>` : ''}
       <button class="btn primary decision-btn" ${disabled?'disabled':''} onclick="toggleAutoCommit()">${isAutoCommitRunning()?'状況中':'状況開始'}</button>
+      <div class="alert-row-label">進行速度</div>
+      <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin-bottom:6px;">
+        ${['slow','normal','fast'].map(spd=>
+          `<button class="btn squad-order-btn ${state.gameSpeed===spd?'active':''}" onclick="setGameSpeed('${spd}')">${GAME_SPEED_LABEL[spd]}</button>`
+        ).join('')}
+      </div>
       <div class="alert-row-label">警報レベル</div>
       <div class="alert-row">
         <button class="btn alert-btn-red" ${disabled?'disabled':''} onclick="setAlertLevel('red')">赤警報</button>
