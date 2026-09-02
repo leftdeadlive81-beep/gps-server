@@ -59,6 +59,7 @@
     <div class="panel status-panel">
       <div class="panel-title force-list-header" onclick="toggleForceList()">
         <span>部隊稼働状況</span>
+        <span class="force-list-badge" id="force-list-badge"></span>
         <span class="force-list-caret" id="force-list-caret">▸</span>
       </div>
       <div class="force-list" id="force-list"></div>
@@ -76,7 +77,8 @@
 </div>
 
 <div class="overlay" id="overlay">
-  <div class="card">
+  <div class="card" id="overlay-card">
+    <div class="overlay-kicker" id="overlay-kicker">After-Action Report</div>
     <h2 id="overlay-title">MISSION COMPLETE</h2>
     <p id="overlay-text"></p>
     <div id="overlay-buttons"></div>
@@ -85,6 +87,7 @@
 
 <div class="overlay" id="shop-overlay">
   <div class="card shop-card">
+    <div class="overlay-kicker">Supply Line</div>
     <h2>武器商人 ― WEAPON DEALER</h2>
     <div id="shop-body"></div>
     <div style="height:10px"></div>
@@ -93,7 +96,8 @@
 </div>
 
 <div class="overlay" id="map-select-overlay">
-  <div class="card shop-card">
+  <div class="card shop-card accent-blue">
+    <div class="overlay-kicker">Operation Orders</div>
     <h2>作戦準備 ― SETUP</h2>
     <div class="panel-title">マップ</div>
     <div id="map-select-body"></div>
@@ -105,22 +109,26 @@
 </div>
 
 <div class="overlay" id="wave-reward-overlay">
-  <div class="card shop-card">
+  <div class="card shop-card card-glow">
+    <div class="overlay-kicker">Field Bonus</div>
     <h2>WAVE クリアボーナス ― 1つ選択</h2>
     <div id="wave-reward-body"></div>
   </div>
 </div>
 
 <div class="overlay" id="decoy-placement-overlay">
-  <div class="card shop-card">
+  <div class="card shop-card accent-gray">
+    <div class="overlay-kicker">Field Engineering</div>
     <h2>擬陣地の設置方法</h2>
     <div id="decoy-placement-body"></div>
   </div>
 </div>
 
 <div class="overlay" id="achievements-overlay">
-  <div class="card shop-card">
+  <div class="card shop-card accent-green">
+    <div class="overlay-kicker">Service Record</div>
     <h2>実績 ― ACHIEVEMENTS</h2>
+    <div class="achievements-progress" id="achievements-progress"></div>
     <div id="achievements-body"></div>
     <div style="height:10px"></div>
     <button class="btn primary" onclick="closeAchievements()">閉じる</button>

@@ -141,6 +141,7 @@
       background:none; border:none; padding:0; margin-bottom:0;
     }
     .alert-decision-panel .decision-summary{display:none;}
+    .alert-decision-panel .alert-row-label{display:none;}
     .alert-decision-panel .alert-row{display:contents;}
     .alert-decision-panel .row-2{display:contents;}
     .alert-decision-panel .decision-btn{order:4; flex:1.3; padding:4px 4px; font-size:18px;}
@@ -210,7 +211,29 @@
     padding:9px 10px;margin-bottom:14px;
   }
   .decision-summary{font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;}
-  .decision-btn{font-size:14px;padding:10px 9px;}
+
+  /* per user request: 決心 reads as the primary/frequent action -- larger, bolder, and
+     given more of row-2's width than the secondary 自動 toggle beside it (previously
+     both were flex:1, same visual weight as a once-per-turn alert button). Scoped to
+     .decision-panel (the non-mobile layout) so it can't win a specificity tie against
+     the phone-width .alert-decision-panel's own flex ratios below, which flatten this
+     same markup into a differently-proportioned single row and must stay in control there. */
+  .decision-panel .row-2 > .decision-btn{flex:1.6 1 0;}
+  .decision-btn{font-size:16px;padding:13px 9px;letter-spacing:1px;box-shadow:0 0 0 1px rgba(217,164,65,0.25);}
+
+  /* 自動 is a mode toggle, not the primary action -- an outline/ghost look by default so
+     it doesn't visually compete with 決心's solid fill; still goes solid amber once active. */
+  .auto-commit-btn{background:transparent;border-color:var(--edge-dim);color:var(--muted);}
+  .auto-commit-btn:hover:not(:disabled){background:var(--panel-2);color:var(--ink);border-color:var(--edge);}
+
+  /* per user request: labels + visually separates the 赤/黄/白警報 cluster as a secondary,
+     less-frequent group below the primary 決心/自動 row rather than reading as equally
+     important siblings of it. Hidden on the phone-width alert-decision-panel (see its
+     rules below), which already reads its own flattened button row without this label. */
+  .alert-row-label{
+    font-family:var(--font-mono);font-size:9.5px;letter-spacing:1.5px;color:var(--muted);
+    text-transform:uppercase;margin-top:10px;padding-top:8px;border-top:1px dashed var(--edge);
+  }
 
   .self-ammo-line{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);margin-top:8px;}
 
@@ -218,7 +241,11 @@
      bars now cover the at-a-glance case), same collapse pattern as .statbar-header */
   .force-list-header{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;}
   .force-list-header:hover{color:var(--amber);}
-  .force-list-caret{font-size:10px;color:var(--amber-dim);flex:0 0 auto;margin-left:auto;}
+  .force-list-badge{
+    font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--red);
+    margin-left:auto;
+  }
+  .force-list-caret{font-size:10px;color:var(--amber-dim);flex:0 0 auto;}
   #force-list{display:none;}
   #force-list.expanded{display:flex;}
   .force-list{flex-direction:column;gap:5px;max-height:120px;overflow-y:auto;padding-right:2px;}
@@ -374,6 +401,31 @@
   }
   .overlay .card p{color:var(--muted);font-size:13px;margin-bottom:16px;}
 
+  /* per user request: every overlay (shop/achievements/briefing/reward/decoy/mission-result)
+     previously shared one identical amber card, so the six screens read as interchangeable.
+     A per-kind accent color (border + h2 + kicker) and a small mono "kicker" label above the
+     title -- matching the game's existing panel-title typographic language -- gives each one
+     its own identity at a glance without touching the overall dark olive/amber palette. */
+  .overlay-kicker{
+    font-family:var(--font-mono);font-size:10.5px;letter-spacing:3px;text-transform:uppercase;
+    color:var(--amber-dim);margin-bottom:6px;
+  }
+  .card.accent-blue{border-color:var(--blue-id);}
+  .card.accent-blue h2{color:var(--blue-id);}
+  .card.accent-blue .overlay-kicker{color:var(--blue-id);}
+  .card.accent-green{border-color:var(--green-id);}
+  .card.accent-green h2{color:var(--green-id);}
+  .card.accent-green .overlay-kicker{color:var(--green-id);}
+  .card.accent-gray{border-color:var(--gray-id);}
+  .card.accent-gray h2{color:var(--gray-id);}
+  .card.accent-gray .overlay-kicker{color:var(--gray-id);}
+  .card.accent-red{border-color:var(--red);}
+  .card.accent-red h2{color:var(--red);}
+  .card.accent-red .overlay-kicker{color:var(--red);}
+  /* wave-reward only: a soft glow instead of a hue change -- it's still a "gain something"
+     screen like the shop (amber), just a one-off celebratory moment rather than a browsable list. */
+  .card.card-glow{box-shadow:0 0 30px rgba(217,164,65,0.35);}
+
   .shop-card{max-width:520px;width:100%;}
   .shop-money{font-family:var(--font-mono);font-size:26px;color:var(--amber);font-weight:700;margin-bottom:2px;}
   .shop-row{
@@ -385,3 +437,20 @@
   .shop-row .sub{font-size:11px;color:var(--muted);margin-top:2px;}
   .shop-row .actions button{width:auto;padding:7px 12px;font-size:12px;white-space:nowrap;}
   .shop-row.selected{border-color:var(--amber);}
+
+  /* per user request: achievements read as a service record, not a shop list -- a
+     left accent bar (green once unlocked, muted otherwise) plus a small status tag
+     replaces plain opacity dimming as the unlocked/locked signal. */
+  .achievements-progress{font-family:var(--font-mono);font-size:12px;color:var(--muted);margin-bottom:12px;}
+  .shop-row.ach-unlocked{border-left:3px solid var(--green-id);}
+  .shop-row.ach-locked{border-left:3px solid var(--edge-dim);opacity:.6;}
+  .ach-status{font-family:var(--font-mono);font-size:10px;letter-spacing:.5px;white-space:nowrap;}
+  .ach-status.unlocked{color:var(--green-id);}
+  .ach-status.locked{color:var(--muted);}
+
+  /* per user request: each WAVEクリアボーナス option gets the same accent color its unit
+     type wears elsewhere (squad=blue, scout=green) so the choice reads at a glance instead
+     of as three identical rows; ammo keeps amber, matching the shop's own ammo rows. */
+  .shop-row.reward-squad{border-left:3px solid var(--blue-id);}
+  .shop-row.reward-scout{border-left:3px solid var(--green-id);}
+  .shop-row.reward-ammo{border-left:3px solid var(--amber);}

@@ -1915,13 +1915,16 @@ document.addEventListener('fullscreenchange', updateFullscreenBtnIcon);
 document.addEventListener('webkitfullscreenchange', updateFullscreenBtnIcon);
 
 function openAchievements(){
+  const total = Object.keys(ACHIEVEMENTS).length;
+  document.getElementById('achievements-progress').textContent = `解放 ${unlockedAchievements.size} / ${total}`;
   const body = document.getElementById('achievements-body');
   body.innerHTML = Object.keys(ACHIEVEMENTS).map(key=>{
     const a = ACHIEVEMENTS[key];
     const got = unlockedAchievements.has(key);
     return `
-      <div class="shop-row" style="${got?'':'opacity:.5;'}">
-        <div><div class="label">${got?'✓ ':''}${a.label}</div><div class="sub">${a.desc}</div></div>
+      <div class="shop-row ${got?'ach-unlocked':'ach-locked'}">
+        <div><div class="label">${a.label}</div><div class="sub">${a.desc}</div></div>
+        <div class="ach-status ${got?'unlocked':'locked'}">${got?'達成 ✓':'未達成'}</div>
       </div>
     `;
   }).join('');
@@ -3401,15 +3404,15 @@ function triggerWaveClearSequence(){
 function showWaveRewardChoice(){
   const body = document.getElementById('wave-reward-body');
   body.innerHTML = `
-    <div class="shop-row">
+    <div class="shop-row reward-squad">
       <div><div class="label">小隊を1個追加</div><div class="sub">新たな歩兵小隊(${SQUAD_SIZE}名)が編成され前線に加わる</div></div>
       <div class="actions"><button class="btn primary" onclick="chooseWaveReward('squad')">選択</button></div>
     </div>
-    <div class="shop-row">
+    <div class="shop-row reward-scout">
       <div><div class="label">斥候班を1個追加</div><div class="sub">新たな斥候班(${SCOUT_SQUAD_SIZE}名)が編成され前線に加わる</div></div>
       <div class="actions"><button class="btn primary" onclick="chooseWaveReward('scout')">選択</button></div>
     </div>
-    <div class="shop-row">
+    <div class="shop-row reward-ammo">
       <div><div class="label">迫撃砲弾を補充</div><div class="sub">HE・HEATをランダムな数量だけ補給する</div></div>
       <div class="actions"><button class="btn primary" onclick="chooseWaveReward('ammo')">選択</button></div>
     </div>
@@ -3520,10 +3523,19 @@ function handleStageClear(){
   }
 }
 
+// per user request: the mission-result overlay's accent (border/title/kicker color) now
+// tracks outcome via one shared class switch instead of each caller poking overlay-title's
+// inline color directly -- an empty kind keeps the default amber (WAVE CLEAR, a routine
+// success), 'green' marks the campaign-ending win, 'red' marks failure.
+function setOverlayAccent(kind, kicker){
+  document.getElementById('overlay-card').className = 'card' + (kind ? ' accent-'+kind : '');
+  document.getElementById('overlay-kicker').textContent = kicker;
+}
+
 function showStageClear(reward, resupply){
   const ov = document.getElementById('overlay');
+  setOverlayAccent('', 'After-Action Report');
   document.getElementById('overlay-title').textContent = 'WAVE CLEAR';
-  document.getElementById('overlay-title').style.color = 'var(--amber)';
   document.getElementById('overlay-text').textContent =
     `WAVE ${state.stage} 撃退成功。報酬 ¥${reward.total.toLocaleString()}(基本¥${reward.base}+速攻¥${reward.turnsBonus}+残弾¥${reward.ammoBonus}+指揮所無傷¥${reward.hqBonus}+砲兵無傷¥${reward.hpBonus}+歩兵無傷¥${reward.infBonus}+斥候無傷¥${reward.scoutBonus}+狙撃無傷¥${reward.sniperBonus}) ／ 所持金 ¥${state.money.toLocaleString()} ／ 補給: 戦果${Math.round(resupply.perf*100)}%によりHE+${resupply.ammoHe}・HEAT+${resupply.ammoHeat}・予備兵力+${resupply.personnel}名`;
   document.getElementById('overlay-buttons').innerHTML =
@@ -3541,8 +3553,8 @@ function proceedToShop(){
 function showGameClear(reward){
   unlockAchievement('campaignComplete');
   const ov = document.getElementById('overlay');
+  setOverlayAccent('green', 'Campaign Complete');
   document.getElementById('overlay-title').textContent = 'ALL WAVES SURVIVED';
-  document.getElementById('overlay-title').style.color = 'var(--amber)';
   document.getElementById('overlay-text').textContent =
     `全${STAGE_COUNT}WAVEの猛攻を耐え抜いた。最終報酬 ¥${reward.total.toLocaleString()}。総資産 ¥${state.money.toLocaleString()}。お疲れ様でした、THUNDER-6。`;
   document.getElementById('overlay-buttons').innerHTML =
@@ -3554,8 +3566,8 @@ function showGameClear(reward){
 function showStageFailed(reason){
   speakRandomAliveUnit('panic');
   const ov = document.getElementById('overlay');
+  setOverlayAccent('red', 'After-Action Report');
   document.getElementById('overlay-title').textContent = 'MISSION FAILED';
-  document.getElementById('overlay-title').style.color = 'var(--red)';
   const remaining = state.targets.filter(t=>!t.destroyed).length;
   let text;
   if(reason==='hq') text = `指揮所が陥落。作戦指揮系統が崩壊し、任務は完全に失敗した。GAME OVER ― WAVE ${state.stage}。`;
@@ -4345,6 +4357,18 @@ function renderStats(){
   rows.push(forceRow('予備', state.reserve/RESERVE_SIZE, `${state.reserve}/${RESERVE_SIZE}`, 'var(--muted)'));
   document.getElementById('force-list').innerHTML = rows.join('');
 
+  // per user request: this panel is collapsed by default and duplicates the on-map
+  // per-unit attrition bars, so give the collapsed header a one-glance answer to "is
+  // anything wrong" (dead or below half strength) instead of making the player expand
+  // it just to find out nothing needs attention.
+  let troubledUnits = 0;
+  if(state.hq.hp<=0 || state.hq.hp/state.hq.maxHp<0.5) troubledUnits++;
+  state.mortars.forEach(m=>{ if(m.hp<=0 || m.hp/m.maxHp<0.5) troubledUnits++; });
+  state.scouts.forEach(s=>{ const a=unitAliveCount(s); if(a===0 || a/s.soldiers.length<0.5) troubledUnits++; });
+  state.squads.forEach(sq=>{ const a=sq.soldiers.filter(x=>x.alive).length; if(a===0 || a/sq.soldiers.length<0.5) troubledUnits++; });
+  state.snipers.forEach(sn=>{ const a=sn.soldiers.filter(x=>x.alive).length; if(a===0 || a/sn.soldiers.length<0.5) troubledUnits++; });
+  document.getElementById('force-list-badge').textContent = troubledUnits>0 ? `⚠ ${troubledUnits}` : '';
+
   document.getElementById('self-ammo-line').textContent = `現有弾薬: HE ${state.ammo.he} ／ HEAT ${state.ammo.heat}`;
 }
 
@@ -4394,6 +4418,7 @@ function renderDecisionPanel(){
         <button class="btn primary decision-btn" ${disabled?'disabled':''} onclick="commitDecision()">決心</button>
         <button class="btn auto-commit-btn ${isAutoCommitRunning()?'active squad-order-btn':''}" onclick="toggleAutoCommit()">自動</button>
       </div>
+      <div class="alert-row-label">警報レベル</div>
       <div class="alert-row">
         <button class="btn alert-btn-red" ${disabled?'disabled':''} onclick="setAlertLevel('red')">赤警報</button>
         <button class="btn alert-btn-yellow" ${disabled?'disabled':''} onclick="setAlertLevel('yellow')">黄警報</button>
@@ -4482,6 +4507,20 @@ function drawAttritionBar(ctx, x, y, frac){
   const filledH = h*frac;
   ctx.fillStyle = frac>0.5 ? '#7fc76b' : frac>0.25 ? '#e0b84a' : '#d9524a';
   ctx.fillRect(bx, by+(h-filledH), w, filledH);
+}
+
+// Shared "this is the thing whose command box is currently open" indicator, drawn the
+// same amber color/style regardless of whether it's a friendly unit, a decoy, or an
+// enemy target -- so the player always has one consistent visual answer to "what am I
+// looking at right now" instead of hunting for the floating command-box's title text.
+function drawSelectionRing(ctx, x, y, active, r){
+  if(!active) return;
+  const pulse = 1.5 + Math.sin(performance.now()*0.006)*1.5;
+  ctx.beginPath();
+  ctx.strokeStyle = 'rgba(217,164,65,0.9)';
+  ctx.lineWidth = 2;
+  ctx.arc(x, y, (r||19)+pulse, 0, Math.PI*2);
+  ctx.stroke();
 }
 
 function drawBoard(){
@@ -4604,6 +4643,7 @@ function drawBoard(){
     ctx.moveTo(0,-10); ctx.lineTo(9,0); ctx.lineTo(0,10); ctx.lineTo(-9,0); ctx.closePath();
     ctx.stroke();
     ctx.setLineDash([]);
+    drawSelectionRing(ctx, 0, 0, state.decoyCommandBox===idx, 16);
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '12px "JetBrains Mono"';
     ctx.textAlign = 'center';
@@ -4613,7 +4653,7 @@ function drawBoard(){
   });
 
   // mortar markers (自軍, left side)
-  state.mortars.forEach(mortar=>{
+  state.mortars.forEach((mortar, mIdx)=>{
     const mVisL = smoothVisualPos(mortar, mortar.x, mortar.y);
     const mVis = project(mVisL.x, mVisL.y);
     const mAlive = mortar.hp>0;
@@ -4621,6 +4661,7 @@ function drawBoard(){
     ctx.translate(mVis.x,mVis.y);
     // per user request: custom mortar icon image (our side only) in place of the old triangle
     drawUnitIcon(ctx, mortarIcon, 0, 0, scaledIconH(16), !mAlive);
+    drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='mortar' && state.commandBox.idx===mIdx);
     // shoot-and-scoot: a pulsing red ring while a counter-battery strike is inbound, so the
     // threat reads clearly on the map itself and not just in the mortar's own panel
     if(mAlive && mortar.cbWarnTurns!==null && mortar.cbWarnTurns!==undefined){
@@ -4704,7 +4745,7 @@ function drawBoard(){
   });
 
   // scout markers (自軍, left side) ― 斥候, vulnerable to enemy attack
-  state.scouts.forEach(scout=>{
+  state.scouts.forEach((scout, scIdx)=>{
     const scoutVisL = smoothVisualPos(scout, scout.x, scout.y);
     const scoutVis = project(scoutVisL.x, scoutVisL.y);
     const aliveCount = unitAliveCount(scout);
@@ -4713,6 +4754,7 @@ function drawBoard(){
     ctx.translate(scoutVis.x, scoutVis.y);
     // per user request: custom scout icon image (our side only) in place of the cross+circle glyph
     drawUnitIcon(ctx, scoutIcon, 0, 0, scaledIconH(16), !scoutAlive);
+    drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='scout' && state.commandBox.idx===scIdx);
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign='center';
@@ -4739,6 +4781,7 @@ function drawBoard(){
       const sqVis = project(sqVisL.x, sqVisL.y);
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
       drawUnitIcon(ctx, infantryIcon, sqVis.x, sqVis.y, scaledIconH(16), aliveSoldiers.length===0);
+      drawSelectionRing(ctx, sqVis.x, sqVis.y, state.commandBox && state.commandBox.kind==='squad' && state.commandBox.idx===sqIdx);
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, sqVis.x+32, sqVis.y, aliveSoldiers.length/sq.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
@@ -4773,6 +4816,7 @@ function drawBoard(){
       const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
       // per user request: custom sniper icon image (our side only) in place of the triangle
       drawUnitIcon(ctx, sniperIcon, snVis.x, snVis.y, scaledIconH(16), aliveSoldiers.length===0);
+      drawSelectionRing(ctx, snVis.x, snVis.y, state.commandBox && state.commandBox.kind==='sniper' && state.commandBox.idx===snIdx);
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, snVis.x+20, snVis.y, aliveSoldiers.length/sn.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
@@ -4827,7 +4871,11 @@ function drawBoard(){
       const eLogical = estPos(t);
       const eVisL = smoothVisualPos(t, eLogical.x, eLogical.y);
       const e = project(eVisL.x, eVisL.y);
-      const selected = t.id===state.selectedId;
+      // per user request: also highlight a target the player has merely opened the
+      // attack-assignment box on (enemyCommandBox), not just one a mortar is actively
+      // aimed at (selectedId) -- previously clicking a target to open that box gave no
+      // on-map confirmation of which one was selected.
+      const selected = t.id===state.selectedId || t.id===state.enemyCommandBox;
       ctx.beginPath();
       ctx.setLineDash([5,4]);
       ctx.strokeStyle = selected ? 'rgba(217,164,65,0.9)' : 'rgba(217,164,65,0.35)';
@@ -4836,13 +4884,7 @@ function drawBoard(){
       ctx.stroke();
       ctx.setLineDash([]);
 
-      if(selected){
-        ctx.beginPath();
-        ctx.strokeStyle = 'rgba(217,164,65,0.9)';
-        ctx.lineWidth = 1.5;
-        ctx.arc(e.x, e.y, 15, 0, Math.PI*2);
-        ctx.stroke();
-      }
+      drawSelectionRing(ctx, e.x, e.y, selected, 15);
 
       // estimated center marker ― one simple symbol per formation group
       let labelY = e.y+20;
@@ -6351,10 +6393,57 @@ function renderDecoyCommandBox(){
   positionCommandBox(box, pos, 260);
 }
 
+// Re-anchors any currently-open command box (unit/enemy/decoy) to its target's current
+// screen position every animation frame. Without this, panning/rotating/zooming the map
+// (setupMapControls only calls updateCameraFromView(), never render()) left an open box
+// frozen at its old screen coordinates while the unit it describes visibly moved out from
+// under it -- the box would drift away from its own unit as soon as the camera moved.
+// This only repositions already-rendered boxes (cheap) -- it never touches their
+// innerHTML, so it can't interrupt an in-progress dropdown selection etc.
+function repositionOpenCommandBoxes(){
+  if(state.commandBox){
+    const box = document.getElementById('command-box');
+    if(box && box.style.display!=='none'){
+      const {kind, idx} = state.commandBox;
+      const unit = kind==='mortar' ? state.mortars[idx]
+        : kind==='scout' ? state.scouts[idx]
+        : kind==='squad' ? state.squads[idx]
+        : kind==='sniper' ? state.snipers[idx]
+        : null;
+      if(unit){
+        const ux = unit._visX!==undefined ? unit._visX : unit.x;
+        const uy = unit._visY!==undefined ? unit._visY : unit.y;
+        positionCommandBox(box, canvasToScreen(ux, uy), 230);
+      }
+    }
+  }
+  if(state.enemyCommandBox){
+    const box = document.getElementById('enemy-command-box');
+    if(box && box.style.display!=='none'){
+      const t = state.targets.find(x=>x.id===state.enemyCommandBox);
+      if(t && !t.destroyed){
+        const vx = t._visX!==undefined ? t._visX : estPos(t).x;
+        const vy = t._visY!==undefined ? t._visY : estPos(t).y;
+        positionCommandBox(box, canvasToScreen(vx, vy), 230);
+      }
+    }
+  }
+  if(state.decoyCommandBox!==null && state.decoyCommandBox!==undefined){
+    const box = document.getElementById('decoy-command-box');
+    if(box && box.style.display!=='none'){
+      const d = state.decoys[state.decoyCommandBox];
+      if(d && !d.destroyed) positionCommandBox(box, canvasToScreen(d.x, d.y), 260);
+    }
+  }
+}
+
 function loop(){
   updateProjectiles();
   updateEnemyTracers();
-  if(state) drawBoard();
+  if(state){
+    drawBoard();
+    repositionOpenCommandBoxes();
+  }
   renderThreeFrame();
   requestAnimationFrame(loop);
 }
