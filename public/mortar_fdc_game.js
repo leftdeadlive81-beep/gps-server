@@ -181,6 +181,7 @@ const WALL_RADIUS = 22;
 const WALL_MAX_HP = 140;
 const WALL_BUILD_COST = 900;
 const MAX_WALLS = 6;
+const WALL_AVOID_PENALTY = 10; // dominates terrainAwareStep's progress/slope score so units steer around a wall instead of walking straight into it
 // per user request: a wave-clear reward can add a whole new squad/scout team at runtime
 // (see addNewSquad/addNewScout), so these can no longer be fixed constants -- they're
 // recomputed from the live roster each time so the roster display/perfectSquad achievement
@@ -1381,9 +1382,13 @@ function startStage(){
   state.commandBox = null;
   state.enemyCommandBox = null;
   state.snipeMortarStrikesPending = 0;
+  // per user request: tanks/engineers/walls weren't captured here (a gap dating from when
+  // each was added), so retryStage() left their HP/existence from the failed attempt in
+  // place instead of resetting to how this wave actually started, unlike every other roster.
   state.stageStartSnapshot = JSON.parse(JSON.stringify({
     ammo: state.ammo, turns: state.turns, reserve: state.reserve, reserveRoster: state.reserveRoster, hq: state.hq,
     mortars: state.mortars, squads: state.squads, scouts: state.scouts, snipers: state.snipers,
+    tanks: state.tanks, engineers: state.engineers, walls: state.walls,
   }));
   ripples = []; projectiles = []; flashes = []; enemyTracers = [];
   debrisParticles = []; wreckSmokes = []; killBanners = [];
@@ -1509,6 +1514,9 @@ function retryStage(){
   state.squads = snap.squads;
   state.scouts = snap.scouts;
   state.snipers = snap.snipers;
+  state.tanks = snap.tanks;
+  state.engineers = snap.engineers;
+  state.walls = snap.walls;
   startStage();
 }
 
@@ -1785,7 +1793,15 @@ function terrainAwareStep(fromX, fromY, targetX, targetY, stepLen, ignoreWalls){
     const ny = fromY + Math.sin(angle)*effStepLen;
     const elevChange = Math.abs(elevationAt(nx,ny) - fromElev);
     const progressFrac = Math.cos(offset);
-    const score = progressFrac - elevChange*TERRAIN_SLOPE_PENALTY;
+    let score = progressFrac - elevChange*TERRAIN_SLOPE_PENALTY;
+    // per user request: a unit walking straight into a wall used to just stop dead at its
+    // edge every tick (STEP_ANGLE_OFFSETS' fan of candidate headings was scored purely on
+    // progress/terrain, oblivious to walls, so the wall-blocked heading usually still "won").
+    // Heavily penalizing a wall-blocked candidate here -- rather than only clamping the
+    // final chosen step in applyWallBlock -- lets an unblocked heading within the fan win
+    // instead, so units steer around a wall when there's room to (±45°), and only get stuck
+    // at its edge when truly boxed in (every candidate blocked).
+    if(!ignoreWalls && nearestWallHit(fromX, fromY, nx, ny)) score -= WALL_AVOID_PENALTY;
     if(score > bestScore){ bestScore = score; best = {x:nx, y:ny}; }
   });
   return ignoreWalls ? best : applyWallBlock(fromX, fromY, best.x, best.y);
@@ -1912,6 +1928,9 @@ function localDetection(t){
   });
 }
 function isTargetDetected(t){
+  // per user request: 戦闘ヘリは常時見えているものとする -- ドローンと同様、斥候の視界/接触に
+  // 関係なく常に現在位置が追跡される(スポット位置がフェードして推定円になることはない)。
+  if(t.type==='heli') return true;
   return inScoutCone(t) || localDetection(t);
 }
 function visibilityBlockReasonFor(scout, t){
@@ -3405,24 +3424,33 @@ function hqBoxHtml(){
   `;
 }
 
+// per user request: shared registry of every non-HQ friendly "roster" unit kind (HQ stays
+// special-cased since it's a singleton, not an array) -- findFriendlyUnitAt/checkFriendlyFireAt/
+// friendlyFireCandidateLabel each used to repeat this same list of kinds/arrays/alive-checks/
+// labels independently, which had already let one of them (friendlyFireCandidateLabel) drift
+// out of sync and silently mislabel 擬陣地 as a sniper team. Order here is findFriendlyUnitAt's
+// original click-priority order (checkFriendlyFireAt is nearest-match, so order doesn't affect
+// its result) -- adding a new friendly unit kind now only means adding one entry here.
+const FRIENDLY_KIND_LIST = [
+  { kind:'scout',    list:()=>state.scouts,    alive:u=>unitAlive(u),                label:i=>`斥候${i+1}` },
+  { kind:'mortar',   list:()=>state.mortars,   alive:u=>u.hp>0,                       label:i=>`迫撃砲${i+1}` },
+  { kind:'tank',     list:()=>state.tanks,     alive:u=>u.hp>0,                       label:i=>`戦車${i+1}` },
+  { kind:'squad',    list:()=>state.squads,    alive:u=>u.soldiers.some(s=>s.alive),  label:i=>`第${i+1}小隊` },
+  { kind:'sniper',   list:()=>state.snipers,   alive:u=>u.soldiers.some(s=>s.alive),  label:i=>`狙撃${i+1}班` },
+  { kind:'engineer', list:()=>state.engineers, alive:u=>u.soldiers.some(s=>s.alive),  label:()=>'工兵小隊' },
+];
 function friendlyFireCandidateLabel(c){
   if(c.kind==='hq') return '指揮所';
-  if(c.kind==='mortar') return `迫撃砲${c.idx+1}`;
-  if(c.kind==='tank') return `戦車${c.idx+1}`;
-  if(c.kind==='scout') return `斥候${c.idx+1}`;
-  if(c.kind==='squad') return `第${c.idx+1}小隊`;
-  if(c.kind==='engineer') return '工兵小隊';
-  return `狙撃${c.idx+1}班`;
+  if(c.kind==='decoy') return '擬陣地';
+  const entry = FRIENDLY_KIND_LIST.find(e=>e.kind===c.kind);
+  return entry ? entry.label(c.idx) : '不明部隊';
 }
 function checkFriendlyFireAt(ix, iy, killRadius){
   const candidates = [];
   if(state.hq.hp>0) candidates.push({kind:'hq', idx:0, x:state.hq.x, y:state.hq.y});
-  state.mortars.forEach((m,idx)=>{ if(m.hp>0) candidates.push({kind:'mortar', idx, x:m.x, y:m.y}); });
-  state.tanks.forEach((tk,idx)=>{ if(tk.hp>0) candidates.push({kind:'tank', idx, x:tk.x, y:tk.y}); });
-  state.scouts.forEach((s,idx)=>{ if(unitAlive(s)) candidates.push({kind:'scout', idx, x:s.x, y:s.y}); });
-  state.squads.forEach((sq,idx)=>{ if(sq.soldiers.some(s=>s.alive)) candidates.push({kind:'squad', idx, x:sq.x, y:sq.y}); });
-  state.snipers.forEach((sn,idx)=>{ if(sn.soldiers.some(s=>s.alive)) candidates.push({kind:'sniper', idx, x:sn.x, y:sn.y}); });
-  state.engineers.forEach((en,idx)=>{ if(en.soldiers.some(s=>s.alive)) candidates.push({kind:'engineer', idx, x:en.x, y:en.y}); });
+  FRIENDLY_KIND_LIST.forEach(({kind,list,alive})=>{
+    list().forEach((u,idx)=>{ if(alive(u)) candidates.push({kind, idx, x:u.x, y:u.y}); });
+  });
   let hit = null, bestD = Infinity;
   candidates.forEach(c=>{
     const d = Math.hypot(ix-c.x, iy-c.y);
@@ -4947,47 +4975,15 @@ function findEnemyTargetAt(px, py){
 function findFriendlyUnitAt(px, py){
   const HIT_R = 22;
   if(state.hq.hp>0 && Math.hypot(state.hq.x-px, state.hq.y-py) <= HIT_R) return {kind:'hq'};
-  for(let i=0;i<state.scouts.length;i++){
-    const s = state.scouts[i];
-    if(!unitAlive(s)) continue;
-    const sx = s._visX!==undefined ? s._visX : s.x;
-    const sy = s._visY!==undefined ? s._visY : s.y;
-    if(Math.hypot(sx-px, sy-py) <= HIT_R) return {kind:'scout', idx:i};
-  }
-  for(let i=0;i<state.mortars.length;i++){
-    const m = state.mortars[i];
-    if(m.hp<=0) continue;
-    const mx = m._visX!==undefined ? m._visX : m.x;
-    const my = m._visY!==undefined ? m._visY : m.y;
-    if(Math.hypot(mx-px, my-py) <= HIT_R) return {kind:'mortar', idx:i};
-  }
-  for(let i=0;i<state.tanks.length;i++){
-    const tk = state.tanks[i];
-    if(tk.hp<=0) continue;
-    const tx = tk._visX!==undefined ? tk._visX : tk.x;
-    const ty = tk._visY!==undefined ? tk._visY : tk.y;
-    if(Math.hypot(tx-px, ty-py) <= HIT_R) return {kind:'tank', idx:i};
-  }
-  for(let i=0;i<state.squads.length;i++){
-    const sq = state.squads[i];
-    if(!sq.soldiers.some(s=>s.alive)) continue;
-    const sx = sq._visX!==undefined ? sq._visX : sq.x;
-    const sy = sq._visY!==undefined ? sq._visY : sq.y;
-    if(Math.hypot(sx-px, sy-py) <= HIT_R) return {kind:'squad', idx:i};
-  }
-  for(let i=0;i<state.snipers.length;i++){
-    const sn = state.snipers[i];
-    if(!sn.soldiers.some(s=>s.alive)) continue;
-    const sx = sn._visX!==undefined ? sn._visX : sn.x;
-    const sy = sn._visY!==undefined ? sn._visY : sn.y;
-    if(Math.hypot(sx-px, sy-py) <= HIT_R) return {kind:'sniper', idx:i};
-  }
-  for(let i=0;i<state.engineers.length;i++){
-    const en = state.engineers[i];
-    if(!en.soldiers.some(s=>s.alive)) continue;
-    const ex = en._visX!==undefined ? en._visX : en.x;
-    const ey = en._visY!==undefined ? en._visY : en.y;
-    if(Math.hypot(ex-px, ey-py) <= HIT_R) return {kind:'engineer', idx:i};
+  for(const {kind, list, alive} of FRIENDLY_KIND_LIST){
+    const arr = list();
+    for(let i=0;i<arr.length;i++){
+      const u = arr[i];
+      if(!alive(u)) continue;
+      const ux = u._visX!==undefined ? u._visX : u.x;
+      const uy = u._visY!==undefined ? u._visY : u.y;
+      if(Math.hypot(ux-px, uy-py) <= HIT_R) return {kind, idx:i};
+    }
   }
   return null;
 }
@@ -7895,6 +7891,7 @@ function repositionOpenCommandBoxes(){
       const {kind, idx} = state.commandBox;
       const unit = kind==='hq' ? state.hq
         : kind==='mortar' ? state.mortars[idx]
+        : kind==='tank' ? state.tanks[idx]
         : kind==='scout' ? state.scouts[idx]
         : kind==='squad' ? state.squads[idx]
         : kind==='sniper' ? state.snipers[idx]
