@@ -364,6 +364,11 @@ const HELI_MOVE_CAP = VEHICLE_MOVE_CAP * 1.8; // flies -- faster than any ground
 const ARTILLERY_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.artillery) * 0.5; // per user request: enemy artillery move speed halved
 const ARTILLERY_STANDOFF_RANGE_M = 300; // artillery repositions closer but holds once within this range of its nearest target
 const ARTILLERY_STANDOFF_RANGE_UNITS = ARTILLERY_STANDOFF_RANGE_M / METERS_PER_UNIT;
+// per user request: 敵の迫撃砲(砲兵)の有効射程を7割に削減 -- それまで enemyCounterAttack は
+// artillery の距離を一切見ておらず(コメント通り "unlimited range" が意図的な仕様だった)、
+// 事実上マップ全域のどこからでも着弾していた。その「これまでの実質射程」= マップ対角線いっぱい
+// を100%とみなし、その7割を新たな上限として導入する。
+const ARTILLERY_FIRE_RANGE_UNITS = Math.round(Math.hypot(CANVAS_W, CANVAS_H) * 0.7);
 const KM_UNIT = 1000 / METERS_PER_UNIT;
 const ENEMY_SPAWN_RANGE_M = 1500;
 const ENEMY_SPAWN_RANGE_UNITS = ENEMY_SPAWN_RANGE_M / METERS_PER_UNIT;
@@ -1260,7 +1265,7 @@ function startStage(){
       hp: TANK_MAX_HP, maxHp: TANK_MAX_HP,
       exposure: TANK_EXPOSURE,
     }));
-    state.hq = {x:HQ_X, y:HQ_Y, hp:HQ_MAX_HP, maxHp:HQ_MAX_HP, exposure:EXPOSURE_DEFAULT, coverBuilt:false};
+    state.hq = {x:HQ_X, y:HQ_Y, hp:HQ_MAX_HP, maxHp:HQ_MAX_HP, exposure:EXPOSURE_DEFAULT, coverBuilt:false, pendingDest:null};
     state.reserve = RESERVE_SIZE;
     state.reserveRoster = ROSTER_RESERVE_INITIAL.slice();
   } else {
@@ -1285,6 +1290,7 @@ function startStage(){
       tk.order = 'hold'; tk.pendingDest = null; tk.huntTargetId = null;
     });
     state.hq.coverBuilt = false;
+    state.hq.pendingDest = null;
   }
   state.alertLevel = null;
   state.animating = false;
@@ -1802,6 +1808,19 @@ function armTankMoveOrder(idx){
   state.commandBox = null;
   render();
 }
+// per user request: 指揮所も移動できるように(移動速度は歩兵と同一 -- applyHqMovement で
+// INFANTRY_MOVE_CAP を使う)。HQ は配列ではなく単一オブジェクトなので idx を持たない点だけ
+// tank/squad の同名関数と異なる。
+function armHqMoveOrder(){
+  state.orderMode = {kind:'hq-move'};
+  state.commandBox = null;
+  render();
+}
+function clearHqDest(){
+  state.hq.pendingDest = null;
+  state.orderMode = null;
+  render();
+}
 function clearTankDest(idx){
   if(!state.tanks[idx]) return;
   state.tanks[idx].pendingDest = null;
@@ -2146,9 +2165,12 @@ function enemyCounterAttack(actionTurns){
         // per user request: fixed the range asymmetry where enemy infantry could snipe
         // scouts/mortars/HQ from unlimited range here while friendly squads can only engage
         // enemy infantry within SQUAD_ENGAGE_RANGE (see the duel loop in resolveSquadOrders).
-        // Artillery/vehicle/drone keep unlimited range -- indirect/stand-off fire is their
-        // whole identity, unlike infantry's expected close-range engagement.
+        // Artillery is now capped at ARTILLERY_FIRE_RANGE_UNITS too (per user request: cut to
+        // 70% of its previous effectively-unlimited reach). vehicle/drone keep unlimited range
+        // here -- indirect/stand-off fire is their whole identity, unlike infantry's expected
+        // close-range engagement.
         if(t.type==='infantry' && near.dist > SQUAD_ENGAGE_RANGE) return;
+        if(t.type==='artillery' && near.dist > ARTILLERY_FIRE_RANGE_UNITS) return;
         const [lo,hi] = COUNTER_DAMAGE[t.type];
         const armorMult = (near.kind==='mortar' && state.equipment.armor) ? 0.75 : 1;
         const altMult = altitudeBonus(t.trueX, t.trueY, near.x, near.y);
@@ -2212,6 +2234,30 @@ function applyStandingOrder(unit, prefix, assaultAllowed){
     unit.order = targetOrder;
     log('sys','司令部', `${prefix} 敵と接触、既定行動により${ORDER_LABEL[targetOrder]}を発令。`);
   }
+}
+
+// per user request: 指揮所の移動 -- 小隊の pendingDest 移動(applySquadMovement)と同じ仕組みだが、
+// HQ には advance/retreat/assault/hunt のような戦闘スタンスは無いので、地図で指定した地点へ
+// 直進するだけの最小構成。移動速度は歩兵と同一(INFANTRY_MOVE_CAP)。
+function applyHqMovement(){
+  const hq = state.hq;
+  if(!hq.pendingDest) return;
+  const next = terrainAwareStep(hq.x, hq.y, hq.pendingDest.x, hq.pendingDest.y, INFANTRY_MOVE_CAP);
+  hq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+  hq.y = clamp(next.y, 30, CANVAS_H-30);
+  checkMineTrigger('hq', 0, hq.x, hq.y);
+  if(Math.hypot(hq.x-hq.pendingDest.x, hq.y-hq.pendingDest.y) < 12){
+    hq.pendingDest = null;
+    log('sys','前線', `指揮所、指定地点への移転完了。`);
+  }
+}
+function resolveHqMovement(actionTurns){
+  if(state.hq.hp<=0 || !state.hq.pendingDest) return false;
+  for(let i=0;i<actionTurns;i++){
+    if(!state.hq.pendingDest) break;
+    applyHqMovement();
+  }
+  return true;
 }
 
 function applySquadMovement(sq, sqIdx){
@@ -3083,12 +3129,19 @@ function hqBoxHtml(){
   const repairCost = Math.round(HQ_REPAIR_COST_PER_HP*repairAmount);
   const canRepair = hq.hp<hq.maxHp && state.money>=repairCost;
   const canCover = !hq.coverBuilt && hq.exposure<HQ_COVER_EXPOSURE_CAP;
+  const arming = state.orderMode && state.orderMode.kind==='hq-move';
+  const destStatus = arming ? '地図をクリックして移転先を指定…' : (hq.pendingDest ? '移転先: 設定済み' : '移転先: 未設定');
   return `
     <div class="meta">HP: ${hq.hp} / ${hq.maxHp}</div>
     <div class="hpbar big" style="margin-bottom:8px;"><div style="width:${Math.max(0,hq.hp/hq.maxHp*100)}%"></div></div>
     ${exposureMetaHtml(hq.exposure)}
     <button class="btn" ${canCover?'':'disabled'} onclick="buildHqCover()" style="margin:8px 0 4px;">掩体構築(掩蔽率+${HQ_COVER_EXPOSURE_BONUS}${hq.coverBuilt?' ・ このWAVEは実施済み':hq.exposure>=HQ_COVER_EXPOSURE_CAP?' ・ 上限到達':''})</button>
     <button class="btn" ${canRepair?'':'disabled'} onclick="repairHq()">応急修復(+${repairAmount}HP ・ ¥${repairCost})${hq.hp>=hq.maxHp?' ・ HP満タン':''}</button>
+    <div class="row-2" style="margin:8px 0 4px;">
+      <button class="btn ${arming?'active squad-order-btn':''}" onclick="armHqMoveOrder()">移転先を指定</button>
+      <button class="btn" ${!hq.pendingDest?'disabled':''} onclick="clearHqDest()">解除</button>
+    </div>
+    <div class="meta">${destStatus}(移動速度: 歩兵と同一)</div>
   `;
 }
 
@@ -3734,6 +3787,7 @@ function resolveMortarCounterBattery(actionTurns){
 function resolveEnemyTurn(actionTurns){
   log('sys','敵ターン', '━━━ 敵が行動 ━━━');
   maybePlaceMine();
+  resolveHqMovement(actionTurns);
   const advanced = advanceEnemyInfantry(actionTurns);
   const repositioned = advanceEnemyArtillery(actionTurns);
   const assaulted = resolveVehicleAssault(actionTurns);
@@ -4415,6 +4469,12 @@ function handleCanvasClick(evt){
         };
         log('sys','前線', `戦車${mode.idx+1}に移動目標を指示。`);
       }
+    } else if(mode.kind==='hq-move'){
+      state.hq.pendingDest = {
+        x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X),
+        y: clamp(py, 30, CANVAS_H-30),
+      };
+      log('sys','前線', `指揮所に移転先を指示。`);
     } else if(mode.kind==='scout-move'){
       const scout = state.scouts[mode.idx];
       if(scout){
@@ -5048,7 +5108,7 @@ function renderCommandBox(){
     if(state.hq.hp<=0){ box.style.display='none'; return; }
     title = '指揮所';
     bodyHtml = hqBoxHtml();
-    pos = canvasToScreen(state.hq.x, state.hq.y);
+    pos = canvasToScreen(state.hq._visX!==undefined?state.hq._visX:state.hq.x, state.hq._visY!==undefined?state.hq._visY:state.hq.y);
   } else if(kind==='mortar'){
     const mortar = state.mortars[state.commandBox.idx];
     if(!mortar){ box.style.display='none'; return; }
@@ -5524,12 +5584,14 @@ function drawBoard(){
     ctx.stroke();
   }
 
-  // HQ marker (指揮所) ― fixed at the screen's left edge; mission-critical, enemies specifically target it
+  // HQ marker (指揮所) ― per user request: now movable (see armHqMoveOrder/applyHqMovement),
+  // so it uses smoothVisualPos like every other mobile unit instead of a bare project(hq.x,hq.y).
   {
     const hq = state.hq;
     const hqAlive = hq.hp>0;
     const hqCol = hqAlive ? FRIENDLY_MARK_COLOR : '#5c2a25';
-    const hqP = project(hq.x, hq.y);
+    const hqVisL = smoothVisualPos(hq, hq.x, hq.y);
+    const hqP = project(hqVisL.x, hqVisL.y);
     ctx.save();
     ctx.translate(hqP.x, hqP.y);
     ctx.fillStyle = hqCol;
@@ -5545,6 +5607,10 @@ function drawBoard(){
     ctx.font = 'bold 15px "JetBrains Mono"';
     ctx.textAlign = 'center';
     ctx.fillText(hqAlive?'指揮所':'指揮所(壊滅)', 0, 34);
+    if(hqAlive && hq.pendingDest){
+      ctx.font = 'bold 13px "JetBrains Mono"';
+      ctx.fillText('[移転中]', 0, 50);
+    }
     ctx.restore();
 
     if(hqAlive){
@@ -7289,7 +7355,10 @@ function syncUnitMarkers3d(){
   };
 
   // per user request: friendly symbols unified to blue on the 3D minimap
-  place('hq', state.hq.x, state.hq.y, 'box', state.hq.hp>0 ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
+  // per user request: HQ is now movable -- use its smoothed visual position (set by
+  // drawBoard's smoothVisualPos call) so this 3D box marker eases along with the 2D icon
+  // instead of snapping straight to the logical position each tick.
+  place('hq', state.hq._visX!==undefined?state.hq._visX:state.hq.x, state.hq._visY!==undefined?state.hq._visY:state.hq.y, 'box', state.hq.hp>0 ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
   // per user request: mortar/scout/squad/sniper now have their own 2D icon image drawn on
   // the overlay canvas (see drawUnitIcon in drawBoard()) -- the old 3D primitive mesh for
   // each (cone/diamond/box/cylinder) was showing through behind/around that icon, so it's
@@ -7423,7 +7492,8 @@ function repositionOpenCommandBoxes(){
     const box = document.getElementById('command-box');
     if(box && box.style.display!=='none'){
       const {kind, idx} = state.commandBox;
-      const unit = kind==='mortar' ? state.mortars[idx]
+      const unit = kind==='hq' ? state.hq
+        : kind==='mortar' ? state.mortars[idx]
         : kind==='scout' ? state.scouts[idx]
         : kind==='squad' ? state.squads[idx]
         : kind==='sniper' ? state.snipers[idx]
