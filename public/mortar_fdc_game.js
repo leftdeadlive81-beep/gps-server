@@ -4,6 +4,14 @@ const OP_HOME_X = 90, OP_HOME_Y = 230;
 const OP = {x: OP_HOME_X, y: OP_HOME_Y};
 const HQ_X = 30, HQ_Y = 230;
 const HQ_MAX_HP = 200;
+// per user request: HQ previously had no player-facing defenses at all (fixed position,
+// fixed exposure, no repair) despite enemy targeting logic actively preferring it (see
+// nearestFriendlyAsset's kind==='hq' distance discount) -- these give the player two ways
+// to actually respond to a threatened HQ instead of just watching it take damage.
+const HQ_COVER_EXPOSURE_BONUS = 20;
+const HQ_COVER_EXPOSURE_CAP = 90;
+const HQ_REPAIR_HP_PER_CALL = 20;
+const HQ_REPAIR_COST_PER_HP = 50;
 const EXPOSURE_DEFAULT = 50;
 // per user request: scouts should be found/hit by the enemy at only 20% of the previous rate.
 // hitChanceFromExposure(EXPOSURE_DEFAULT) = (80-50)/100 = 30% -- solving (80-e)/100 = 30%*0.2 gives e=74.
@@ -1163,7 +1171,7 @@ function startStage(){
       reinforceUsed: false,
       exposure: EXPOSURE_DEFAULT,
     }));
-    state.hq = {x:HQ_X, y:HQ_Y, hp:HQ_MAX_HP, maxHp:HQ_MAX_HP, exposure:EXPOSURE_DEFAULT};
+    state.hq = {x:HQ_X, y:HQ_Y, hp:HQ_MAX_HP, maxHp:HQ_MAX_HP, exposure:EXPOSURE_DEFAULT, coverBuilt:false};
     state.reserve = RESERVE_SIZE;
     state.reserveRoster = ROSTER_RESERVE_INITIAL.slice();
   } else {
@@ -1184,6 +1192,7 @@ function startStage(){
     state.snipers.forEach(sn=>{
       sn.order = 'hold'; sn.pendingDest = null; sn.pendingSnipeTargetId = null; sn.aimAngle = null; sn.reinforceUsed = false; sn.preAlertOrder = null;
     });
+    state.hq.coverBuilt = false;
   }
   state.alertLevel = null;
   state.animating = false;
@@ -2804,6 +2813,54 @@ function requestReinforcement(kind, idx){
   render();
 }
 
+// per user request: a once-per-WAVE defensive action for HQ (matching the once-per-wave
+// reinforceUsed pattern) that raises its exposure -- i.e. lowers its chance of being hit --
+// up to a cap, rather than leaving the player with literally no way to protect it.
+function buildHqCover(){
+  if(!state || state.stageResolved || state.hq.hp<=0) return;
+  if(state.hq.coverBuilt || state.hq.exposure>=HQ_COVER_EXPOSURE_CAP) return;
+  state.hq.exposure = Math.min(HQ_COVER_EXPOSURE_CAP, state.hq.exposure+HQ_COVER_EXPOSURE_BONUS);
+  state.hq.coverBuilt = true;
+  state.turns += 1;
+  log('sys','工兵', `指揮所、掩体構築完了。掩蔽率 ${state.hq.exposure}に向上(このWAVE中の再実施は不可)。`);
+  resolveEnemyTurn(1);
+  checkEnd();
+  render();
+}
+
+// per user request: spend money to repair HQ HP -- previously HQ damage was permanent for
+// the rest of the wave with no way to spend resources to offset it, unlike every other unit
+// (reinforcement restores soldiers; HQ has no soldiers to restore).
+function repairHq(){
+  if(!state || state.stageResolved || state.hq.hp<=0 || state.hq.hp>=state.hq.maxHp) return;
+  const restoreHp = Math.min(HQ_REPAIR_HP_PER_CALL, state.hq.maxHp-state.hq.hp);
+  const cost = Math.round(HQ_REPAIR_COST_PER_HP*restoreHp);
+  if(state.money < cost){ log('sys','システム','資金が不足しています。'); return; }
+  state.money -= cost;
+  state.hq.hp = Math.min(state.hq.maxHp, state.hq.hp+restoreHp);
+  state.turns += 1;
+  log('sys','工兵', `指揮所、応急修復完了(+${restoreHp}HP)。¥${cost}を消費(現在HP ${state.hq.hp}/${state.hq.maxHp})。`);
+  resolveEnemyTurn(1);
+  checkEnd();
+  render();
+}
+
+function hqBoxHtml(){
+  const hq = state.hq;
+  if(hq.hp<=0) return `<div class="empty-hint" style="padding:4px 0;color:var(--red);">壊滅</div>`;
+  const repairAmount = Math.min(HQ_REPAIR_HP_PER_CALL, hq.maxHp-hq.hp);
+  const repairCost = Math.round(HQ_REPAIR_COST_PER_HP*repairAmount);
+  const canRepair = hq.hp<hq.maxHp && state.money>=repairCost;
+  const canCover = !hq.coverBuilt && hq.exposure<HQ_COVER_EXPOSURE_CAP;
+  return `
+    <div class="meta">HP: ${hq.hp} / ${hq.maxHp}</div>
+    <div class="hpbar big" style="margin-bottom:8px;"><div style="width:${Math.max(0,hq.hp/hq.maxHp*100)}%"></div></div>
+    ${exposureMetaHtml(hq.exposure)}
+    <button class="btn" ${canCover?'':'disabled'} onclick="buildHqCover()" style="margin:8px 0 4px;">掩体構築(掩蔽率+${HQ_COVER_EXPOSURE_BONUS}${hq.coverBuilt?' ・ このWAVEは実施済み':hq.exposure>=HQ_COVER_EXPOSURE_CAP?' ・ 上限到達':''})</button>
+    <button class="btn" ${canRepair?'':'disabled'} onclick="repairHq()">応急修復(+${repairAmount}HP ・ ¥${repairCost})${hq.hp>=hq.maxHp?' ・ HP満タン':''}</button>
+  `;
+}
+
 function friendlyFireCandidateLabel(c){
   if(c.kind==='hq') return '指揮所';
   if(c.kind==='mortar') return `迫撃砲${c.idx+1}`;
@@ -4178,6 +4235,7 @@ function findEnemyTargetAt(px, py){
 
 function findFriendlyUnitAt(px, py){
   const HIT_R = 22;
+  if(state.hq.hp>0 && Math.hypot(state.hq.x-px, state.hq.y-py) <= HIT_R) return {kind:'hq'};
   for(let i=0;i<state.scouts.length;i++){
     const s = state.scouts[i];
     if(!unitAlive(s)) continue;
@@ -4568,7 +4626,12 @@ function renderCommandBox(){
   if(!state.commandBox){ box.style.display='none'; return; }
   const kind = state.commandBox.kind;
   let title, bodyHtml, pos;
-  if(kind==='mortar'){
+  if(kind==='hq'){
+    if(state.hq.hp<=0){ box.style.display='none'; return; }
+    title = '指揮所';
+    bodyHtml = hqBoxHtml();
+    pos = canvasToScreen(state.hq.x, state.hq.y);
+  } else if(kind==='mortar'){
     const mortar = state.mortars[state.commandBox.idx];
     if(!mortar){ box.style.display='none'; return; }
     title = `迫撃砲${state.commandBox.idx+1}`;
