@@ -155,6 +155,12 @@ const TANK_DUEL_DMG_TO_ENEMY = [18, 32];
 const TANK_INCOMING_DMG = [8, 20];
 const TANK_REPAIR_HP_PER_CALL = 30;
 const TANK_REPAIR_COST_PER_HP = 40;
+// per user request: 味方の工兵小隊 -- マップ上を歩兵と同じ要領で移動でき、任意の地点にキャッシュを
+// 消費して防壁(壁)を構築できる。工兵自身は戦闘要員ではないので、他の小隊のような交戦ロジックは
+// 持たない(前進/防御/後退での移動と壁の構築のみ)。
+const NUM_ENGINEERS = 1;
+const ENGINEER_SQUAD_SIZE = 6;
+const ENGINEER_POS = {x: 260, y: 230};
 const RESERVE_SIZE = 10;
 // per user request: 擬陣地 (decoy positions) -- placed at the start of each wave (auto or
 // manual, player's choice), these lure enemy indirect fire/vehicle assaults away from real
@@ -168,6 +174,13 @@ const DECOY_LURE_MULT_DAY = 0.6;
 const DECOY_LURE_MULT_NIGHT = 0.3;
 const DECOY_LONGPRESS_MS = 550;
 const DECOY_LONGPRESS_MOVE_TOLERANCE_PX = 10;
+// per user request: 工兵が構築する防壁(壁) -- 敵味方問わず地上ユニットの移動と直接照準の
+// 銃撃/突撃を遮り(terrainAwareStep/hasLineOfSight/各交戦ロジックに組み込む)、それ自体もHPを
+// 持つ障害物。迫撃砲/敵砲兵のような曲射弾は上を越えて着弾する(壁は防がない)。
+const WALL_RADIUS = 22;
+const WALL_MAX_HP = 140;
+const WALL_BUILD_COST = 900;
+const MAX_WALLS = 6;
 // per user request: a wave-clear reward can add a whole new squad/scout team at runtime
 // (see addNewSquad/addNewScout), so these can no longer be fixed constants -- they're
 // recomputed from the live roster each time so the roster display/perfectSquad achievement
@@ -177,6 +190,7 @@ function totalRosterCapacity(){
   return totalSquadCapacity()
     + state.scouts.reduce((s,sc)=>s+sc.soldiers.length, 0)
     + state.snipers.reduce((s,sn)=>s+sn.soldiers.length, 0)
+    + state.engineers.reduce((s,en)=>s+en.soldiers.length, 0)
     + state.mortars.length*MORTAR_CREW_SIZE
     + state.reserve;
 }
@@ -282,6 +296,15 @@ const PERSONNEL_ROSTER = [
   {rank:'1等陸士', name:'川口'},
   {rank:'1等陸士', name:'新井'},
   {rank:'1等陸士', name:'大西'},
+  // per user request: 工兵小隊を追加。既存の roundRobinDistribute はこの配列をきっちり100名分
+  // (既存4兵科+予備)で使い切っていたため、工兵の枠を追加するには新規に人員を足す必要がある
+  // (足さずに重みだけ増やすと他部隊の人数が静かに削られてしまう)。
+  {rank:'3等陸尉', name:'岩崎'},
+  {rank:'1等陸曹', name:'木下'},
+  {rank:'2等陸曹', name:'野口'},
+  {rank:'2等陸曹', name:'工藤'},
+  {rank:'3等陸曹', name:'今村'},
+  {rank:'陸士長', name:'柴田'},
 ];
 function roundRobinDistribute(items, weights){
   const pools = weights.map(w=>({target:w, list:[]}));
@@ -296,14 +319,15 @@ function roundRobinDistribute(items, weights){
   });
   return pools.map(p=>p.list);
 }
-const [ROSTER_MORTAR_POOL, ROSTER_SCOUT_POOL, ROSTER_SNIPER_POOL, ROSTER_SQUAD_POOL, ROSTER_RESERVE_INITIAL] =
+const [ROSTER_MORTAR_POOL, ROSTER_SCOUT_POOL, ROSTER_SNIPER_POOL, ROSTER_SQUAD_POOL, ROSTER_ENGINEER_POOL, ROSTER_RESERVE_INITIAL] =
   roundRobinDistribute(PERSONNEL_ROSTER, [
     MORTAR_CREW_SIZE*NUM_MORTARS, SCOUT_SQUAD_SIZE*NUM_SCOUTS, SNIPER_SQUAD_SIZE*NUM_SNIPERS,
-    SQUAD_SIZE*NUM_SQUADS, RESERVE_SIZE,
+    SQUAD_SIZE*NUM_SQUADS, ENGINEER_SQUAD_SIZE*NUM_ENGINEERS, RESERVE_SIZE,
   ]);
 const ROSTER_MORTAR_CREWS = roundRobinDistribute(ROSTER_MORTAR_POOL, Array(NUM_MORTARS).fill(MORTAR_CREW_SIZE));
 const ROSTER_SCOUT_TEAMS  = roundRobinDistribute(ROSTER_SCOUT_POOL, Array(NUM_SCOUTS).fill(SCOUT_SQUAD_SIZE));
 const ROSTER_SNIPER_TEAMS = roundRobinDistribute(ROSTER_SNIPER_POOL, Array(NUM_SNIPERS).fill(SNIPER_SQUAD_SIZE));
+const ROSTER_ENGINEER_TEAMS = roundRobinDistribute(ROSTER_ENGINEER_POOL, Array(NUM_ENGINEERS).fill(ENGINEER_SQUAD_SIZE));
 const ROSTER_SQUADS = roundRobinDistribute(ROSTER_SQUAD_POOL, Array(NUM_SQUADS).fill(SQUAD_SIZE));
 const FORMATION_OFFSETS = [
   {dx:-24,dy:-14},{dx:-8,dy:-16},{dx:8,dy:-16},{dx:24,dy:-14},{dx:-16,dy:-2},
@@ -671,6 +695,42 @@ function drawTankIcon(ctx, cx, cy, size, dead){
   ctx.stroke();
   ctx.restore();
 }
+// per user request: 工兵小隊 -- ヘルメット(半円)+交差した工具(X)のベクター描画アイコン
+// (戦車と同様、画像アセットが無いため)。
+function drawEngineerIcon(ctx, cx, cy, size, dead){
+  ctx.save();
+  ctx.translate(cx, cy);
+  const col = dead ? '#5c2a25' : FRIENDLY_MARK_COLOR;
+  ctx.fillStyle = col;
+  ctx.strokeStyle = dead ? '#3a1b18' : '#3d5a70';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(0, 0, size*0.42, Math.PI, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(-size*0.4, size*0.4); ctx.lineTo(size*0.4, size*0.08);
+  ctx.moveTo(-size*0.4, size*0.08); ctx.lineTo(size*0.4, size*0.4);
+  ctx.stroke();
+  ctx.restore();
+}
+// per user request: 防壁(壁) -- 工兵が構築する障害物。台形のバリケード形状で、生きている限り
+// 壁のHPバーを重ねて描く。
+function drawWallShape(ctx, cx, cy, dead){
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.fillStyle = dead ? 'rgba(92,42,37,0.5)' : 'rgba(111,155,191,0.45)';
+  ctx.strokeStyle = dead ? '#5c2a25' : FRIENDLY_MARK_COLOR;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-18,10); ctx.lineTo(-13,-10); ctx.lineTo(13,-10); ctx.lineTo(18,10); ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
 
 // per user request: BGM + sound effects. bgmAudio/combatAudio are single persistent,
 // looping <audio> elements (started/stopped as state changes); one-shot sfx (explosion,
@@ -850,6 +910,8 @@ function initGame(){
     })),
     squads: [],
     tanks: [],
+    engineers: [],
+    walls: [],
     scouts: Array.from({length:NUM_SCOUTS}, (_,i)=>({
       id:i, x:SCOUT_X, y:SCOUT_UPPER_Y+i*40, watchAngle:90,
       soldiers: makeSoldiers(ROSTER_SCOUT_TEAMS[i]), pendingDest:null, pendingReconTargetId:null,
@@ -1195,6 +1257,10 @@ function startStage(){
   if(state.snipers) state.snipers = state.snipers.filter(sn=>unitAlive(sn));
   if(state.mortars) state.mortars = state.mortars.filter(m=>m.hp>0);
   if(state.tanks) state.tanks = state.tanks.filter(tk=>tk.hp>0);
+  if(state.engineers) state.engineers = state.engineers.filter(e=>unitAlive(e));
+  // per user request: 防壁(壁)は迫撃砲/戦車と同じく、決心のたびにリセットされる擬陣地とは違い、
+  // 波を跨いで恒久的に残る(現実の陣地構築なので、破壊されない限り消えない)。
+  if(state.walls) state.walls = state.walls.filter(w=>w.hp>0);
 
   if(stage===1){
     // first wave ― fresh deployment at full roster strength, confined to a real 1km x 1km
@@ -1265,6 +1331,18 @@ function startStage(){
       hp: TANK_MAX_HP, maxHp: TANK_MAX_HP,
       exposure: TANK_EXPOSURE,
     }));
+    state.engineers = Array.from({length:NUM_ENGINEERS}, (_,ei)=>({
+      id: ei,
+      order: 'hold',
+      pendingDest: null,
+      standingOrder: null,
+      x: deployX(ENGINEER_POS.x),
+      y: clamp(deployYMid + (ei-(NUM_ENGINEERS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax),
+      soldiers: makeSoldiers(ROSTER_ENGINEER_TEAMS[ei]),
+      reinforceUsed: false,
+      exposure: EXPOSURE_DEFAULT,
+    }));
+    state.walls = [];
     state.hq = {x:HQ_X, y:HQ_Y, hp:HQ_MAX_HP, maxHp:HQ_MAX_HP, exposure:EXPOSURE_DEFAULT, coverBuilt:false, pendingDest:null};
     state.reserve = RESERVE_SIZE;
     state.reserveRoster = ROSTER_RESERVE_INITIAL.slice();
@@ -1289,6 +1367,9 @@ function startStage(){
     state.tanks.forEach(tk=>{
       tk.order = 'hold'; tk.pendingDest = null; tk.huntTargetId = null;
     });
+    state.engineers.forEach(e=>{
+      e.order = 'hold'; e.pendingDest = null; e.reinforceUsed = false;
+    });
     state.hq.coverBuilt = false;
     state.hq.pendingDest = null;
   }
@@ -1312,7 +1393,7 @@ function startStage(){
   log('sys','警報', '戦闘ヘリ1機を確認。ヒットアンドアウェイ戦術(接近→攻撃→離脱)に警戒せよ。');
   if(stage===1){
     const co = PERSONNEL_ROSTER[0];
-    log('sys','司令部', `戦闘団編成完了、総員100名。総指揮官: ${co.rank} ${co.name}。`);
+    log('sys','司令部', `戦闘団編成完了、総員${PERSONNEL_ROSTER.length}名。総指揮官: ${co.rank} ${co.name}。`);
   }
   state.decoys = [];
   state.decoyPlacementPending = false;
@@ -1619,13 +1700,71 @@ const ROAD_PULL_RADIUS = 140;
 const TERRAIN_SLOPE_PENALTY = 4;
 const STEP_ANGLE_OFFSETS = [0, -0.26,0.26, -0.52,0.52, -0.79,0.79]; // 0°, ±15°, ±30°, ±45°
 
+// per user request: 工兵の防壁(壁) -- 地上ユニットの移動を物理的に遮る障害物として、円形の
+// 当たり判定(WALL_RADIUS)を持つ。fromX,fromY -> toX,toY の線分が生きている壁の円と交わる
+// 最初の点(進行方向に沿って最も手前の交点)を返す -- 移動クランプ(applyWallBlock)と、直接照準
+// 火力が壁に阻止されるかどうかの判定(wallBlockingLineOfFire)の両方で共有する。
+function nearestWallHit(fromX, fromY, toX, toY){
+  if(!state || !state.walls || !state.walls.length) return null;
+  const dx = toX-fromX, dy = toY-fromY;
+  const a = dx*dx+dy*dy;
+  let best = null, bestT = Infinity;
+  state.walls.forEach(w=>{
+    if(w.hp<=0) return;
+    const fx = fromX-w.x, fy = fromY-w.y;
+    if(a < 0.0001){
+      if(Math.hypot(fx,fy) <= WALL_RADIUS && 0 < bestT){ bestT = 0; best = w; }
+      return;
+    }
+    const b = 2*(fx*dx+fy*dy);
+    const c = fx*fx+fy*fy-WALL_RADIUS*WALL_RADIUS;
+    const disc = b*b-4*a*c;
+    if(disc<0) return;
+    const sq = Math.sqrt(disc);
+    const t1 = (-b-sq)/(2*a), t2 = (-b+sq)/(2*a);
+    let tHit = null;
+    if(t1>=0 && t1<=1) tHit = t1;
+    else if(t2>=0 && t2<=1) tHit = Math.max(0,t2);
+    else if(t1<0 && t2>0) tHit = 0; // already inside the wall's radius
+    if(tHit!==null && tHit<bestT){ bestT = tHit; best = w; }
+  });
+  return best ? {wall:best, t:bestT} : null;
+}
+// Clamps a movement step so it stops just short of the first wall it would otherwise pass
+// through, instead of the mover teleporting past/into it.
+function applyWallBlock(fromX, fromY, toX, toY){
+  const hit = nearestWallHit(fromX, fromY, toX, toY);
+  if(!hit) return {x:toX, y:toY};
+  const stopT = Math.max(0, hit.t-0.05);
+  return { x: fromX+(toX-fromX)*stopT, y: fromY+(toY-fromY)*stopT };
+}
+// Returns the wall (if any) that a direct-fire shot along fromX,fromY -> toX,toY would hit
+// before reaching toX,toY -- used by squad/tank/vehicle/sniper-beam engagement code to redirect
+// the shot into the wall instead of the intended target. NOT used for indirect/arcing fire
+// (mortar/artillery shells) or airborne attackers (heli/drone), which pass over the wall.
+function wallBlockingLineOfFire(fromX, fromY, toX, toY){
+  const hit = nearestWallHit(fromX, fromY, toX, toY);
+  return hit ? hit.wall : null;
+}
+function damageWall(wall, dmg, sourceLabel){
+  if(!wall || wall.hp<=0 || dmg<=0) return;
+  wall.hp = Math.max(0, wall.hp-dmg);
+  log('sys','被弾', `${sourceLabel}が防壁に着弾、これを阻止(壁 残りHP ${wall.hp}/${wall.maxHp})。`);
+  if(wall.hp<=0){
+    log('sys','工兵', `防壁が破壊された。`);
+    spawnDestructionEffect(wall.x, wall.y, '防壁 破壊', FRIENDLY_MARK_COLOR);
+  }
+}
+
 // Movement no longer steers toward roads. Units advance by the shortest path
 // toward their target while favoring headings with the least elevation change
 // (a cheap local greedy approximation of least-climb pathfinding: sample a fan
 // of candidate headings around the direct line to the target and pick the one
 // that best balances progress vs. slope). Road proximity (nearestRoadPoint) is
 // kept purely as a speed check: on a road = full speed, off-road = reduced.
-function terrainAwareStep(fromX, fromY, targetX, targetY, stepLen){
+// per user request: ignoreWalls lets airborne movers (heli) fly straight over a 工兵's
+//防壁(壁) instead of being physically stopped by it, like every ground unit is.
+function terrainAwareStep(fromX, fromY, targetX, targetY, stepLen, ignoreWalls){
   const straightDx = targetX-fromX, straightDy = targetY-fromY;
   const straightDist = Math.hypot(straightDx,straightDy) || 1;
   if(straightDist < 0.01) return {x:fromX, y:fromY};
@@ -1634,7 +1773,7 @@ function terrainAwareStep(fromX, fromY, targetX, targetY, stepLen){
   const onRoad = near && near.dist < ROAD_PULL_RADIUS;
   const effStepLen = Math.min(stepLen * (onRoad ? 1 : OFF_ROAD_SPEED_MULT), straightDist);
   if(straightDist <= effStepLen){
-    return {x: targetX, y: targetY};
+    return ignoreWalls ? {x: targetX, y: targetY} : applyWallBlock(fromX, fromY, targetX, targetY);
   }
 
   const baseAngle = Math.atan2(straightDy, straightDx);
@@ -1649,7 +1788,7 @@ function terrainAwareStep(fromX, fromY, targetX, targetY, stepLen){
     const score = progressFrac - elevChange*TERRAIN_SLOPE_PENALTY;
     if(score > bestScore){ bestScore = score; best = {x:nx, y:ny}; }
   });
-  return best;
+  return ignoreWalls ? best : applyWallBlock(fromX, fromY, best.x, best.y);
 }
 
 // terrainAwareStep only lets elevation nudge the HEADING (a small subset of
@@ -1719,6 +1858,7 @@ function hasLineOfSight(fromX,fromY,toX,toY){
   const fromE = elevationAt(fromX,fromY)+EYE_HEIGHT;
   const toE = elevationAt(toX,toY)+EYE_HEIGHT;
   const smokeClouds = state && state.smokeClouds;
+  const walls = state && state.walls;
   for(let i=1;i<steps;i++){
     const t = i/steps;
     const x = fromX+(toX-fromX)*t;
@@ -1726,6 +1866,8 @@ function hasLineOfSight(fromX,fromY,toX,toY){
     const sightE = fromE+(toE-fromE)*t;
     if(elevationAt(x,y) > sightE+0.02) return false;
     if(smokeClouds && smokeClouds.some(c=>Math.hypot(x-c.x,y-c.y) <= SMOKE_RADIUS_UNITS)) return false;
+    // per user request: 工兵の防壁(壁)も視線を遮る -- 地形/煙と同じ扱いで、壁の向こうは見えない。
+    if(walls && walls.some(w=>w.hp>0 && Math.hypot(x-w.x,y-w.y) <= WALL_RADIUS)) return false;
   }
   return true;
 }
@@ -1826,6 +1968,47 @@ function clearTankDest(idx){
   state.tanks[idx].pendingDest = null;
   state.orderMode = null;
   render();
+}
+function setEngineerOrder(idx, order){
+  if(!state.engineers[idx]) return;
+  state.engineers[idx].order = order;
+  render();
+}
+function armEngineerMoveOrder(idx){
+  state.orderMode = {kind:'engineer-move', idx};
+  state.commandBox = null;
+  render();
+}
+function clearEngineerDest(idx){
+  if(!state.engineers[idx]) return;
+  state.engineers[idx].pendingDest = null;
+  state.orderMode = null;
+  render();
+}
+// per user request: 壁の構築 -- 地図をクリックした地点にキャッシュ(お金)を消費して防壁を配置。
+// 工兵自身がその場に居る必要はない(「任意の場所に」構築できる、という要望通り)。上限
+// MAX_WALLS/建設費 WALL_BUILD_COST/HP WALL_MAX_HP。
+let wallIdCounter = 0;
+function armWallBuildOrder(idx){
+  if(!state.engineers[idx] || !unitAlive(state.engineers[idx])) return;
+  state.orderMode = {kind:'wall-build', idx};
+  state.commandBox = null;
+  render();
+}
+function buildWallAt(x, y){
+  if(state.walls.length >= MAX_WALLS){
+    log('sys','システム', `防壁は最大${MAX_WALLS}基まで。既存の壁を破壊してから再構築せよ。`);
+    return false;
+  }
+  if(state.money < WALL_BUILD_COST){
+    log('sys','システム', `資金が不足しています(防壁建設 ¥${WALL_BUILD_COST})。`);
+    return false;
+  }
+  state.money -= WALL_BUILD_COST;
+  wallIdCounter += 1;
+  state.walls.push({ id: wallIdCounter, x, y, hp: WALL_MAX_HP, maxHp: WALL_MAX_HP });
+  log('sys','工兵', `工兵小隊、指定地点に防壁を構築(¥${WALL_BUILD_COST}を消費)。`);
+  return true;
 }
 function clearSquadDest(idx){
   if(!state.squads[idx]) return;
@@ -2171,6 +2354,17 @@ function enemyCounterAttack(actionTurns){
         // close-range engagement.
         if(t.type==='infantry' && near.dist > SQUAD_ENGAGE_RANGE) return;
         if(t.type==='artillery' && near.dist > ARTILLERY_FIRE_RANGE_UNITS) return;
+        // per user request: 工兵の防壁は地上の直接照準射撃(歩兵/車両)も遮る -- 曲射弾を
+        // 撃つ砲兵と、上空を飛ぶドローンは対象外(壁は防がない)。
+        if(t.type==='infantry' || t.type==='vehicle'){
+          const blockWall = wallBlockingLineOfFire(t.trueX, t.trueY, near.x, near.y);
+          if(blockWall){
+            const [wlo,whi] = COUNTER_DAMAGE[t.type];
+            damageWall(blockWall, Math.round(rnd(wlo,whi)), `${t.id}(${t.revealed?t.def.label:'未識別目標'})からの攻撃`);
+            anyHit = true;
+            return;
+          }
+        }
         const [lo,hi] = COUNTER_DAMAGE[t.type];
         const armorMult = (near.kind==='mortar' && state.equipment.armor) ? 0.75 : 1;
         const altMult = altitudeBonus(t.trueX, t.trueY, near.x, near.y);
@@ -2319,6 +2513,49 @@ function applySquadMovement(sq, sqIdx){
   checkMineTrigger('squad', sqIdx, sq.x, sq.y);
 }
 
+// per user request: 工兵小隊の移動 -- 小隊(applySquadMovement)の advance/retreat/pendingDest と
+// 同じ仕組みだが、assault/hunt のような交戦系スタンスは持たない(工兵は戦闘要員ではないため)。
+function applyEngineerMovement(en, enIdx){
+  if(en.pendingDest){
+    const next = terrainAwareStep(en.x, en.y, en.pendingDest.x, en.pendingDest.y, INFANTRY_MOVE_CAP);
+    en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+    en.y = clamp(next.y, 30, CANVAS_H-30);
+    checkMineTrigger('engineer', enIdx, en.x, en.y);
+    if(Math.hypot(en.x-en.pendingDest.x, en.y-en.pendingDest.y) < 12){
+      en.pendingDest = null;
+      log('sys','前線', `工兵小隊、指定地点に到着。`);
+    }
+    return;
+  }
+  if(en.order==='advance'){
+    const next = terrainAwareStep(en.x, en.y, SQUAD_ADVANCE_LIMIT_X, en.y, INFANTRY_MOVE_CAP);
+    en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
+    en.y = clamp(next.y, 30, CANVAS_H-30);
+  } else if(en.order==='retreat'){
+    const next = terrainAwareStep(en.x, en.y, FRIENDLY_INF_POS.x, FRIENDLY_INF_POS.y, INFANTRY_MOVE_CAP);
+    en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
+    en.y = clamp(next.y, 30, CANVAS_H-30);
+  }
+  checkMineTrigger('engineer', enIdx, en.x, en.y);
+}
+function allEngineersWiped(){
+  return !state.engineers.length || state.engineers.every(e=>!unitAlive(e));
+}
+function resolveEngineerOrders(actionTurns){
+  let anyEvent = false;
+  for(let i=0;i<actionTurns;i++){
+    state.engineers.forEach((en, enIdx)=>{
+      const aliveSoldiers = en.soldiers.filter(s=>s.alive);
+      if(aliveSoldiers.length===0) return;
+      applyStandingOrder(en, '工兵小隊', false);
+      const beforeX = en.x, beforeY = en.y;
+      applyEngineerMovement(en, enIdx);
+      if(en.x!==beforeX || en.y!==beforeY) anyEvent = true;
+    });
+  }
+  return anyEvent;
+}
+
 function resolveSquadOrders(actionTurns){
   let anyEvent = false;
   for(let i=0;i<actionTurns;i++){
@@ -2344,6 +2581,14 @@ function resolveSquadOrders(actionTurns){
         const e = estPos(t);
         const dist = Math.hypot(e.x-sq.x, e.y-sq.y);
         if(dist > SQUAD_ENGAGE_RANGE) return;
+        // per user request: 工兵の防壁(壁)は直接照準の銃撃も遮る -- 射線上に壁があれば、
+        // 目標の代わりに壁が被弾する。
+        const blockWall = wallBlockingLineOfFire(sq.x, sq.y, t.trueX, t.trueY);
+        if(blockWall){
+          anyEvent = true;
+          damageWall(blockWall, Math.round(rnd(INFANTRY_DUEL_DMG_TO_ENEMY[0], INFANTRY_DUEL_DMG_TO_ENEMY[1])), `第${sqIdx+1}小隊の射撃`);
+          return;
+        }
         if(revealTarget(t)){
           log('op','斥候', `第${sqIdx+1}小隊が${t.id}と交戦、<b>${t.def.label}</b>と識別。`);
         }
@@ -2455,6 +2700,12 @@ function resolveTankOrders(actionTurns){
         const e = estPos(t);
         const dist = Math.hypot(e.x-tank.x, e.y-tank.y);
         if(dist > TANK_ENGAGE_RANGE) return;
+        const blockWall = wallBlockingLineOfFire(tank.x, tank.y, t.trueX, t.trueY);
+        if(blockWall){
+          anyEvent = true;
+          damageWall(blockWall, Math.round(rnd(TANK_DUEL_DMG_TO_ENEMY[0], TANK_DUEL_DMG_TO_ENEMY[1])), `戦車${idx+1}の砲撃`);
+          return;
+        }
         if(revealTarget(t)){
           log('op','斥候', `戦車${idx+1}が${t.id}と交戦、<b>${t.def.label}</b>と識別。`);
         }
@@ -2565,6 +2816,12 @@ function findTargetOnSniperLine(sn){
     if(perp > SNIPER_AIM_LINE_WIDTH_UNITS/2) return;
     if(proj<bestProj){ bestProj=proj; best=t; }
   });
+  // per user request: 工兵の防壁もこの射撃ラインを遮る -- ビーム上の的より手前に壁があれば
+  // そちらが優先され(的には届かない)、狙撃班はその壁を撃つ。
+  const wallHit = nearestWallHit(sn.x, sn.y, sn.x+dirX*SNIPER_AIM_RANGE_UNITS, sn.y+dirY*SNIPER_AIM_RANGE_UNITS);
+  if(wallHit && wallHit.t*SNIPER_AIM_RANGE_UNITS < bestProj){
+    return {wall: wallHit.wall};
+  }
   return best;
 }
 
@@ -2642,7 +2899,10 @@ function resolveSniperOrders(actionTurns){
 
       const lineTarget = findTargetOnSniperLine(sn);
       if(lineTarget){
-        if(lineTarget.type==='vehicle'){
+        if(lineTarget.wall){
+          anyEvent = true;
+          damageWall(lineTarget.wall, Math.round(rnd(SNIPER_DMG[0], SNIPER_DMG[1])), `狙撃${sn.id+1}班の射撃`);
+        } else if(lineTarget.type==='vehicle'){
           anyEvent = true;
           callInMortarHeatStrike(lineTarget, sn);
         } else if(hasLineOfSight(sn.x, sn.y, lineTarget.trueX, lineTarget.trueY)){
@@ -3151,6 +3411,7 @@ function friendlyFireCandidateLabel(c){
   if(c.kind==='tank') return `戦車${c.idx+1}`;
   if(c.kind==='scout') return `斥候${c.idx+1}`;
   if(c.kind==='squad') return `第${c.idx+1}小隊`;
+  if(c.kind==='engineer') return '工兵小隊';
   return `狙撃${c.idx+1}班`;
 }
 function checkFriendlyFireAt(ix, iy, killRadius){
@@ -3161,6 +3422,7 @@ function checkFriendlyFireAt(ix, iy, killRadius){
   state.scouts.forEach((s,idx)=>{ if(unitAlive(s)) candidates.push({kind:'scout', idx, x:s.x, y:s.y}); });
   state.squads.forEach((sq,idx)=>{ if(sq.soldiers.some(s=>s.alive)) candidates.push({kind:'squad', idx, x:sq.x, y:sq.y}); });
   state.snipers.forEach((sn,idx)=>{ if(sn.soldiers.some(s=>s.alive)) candidates.push({kind:'sniper', idx, x:sn.x, y:sn.y}); });
+  state.engineers.forEach((en,idx)=>{ if(en.soldiers.some(s=>s.alive)) candidates.push({kind:'engineer', idx, x:en.x, y:en.y}); });
   let hit = null, bestD = Infinity;
   candidates.forEach(c=>{
     const d = Math.hypot(ix-c.x, iy-c.y);
@@ -3188,6 +3450,10 @@ function getUnitExposure(candidate){
     const u = state.snipers[candidate.idx];
     return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL;
   }
+  if(candidate.kind==='engineer'){
+    const u = state.engineers[candidate.idx];
+    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL;
+  }
   return EXPOSURE_DEFAULT;
 }
 function rollExposureHit(exposure){
@@ -3212,6 +3478,9 @@ function nearestFriendlyAsset(x, y, includeSquads){
     });
     state.tanks.forEach((tk,idx)=>{
       if(tk.hp>0) candidates.push({kind:'tank', idx, x:tk.x, y:tk.y});
+    });
+    state.engineers.forEach((en,idx)=>{
+      if(en.soldiers.some(s=>s.alive)) candidates.push({kind:'engineer', idx, x:en.x, y:en.y});
     });
   }
   // per user request: 擬陣地 lure enemy indirect fire/vehicle assaults away from real assets
@@ -3331,6 +3600,20 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
     if(tank.hp <= tank.maxHp*0.2) state.hpDroppedLow = true;
     log('sys','被弾', `${sourceLabel}が戦車${target.idx+1}を攻撃。被害 ${dmg}。`);
     if(wasAlive && tank.hp<=0) spawnDestructionEffect(tank.x, tank.y, `戦車${target.idx+1} 撃破!`, FRIENDLY_MARK_COLOR);
+  } else if(target.kind==='engineer'){
+    const en = state.engineers[target.idx];
+    if(!en) return;
+    const aliveSoldiers = en.soldiers.filter(s=>s.alive);
+    if(aliveSoldiers.length>0){
+      const victim = choice(aliveSoldiers);
+      victim.alive = false;
+      log('sys','被弾', `${sourceLabel}が工兵小隊を攻撃。<b>${victim.rank} ${victim.name}</b> 戦死。`);
+      unitSpeakInjury('engineer', target.idx);
+      if(aliveSoldiers.length===1){
+        spawnDestructionEffect(en.x, en.y, '工兵小隊 全滅!', FRIENDLY_MARK_COLOR);
+        speakRandomAliveUnit('outburst');
+      }
+    }
   }
 }
 
@@ -3454,6 +3737,11 @@ function resolveVehicleAssault(actionTurns){
       if(!near) return;
       if(near.dist <= VEHICLE_ASSAULT_RANGE){
         anyEvent = true;
+        const blockWall = wallBlockingLineOfFire(t.trueX, t.trueY, near.x, near.y);
+        if(blockWall){
+          damageWall(blockWall, Math.round(rnd(VEHICLE_ASSAULT_DAMAGE[0], VEHICLE_ASSAULT_DAMAGE[1])), `${t.id}(装甲車)の突撃`);
+          return;
+        }
         const e = estPos(t);
         if(revealTarget(t)){
           log('op','斥候', `${t.id} が至近距離で接触、<b>${t.def.label}</b>と識別。`);
@@ -3497,6 +3785,9 @@ function resolveVehicleAssault(actionTurns){
           }
         }
         if(!next) next = terrainAwareStep(t.trueX, t.trueY, moveGoal.x, moveGoal.y, step);
+        // per user request: 工兵の防壁は道路沿いのA*経路(advanceAlongPath、terrainAwareStepを
+        // 通らない)による車両移動も遮る必要がある -- ここで最終座標に一括して適用する。
+        next = applyWallBlock(t.trueX, t.trueY, next.x, next.y);
         t.trueX = next.x; t.trueY = clamp(next.y, 30, CANVAS_H-30);
         const dx = t.trueX-OP.x, dy = t.trueY-OP.y;
         t.trueBearing = (Math.atan2(dx,-dy)*180/Math.PI+360)%360;
@@ -3539,7 +3830,7 @@ function resolveHeliAssault(actionTurns){
         const dx = h.trueX-h.heliAnchor.x, dy = h.trueY-h.heliAnchor.y;
         const dist = Math.hypot(dx,dy) || 1;
         const fleeX = h.trueX + (dx/dist)*500, fleeY = h.trueY + (dy/dist)*500;
-        const next = terrainAwareStep(h.trueX, h.trueY, fleeX, fleeY, HELI_MOVE_CAP);
+        const next = terrainAwareStep(h.trueX, h.trueY, fleeX, fleeY, HELI_MOVE_CAP, true);
         h.trueX = next.x; h.trueY = clamp(next.y, 30, CANVAS_H-30);
         recomputeBearing();
         anyEvent = true;
@@ -3555,7 +3846,7 @@ function resolveHeliAssault(actionTurns){
       if(!near) return;
       if(near.dist > HELI_ENGAGE_RANGE){
         h.heliPhase = 'approach';
-        const next = terrainAwareStep(h.trueX, h.trueY, near.x, near.y, HELI_MOVE_CAP);
+        const next = terrainAwareStep(h.trueX, h.trueY, near.x, near.y, HELI_MOVE_CAP, true);
         h.trueX = next.x; h.trueY = clamp(next.y, 30, CANVAS_H-30);
         recomputeBearing();
         anyEvent = true;
@@ -3808,6 +4099,9 @@ function resolveEnemyTurn(actionTurns){
   if(!allTanksWiped()){
     tankEvent = resolveTankOrders(actionTurns);
   }
+  if(!allEngineersWiped()){
+    resolveEngineerOrders(actionTurns);
+  }
   if(!hit && !infEvent && !sniperEvent && !tankEvent && !advanced && !assaulted && !heliEvent && !swarmed && !cbEvent && !antiDroned){
     log('sys','敵ターン', '目立った動きなし。');
   }
@@ -3825,6 +4119,10 @@ function resolveEnemyTurn(actionTurns){
   if(state.targets.some(t=>t.destroyed)){
     state.targets.forEach(t=>{ if(t.destroyed) disposeMarker3d('target'+t.id); });
     state.targets = state.targets.filter(t=>!t.destroyed);
+  }
+  if(state.walls.some(w=>w.hp<=0)){
+    state.walls.forEach(w=>{ if(w.hp<=0) disposeMarker3d('wall'+w.id); });
+    state.walls = state.walls.filter(w=>w.hp>0);
   }
 }
 
@@ -4475,6 +4773,17 @@ function handleCanvasClick(evt){
         y: clamp(py, 30, CANVAS_H-30),
       };
       log('sys','前線', `指揮所に移転先を指示。`);
+    } else if(mode.kind==='engineer-move'){
+      const en = state.engineers[mode.idx];
+      if(en){
+        en.pendingDest = {
+          x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X),
+          y: clamp(py, 30, CANVAS_H-30),
+        };
+        log('sys','前線', `工兵小隊に移動目標を指示。`);
+      }
+    } else if(mode.kind==='wall-build'){
+      buildWallAt(clamp(px, 10, CANVAS_W-10), clamp(py, 20, CANVAS_H-20));
     } else if(mode.kind==='scout-move'){
       const scout = state.scouts[mode.idx];
       if(scout){
@@ -4672,6 +4981,13 @@ function findFriendlyUnitAt(px, py){
     const sx = sn._visX!==undefined ? sn._visX : sn.x;
     const sy = sn._visY!==undefined ? sn._visY : sn.y;
     if(Math.hypot(sx-px, sy-py) <= HIT_R) return {kind:'sniper', idx:i};
+  }
+  for(let i=0;i<state.engineers.length;i++){
+    const en = state.engineers[i];
+    if(!en.soldiers.some(s=>s.alive)) continue;
+    const ex = en._visX!==undefined ? en._visX : en.x;
+    const ey = en._visY!==undefined ? en._visY : en.y;
+    if(Math.hypot(ex-px, ey-py) <= HIT_R) return {kind:'engineer', idx:i};
   }
   return null;
 }
@@ -5058,6 +5374,42 @@ function tankBoxHtml(idx){
   `;
 }
 
+// per user request: 工兵小隊 -- 移動は小隊と同じ(前進/防御/後退+精密移動先指定)だが交戦はしない。
+// 追加で、任意の地点にキャッシュ ¥WALL_BUILD_COST を消費して防壁(壁)を構築できる
+// (工兵自身がその場に居なくてもよい、という要望通り、地図クリックのみで即時建設)。
+function engineerBoxHtml(idx){
+  const en = state.engineers[idx];
+  const alive = unitAliveCount(en);
+  const dead = alive<=0;
+  if(dead) return `<div class="empty-hint" style="padding:4px 0;color:var(--red);">全滅</div>`;
+  const btns = ['advance','hold','retreat'].map(o=>
+    `<button class="btn squad-order-btn ${en.order===o?'active':''}" onclick="setEngineerOrder(${idx},'${o}')">${ORDER_LABEL[o]}</button>`
+  ).join('');
+  const armingMove = state.orderMode && state.orderMode.kind==='engineer-move' && state.orderMode.idx===idx;
+  const armingWall = state.orderMode && state.orderMode.kind==='wall-build' && state.orderMode.idx===idx;
+  const destStatus = armingMove ? '地図をクリックして移動先指定…' : (en.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
+  const wallCapReached = state.walls.length >= MAX_WALLS;
+  const wallMoneyShort = state.money < WALL_BUILD_COST;
+  const wallStatus = armingWall ? '地図をクリックして防壁の建設地点を指定…'
+    : wallCapReached ? `防壁は上限(${MAX_WALLS}基)に達しています`
+    : wallMoneyShort ? `資金不足(建設費 ¥${WALL_BUILD_COST})`
+    : `現在の防壁: ${state.walls.length}/${MAX_WALLS}基`;
+  return `
+    <div class="meta">${alive}/${en.soldiers.length}名</div>
+    ${exposureMetaHtml(getUnitExposure({kind:'engineer', idx}))}
+    <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/en.soldiers.length*100)}%"></div></div>
+    <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
+    <div class="row-2" style="margin-bottom:6px;">
+      <button class="btn ${armingMove?'active squad-order-btn':''}" onclick="armEngineerMoveOrder(${idx})">移動先を指定</button>
+      <button class="btn" ${!en.pendingDest?'disabled':''} onclick="clearEngineerDest(${idx})">解除</button>
+    </div>
+    <div class="meta" style="margin-bottom:8px;">${destStatus}</div>
+    <button class="btn ${armingWall?'active squad-order-btn':''}" ${wallCapReached||wallMoneyShort?'disabled':''} style="width:100%;margin-bottom:4px;" onclick="armWallBuildOrder(${idx})">防壁を構築(¥${WALL_BUILD_COST}・地図で地点指定)</button>
+    <div class="meta" style="margin-bottom:8px;">${wallStatus}</div>
+    ${soldierRosterHtml(en.soldiers)}
+  `;
+}
+
 function sniperBoxHtml(idx){
   const sn = state.snipers[idx];
   const alive = sn.soldiers.filter(s=>s.alive).length;
@@ -5139,6 +5491,12 @@ function renderCommandBox(){
     title = `狙撃${state.commandBox.idx+1}班`;
     bodyHtml = sniperBoxHtml(state.commandBox.idx);
     pos = canvasToScreen(sn._visX!==undefined?sn._visX:sn.x, sn._visY!==undefined?sn._visY:sn.y);
+  } else if(kind==='engineer'){
+    const en = state.engineers[state.commandBox.idx];
+    if(!en || !unitAlive(en)){ box.style.display='none'; return; }
+    title = '工兵小隊';
+    bodyHtml = engineerBoxHtml(state.commandBox.idx);
+    pos = canvasToScreen(en._visX!==undefined?en._visX:en.x, en._visY!==undefined?en._visY:en.y);
   } else {
     box.style.display='none';
     return;
@@ -5237,7 +5595,8 @@ function renderStats(){
   const aliveScoutPersonnel = state.scouts.reduce((s,sc)=>s+unitAliveCount(sc),0);
   const aliveSquadPersonnel = totalAliveSoldiers();
   const aliveSniperPersonnel = state.snipers.reduce((s,sn)=>s+sn.soldiers.filter(x=>x.alive).length,0);
-  const aliveTotal = aliveMortarPersonnel + aliveScoutPersonnel + aliveSquadPersonnel + aliveSniperPersonnel + state.reserve;
+  const aliveEngineerPersonnel = state.engineers.reduce((s,en)=>s+en.soldiers.filter(x=>x.alive).length,0);
+  const aliveTotal = aliveMortarPersonnel + aliveScoutPersonnel + aliveSquadPersonnel + aliveSniperPersonnel + aliveEngineerPersonnel + state.reserve;
   document.querySelector('#stat-roster .value').textContent = aliveTotal + ' / ' + totalRosterCapacity();
   document.getElementById('board-note').textContent = state.placementPending
     ? '手動配置モード ― 地図上の指定範囲内をクリックして、表示中のユニットの初期位置を指定してください'
@@ -5292,6 +5651,10 @@ function renderStats(){
   state.snipers.forEach((sn,i)=>{
     const alive = sn.soldiers.filter(s=>s.alive).length;
     rows.push(forceRow(`狙${i+1}`, alive/sn.soldiers.length, `${alive}/${sn.soldiers.length}`, 'var(--blue-id)', 'sniper', i));
+  });
+  state.engineers.forEach((en,i)=>{
+    const alive = en.soldiers.filter(s=>s.alive).length;
+    rows.push(forceRow(`工${i+1}`, alive/en.soldiers.length, `${alive}/${en.soldiers.length}`, 'var(--blue-id)', 'engineer', i));
   });
   rows.push(forceRow('予備', state.reserve/RESERVE_SIZE, `${state.reserve}/${RESERVE_SIZE}`, 'var(--muted)'));
   document.getElementById('force-list').innerHTML = rows.join('');
@@ -5830,6 +6193,36 @@ function drawBoard(){
         }
       }
     }
+  });
+
+  // 防壁(壁) ― 工兵が構築する障害物。敵味方どちらのユニットからも見える固定物なので
+  // 検知/未検知の区別はない。
+  state.walls.forEach(w=>{
+    const wVis = project(w.x, w.y);
+    drawWallShape(ctx, wVis.x, wVis.y, w.hp<=0);
+    if(w.hp>0) drawAttritionBar(ctx, wVis.x+20, wVis.y, w.hp/w.maxHp);
+  });
+
+  // 工兵小隊 (自軍) ― HP制ではなく小隊と同じ soldiers ロスター制、戦闘はせず移動+壁構築のみ
+  state.engineers.forEach((en, enIdx)=>{
+    const enVisL = smoothVisualPos(en, en.x, en.y);
+    const enVis = project(enVisL.x, enVisL.y);
+    const aliveSoldiers = en.soldiers.filter(s=>s.alive);
+    ctx.save();
+    ctx.translate(enVis.x, enVis.y);
+    drawEngineerIcon(ctx, 0, 0, scaledIconH(16), aliveSoldiers.length===0);
+    drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='engineer' && state.commandBox.idx===enIdx);
+    ctx.fillStyle = LABEL_TEXT_COLOR;
+    ctx.font = '14px "JetBrains Mono"';
+    ctx.textAlign='center';
+    ctx.fillText(`工兵 ${aliveSoldiers.length}/${en.soldiers.length}`, 0, 28);
+    if(aliveSoldiers.length>0){
+      const enOrderLabel = en.pendingDest ? `${ORDER_LABEL[en.order]}→移動` : ORDER_LABEL[en.order];
+      ctx.font = 'bold 13px "JetBrains Mono"';
+      ctx.fillText(`[${enOrderLabel}]`, 0, 44);
+    }
+    ctx.restore();
+    if(aliveSoldiers.length>0) drawAttritionBar(ctx, enVis.x+18, enVis.y, aliveSoldiers.length/en.soldiers.length);
   });
 
   // friendly infantry squads (自軍) ― orderly formation, moves as a unit per order
@@ -7368,6 +7761,14 @@ function syncUnitMarkers3d(){
   state.scouts.forEach((s,i)=>{ seen['scout'+i]=true; hideMarker3d('scout'+i); });
   state.squads.forEach((sq,i)=>{ seen['squad'+i]=true; hideMarker3d('squad'+i); });
   state.snipers.forEach((sn,i)=>{ seen['sniper'+i]=true; hideMarker3d('sniper'+i); });
+  state.engineers.forEach((en,i)=>{ seen['engineer'+i]=true; hideMarker3d('engineer'+i); });
+  // per user request: 防壁(壁) -- 他の自軍ユニットと違い専用の2Dベクター描画に加えて、
+  // 3Dミニマップ上でも障害物として視認できるよう箱形メッシュを配置する。
+  state.walls.forEach(w=>{
+    const key = 'wall'+w.id;
+    seen[key] = true;
+    place(key, w.x, w.y, 'box', w.hp>0 ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, w.hp>0);
+  });
   state.targets.forEach((t,i)=>{
     const key = 'target'+t.id;
     if(t.destroyed){ place(key, t.trueX, t.trueY, 'sphere', 0x5c2a25, false); return; }
@@ -7497,6 +7898,7 @@ function repositionOpenCommandBoxes(){
         : kind==='scout' ? state.scouts[idx]
         : kind==='squad' ? state.squads[idx]
         : kind==='sniper' ? state.snipers[idx]
+        : kind==='engineer' ? state.engineers[idx]
         : null;
       if(unit){
         const ux = unit._visX!==undefined ? unit._visX : unit.x;
