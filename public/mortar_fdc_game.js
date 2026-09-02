@@ -6450,14 +6450,25 @@ function repositionOpenCommandBoxes(){
   }
 }
 
+// per user request: the map now renders at full device resolution (see the full-screen UI
+// redesign), so continuing to render it every frame while a full-screen modal (map-select,
+// shop, achievements, mission-result, etc.) is covering it -- e.g. the whole time the player
+// is still on the setup screen -- wasted real GPU work on a frame nobody can see, and made
+// that screen feel heavy/laggy especially on phones.
+function anyOverlayShown(){
+  return !!document.querySelector('.overlay.show');
+}
+
 function loop(){
   updateProjectiles();
   updateEnemyTracers();
   if(state){
-    drawBoard();
     repositionOpenCommandBoxes();
   }
-  renderThreeFrame();
+  if(!anyOverlayShown()){
+    if(state) drawBoard();
+    renderThreeFrame();
+  }
   requestAnimationFrame(loop);
 }
 
