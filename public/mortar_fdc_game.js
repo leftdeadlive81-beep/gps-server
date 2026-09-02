@@ -1008,18 +1008,21 @@ function startStage(){
   // per user request: no more flat "3 units per wave" cap -- infantry now spawns as
   // several formation groups (buildEnemyInfantryGroups) totalling ~50 soldiers, generated
   // independently from the small mixed pool of artillery/vehicle/drone below.
-  const infantryGroups = buildEnemyInfantryGroups(stage);
-  const otherCount = Math.min(2+Math.floor((stage-1)/3), 6);
+  // per user request: doubled simultaneous enemy count -- two independent group-building
+  // passes (each already reaching its own ~50-soldier target) roughly doubles the number of
+  // infantry groups, and otherCount (artillery/vehicle/drone) is doubled outright.
+  const infantryGroups = [...buildEnemyInfantryGroups(stage), ...buildEnemyInfantryGroups(stage)];
+  const otherCount = Math.min(2+Math.floor((stage-1)/3), 6) * 2;
   const diff = DIFFICULTIES[state.difficulty];
   const hpMult = (1 + (stage-1)*0.08) * diff.hpMult * 2; // per user request: enemy defense doubled
   state.weather = stage===1 ? 'clear' : choice(Object.keys(WEATHER_TYPES));
   const weather = WEATHER_TYPES[state.weather];
   const opticsMult = (state.equipment.optics ? 0.8 : 1) * weather.errMult;
-  // per user request: eased the growth of observation error over stages -- both the base
-  // error and its per-stage growth were roughly halved (bearing 45->30 base, +2->+1/stage;
-  // distance 180->120 base, +8->+4/stage) so unguided fire misses by less at high stages.
-  const bearingErrBase = (30 + (stage-1)*1) * opticsMult;
-  const distErrBase = (120 + (stage-1)*4) * opticsMult;
+  // per user request: halved again (bearing 30->15 base, +1->+0.5/stage; distance 120->60
+  // base, +4->+2/stage) -- the estimated enemy position was still reading as too far from
+  // the true position for indirect fire to feel accurate.
+  const bearingErrBase = (15 + (stage-1)*0.5) * opticsMult;
+  const distErrBase = (60 + (stage-1)*2) * opticsMult;
   const totalCount = infantryGroups.length + otherCount;
   const spots = generateSpots(totalCount);
   const otherTypes = pickTypesForCount(otherCount, stage);
