@@ -813,6 +813,7 @@ function initGame(){
     animating: false,
     stageResolved: false,
     deploymentMode: 'auto',
+    decoyPlacementMode: 'auto',
     placementPending: false,
     placementQueue: [],
     placementIndex: 0,
@@ -856,9 +857,17 @@ const DEPLOYMENT_MODES = {
   manual: {label:'手動配置', sub:'地図をクリックして全ユニットの初期位置を1つずつ指定する'},
 };
 
+// per user request: 擬陣地の自動/手動選択も配置方法と同じくここで一度だけ選ぶ(以後の全
+// WAVEでstate.decoyPlacementModeがそのまま自動適用される)。
+const DECOY_MODES = {
+  auto:   {label:'自動設置', sub:`最大${MAX_DECOYS}箇所の擬陣地を自動配置する`},
+  manual: {label:'手動設置', sub:`地図を長押しして最大${MAX_DECOYS}箇所を自分で指定する`},
+};
+
 function renderMapSelectOverlay(){
   renderMapSelectBody();
   renderDeploymentSelectBody();
+  renderDecoySelectBody();
 }
 
 function renderMapSelectBody(){
@@ -911,6 +920,29 @@ function selectDeploymentMode(key){
   renderDeploymentSelectBody();
 }
 
+function renderDecoySelectBody(){
+  const body = document.getElementById('decoy-select-body');
+  body.innerHTML = Object.keys(DECOY_MODES).map(key=>{
+    const d = DECOY_MODES[key];
+    const selected = state.decoyPlacementMode===key;
+    return `
+      <div class="shop-row ${selected?'selected':''}">
+        <div>
+          <div class="label">${d.label}</div>
+          <div class="sub">${d.sub}</div>
+        </div>
+        <div class="actions"><button class="btn primary" onclick="selectDecoyMode('${key}')">${selected?'選択中':'選択'}</button></div>
+      </div>
+    `;
+  }).join('');
+}
+
+function selectDecoyMode(key){
+  if(!DECOY_MODES[key]) return;
+  state.decoyPlacementMode = key;
+  renderDecoySelectBody();
+}
+
 function startSetup(){
   const m = MAPS[state.selectedMap];
   if(!m || !m.hasData()) return;
@@ -919,7 +951,7 @@ function startSetup(){
   state.ammo = {he:d.startHe, heat:d.startHeat};
   state.fuzeUnlocked = {impact:true, proximity:true, delay:true};
   document.getElementById('map-select-overlay').classList.remove('show');
-  log('sys','システム', `マップ「${m.label}」・${DEPLOYMENT_MODES[state.deploymentMode].label}で作戦開始。全弾種・信管を装備済み。`);
+  log('sys','システム', `マップ「${m.label}」・${DEPLOYMENT_MODES[state.deploymentMode].label}・擬陣地${DECOY_MODES[state.decoyPlacementMode].label}で作戦開始。全弾種・信管を装備済み。`);
   startBgm();
   deployStage();
 }
@@ -957,9 +989,10 @@ function generateSpots(n){
 // are only known once the terrain has loaded, so this is computed fresh here in startStage()
 // rather than baked into the HQ_X/SCOUT_X/etc. constants, which are in fixed canvas-unit
 // space and would otherwise describe a real-world box that grows or shrinks with the map.
+const DEPLOY_BOX_METERS = 2000; // per user request: 2km x 2km (was 1km)
 function deployBoxSize(){
-  const w = clamp(1000/(WORLD.scaleX||1), 40, CANVAS_W*0.6);
-  const h = clamp(1000/(WORLD.scaleZ||1), 40, CANVAS_H*0.9);
+  const w = clamp(DEPLOY_BOX_METERS/(WORLD.scaleX||1), 40, CANVAS_W*0.6);
+  const h = clamp(DEPLOY_BOX_METERS/(WORLD.scaleZ||1), 40, CANVAS_H*0.9);
   return {w, h};
 }
 
@@ -1053,6 +1086,9 @@ function startStage(){
   state.targetsSpawnedTotal = targets.length;
   state.selectedId = targets[0].id;
   state.turns = 0;
+  // per user request: no enemy (drone) spawning for the first 3 real seconds of a wave,
+  // giving the player a moment to get oriented before reinforcements start arriving.
+  state.stageStartAt = performance.now();
 
   // per user request: a fully wiped-out unit (squad/scout/sniper/mortar) no longer lingers
   // on the map as an inert "destroyed" marker into future waves -- discard it from the
@@ -1180,7 +1216,7 @@ function startStage(){
     log('op','斥候', '前線に展開完了。各斥候の観測方向を指示せよ。');
   }
   render();
-  if(!state.placementPending) openDecoyPlacementChoice();
+  if(!state.placementPending) applyDecoyPlacementMode(state.decoyPlacementMode);
 }
 
 function buildPlacementQueue(){
@@ -1232,7 +1268,7 @@ function finishPlacement(){
   log('sys','司令部', '配置完了。作戦開始。');
   log('op','斥候', '前線に展開完了。各斥候の観測方向を指示せよ。');
   render();
-  openDecoyPlacementChoice();
+  applyDecoyPlacementMode(state.decoyPlacementMode);
 }
 
 // 擬陣地 (decoy positions) -- placement flow. See MAX_DECOYS etc.
@@ -1240,22 +1276,9 @@ function makeDecoy(x,y){ return {x, y, hp:DECOY_MAX_HP, maxHp:DECOY_MAX_HP, dest
 function randomDecoySpot(){
   return { x: rnd(SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X*0.8), y: rnd(30, CANVAS_H-30) };
 }
-function openDecoyPlacementChoice(){
-  const body = document.getElementById('decoy-placement-body');
-  body.innerHTML = `
-    <div class="shop-row">
-      <div><div class="label">自動設置</div><div class="sub">最大${MAX_DECOYS}箇所の擬陣地を自動配置する</div></div>
-      <div class="actions"><button class="btn primary" onclick="chooseDecoyPlacementMode('auto')">選択</button></div>
-    </div>
-    <div class="shop-row">
-      <div><div class="label">手動設置</div><div class="sub">地図を長押しして最大${MAX_DECOYS}箇所を自分で指定する</div></div>
-      <div class="actions"><button class="btn primary" onclick="chooseDecoyPlacementMode('manual')">選択</button></div>
-    </div>
-  `;
-  document.getElementById('decoy-placement-overlay').classList.add('show');
-}
-function chooseDecoyPlacementMode(mode){
-  document.getElementById('decoy-placement-overlay').classList.remove('show');
+// per user request: 擬陣地(decoy)の自動/手動選択も、配置方法と同じく作戦準備(タイトル)
+// 画面で一度だけ選び、以後の全WAVEで自動適用する(WAVEごとに別モーダルを出さない)。
+function applyDecoyPlacementMode(mode){
   state.decoys = [];
   if(mode==='auto'){
     for(let i=0;i<MAX_DECOYS;i++){
@@ -2924,7 +2947,7 @@ function advanceEnemyInfantry(actionTurns){
   for(let i=0;i<actionTurns;i++){
     enemyInfantry.forEach(t=>{
       if(t.destroyed) return;
-      if(state.stage >= DRONE_INTRO_STAGE){
+      if(state.stage >= DRONE_INTRO_STAGE && performance.now()-(state.stageStartAt||0) >= 3000){
         if(t._droneCooldown === undefined) t._droneCooldown = Math.floor(rnd(2, INFANTRY_DRONE_COOLDOWN_TICKS));
         if(t._droneCooldown > 0){
           t._droneCooldown -= 1;
@@ -5511,7 +5534,7 @@ const TERRAIN_FLAT_COLOR = 0xf2ead2;
 // display -- so a naive 0.5 here only looks like 0.5^(1/2.2) =~ 73% brightness on screen,
 // not 50%. This value is chosen so the DISPLAYED brightness comes out to the requested
 // fraction: linear = displayed_fraction ^ 2.2 (0.22 =~ a true 50%-as-bright appearance).
-const TERRAIN_TEXTURE_BRIGHTNESS = 0.1;
+const TERRAIN_TEXTURE_BRIGHTNESS = 0.2;
 // per user request: exaggerates vertical relief (hills/mountains read twice as tall/steep).
 // Applied via a wrapping group's Y scale -- see loadSelectedTerrain().
 const TERRAIN_RELIEF_EXAGGERATION = 2;
