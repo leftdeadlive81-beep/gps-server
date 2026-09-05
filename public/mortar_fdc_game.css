@@ -399,6 +399,8 @@
   .shop-row .sub{font-size:11px;color:var(--muted);margin-top:2px;}
   .shop-row .actions button{width:auto;padding:7px 12px;font-size:12px;white-space:nowrap;}
   .shop-row.selected{border-color:var(--amber);}
+  .seed-candidate-row{align-items:center;}
+  .seed-thumb{flex:0 0 auto;border-radius:3px;border:1px solid var(--edge-dim);display:block;}
 
   .achievements-progress{font-family:var(--font-mono);font-size:12px;color:var(--muted);margin-bottom:12px;}
   .shop-row.ach-unlocked{border-left:3px solid var(--green-id);}

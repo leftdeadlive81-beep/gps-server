@@ -831,11 +831,11 @@ function playSfx(name, volume){
 
 const FLIGHT_DURATION = 1400; // per user request: half the previous flight speed (was 700)
 const LAUNCH_INTERVAL = 420;
-// per user request: real world-space apex height (same units as terrain elevation, already
-// reflecting TERRAIN_RELIEF_EXAGGERATION) rather than a fixed screen-pixel offset -- a pixel
-// offset applied after projecting the ground point doesn't grow/shrink with terrain relief
-// along the flight path, so on hilly terrain the "arc" reads as hugging the ground instead of
-// flying above it. Projecting a real elevated point (see projectAtHeight) always clears it.
+// per user request: real world-space apex height (same units terrainHeightAt() returns)
+// rather than a fixed screen-pixel offset -- a pixel offset applied after projecting the
+// ground point doesn't grow/shrink with terrain relief along the flight path, so on hilly
+// terrain the "arc" reads as hugging the ground instead of flying above it. Projecting a
+// real elevated point (see projectAtHeight) always clears it.
 const ARC_HEIGHT = 700; // per user request: higher apex than before (was 350)
 
 function rnd(a,b){ return a + Math.random()*(b-a); }
@@ -930,8 +930,7 @@ function initGame(){
     orderMode: null,
     smartOrderMode: null,
     weather: 'clear',
-    terrain: [],
-    contours: null,
+    terrainGen: null,
     roads: [],
     smokeClouds: [],
     illumFlares: [],
@@ -953,33 +952,34 @@ function initGame(){
     decoys: [],
     decoyPlacementPending: false,
     decoyCommandBox: null,
-    selectedMap: 'map6',
+    selectedSeedIndex: 0,
+    pendingTerrainGen: null,
   };
   ripples = []; projectiles = []; flashes = []; enemyTracers = [];
   debrisParticles = []; wreckSmokes = []; killBanners = [];
   document.getElementById('log').innerHTML='';
   log('sys', 'システム', `コンシム v${GAME_VERSION} 起動。マップと配置方法を選択し、作戦を開始せよ。`);
+  rollMapSeedCandidates();
   renderMapSelectOverlay();
   document.getElementById('map-select-overlay').classList.add('show');
-  if(MAPS[state.selectedMap] && MAPS[state.selectedMap].hasData()) loadSelectedTerrain();
 }
 
-// per user request: map selection -- lets the player pick which real-world terrain to
-// deploy on before difficulty selection. Each map's raw GLB/texture/roads base64 lives in
-// its own globally-scoped const (see mapcreate/*.js); MAPS below just points at whichever
-// set is active for a given key so the rest of the 3D-loading code (initThree/
-// applyTerrainTextureOverride/buildRealRoads) doesn't need to know about individual maps.
-// A map's texture is optional (texture() may return null) -- see applyTerrainTextureOverride.
-const MAPS = {
-  map6: {
-    label: '演習場',
-    sub: '新規マップ',
-    hasData: ()=> typeof TERRAIN_GLB_BASE64_MAP6 !== 'undefined',
-    glb: ()=> TERRAIN_GLB_BASE64_MAP6,
-    texture: ()=> (typeof TERRAIN_TEXTURE_BASE64_MAP6!=='undefined' ? TERRAIN_TEXTURE_BASE64_MAP6 : null),
-    roads: ()=> (typeof ROADS_RAW_DATA_MAP6!=='undefined' ? ROADS_RAW_DATA_MAP6 : []),
-  },
-};
+// per user request (idea 1/4): map selection is now a choice among a few freshly-rolled
+// procedural battlefields rather than a fixed real-world map -- since generation is
+// instant, the player can preview and pick a seed instead of always getting whatever
+// loaded. Rerolled each time the title screen shows (initGame()); wave 1 uses whichever
+// candidate the player picked (see startSetup()/pickTerrainForStage()), later waves
+// regenerate fresh each time.
+const MAP_SEED_CANDIDATE_COUNT = 3;
+let mapSeedCandidates = [];
+function rollMapSeedCandidates(){
+  mapSeedCandidates = [];
+  for(let i=0;i<MAP_SEED_CANDIDATE_COUNT;i++){
+    const seed = Math.floor(Math.random()*0xFFFFFFFF);
+    mapSeedCandidates.push(generateProceduralTerrain(seed, pickArchetypeForStage(1, Math.random)));
+  }
+  state.selectedSeedIndex = 0;
+}
 
 // per user request: difficulty selection removed (always 'normal', set directly in
 // initGame()'s state and applied in startSetup()) and map/deployment-mode selection merged
@@ -1003,31 +1003,32 @@ function renderMapSelectOverlay(){
   renderDecoySelectBody();
 }
 
+const MAP_SEED_THUMB_W = 150, MAP_SEED_THUMB_H = 53;
 function renderMapSelectBody(){
   const body = document.getElementById('map-select-body');
-  body.innerHTML = Object.keys(MAPS).map(key=>{
-    const m = MAPS[key];
-    const available = m.hasData();
-    const selected = state.selectedMap===key;
+  body.innerHTML = mapSeedCandidates.map((gen, idx)=>{
+    const selected = state.selectedSeedIndex===idx;
     return `
-      <div class="shop-row ${selected?'selected':''}">
-        <div>
-          <div class="label">${m.label}</div>
-          <div class="sub">${available ? m.sub : 'データ未読み込み'}</div>
+      <div class="shop-row seed-candidate-row ${selected?'selected':''}">
+        <canvas class="seed-thumb" id="seed-thumb-${idx}" width="${MAP_SEED_THUMB_W}" height="${MAP_SEED_THUMB_H}"></canvas>
+        <div style="flex:1;">
+          <div class="label">候補${idx+1}: ${gen.label}</div>
+          <div class="sub">シード #${gen.seed}${gen.river?' ・ 渡河点あり':''}</div>
         </div>
-        <div class="actions"><button class="btn primary" ${available?'':'disabled'} onclick="selectMap('${key}')">${selected?'選択中':'選択'}</button></div>
+        <div class="actions"><button class="btn primary" onclick="selectMapSeed(${idx})">${selected?'選択中':'選択'}</button></div>
       </div>
     `;
   }).join('');
+  mapSeedCandidates.forEach((gen, idx)=>{
+    const canvas = document.getElementById('seed-thumb-'+idx);
+    if(canvas) paintTerrainColors(canvas.getContext('2d'), MAP_SEED_THUMB_W, MAP_SEED_THUMB_H, gen);
+  });
 }
 
-function selectMap(key){
-  const m = MAPS[key];
-  if(!m || !m.hasData()) return;
-  const changed = state.selectedMap!==key;
-  state.selectedMap = key;
+function selectMapSeed(idx){
+  if(!mapSeedCandidates[idx]) return;
+  state.selectedSeedIndex = idx;
   renderMapSelectBody();
-  if(changed) loadSelectedTerrain();
 }
 
 function renderDeploymentSelectBody(){
@@ -1077,16 +1078,32 @@ function selectDecoyMode(key){
 }
 
 function startSetup(){
-  const m = MAPS[state.selectedMap];
-  if(!m || !m.hasData()) return;
+  const gen = mapSeedCandidates[state.selectedSeedIndex];
+  if(!gen) return;
+  state.pendingTerrainGen = gen;
   const d = DIFFICULTIES[state.difficulty];
   state.money = d.startMoney;
   state.ammo = {he:d.startHe, heat:d.startHeat};
   state.fuzeUnlocked = {impact:true, proximity:true, delay:true};
   document.getElementById('map-select-overlay').classList.remove('show');
-  log('sys','システム', `マップ「${m.label}」・${DEPLOYMENT_MODES[state.deploymentMode].label}・擬陣地${DECOY_MODES[state.decoyPlacementMode].label}で作戦開始。全弾種・信管を装備済み。`);
+  log('sys','システム', `戦場「${gen.label}」・${DEPLOYMENT_MODES[state.deploymentMode].label}・擬陣地${DECOY_MODES[state.decoyPlacementMode].label}で作戦開始。全弾種・信管を装備済み。`);
   startBgm();
   deployStage();
+}
+
+// per user request (idea 1): the map genuinely changes wave to wave instead of being the
+// same fixed layout every time. Wave 1 honors whatever seed the player picked on the setup
+// screen (state.pendingTerrainGen, see startSetup()); every later wave rolls a fresh one,
+// with pickArchetypeForStage() (idea 2/6) biasing which archetype toward the harsher end of
+// the pool as the run progresses, so terrain itself contributes to the difficulty curve.
+function pickTerrainForStage(stage){
+  if(stage===1 && state.pendingTerrainGen){
+    const gen = state.pendingTerrainGen;
+    state.pendingTerrainGen = null;
+    return gen;
+  }
+  const seed = Math.floor(Math.random()*0xFFFFFFFF);
+  return generateProceduralTerrain(seed, pickArchetypeForStage(stage, Math.random));
 }
 
 function pickTypesForCount(count, stage){
@@ -1158,8 +1175,7 @@ function deployBoxSize(){
 function startStage(){
   const stage = state.stage;
   pickWaveBgm();
-  state.contours = computeContours();
-  state.roads = REAL_ROADS_CANVAS;
+  regenerateTerrain(pickTerrainForStage(stage));
   state.smokeClouds = [];
   state.illumFlares = [];
   state.mines = [];
@@ -1661,10 +1677,8 @@ function bearingToXY(bearingDeg, dist, originX, originY){
   const rad = bearingDeg*Math.PI/180;
   return { x: originX + dist*Math.sin(rad), y: originY - dist*Math.cos(rad) };
 }
-// Real-world road network (from OSM, via mapcreate/roads_data.js) replaces the
-// old procedural line-only roads. Converted from raw terrain-local meters to
-// canvas-unit space once, asynchronously, as soon as the 3D terrain finishes
-// loading (see buildRealRoads() in the 3D map section below).
+// Road network in canvas-unit space, generated fresh with each procedural battlefield
+// (see buildProceduralRoads() in the 3D map section below, called from regenerateTerrain()).
 const REAL_ROADS_CANVAS = [];
 // Road-network graph (nodes + adjacency) built once from REAL_ROADS_CANVAS by
 // buildRoadGraph() (see 3D map section) -- used to constrain vehicle movement
@@ -1770,7 +1784,7 @@ function terrainAwareStep(fromX, fromY, targetX, targetY, stepLen, ignoreWalls){
 
   const near = nearestRoadPoint(fromX, fromY);
   const onRoad = near && near.dist < ROAD_PULL_RADIUS;
-  // per user request: forest/water (see classifyTerrainTypes) slow off-road movement
+  // per user request: forest/water (see terrainTypeAt/generateProceduralTerrain) slow off-road movement
   // further still -- a road already represents a cleared path, so it's exempt.
   const terrainTypeMult = onRoad ? 1 : (TERRAIN_TYPE_SPEED_MULT[terrainTypeAt(fromX, fromY)] || 1);
   const effStepLen = Math.min(stepLen * (onRoad ? 1 : OFF_ROAD_SPEED_MULT) * terrainTypeMult, straightDist);
@@ -1818,23 +1832,35 @@ function scoutTerrainAwareStep(fromX, fromY, targetX, targetY, stepLen){
   return { x: fromX + (next.x-fromX)*mult, y: fromY + (next.y-fromY)*mult };
 }
 
-// Tactical elevation now reads the map's REAL terrain mesh (via terrainHeightAt/
-// HEIGHT_GRID, built once from the loaded GLB) instead of a set of random invisible
-// hills re-rolled every wave. Previously the two were completely disconnected: the
-// contour lines and 3D terrain the player actually sees came from the real mesh, while
-// every gameplay effect that used elevation -- line-of-sight blocking, the attacker/
-// defender altitude combat bonus, movement's slope penalty, and the 標高 label shown in
-// each unit's panel -- silently used a different, randomized, per-wave height field. A
-// hill you could see and climb to on the map had no tactical effect, and "high ground"
-// in-game could be sitting in a visual valley. Normalizing the real height range to
-// 0..1 keeps every formula below (EYE_HEIGHT, the 0.35 altitude-bonus coefficient,
-// TERRAIN_SLOPE_PENALTY, the 0.25/0.6 elevationLabel breakpoints) working against
-// roughly the same scale they were tuned for.
+// Tactical elevation reads directly from the current procedural terrain descriptor
+// (state.terrainGen, built by generateProceduralTerrain() -- see there) instead of a
+// separate mesh/raycast pipeline. The 3D terrain mesh and texture the player sees are
+// built from this exact same descriptor (see buildProceduralTerrainMesh()), so visual
+// and mechanical terrain can't drift apart the way the old GLB-vs-invisible-hills split
+// could. A river carves a shallow valley into the hill-based height field so water
+// visibly and mechanically sits in a low channel rather than floating over high ground.
+// elevationAtFor() takes an explicit descriptor rather than always reading state.terrainGen
+// so the setup screen's seed-preview thumbnails (idea 4) can evaluate candidate maps that
+// aren't the active one yet; elevationAt() is the normal gameplay entry point.
+function elevationAtFor(gen, x, y){
+  if(!gen) return 0;
+  let e = 0;
+  for(let i=0;i<gen.hills.length;i++){
+    const hill = gen.hills[i];
+    const d = Math.hypot(x-hill.x, y-hill.y);
+    const t = clamp(1-d/hill.r, 0, 1);
+    e += hill.h * t*t*(3-2*t);
+  }
+  if(gen.river){
+    const rx = riverXAt(gen.river, y);
+    const dx = Math.abs(x-rx);
+    const t = clamp(1-dx/(gen.river.width*1.5), 0, 1);
+    e -= RIVER_VALLEY_DEPTH * t*t*(3-2*t);
+  }
+  return clamp(e, 0, 1.3);
+}
 function elevationAt(x,y){
-  if(!HEIGHT_GRID.values) return 0;
-  const range = WORLD.maxY - WORLD.minY;
-  if(!(range>0)) return 0;
-  return clamp((terrainHeightAt(x,y) - WORLD.minY) / range, 0, 1);
+  return elevationAtFor(state && state.terrainGen, x, y);
 }
 function elevationLabel(e){
   if(e < 0.25) return '低地';
@@ -1868,7 +1894,7 @@ const TERRAIN_COVER_RANGE = 20;
 // local high or low point, so more relief than this shouldn't swing cover any further.
 const TERRAIN_COVER_RELIEF_SATURATION = 0.15;
 function terrainCoverBonus(x, y){
-  if(!HEIGHT_GRID.values) return 0;
+  if(!state || !state.terrainGen) return 0;
   const here = elevationAt(x, y);
   let sum = 0;
   for(let i=0;i<TERRAIN_COVER_SAMPLE_COUNT;i++){
@@ -1882,7 +1908,8 @@ function terrainCoverBonus(x, y){
 }
 
 // per user request: on top of the elevation-based terrainCoverBonus, a discrete terrain
-// type (see classifyTerrainTypes, defined further below with TERRAIN_TYPE_FOREST/WATER)
+// type (see terrainTypeAt/generateProceduralTerrain, defined further below with
+// TERRAIN_TYPE_FOREST/WATER)
 // adds its own flat cover swing -- concealment among trees vs. having nowhere to hide
 // while caught out in open water. Returns 0 (no change from current behavior) wherever
 // classification hasn't finished yet or reads open ground. The lookup table itself
@@ -1898,28 +1925,6 @@ function terrainTypeCoverBonus(x, y){
 // exposure -- see each for details.
 function terrainCoverTotal(x, y){
   return terrainCoverBonus(x, y) + terrainTypeCoverBonus(x, y);
-}
-
-function computeContours(){
-  const byLevel = {};
-  CONTOUR_LEVELS.forEach(level=>{
-    const segs = [];
-    for(let gy=0; gy<CANVAS_H; gy+=CONTOUR_CELL){
-      for(let gx=0; gx<CANVAS_W; gx+=CONTOUR_CELL){
-        const x0=gx, x1=Math.min(gx+CONTOUR_CELL,CANVAS_W), y0=gy, y1=Math.min(gy+CONTOUR_CELL,CANVAS_H);
-        const vTL=elevationAt(x0,y0), vTR=elevationAt(x1,y0), vBR=elevationAt(x1,y1), vBL=elevationAt(x0,y1);
-        const pts=[];
-        if((vTL>level)!==(vTR>level)){ const t=(level-vTL)/(vTR-vTL); pts.push({x:x0+t*(x1-x0), y:y0}); }
-        if((vTR>level)!==(vBR>level)){ const t=(level-vTR)/(vBR-vTR); pts.push({x:x1, y:y0+t*(y1-y0)}); }
-        if((vBL>level)!==(vBR>level)){ const t=(level-vBL)/(vBR-vBL); pts.push({x:x0+t*(x1-x0), y:y1}); }
-        if((vTL>level)!==(vBL>level)){ const t=(level-vTL)/(vBL-vTL); pts.push({x:x0, y:y0+t*(y1-y0)}); }
-        if(pts.length===2) segs.push([pts[0],pts[1]]);
-        else if(pts.length===4){ segs.push([pts[0],pts[1]]); segs.push([pts[2],pts[3]]); }
-      }
-    }
-    byLevel[level] = segs;
-  });
-  return byLevel;
 }
 
 function hasLineOfSight(fromX,fromY,toX,toY){
@@ -7001,10 +7006,10 @@ let threeReady = false;
 // own zoom, since zooming in necessarily pushes the map's corners off-screen.
 let cameraNeedsInitialFit = true;
 let scene3d, camera3d, renderer3d, terrainObject3d;
-const HEIGHT_GRID = { cols:0, rows:0, values:null, minX:0, minZ:0, stepX:1, stepZ:1 };
-// per user request: topographic-map-style contour lines, generated from the same real
-// elevation data as HEIGHT_GRID (see buildContourLines()). Canvas-unit line segments,
-// re-projected and drawn each frame in drawBoard() like the (now-suppressed) road overlay.
+// Topographic-map-style contour lines, traced directly from elevationAt() (the same
+// function every gameplay formula uses) via a simplified marching-squares pass over the
+// canvas -- see buildContourLines(). Canvas-unit line segments, re-projected and drawn
+// each frame in drawBoard() like the road overlay.
 const CONTOUR_LINES_CANVAS = [];
 // On phones, start the camera rotated -90 deg so the friendly<->enemy axis
 // (canvas X: friendly at low X, enemy at high X) reads bottom-to-top on
@@ -7029,62 +7034,100 @@ const MAP_POLAR_MIN = 0.12, MAP_POLAR_MAX = 1.45;
 // rendered (so it looked like part of the map) but was outside canvas-unit space, so no
 // order could ever move a unit into it. That read as units hitting an invisible wall well
 // short of the map's visible top/bottom edge.
-const WORLD = { originX: 0, originZ: 0, scaleX: 1, scaleZ: 1, minY: 0, maxY: 0, refY: 0 };
+// scaleX/scaleZ are fixed at METERS_PER_UNIT (the same real-world scale every other
+// gameplay distance in the file already assumes -- see METERS_PER_UNIT) rather than
+// derived from a loaded mesh's bounding box, since a procedural battlefield has no
+// independent "real size" of its own; PROC_TERRAIN_HEIGHT_SCALE below is scaled by the
+// same factor so vertical relief keeps the exact proportions it was tuned at.
+const PROC_TERRAIN_HEIGHT_SCALE = 90 * METERS_PER_UNIT;
+const WORLD = {
+  originX: 0, originZ: 0, scaleX: METERS_PER_UNIT, scaleZ: METERS_PER_UNIT,
+  minY: 0, maxY: PROC_TERRAIN_HEIGHT_SCALE*1.3, refY: PROC_TERRAIN_HEIGHT_SCALE*0.65,
+};
 const unitMarkers3d = {};
 let mapFocusTarget = null;
 
-// per user request: topographic-map style. When a map ships real texture data (now GSI's
-// 淡色地図/"pale" tiles rather than the old aerial photo -- see mapcreate/gsi_terrain_to_obj.py),
-// that texture is applied directly; brown contour lines (CONTOUR_LINES_CANVAS, drawn in
-// drawBoard()) are layered over it either way, matching how a real topo map combines a
-// muted base map with contour lines. Maps that ship no texture data fall back to a flat
-// pale parchment color so contours still read clearly against something texture-like.
-const TERRAIN_FLAT_COLOR = 0xf2ead2;
-// per user request: darkens the terrain texture uniformly without editing the image files.
-// MeshStandardMaterial multiplies its texture by material.color per-pixel in LINEAR color
-// space, but the renderer's sRGB output encoding then gamma-corrects the result for
-// display -- so a naive 0.5 here only looks like 0.5^(1/2.2) =~ 73% brightness on screen,
-// not 50%. This value is chosen so the DISPLAYED brightness comes out to the requested
-// fraction: linear = displayed_fraction ^ 2.2 (0.22 =~ a true 50%-as-bright appearance).
-const TERRAIN_TEXTURE_BRIGHTNESS = 0.2;
-// per user request: exaggerates vertical relief (hills/mountains read twice as tall/steep).
-// Applied via a wrapping group's Y scale -- see loadSelectedTerrain().
-const TERRAIN_RELIEF_EXAGGERATION = 2;
-function applyTerrainTextureOverride(root, textureBase64){
-  if(!textureBase64){
-    root.traverse(o=>{
-      if(o.isMesh && o.material){
-        const mats = Array.isArray(o.material) ? o.material : [o.material];
-        mats.forEach(m=>{ m.map = null; m.color = new THREE.Color(TERRAIN_FLAT_COLOR); m.needsUpdate = true; });
+// per user request: the terrain texture is now painted procedurally (a canvas colored by
+// elevation + forest/water zones, straight from the same descriptor the mesh geometry and
+// every gameplay formula use) instead of loaded from an aerial photo -- see
+// buildProceduralTexture(). TERRAIN_TEXTURE_BRIGHTNESS is chosen so the DISPLAYED
+// brightness matches the intended fraction: MeshStandardMaterial multiplies its texture by
+// material.color in LINEAR color space, but the renderer's sRGB output encoding then
+// gamma-corrects the result for display, so a naive 0.5 here would only look like
+// 0.5^(1/2.2) =~ 73% brightness on screen, not 50%.
+const TERRAIN_TEXTURE_BRIGHTNESS = 0.55;
+const PROC_TEXTURE_SIZE_X = 520, PROC_TEXTURE_SIZE_Z = 184; // 2.826:1, matching CANVAS_W:CANVAS_H
+// Base ground colors across the elevation range (low -> high), and the forest/water zone
+// overlay colors -- painted from the exact same descriptor buildProceduralTerrainMesh()
+// displaces its geometry from, so the picture and the mechanics can't disagree.
+const PROC_COLOR_LOW = [0x3a,0x42,0x28], PROC_COLOR_HIGH = [0x9a,0x8f,0x66];
+const PROC_COLOR_FOREST = [0x23,0x38,0x1e], PROC_COLOR_WATER = [0x2c,0x4a,0x5e];
+// Shared by the 3D terrain's texture and the setup screen's seed-preview thumbnails
+// (renderMapSelectBody) so both always show exactly the elevation/forest/water picture
+// elevationAtFor/terrainTypeAtFor actually compute for the given descriptor.
+function paintTerrainColors(ctx, w, h, gen){
+  const img = ctx.createImageData(w, h);
+  for(let py=0; py<h; py++){
+    const cy = (py/h)*CANVAS_H;
+    for(let px=0; px<w; px++){
+      const cx = (px/w)*CANVAS_W;
+      const e = clamp(elevationAtFor(gen, cx, cy), 0, 1);
+      const type = terrainTypeAtFor(gen, cx, cy);
+      let r,g,b;
+      if(type===TERRAIN_TYPE_WATER){ [r,g,b] = PROC_COLOR_WATER; }
+      else if(type===TERRAIN_TYPE_FOREST){ [r,g,b] = PROC_COLOR_FOREST; }
+      else {
+        r = PROC_COLOR_LOW[0] + (PROC_COLOR_HIGH[0]-PROC_COLOR_LOW[0])*e;
+        g = PROC_COLOR_LOW[1] + (PROC_COLOR_HIGH[1]-PROC_COLOR_LOW[1])*e;
+        b = PROC_COLOR_LOW[2] + (PROC_COLOR_HIGH[2]-PROC_COLOR_LOW[2])*e;
       }
-    });
-    return;
+      const idx = (py*w+px)*4;
+      img.data[idx] = r; img.data[idx+1] = g; img.data[idx+2] = b; img.data[idx+3] = 255;
+    }
   }
-  const dataUrl = 'data:image/jpeg;base64,'+textureBase64;
-  const loader = new THREE.TextureLoader();
-  loader.load(dataUrl, tex=>{
-    tex.flipY = false;
-    if('encoding' in tex) tex.encoding = THREE.sRGBEncoding;
-    if('colorSpace' in tex) tex.colorSpace = THREE.SRGBColorSpace;
-    tex.needsUpdate = true;
-    root.traverse(o=>{
-      if(o.isMesh && o.material){
-        const mats = Array.isArray(o.material) ? o.material : [o.material];
-        mats.forEach(m=>{ m.map = tex; m.color = new THREE.Color(TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TEXTURE_BRIGHTNESS); m.needsUpdate = true; });
-      }
-    });
-  }, undefined, err=>{
-    console.error('差し替えテクスチャの読み込みに失敗しました', err);
-  });
+  ctx.putImageData(img, 0, 0);
+}
+function buildProceduralTexture(gen){
+  const cv = document.createElement('canvas');
+  cv.width = PROC_TEXTURE_SIZE_X; cv.height = PROC_TEXTURE_SIZE_Z;
+  paintTerrainColors(cv.getContext('2d'), PROC_TEXTURE_SIZE_X, PROC_TEXTURE_SIZE_Z, gen);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.flipY = true; // canvas y=0 is the top row, matching PlaneGeometry's default UV v=1 at the top after our rotateX below
+  if('encoding' in tex) tex.encoding = THREE.sRGBEncoding;
+  if('colorSpace' in tex) tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
-// Sets up the renderer/scene/camera/lights, which are the same regardless of which map
-// is eventually chosen. Runs once at page load. The actual terrain GLB is NOT loaded here
-// -- that depends on the player's map choice (see selectMap()) and happens in
-// loadSelectedTerrain(), called once that choice is made.
+// per user request: builds the terrain mesh directly (a displaced PlaneGeometry spanning
+// exactly canvas-unit space) instead of loading a GLB -- see generateProceduralTerrain()
+// for the descriptor this displaces from and buildProceduralTexture() for its texture.
+// Segment counts are a readability/perf compromise: fine enough for smooth-looking hills,
+// coarse enough that displacing ~3000 vertices analytically is instant.
+const PROC_MESH_SEGMENTS_X = 90, PROC_MESH_SEGMENTS_Z = 32;
+function buildProceduralTerrainMesh(gen){
+  const geo = new THREE.PlaneGeometry(CANVAS_W, CANVAS_H, PROC_MESH_SEGMENTS_X, PROC_MESH_SEGMENTS_Z);
+  geo.rotateX(-Math.PI/2); // lie flat in the XZ plane, Y up
+  geo.translate(CANVAS_W/2, 0, CANVAS_H/2); // shift from centered-at-origin to span X:[0,W], Z:[0,H]
+  const pos = geo.attributes.position;
+  for(let i=0;i<pos.count;i++){
+    const x = pos.getX(i), z = pos.getZ(i);
+    pos.setY(i, elevationAtFor(gen, x, z)*PROC_TERRAIN_HEIGHT_SCALE);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  const material = new THREE.MeshStandardMaterial({
+    map: buildProceduralTexture(gen),
+    color: new THREE.Color(TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TEXTURE_BRIGHTNESS),
+  });
+  return new THREE.Mesh(geo, material);
+}
+
+// Sets up the renderer/scene/camera/lights, which never change once the page loads. The
+// procedural terrain itself is NOT built here -- that happens per-wave (see
+// regenerateTerrain(), called from startStage()) since it now regenerates every wave.
 function initThree(){
   const canvas3d = document.getElementById('board3d');
-  if(typeof THREE === 'undefined' || !THREE.GLTFLoader){
+  if(typeof THREE === 'undefined'){
     console.warn('3D地形(Three.js)を読み込めませんでした。地図は表示されません。');
     return;
   }
@@ -7112,175 +7155,179 @@ function initThree(){
   resizeThree();
 }
 
-// per user request: loads the terrain GLB/texture/roads for whichever map the player
-// picked (state.selectedMap, see MAPS/selectMap()). Called once after map selection.
-function loadSelectedTerrain(){
-  if(typeof THREE === 'undefined' || !THREE.GLTFLoader || !scene3d){
+// per user request: (re)builds the terrain -- mesh, contour lines, roads -- from a
+// procedural descriptor (see generateProceduralTerrain()). Called once at game start and
+// again at the top of every wave (startStage(), idea 1: the map genuinely changes wave to
+// wave instead of being the same fixed layout every time) and disposes the previous
+// mesh's geometry/texture first so repeated regeneration doesn't leak GPU resources.
+function regenerateTerrain(gen){
+  if(typeof THREE === 'undefined' || !scene3d){
     console.warn('3D地形(Three.js)を読み込めませんでした。地図は表示されません。');
     return;
   }
-  const mapConf = MAPS[state.selectedMap];
-  const glbBase64 = mapConf && mapConf.glb();
-  if(!glbBase64){
-    console.warn('地形データが見つかりませんでした。地図は表示されません。');
-    return;
+  if(terrainObject3d){
+    scene3d.remove(terrainObject3d);
+    terrainObject3d.geometry.dispose();
+    if(terrainObject3d.material.map) terrainObject3d.material.map.dispose();
+    terrainObject3d.material.dispose();
   }
+  state.terrainGen = gen;
+  terrainObject3d = buildProceduralTerrainMesh(gen);
+  scene3d.add(terrainObject3d);
 
-  let arrayBuffer;
-  try{
-    const binStr = atob(glbBase64);
-    const bytes = new Uint8Array(binStr.length);
-    for(let i=0;i<binStr.length;i++) bytes[i] = binStr.charCodeAt(i);
-    arrayBuffer = bytes.buffer;
-  } catch(e){
-    console.error('地形データのデコードに失敗しました', e);
-    return;
-  }
-
-  const loader = new THREE.GLTFLoader();
-  loader.parse(arrayBuffer, '', (gltf)=>{
-    terrainObject3d = gltf.scene;
-    // per user request: exaggerates vertical relief. Scaling terrainObject3d's own Y
-    // wouldn't reliably mean "world-up" -- the GLB node carries a baked-in 90deg rotation
-    // (Blender's Z-up -> Three's Y-up), and local scale is applied before that rotation, so
-    // a direct .scale.y would partly stretch the wrong world axis. Wrapping it in an
-    // unrotated parent group and scaling THAT group's Y instead guarantees the scale applies
-    // in world-vertical space regardless of the child's own rotation.
-    const terrainRig = new THREE.Group();
-    terrainRig.scale.y = TERRAIN_RELIEF_EXAGGERATION;
-    terrainRig.add(terrainObject3d);
-    scene3d.add(terrainRig);
-    terrainRig.updateMatrixWorld(true);
-    applyTerrainTextureOverride(terrainObject3d, mapConf.texture());
-
-    const box = new THREE.Box3().setFromObject(terrainObject3d);
-    const sizeX = box.max.x-box.min.x, sizeZ = box.max.z-box.min.z;
-    WORLD.minY = box.min.y; WORLD.maxY = box.max.y;
-    WORLD.refY = (box.min.y+box.max.y)/2;
-    WORLD.scaleX = sizeX/CANVAS_W;
-    WORLD.scaleZ = sizeZ/CANVAS_H;
-    WORLD.originX = box.min.x;
-    WORLD.originZ = box.min.z;
-
-    // per user request: buildHeightGrid's 2800 unaccelerated raycasts (plus the contour/road
-    // setup) are heavy enough to visibly freeze the page for a moment -- deferring them one
-    // animation frame lets the browser actually paint the current screen first, so the freeze
-    // (still the same total work) doesn't land in the same tick as the map selection click.
-    requestAnimationFrame(()=>{
-      buildHeightGrid();
-      buildContourLines();
-      buildRealRoads(mapConf.roads());
-      classifyTerrainTypes(mapConf.texture());
-      threeReady = true;
-      cameraNeedsInitialFit = true;
-      resizeThree();
-    });
-  }, (err)=>{
-    console.error('地形モデルの読み込みに失敗しました', err);
-  });
+  buildContourLines();
+  buildProceduralRoads(gen.roadPaths);
+  threeReady = true;
+  cameraNeedsInitialFit = true;
+  resizeThree();
 }
 
-// Precompute a coarse height field ONCE at load time (via real mesh raycasts) so that
-// per-frame lookups (terrainHeightAt) are cheap O(1) bilinear reads instead of raycasts
-// against a dense terrain mesh (which would be far too slow to do every frame). Also
-// stashes each cell's raycast-hit UV (HEIGHT_GRID.uvs) -- classifyTerrainTypes() reuses
-// these to sample the real aerial-photo texture for forest/water, at zero extra
-// raycasting cost, once that texture has decoded.
-function buildHeightGrid(){
-  const COLS = 70, ROWS = 40;
-  const rc = new THREE.Raycaster();
-  const minX = WORLD.originX, minZ = WORLD.originZ;
-  const stepX = (CANVAS_W*WORLD.scaleX)/(COLS-1);
-  const stepZ = (CANVAS_H*WORLD.scaleZ)/(ROWS-1);
-  const values = new Float32Array(COLS*ROWS);
-  const uvs = new Float32Array(COLS*ROWS*2);
-  for(let r=0;r<ROWS;r++){
-    for(let c=0;c<COLS;c++){
-      const x = minX + c*stepX, z = minZ + r*stepZ;
-      rc.set(new THREE.Vector3(x, WORLD.maxY+2000, z), new THREE.Vector3(0,-1,0));
-      const hits = rc.intersectObject(terrainObject3d, true);
-      const hit = hits[0];
-      values[r*COLS+c] = hit ? hit.point.y : WORLD.refY;
-      uvs[(r*COLS+c)*2] = hit && hit.uv ? hit.uv.x : -1;
-      uvs[(r*COLS+c)*2+1] = hit && hit.uv ? hit.uv.y : -1;
-    }
-  }
-  HEIGHT_GRID.cols = COLS; HEIGHT_GRID.rows = ROWS; HEIGHT_GRID.values = values;
-  HEIGHT_GRID.minX = minX; HEIGHT_GRID.minZ = minZ;
-  HEIGHT_GRID.stepX = stepX; HEIGHT_GRID.stepZ = stepZ;
-  HEIGHT_GRID.uvs = uvs;
-}
-
-// per user request: classifies each HEIGHT_GRID cell as open ground / forest / water by
-// sampling the real aerial-photo terrain texture at that cell's raycast UV -- so, unlike
-// a procedural zone generator, "which spots are forest or water" always matches what the
-// player can actually see on the map. The photo's colors turn out fairly muted (satellite
-// haze, JPEG compression), so absolute "water is blue" RGB thresholds don't hold up --
-// instead this ranks every cell by how much bluer/greener it is than its own red+opposite
-// channel average, and takes the top slice of *this specific texture's* distribution as
-// water/forest. That adapts to whatever the actual map's palette turns out to be instead
-// of assuming a fixed palette that might not match. Runs async (image decode) and leaves
-// TERRAIN_TYPE_GRID.values null (terrainTypeAt() then reports "open") until it finishes.
-const TERRAIN_TYPE_OPEN = 0, TERRAIN_TYPE_FOREST = 1, TERRAIN_TYPE_WATER = 2;
-const TERRAIN_TYPE_GRID = { cols:0, rows:0, values:null };
-const TERRAIN_WATER_PERCENTILE = 0.95; // top 5% bluest cells
-const TERRAIN_FOREST_PERCENTILE = 0.85; // top 15% greenest of the cells water didn't already claim
-const TERRAIN_COLOR_SAMPLE_BOX = 4; // half-width (px) of the average-color box per cell, to smooth JPEG noise
-function classifyTerrainTypes(base64Texture){
-  if(!base64Texture || !HEIGHT_GRID.uvs) return;
-  const img = new Image();
-  img.onload = ()=>{
-    const cv = document.createElement('canvas');
-    cv.width = img.naturalWidth; cv.height = img.naturalHeight;
-    const ctx = cv.getContext('2d');
-    ctx.drawImage(img, 0, 0);
-    const W = img.naturalWidth, H = img.naturalHeight;
-    const pixels = ctx.getImageData(0, 0, W, H).data;
-    const {cols, rows, uvs} = HEIGHT_GRID;
-    const n = cols*rows;
-    const blueScores = new Float32Array(n), greenScores = new Float32Array(n);
-    for(let i=0;i<n;i++){
-      const u = uvs[i*2], v = uvs[i*2+1];
-      if(u<0){ continue; } // cell's raycast missed the mesh -- leave both scores at 0 (open)
-      const cx = clamp(Math.round(u*W), 0, W-1), cy = clamp(Math.round(v*H), 0, H-1);
-      let r=0,g=0,b=0,cnt=0;
-      for(let dy=-TERRAIN_COLOR_SAMPLE_BOX; dy<TERRAIN_COLOR_SAMPLE_BOX; dy++){
-        const py = cy+dy; if(py<0||py>=H) continue;
-        for(let dx=-TERRAIN_COLOR_SAMPLE_BOX; dx<TERRAIN_COLOR_SAMPLE_BOX; dx++){
-          const px = cx+dx; if(px<0||px>=W) continue;
-          const idx = (py*W+px)*4;
-          r+=pixels[idx]; g+=pixels[idx+1]; b+=pixels[idx+2]; cnt++;
-        }
-      }
-      if(cnt===0) continue;
-      r/=cnt; g/=cnt; b/=cnt;
-      blueScores[i] = b-(r+g)/2;
-      greenScores[i] = g-(r+b)/2;
-    }
-    const sortedBlue = Float32Array.from(blueScores).sort();
-    const sortedGreen = Float32Array.from(greenScores).sort();
-    const blueThresh = sortedBlue[Math.floor(n*TERRAIN_WATER_PERCENTILE)];
-    const greenThresh = sortedGreen[Math.floor(n*TERRAIN_FOREST_PERCENTILE)];
-    const values = new Uint8Array(n);
-    for(let i=0;i<n;i++){
-      if(blueScores[i] >= blueThresh) values[i] = TERRAIN_TYPE_WATER;
-      else if(greenScores[i] >= greenThresh) values[i] = TERRAIN_TYPE_FOREST;
-      else values[i] = TERRAIN_TYPE_OPEN;
-    }
-    TERRAIN_TYPE_GRID.cols = cols; TERRAIN_TYPE_GRID.rows = rows; TERRAIN_TYPE_GRID.values = values;
+// ===================== Procedural terrain generation =====================
+// Replaces the old fixed real-world map (a GLB + aerial-photo texture + OSM road file, all
+// embedded as base64 <script> tags the browser had to fully download and parse before the
+// title screen's 作戦開始 button did anything) with a small, instantly-generated
+// battlefield. Because the same descriptor (hills/forestPatches/river/roadPaths) drives
+// BOTH the tactical math (elevationAt/terrainTypeAt below) AND the 3D mesh/texture the
+// player sees (buildProceduralTerrainMesh), the visual-vs-mechanical mismatch that the old
+// real-map pipeline was prone to can't happen here by construction -- there is no second
+// data source to drift out of sync with.
+//
+// Deterministic PRNG (mulberry32) so a given seed always reproduces the same map --
+// needed for the setup screen's seed preview (pick one of several candidates) and for
+// regenerating the identical map if ever needed, unlike Math.random().
+function mulberry32(seed){
+  let a = seed>>>0;
+  return function(){
+    a |= 0; a = (a+0x6D2B79F5)|0;
+    let t = Math.imul(a ^ (a>>>15), 1|a);
+    t = (t + Math.imul(t ^ (t>>>7), 61|t)) ^ t;
+    return ((t ^ (t>>>14))>>>0) / 4294967296;
   };
-  img.onerror = ()=>{ console.error('地形分類用テクスチャの読み込みに失敗しました'); };
-  img.src = 'data:image/jpeg;base64,'+base64Texture;
+}
+function rngRange(rng, lo, hi){ return lo + (hi-lo)*rng(); }
+function rngRangeArr(rng, [lo,hi]){ return lo + (hi-lo)*rng(); }
+
+// per user request: named archetypes give the generator a distinct tactical character to
+// aim for instead of one generic "some hills" look -- see pickArchetypeForStage() for how
+// waves pick among these, escalating toward the more demanding ones over a run.
+const TERRAIN_ARCHETYPES = {
+  hills:  { label:'丘陵地帯', hillCount:[4,6], hillHeight:[0.5,0.85],  hillRadius:[90,180],  river:false, forestPatches:[3,5] },
+  river:  { label:'河川地帯', hillCount:[2,3], hillHeight:[0.3,0.55],  hillRadius:[100,200], river:true,  forestPatches:[2,4] },
+  forest: { label:'森林地帯', hillCount:[2,4], hillHeight:[0.25,0.5],  hillRadius:[90,160],  river:false, forestPatches:[5,8] },
+  urban:  { label:'市街地',   hillCount:[1,2], hillHeight:[0.15,0.3],  hillRadius:[80,140],  river:false, forestPatches:[1,2] },
+};
+// per user request: early waves stay to the gentlest archetype so players learn movement/
+// terrain basics without a river in the way; later waves draw from the full pool, biased
+// toward the river archetype as the single most demanding one (a forced chokepoint).
+function pickArchetypeForStage(stage, rng){
+  if(stage<=3) return 'hills';
+  if(stage<=8) return rng()<0.5 ? 'hills' : 'forest';
+  const roll = rng();
+  if(roll<0.4) return 'river';
+  if(roll<0.7) return 'forest';
+  if(roll<0.9) return 'hills';
+  return 'urban';
+}
+// Evaluated wherever the river's x-position along its length is needed (elevation dip,
+// water-zone test, texture painting, road routing) so all of them agree exactly.
+function riverXAt(river, y){
+  return river.baseX + Math.sin((y/CANVAS_H)*river.freq + river.phase)*river.amplitude;
+}
+const RIVER_VALLEY_DEPTH = 0.15;
+
+// per user request: builds the full battlefield descriptor -- hills (idea 1: real
+// elevation the player can read), a guaranteed contested high-ground hill near the map's
+// center (idea 3), an optional river with exactly one ford forming the map's one reliable
+// crossing point (idea 3/6: a genuine kill zone to pre-register fire on), forest patches
+// (idea 6), and a road forced through that ford (idea 3/6, reusing the existing road-
+// speed-bonus/A*-pathfinding system unchanged). seed+archetype are both stored so the UI
+// can label/reproduce a specific roll (idea 4's seed preview).
+function generateProceduralTerrain(seed, archetypeKey){
+  const rng = mulberry32(seed);
+  const key = TERRAIN_ARCHETYPES[archetypeKey] ? archetypeKey : 'hills';
+  const arch = TERRAIN_ARCHETYPES[key];
+
+  const hills = [];
+  hills.push({
+    x: rngRange(rng, CANVAS_W*0.42, CANVAS_W*0.58),
+    y: rngRange(rng, CANVAS_H*0.35, CANVAS_H*0.65),
+    r: rngRangeArr(rng, arch.hillRadius) * 1.15,
+    h: rngRangeArr(rng, arch.hillHeight) * 1.1,
+  });
+  const hillCount = Math.round(rngRangeArr(rng, arch.hillCount));
+  for(let i=1;i<hillCount;i++){
+    hills.push({
+      x: rngRange(rng, 120, CANVAS_W-120),
+      y: rngRange(rng, 40, CANVAS_H-40),
+      r: rngRangeArr(rng, arch.hillRadius),
+      h: rngRangeArr(rng, arch.hillHeight),
+    });
+  }
+
+  let river = null;
+  if(arch.river){
+    river = {
+      baseX: rngRange(rng, CANVAS_W*0.38, CANVAS_W*0.55),
+      amplitude: rngRange(rng, 20, 45),
+      freq: rngRange(rng, 2.5, 4),
+      phase: rngRange(rng, 0, Math.PI*2),
+      width: rngRange(rng, 20, 32),
+      fordY: rngRange(rng, CANVAS_H*0.25, CANVAS_H*0.75),
+      fordHalfHeight: 26,
+    };
+  }
+
+  const forestCount = Math.round(rngRangeArr(rng, arch.forestPatches));
+  const forestPatches = [];
+  for(let i=0;i<forestCount;i++){
+    forestPatches.push({
+      x: rngRange(rng, 100, CANVAS_W-100),
+      y: rngRange(rng, 30, CANVAS_H-30),
+      r: rngRange(rng, 60, 130),
+    });
+  }
+
+  let roadPath;
+  if(river){
+    const fordX = riverXAt(river, river.fordY);
+    roadPath = [
+      {x: CANVAS_W-40, y: river.fordY + rngRange(rng,-15,15)},
+      {x: fordX, y: river.fordY},
+      {x: 20, y: river.fordY + rngRange(rng,-15,15)},
+    ];
+  } else {
+    const midY = rngRange(rng, CANVAS_H*0.3, CANVAS_H*0.7);
+    roadPath = [
+      {x: CANVAS_W-40, y: midY},
+      {x: CANVAS_W*0.5, y: midY+rngRange(rng,-40,40)},
+      {x: 20, y: midY},
+    ];
+  }
+
+  return { seed, archetype: key, label: arch.label, hills, forestPatches, river, roadPaths: [roadPath] };
 }
 
-// Nearest-cell lookup (a terrain type is categorical, so no bilinear blending) into
-// TERRAIN_TYPE_GRID, which shares HEIGHT_GRID's exact grid layout.
+const TERRAIN_TYPE_OPEN = 0, TERRAIN_TYPE_FOREST = 1, TERRAIN_TYPE_WATER = 2;
+// Direction-agnostic zone lookup against an explicit procedural descriptor: inside the
+// river band but outside its ford -> water; inside a forest patch -> forest; else open.
+// Split the same way as elevationAtFor/elevationAt -- see there for why.
+function terrainTypeAtFor(gen, x, y){
+  if(!gen) return TERRAIN_TYPE_OPEN;
+  if(gen.river){
+    const inFord = Math.abs(y-gen.river.fordY) < gen.river.fordHalfHeight;
+    if(!inFord){
+      const rx = riverXAt(gen.river, y);
+      if(Math.abs(x-rx) < gen.river.width/2) return TERRAIN_TYPE_WATER;
+    }
+  }
+  for(let i=0;i<gen.forestPatches.length;i++){
+    const f = gen.forestPatches[i];
+    if(Math.hypot(x-f.x, y-f.y) < f.r) return TERRAIN_TYPE_FOREST;
+  }
+  return TERRAIN_TYPE_OPEN;
+}
 function terrainTypeAt(x, y){
-  if(!TERRAIN_TYPE_GRID.values || !HEIGHT_GRID.values) return TERRAIN_TYPE_OPEN;
-  const {x:wx, z:wz} = canvasUnitToWorldXZ(x, y);
-  const c = clamp(Math.round((wx-HEIGHT_GRID.minX)/HEIGHT_GRID.stepX), 0, HEIGHT_GRID.cols-1);
-  const r = clamp(Math.round((wz-HEIGHT_GRID.minZ)/HEIGHT_GRID.stepZ), 0, HEIGHT_GRID.rows-1);
-  return TERRAIN_TYPE_GRID.values[r*HEIGHT_GRID.cols+c];
+  return terrainTypeAtFor(state && state.terrainGen, x, y);
 }
 function terrainTypeLabel(type){
   if(type===TERRAIN_TYPE_FOREST) return '森林';
@@ -7292,89 +7339,45 @@ function terrainTypeLabel(type){
 const TERRAIN_TYPE_COVER_BONUS = { [TERRAIN_TYPE_FOREST]: 12, [TERRAIN_TYPE_WATER]: -8 };
 const TERRAIN_TYPE_SPEED_MULT = { [TERRAIN_TYPE_FOREST]: 0.7, [TERRAIN_TYPE_WATER]: 0.35 };
 
-// Picks a "nice" (1/2/5 x 10^n) contour interval that yields roughly 10 contour lines
-// across the map's real elevation range, the way a paper topographic map's contour
-// interval is chosen relative to the terrain's relief.
-function niceContourInterval(range){
-  if(!(range>0)) return 10;
-  const raw = range/10;
-  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
-  const norm = raw/mag;
-  const nice = norm<1.5 ? 1 : norm<3.5 ? 2 : norm<7.5 ? 5 : 10;
-  return nice*mag;
+// per user request: the procedural road path (see generateProceduralTerrain) is already
+// in canvas-unit space -- no OSM-mesh-local-to-world conversion needed, since there's no
+// real mesh it was authored against. Kept as its own function (rather than inlining) so
+// the rest of the pipeline (state.roads, buildRoadGraph, A* vehicle pathfinding, the
+// on-road speed bonus) is untouched.
+function buildProceduralRoads(roadPaths){
+  REAL_ROADS_CANVAS.length = 0;
+  (roadPaths||[]).forEach(poly=> REAL_ROADS_CANVAS.push(poly));
+  if(state) state.roads = REAL_ROADS_CANVAS;
+  buildRoadGraph();
 }
 
-// per user request: topographic-map-style contour lines, traced from the same real
-// elevation data as HEIGHT_GRID via a simplified marching-squares pass over its grid
-// (each cell's 4 edges are checked independently for a level crossing and paired off in
-// the order found -- this can occasionally split a saddle cell "wrong", which is
-// invisible at this line weight/zoom). Segments are stored in canvas-unit space so
-// drawBoard() can re-project and draw them exactly like any other map element.
+// Topographic-map-style contour lines, traced directly from elevationAt() (the same
+// function every gameplay formula uses) via a simplified marching-squares pass over the
+// canvas -- so, unlike the old real-mesh pipeline (a separate raycast height grid that
+// could in principle drift from what elevationAt reported), there is exactly one terrain
+// truth. CONTOUR_LEVELS are fixed (elevationAt is always normalized 0..1.3) rather than
+// picked per-map, since there's no arbitrary real elevation range to adapt to anymore.
 function buildContourLines(){
   CONTOUR_LINES_CANVAS.length = 0;
-  if(!HEIGHT_GRID.values) return;
-  const {cols, rows, values, minX, minZ, stepX, stepZ} = HEIGHT_GRID;
-  const range = WORLD.maxY-WORLD.minY;
-  const interval = niceContourInterval(range);
-  if(!(interval>0)) return;
-  const v = (r,c)=> values[r*cols+c];
-  const toCanvas = (wx, wz)=> ({ x:(wx-WORLD.originX)/WORLD.scaleX, y:(wz-WORLD.originZ)/WORLD.scaleZ });
-  const firstLevel = Math.ceil(WORLD.minY/interval)*interval;
-  for(let level=firstLevel; level<=WORLD.maxY; level+=interval){
-    for(let r=0; r<rows-1; r++){
-      for(let c=0; c<cols-1; c++){
-        const a=v(r,c), b=v(r,c+1), cc=v(r+1,c+1), d=v(r+1,c);
-        const ax=minX+c*stepX, az=minZ+r*stepZ;
-        const bx=minX+(c+1)*stepX, bz=az;
-        const cx2=bx, cz2=minZ+(r+1)*stepZ;
-        const dx=ax, dz=cz2;
-        const pts = [];
-        const tryEdge = (v0,v1,x0,z0,x1,z1)=>{
-          if((v0<level)!==(v1<level)){
-            const t = (level-v0)/(v1-v0);
-            pts.push({x:x0+(x1-x0)*t, z:z0+(z1-z0)*t});
-          }
-        };
-        tryEdge(a,b, ax,az, bx,bz);
-        tryEdge(b,cc, bx,bz, cx2,cz2);
-        tryEdge(cc,d, cx2,cz2, dx,dz);
-        tryEdge(d,a, dx,dz, ax,az);
-        for(let i=0; i+1<pts.length; i+=2){
-          const p0 = toCanvas(pts[i].x, pts[i].z);
-          const p1 = toCanvas(pts[i+1].x, pts[i+1].z);
-          CONTOUR_LINES_CANVAS.push({x1:p0.x, y1:p0.y, x2:p1.x, y2:p1.y});
+  CONTOUR_LEVELS.forEach(level=>{
+    for(let gy=0; gy<CANVAS_H; gy+=CONTOUR_CELL){
+      for(let gx=0; gx<CANVAS_W; gx+=CONTOUR_CELL){
+        const x0=gx, x1=Math.min(gx+CONTOUR_CELL,CANVAS_W), y0=gy, y1=Math.min(gy+CONTOUR_CELL,CANVAS_H);
+        const vTL=elevationAt(x0,y0), vTR=elevationAt(x1,y0), vBR=elevationAt(x1,y1), vBL=elevationAt(x0,y1);
+        const pts=[];
+        if((vTL>level)!==(vTR>level)){ const t=(level-vTL)/(vTR-vTL); pts.push({x:x0+t*(x1-x0), y:y0}); }
+        if((vTR>level)!==(vBR>level)){ const t=(level-vTR)/(vBR-vTR); pts.push({x:x1, y:y0+t*(y1-y0)}); }
+        if((vBL>level)!==(vBR>level)){ const t=(level-vBL)/(vBR-vBL); pts.push({x:x0+t*(x1-x0), y:y1}); }
+        if((vTL>level)!==(vBL>level)){ const t=(level-vTL)/(vBL-vTL); pts.push({x:x0, y:y0+t*(y1-y0)}); }
+        if(pts.length===2){
+          CONTOUR_LINES_CANVAS.push({x1:pts[0].x, y1:pts[0].y, x2:pts[1].x, y2:pts[1].y});
+        } else if(pts.length===4){
+          CONTOUR_LINES_CANVAS.push({x1:pts[0].x, y1:pts[0].y, x2:pts[1].x, y2:pts[1].y});
+          CONTOUR_LINES_CANVAS.push({x1:pts[2].x, y1:pts[2].y, x2:pts[3].x, y2:pts[3].y});
         }
       }
     }
-  }
-}
-
-// Converts the real OSM road network (mapcreate/roads_data.js, raw local terrain
-// meters as originally exported by gsi_terrain_to_obj.py) into canvas-unit
-// polylines. Uses the terrain mesh node's own accumulated world matrix
-// (localToWorld) rather than a hand-derived scale/rotation, so it stays correct
-// regardless of exactly how the GLB was authored/exported.
-function buildRealRoads(roadsRawData){
-  if(!roadsRawData || !terrainObject3d) return;
-  let meshNode = null;
-  terrainObject3d.traverse(o=>{ if(o.isMesh && !meshNode) meshNode = o; });
-  if(!meshNode) return;
-  meshNode.updateWorldMatrix(true, false);
-  const v = new THREE.Vector3();
-  REAL_ROADS_CANVAS.length = 0;
-  roadsRawData.forEach(way=>{
-    const poly = way.points.map(pt=>{
-      v.set(pt.x, pt.z, 0);
-      meshNode.localToWorld(v);
-      return {
-        x: (v.x-WORLD.originX)/WORLD.scaleX,
-        y: (v.z-WORLD.originZ)/WORLD.scaleZ,
-      };
-    });
-    REAL_ROADS_CANVAS.push(poly);
   });
-  if(state) state.roads = REAL_ROADS_CANVAS;
-  buildRoadGraph();
 }
 
 // Builds a graph (nodes + adjacency list) from REAL_ROADS_CANVAS so vehicles
@@ -7509,17 +7512,14 @@ function advanceAlongPath(fromX, fromY, path, stepLen){
 function canvasUnitToWorldXZ(cx, cy){
   return { x: WORLD.originX + cx*WORLD.scaleX, z: WORLD.originZ + cy*WORLD.scaleZ };
 }
+// World-space (real Three.js Y) terrain height at a canvas position -- the single choke
+// point every 3D-facing consumer (camera look-at/fit, unit/projectile screen projection)
+// goes through. Derived directly from elevationAt()'s 0..1.3 normalized value rather than
+// a raycast against a loaded mesh, since the procedural mesh built in
+// buildProceduralTerrainMesh() is displaced by this exact same formula -- what the camera
+// projects units onto and what the visible mesh surface actually is can't disagree.
 function terrainHeightAt(cx, cy){
-  if(!HEIGHT_GRID.values) return WORLD.refY||0;
-  const {x,z} = canvasUnitToWorldXZ(cx,cy);
-  const fc = clamp((x-HEIGHT_GRID.minX)/HEIGHT_GRID.stepX, 0, HEIGHT_GRID.cols-1.0001);
-  const fr = clamp((z-HEIGHT_GRID.minZ)/HEIGHT_GRID.stepZ, 0, HEIGHT_GRID.rows-1.0001);
-  const c0 = Math.floor(fc), r0 = Math.floor(fr), c1 = c0+1, r1 = r0+1;
-  const tx = fc-c0, tz = fr-r0;
-  const v = (r,c)=> HEIGHT_GRID.values[r*HEIGHT_GRID.cols+c];
-  const top = v(r0,c0)*(1-tx) + v(r0,c1)*tx;
-  const bot = v(r1,c0)*(1-tx) + v(r1,c1)*tx;
-  return top*(1-tz) + bot*tz;
+  return WORLD.minY + elevationAt(cx, cy)*PROC_TERRAIN_HEIGHT_SCALE;
 }
 
 // Screen-space projection of a logical (canvas-unit) point through the live 3D camera.
@@ -8146,12 +8146,9 @@ document.getElementById('minimap').addEventListener('click', handleMinimapClick)
 document.addEventListener('contextmenu', e=>e.preventDefault());
 loadAchievements();
 renderAudioSettingsPanel();
-// initThree() must run before initGame() -- initGame() eagerly calls loadSelectedTerrain()
-// for the default map so it preloads while the setup screen is up, and that needs scene3d
-// (set up by initThree()) to already exist. Calling them in the other order left scene3d
-// undefined on first load, so loadSelectedTerrain() silently bailed out and no map ever
-// appeared until the player re-triggered it (e.g. by picking a map, which initThree() had
-// long since finished setting up by then).
+// initThree() sets up the renderer/scene/camera once at load; the actual terrain mesh
+// isn't built until the first wave starts (regenerateTerrain(), called from startStage()),
+// so initGame() itself only needs to roll the setup screen's seed candidates.
 initThree();
 initGame();
 setupMapControls();
