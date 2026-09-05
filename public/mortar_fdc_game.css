@@ -254,12 +254,11 @@
     padding:9px 10px;margin-bottom:14px;
   }
   .decision-summary{font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;}
-  .decision-btn{font-size:16px;padding:13px 9px;letter-spacing:1px;box-shadow:0 0 0 1px rgba(217,164,65,0.25);}
 
   /* per user request: game-speed switcher moved to sit directly to the left of 状況開始,
      instead of its own labeled row underneath -- a narrow stacked column of 3 small buttons
      next to the full-height primary button. */
-  .decision-controls-row{display:flex;align-items:stretch;gap:6px;}
+  .decision-controls-row{display:flex;align-items:center;gap:6px;}
   .decision-controls-row .decision-btn{flex:1 1 auto;}
   .speed-row{display:flex;flex-direction:column;gap:3px;flex:0 0 auto;}
   .speed-row button{padding:4px 9px;font-size:10.5px;}
@@ -341,6 +340,11 @@
   .btn.primary{background:var(--amber-dim);border-color:var(--amber);color:#1a1608;}
   .btn.primary:hover:not(:disabled){background:var(--amber);}
   .btn.recon{background:#26301e;border-color:var(--edge);}
+  /* per user request: shrunk to ~1/3 its old height -- placed after the base select,.btn
+     rule (same specificity, 0-1-0 each) so it actually wins the cascade instead of being
+     silently overridden by that rule's own font-size/padding, which is what was happening
+     when this lived up near .decision-box/.decision-summary earlier in the file. */
+  .decision-btn{font-size:12px;padding:2px 9px;letter-spacing:0.5px;box-shadow:0 0 0 1px rgba(217,164,65,0.25);}
   .row-2{display:flex;gap:8px;}
   .row-2 > div, .row-2 > button{flex:1;}
 
