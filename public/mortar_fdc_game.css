@@ -138,7 +138,7 @@
     background:none; border:none; padding:0; margin-bottom:0;
   }
   .hud-bottom .decision-summary{display:none;}
-  .hud-bottom .speed-row button{padding:8px 8px; font-size:11px;}
+  .hud-bottom .speed-slider{width:56px;}
 
   .map-fullscreen-btn{width:32px;height:32px;}
 
@@ -255,13 +255,29 @@
   }
   .decision-summary{font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;}
 
-  /* per user request: game-speed switcher moved to sit directly to the left of 状況開始,
-     instead of its own labeled row underneath -- a narrow stacked column of 3 small buttons
-     next to the full-height primary button. */
-  .decision-controls-row{display:flex;align-items:center;gap:6px;}
+  /* per user request: game-speed switcher moved to sit directly to the left of 状況開始
+     (instead of its own labeled row underneath) and later changed from 3 stacked buttons to
+     a compact horizontal slider -- the whole point of shrinking 決心/状況開始 is to give the
+     battlefield view back more screen space (.hud-bottom is a fixed overlay directly above
+     the full-bleed 3D canvas), so a tall stacked-button column defeating that by keeping the
+     bar just as tall would miss the point entirely. */
+  .decision-controls-row{display:flex;align-items:center;gap:8px;}
   .decision-controls-row .decision-btn{flex:1 1 auto;}
-  .speed-row{display:flex;flex-direction:column;gap:3px;flex:0 0 auto;}
-  .speed-row button{padding:4px 9px;font-size:10.5px;}
+  .speed-slider-row{display:flex;align-items:center;gap:6px;flex:0 0 auto;}
+  .speed-slider{
+    -webkit-appearance:none;appearance:none;
+    width:64px;height:4px;border-radius:2px;background:var(--edge-dim);outline:none;cursor:pointer;
+  }
+  .speed-slider::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;
+    width:14px;height:14px;border-radius:50%;background:var(--amber);border:1px solid var(--amber-dim);cursor:pointer;
+  }
+  .speed-slider::-moz-range-thumb{
+    width:14px;height:14px;border-radius:50%;background:var(--amber);border:1px solid var(--amber-dim);cursor:pointer;
+  }
+  .speed-slider-label{
+    font-family:var(--font-mono);font-size:10.5px;color:var(--muted);min-width:26px;text-align:center;
+  }
 
   .roster-list{max-height:110px;overflow-y:auto;margin-bottom:8px;border-top:1px dashed var(--edge);padding-top:6px;}
   .roster-row{display:flex;justify-content:space-between;gap:6px;font-family:var(--font-mono);font-size:10.5px;padding:1px 0;}

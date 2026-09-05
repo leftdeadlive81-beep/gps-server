@@ -493,6 +493,10 @@ const MORTAR_CB_STRIKE_DMG = [56, 84]; // per user request: enemy attack power d
 // still finishes just before the next tick, at any speed.
 const GAME_SPEED_INTERVALS = { slow: 2000, normal: 1000, fast: 500 };
 const GAME_SPEED_LABEL = { slow: '低速', normal: '通常', fast: '高速' };
+// per user request: 3-position slider instead of 3 stacked buttons -- index order for the
+// <input type="range"> in renderDecisionPanel().
+const GAME_SPEED_ORDER = ['slow', 'normal', 'fast'];
+function setGameSpeedByIndex(idx){ setGameSpeed(GAME_SPEED_ORDER[idx]); }
 function visualTweenDurationMs(){
   const ms = GAME_SPEED_INTERVALS[(state && state.gameSpeed) || 'normal'];
   return Math.round(ms*0.96);
@@ -5908,10 +5912,11 @@ function renderDecisionPanel(){
     <div class="decision-box">
       ${summary ? `<div class="decision-summary">${summary}</div>` : ''}
       <div class="decision-controls-row">
-        <div class="speed-row">
-          ${['slow','normal','fast'].map(spd=>
-            `<button class="btn squad-order-btn ${state.gameSpeed===spd?'active':''}" onclick="setGameSpeed('${spd}')">${GAME_SPEED_LABEL[spd]}</button>`
-          ).join('')}
+        <div class="speed-slider-row">
+          <input type="range" class="speed-slider" min="0" max="2" step="1"
+            value="${GAME_SPEED_ORDER.indexOf(state.gameSpeed)}"
+            oninput="setGameSpeedByIndex(this.value)" title="進行速度">
+          <span class="speed-slider-label">${GAME_SPEED_LABEL[state.gameSpeed]}</span>
         </div>
         <button class="btn primary decision-btn" ${disabled?'disabled':''} onclick="toggleAutoCommit()">${isAutoCommitRunning()?'状況中':'状況開始'}</button>
       </div>
