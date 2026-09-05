@@ -1158,7 +1158,6 @@ function deployBoxSize(){
 function startStage(){
   const stage = state.stage;
   pickWaveBgm();
-  state.terrain = generateTerrain();
   state.contours = computeContours();
   state.roads = REAL_ROADS_CANVAS;
   state.smokeClouds = [];
@@ -1662,20 +1661,6 @@ function bearingToXY(bearingDeg, dist, originX, originY){
   const rad = bearingDeg*Math.PI/180;
   return { x: originX + dist*Math.sin(rad), y: originY - dist*Math.cos(rad) };
 }
-function generateTerrain(){
-  const hillCount = 3 + Math.floor(Math.random()*3);
-  const hills = [];
-  for(let i=0;i<hillCount;i++){
-    hills.push({
-      x: rnd(140, CANVAS_W-100),
-      y: rnd(50, CANVAS_H-50),
-      r: rnd(100,220),
-      h: rnd(0.35,0.75),
-    });
-  }
-  return hills;
-}
-
 // Real-world road network (from OSM, via mapcreate/roads_data.js) replaces the
 // old procedural line-only roads. Converted from raw terrain-local meters to
 // canvas-unit space once, asynchronously, as soon as the 3D terrain finishes
@@ -1785,7 +1770,10 @@ function terrainAwareStep(fromX, fromY, targetX, targetY, stepLen, ignoreWalls){
 
   const near = nearestRoadPoint(fromX, fromY);
   const onRoad = near && near.dist < ROAD_PULL_RADIUS;
-  const effStepLen = Math.min(stepLen * (onRoad ? 1 : OFF_ROAD_SPEED_MULT), straightDist);
+  // per user request: forest/water (see classifyTerrainTypes) slow off-road movement
+  // further still -- a road already represents a cleared path, so it's exempt.
+  const terrainTypeMult = onRoad ? 1 : (TERRAIN_TYPE_SPEED_MULT[terrainTypeAt(fromX, fromY)] || 1);
+  const effStepLen = Math.min(stepLen * (onRoad ? 1 : OFF_ROAD_SPEED_MULT) * terrainTypeMult, straightDist);
   if(straightDist <= effStepLen){
     return ignoreWalls ? {x: targetX, y: targetY} : applyWallBlock(fromX, fromY, targetX, targetY);
   }
@@ -1830,16 +1818,23 @@ function scoutTerrainAwareStep(fromX, fromY, targetX, targetY, stepLen){
   return { x: fromX + (next.x-fromX)*mult, y: fromY + (next.y-fromY)*mult };
 }
 
+// Tactical elevation now reads the map's REAL terrain mesh (via terrainHeightAt/
+// HEIGHT_GRID, built once from the loaded GLB) instead of a set of random invisible
+// hills re-rolled every wave. Previously the two were completely disconnected: the
+// contour lines and 3D terrain the player actually sees came from the real mesh, while
+// every gameplay effect that used elevation -- line-of-sight blocking, the attacker/
+// defender altitude combat bonus, movement's slope penalty, and the 標高 label shown in
+// each unit's panel -- silently used a different, randomized, per-wave height field. A
+// hill you could see and climb to on the map had no tactical effect, and "high ground"
+// in-game could be sitting in a visual valley. Normalizing the real height range to
+// 0..1 keeps every formula below (EYE_HEIGHT, the 0.35 altitude-bonus coefficient,
+// TERRAIN_SLOPE_PENALTY, the 0.25/0.6 elevationLabel breakpoints) working against
+// roughly the same scale they were tuned for.
 function elevationAt(x,y){
-  if(!state || !state.terrain) return 0;
-  let e = 0;
-  for(let i=0;i<state.terrain.length;i++){
-    const hill = state.terrain[i];
-    const d = Math.hypot(x-hill.x, y-hill.y);
-    const t = clamp(1-d/hill.r, 0, 1);
-    e += hill.h * t*t*(3-2*t);
-  }
-  return e;
+  if(!HEIGHT_GRID.values) return 0;
+  const range = WORLD.maxY - WORLD.minY;
+  if(!(range>0)) return 0;
+  return clamp((terrainHeightAt(x,y) - WORLD.minY) / range, 0, 1);
 }
 function elevationLabel(e){
   if(e < 0.25) return '低地';
@@ -1849,6 +1844,60 @@ function elevationLabel(e){
 function altitudeBonus(attackerX, attackerY, defenderX, defenderY){
   const diff = elevationAt(attackerX, attackerY) - elevationAt(defenderX, defenderY);
   return clamp(1 + diff*0.35, 0.75, 1.4);
+}
+
+// per user request: 掩蔽率(cover) now factors in the real terrain around a unit, not
+// just a fixed per-unit-type constant. This deliberately ignores who's actually
+// shooting (wiring an attacker position through every getUnitExposure/rollExposureHit
+// call site would be a much bigger change) and instead asks a direction-agnostic
+// question: relative to its immediate surroundings, is this spot tucked into a dip
+// (average nearby ground is higher -- masked from most angles) or sitting on a local
+// high point (average nearby ground is lower -- silhouetted from most angles)? Using
+// the relief relative to the local average (rather than counting how many sampled
+// neighbors are strictly higher) keeps flat/open ground correctly neutral -- nothing
+// nearby reads as meaningfully higher OR lower, so relief comes out near zero instead
+// of always scoring as "exposed" for want of any higher neighbor. This deliberately
+// cuts the other way from altitudeBonus's attacker-vs-defender high-ground damage bonus:
+// the tallest hilltop is the best place to shoot from and the worst place to stand still
+// and get shot at.
+const TERRAIN_COVER_SAMPLE_RADIUS = 40;
+const TERRAIN_COVER_SAMPLE_COUNT = 8;
+const TERRAIN_COVER_RANGE = 20;
+// Relief (in elevationAt's 0..1 scale) relative to the local average that saturates the
+// cover bonus -- a fold/knob this pronounced within one sample radius is already a clear
+// local high or low point, so more relief than this shouldn't swing cover any further.
+const TERRAIN_COVER_RELIEF_SATURATION = 0.15;
+function terrainCoverBonus(x, y){
+  if(!HEIGHT_GRID.values) return 0;
+  const here = elevationAt(x, y);
+  let sum = 0;
+  for(let i=0;i<TERRAIN_COVER_SAMPLE_COUNT;i++){
+    const ang = (i/TERRAIN_COVER_SAMPLE_COUNT) * Math.PI*2;
+    const nx = x + Math.cos(ang)*TERRAIN_COVER_SAMPLE_RADIUS;
+    const ny = y + Math.sin(ang)*TERRAIN_COVER_SAMPLE_RADIUS;
+    sum += elevationAt(nx, ny);
+  }
+  const relief = (sum/TERRAIN_COVER_SAMPLE_COUNT) - here; // >0 = local dip, <0 = local high point
+  return clamp(relief/TERRAIN_COVER_RELIEF_SATURATION, -1, 1) * (TERRAIN_COVER_RANGE/2);
+}
+
+// per user request: on top of the elevation-based terrainCoverBonus, a discrete terrain
+// type (see classifyTerrainTypes, defined further below with TERRAIN_TYPE_FOREST/WATER)
+// adds its own flat cover swing -- concealment among trees vs. having nowhere to hide
+// while caught out in open water. Returns 0 (no change from current behavior) wherever
+// classification hasn't finished yet or reads open ground. The lookup table itself
+// (TERRAIN_TYPE_COVER_BONUS) is declared next to those constants further down in the
+// file -- this function is only ever called once gameplay is running, long after every
+// top-level const in the file has already initialized, so the textual ordering here
+// doesn't matter the way it would for a top-level object literal evaluated at load time.
+function terrainTypeCoverBonus(x, y){
+  return TERRAIN_TYPE_COVER_BONUS[terrainTypeAt(x, y)] || 0;
+}
+// Combines both cover sources (elevation-based defilade + discrete terrain type) into the
+// one number every getUnitExposure/getTargetExposure branch adds on top of a unit's base
+// exposure -- see each for details.
+function terrainCoverTotal(x, y){
+  return terrainCoverBonus(x, y) + terrainTypeCoverBonus(x, y);
 }
 
 function computeContours(){
@@ -2623,7 +2672,7 @@ function resolveSquadOrders(actionTurns){
         const strengthFrac = curAlive.length/sq.soldiers.length;
         const squadAltMult = altitudeBonus(sq.x, sq.y, t.trueX, t.trueY);
         const suppressionDmgMult = suppressed ? SUPPRESSION_DUEL_DMG_BONUS : 1;
-        const enemyExposureMult = exposureNormalizedMult(t.exposure);
+        const enemyExposureMult = exposureNormalizedMult(getTargetExposure(t));
         const vetDmgMult = 1 + unitAvgVetLevel(sq.soldiers)*VET_DMG_BONUS_PER_LEVEL;
         const dmgToEnemy = Math.round(rnd(INFANTRY_DUEL_DMG_TO_ENEMY[0], INFANTRY_DUEL_DMG_TO_ENEMY[1]) * strengthFrac * dmgMult * squadAltMult * suppressionDmgMult * enemyExposureMult * vetDmgMult);
         applyDamageToTarget(t, dmgToEnemy);
@@ -2737,7 +2786,7 @@ function resolveTankOrders(actionTurns){
         const suppressed = isSuppressed(t);
         const tankAltMult = altitudeBonus(tank.x, tank.y, t.trueX, t.trueY);
         const suppressionDmgMult = suppressed ? SUPPRESSION_DUEL_DMG_BONUS : 1;
-        const enemyExposureMult = exposureNormalizedMult(t.exposure);
+        const enemyExposureMult = exposureNormalizedMult(getTargetExposure(t));
         const dmgToEnemy = Math.round(rnd(TANK_DUEL_DMG_TO_ENEMY[0], TANK_DUEL_DMG_TO_ENEMY[1]) * dmgMult * tankAltMult * suppressionDmgMult * enemyExposureMult);
         applyDamageToTarget(t, dmgToEnemy);
         anyEvent = true;
@@ -2797,7 +2846,7 @@ function sniperEngageTarget(sn, t){
   if(revealTarget(t)){
     log('op','斥候', `狙撃${sn.id+1}班が${t.id}を捕捉、<b>${t.def.label}</b>と識別。`);
   }
-  if(!rollExposureHit(t.exposure)){
+  if(!rollExposureHit(getTargetExposure(t))){
     log('mortar','狙撃', `狙撃${sn.id+1}班、${t.id}へ発砲するも掩蔽率により外す。`);
     return;
   }
@@ -3419,7 +3468,7 @@ function hqBoxHtml(){
   return `
     <div class="meta">HP: ${hq.hp} / ${hq.maxHp}</div>
     <div class="hpbar big" style="margin-bottom:8px;"><div style="width:${Math.max(0,hq.hp/hq.maxHp*100)}%"></div></div>
-    ${exposureMetaHtml(hq.exposure)}
+    ${exposureMetaHtml(getUnitExposure({kind:'hq'}))}
     <button class="btn" ${canCover?'':'disabled'} onclick="buildHqCover()" style="margin:8px 0 4px;">掩体構築(掩蔽率+${HQ_COVER_EXPOSURE_BONUS}${hq.coverBuilt?' ・ このWAVEは実施済み':hq.exposure>=HQ_COVER_EXPOSURE_CAP?' ・ 上限到達':''})</button>
     <button class="btn" ${canRepair?'':'disabled'} onclick="repairHq()">応急修復(+${repairAmount}HP ・ ¥${repairCost})${hq.hp>=hq.maxHp?' ・ HP満タン':''}</button>
     <div class="row-2" style="margin:8px 0 4px;">
@@ -3467,31 +3516,45 @@ function checkFriendlyFireAt(ix, iy, killRadius){
 
 // veteran soldiers are harder to hit (folded in here as a bonus on top of the unit's base
 // exposure, so it flows through every existing damage-avoidance path -- enemyCounterAttack,
-// resolveVehicleAssault, mortar friendly fire, the squad/infantry duel -- for free)
+// resolveVehicleAssault, mortar friendly fire, the squad/infantry duel -- for free). Terrain
+// cover (terrainCoverTotal: elevation defilade + discrete terrain type) is folded in the
+// same way, on top of both.
 function getUnitExposure(candidate){
-  if(candidate.kind==='hq') return state.hq.exposure;
-  if(candidate.kind==='mortar') return state.mortars[candidate.idx].exposure;
-  if(candidate.kind==='tank') return state.tanks[candidate.idx].exposure;
+  if(candidate.kind==='hq') return state.hq.exposure + terrainCoverTotal(state.hq.x, state.hq.y);
+  if(candidate.kind==='mortar'){
+    const m = state.mortars[candidate.idx];
+    return m.exposure + terrainCoverTotal(m.x, m.y);
+  }
+  if(candidate.kind==='tank'){
+    const tk = state.tanks[candidate.idx];
+    return tk.exposure + terrainCoverTotal(tk.x, tk.y);
+  }
   if(candidate.kind==='scout'){
     const u = state.scouts[candidate.idx];
-    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL;
+    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y);
   }
   if(candidate.kind==='squad'){
     const u = state.squads[candidate.idx];
-    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL;
+    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y);
   }
   if(candidate.kind==='sniper'){
     const u = state.snipers[candidate.idx];
-    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL;
+    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y);
   }
   if(candidate.kind==='engineer'){
     const u = state.engineers[candidate.idx];
-    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL;
+    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y);
   }
   return EXPOSURE_DEFAULT;
 }
 function rollExposureHit(exposure){
   return Math.random() < hitChanceFromExposure(exposure);
+}
+// Mirrors getUnitExposure() for enemy targets -- same terrain-cover treatment, evaluated
+// against the target's true position (trueX/trueY) rather than wherever it's currently
+// estimated to be, since cover depends on where the target actually is standing.
+function getTargetExposure(t){
+  return t.exposure + terrainCoverTotal(t.trueX, t.trueY);
 }
 
 function nearestFriendlyAsset(x, y, includeSquads){
@@ -3790,7 +3853,7 @@ function resolveVehicleAssault(actionTurns){
         }
         if(near.kind==='squad'){
           const aliveSoldiers = state.squads[near.idx].soldiers.filter(s=>s.alive);
-          if(aliveSoldiers.length>0 && Math.random()<0.5 && rollExposureHit(t.exposure)){
+          if(aliveSoldiers.length>0 && Math.random()<0.5 && rollExposureHit(getTargetExposure(t))){
             const antiTankMult = altitudeBonus(near.x, near.y, t.trueX, t.trueY);
             const antiTankDmg = Math.round(rnd(2,6) * antiTankMult);
             t.hp -= antiTankDmg;
@@ -4025,7 +4088,7 @@ function advanceEnemyInfantry(actionTurns){
       if(!squadsAlive && state.hq.hp>0){
         const hqDist = Math.hypot(t.trueX-state.hq.x, t.trueY-state.hq.y);
         if(hqDist <= SQUAD_ENGAGE_RANGE){
-          if(rollExposureHit(state.hq.exposure)){
+          if(rollExposureHit(getUnitExposure({kind:'hq'}))){
             const dmg = Math.round(rnd(6,16) * DIFFICULTIES[state.difficulty].counterMult); // per user request: enemy attack power doubled
             state.hq.hp = Math.max(0, state.hq.hp-dmg);
             if(state.hq.hp <= state.hq.maxHp*0.3) state.hpDroppedLow = true;
@@ -5150,7 +5213,7 @@ function mortarBoxHtml(idx){
     if(armingMove) moveStatus = '地図をクリックして移動先指定…';
     else if(mortar.pendingDest) moveStatus = '移動先: 設定済み(陣地転換予定)';
     bodyHtml = `
-      <div class="meta">標高: ${elevationLabel(elevationAt(mortar.x,mortar.y))}</div>
+      <div class="meta">標高: ${elevationLabel(elevationAt(mortar.x,mortar.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(mortar.x,mortar.y))}</div>
       <button class="btn ${armingMove?'active squad-order-btn':''}" onclick="setMortarOrder(${idx},'move')" style="margin:6px 0;">移動先を指定</button>
       <div class="meta">${moveStatus}</div>
     `;
@@ -5230,7 +5293,7 @@ function mortarBoxHtml(idx){
     ${cbWarnHtml}
     ${bodyHtml}
     ${!dead ? mortarMainlineHtml(idx, mortar) : ''}
-    ${exposureMetaHtml(mortar.exposure)}
+    ${exposureMetaHtml(getUnitExposure({kind:'mortar', idx}))}
     ${crewHtml}
   `;
 }
@@ -5260,7 +5323,10 @@ function updateFireConfigCancel(idx){
 
 function exposureMetaHtml(exposure){
   const pct = Math.round(hitChanceFromExposure(exposure)*100);
-  return `<div class="meta">掩蔽率: ${exposure} (被弾率目安 ${pct}%)</div>`;
+  // terrainCoverTotal (elevation defilade + terrain type) adds a non-integer bonus on top
+  // of what used to always be a whole-number constant -- round for display only, the raw
+  // float is still what hitChanceFromExposure above and every combat roll actually use.
+  return `<div class="meta">掩蔽率: ${Math.round(exposure)} (被弾率目安 ${pct}%)</div>`;
 }
 
 function soldierRosterHtml(soldiers){
@@ -5297,7 +5363,7 @@ function scoutBoxHtml(idx){
   else if(scout.pendingDest) orderStatus = '行動: 移動先へ前進予定';
   else if(scout.pendingReconTargetId) orderStatus = `行動: ${scout.pendingReconTargetId} を偵察予定`;
   return `
-    <div class="meta">${dead?'戦闘不能':alive+'/'+scout.soldiers.length+'名'} ・ 標高: ${elevationLabel(elevationAt(scout.x,scout.y))}</div>
+    <div class="meta">${dead?'戦闘不能':alive+'/'+scout.soldiers.length+'名'} ・ 標高: ${elevationLabel(elevationAt(scout.x,scout.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(scout.x,scout.y))}</div>
     ${exposureMetaHtml(getUnitExposure({kind:'scout', idx}))}
     <div class="meta">観測方向: ${Math.round(scout.watchAngle)}° (視野約${Math.round(scoutHalfFov()*2)}°)</div>
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/scout.soldiers.length*100)}%"></div></div>
@@ -5344,7 +5410,7 @@ function squadBoxHtml(idx){
     ? `攻撃目標: ${huntTarget.id} (${huntTarget.revealed?huntTarget.def.label:'識別不能'})`
     : null;
   return `
-    <div class="meta">${alive} / ${sq.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sq.x,sq.y))}</div>
+    <div class="meta">${alive} / ${sq.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sq.x,sq.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(sq.x,sq.y))}</div>
     ${exposureMetaHtml(getUnitExposure({kind:'squad', idx}))}
     <div class="squad-orders" style="margin:6px 0;">${btns}</div>
     <div class="row-2" style="margin-bottom:6px;">
@@ -5447,7 +5513,7 @@ function sniperBoxHtml(idx){
   else if(sn.aimAngle!==null && sn.aimAngle!==undefined) aimStatus = `射撃方向: ${Math.round(sn.aimAngle)}° (射程${SNIPER_AIM_RANGE_M}m、自動交戦)`;
   else aimStatus = '射撃方向: 未設定';
   return `
-    <div class="meta">${alive} / ${sn.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sn.x,sn.y))} ・ 有効射程約${SNIPER_RANGE_M}m</div>
+    <div class="meta">${alive} / ${sn.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sn.x,sn.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(sn.x,sn.y))} ・ 有効射程約${SNIPER_RANGE_M}m</div>
     ${exposureMetaHtml(getUnitExposure({kind:'sniper', idx}))}
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
     <div class="row-2" style="margin-bottom:6px;">
@@ -7096,6 +7162,7 @@ function loadSelectedTerrain(){
       buildHeightGrid();
       buildContourLines();
       buildRealRoads(mapConf.roads());
+      classifyTerrainTypes(mapConf.texture());
       threeReady = true;
       cameraNeedsInitialFit = true;
       resizeThree();
@@ -7107,7 +7174,10 @@ function loadSelectedTerrain(){
 
 // Precompute a coarse height field ONCE at load time (via real mesh raycasts) so that
 // per-frame lookups (terrainHeightAt) are cheap O(1) bilinear reads instead of raycasts
-// against a dense terrain mesh (which would be far too slow to do every frame).
+// against a dense terrain mesh (which would be far too slow to do every frame). Also
+// stashes each cell's raycast-hit UV (HEIGHT_GRID.uvs) -- classifyTerrainTypes() reuses
+// these to sample the real aerial-photo texture for forest/water, at zero extra
+// raycasting cost, once that texture has decoded.
 function buildHeightGrid(){
   const COLS = 70, ROWS = 40;
   const rc = new THREE.Raycaster();
@@ -7115,18 +7185,104 @@ function buildHeightGrid(){
   const stepX = (CANVAS_W*WORLD.scaleX)/(COLS-1);
   const stepZ = (CANVAS_H*WORLD.scaleZ)/(ROWS-1);
   const values = new Float32Array(COLS*ROWS);
+  const uvs = new Float32Array(COLS*ROWS*2);
   for(let r=0;r<ROWS;r++){
     for(let c=0;c<COLS;c++){
       const x = minX + c*stepX, z = minZ + r*stepZ;
       rc.set(new THREE.Vector3(x, WORLD.maxY+2000, z), new THREE.Vector3(0,-1,0));
       const hits = rc.intersectObject(terrainObject3d, true);
-      values[r*COLS+c] = hits.length ? hits[0].point.y : WORLD.refY;
+      const hit = hits[0];
+      values[r*COLS+c] = hit ? hit.point.y : WORLD.refY;
+      uvs[(r*COLS+c)*2] = hit && hit.uv ? hit.uv.x : -1;
+      uvs[(r*COLS+c)*2+1] = hit && hit.uv ? hit.uv.y : -1;
     }
   }
   HEIGHT_GRID.cols = COLS; HEIGHT_GRID.rows = ROWS; HEIGHT_GRID.values = values;
   HEIGHT_GRID.minX = minX; HEIGHT_GRID.minZ = minZ;
   HEIGHT_GRID.stepX = stepX; HEIGHT_GRID.stepZ = stepZ;
+  HEIGHT_GRID.uvs = uvs;
 }
+
+// per user request: classifies each HEIGHT_GRID cell as open ground / forest / water by
+// sampling the real aerial-photo terrain texture at that cell's raycast UV -- so, unlike
+// a procedural zone generator, "which spots are forest or water" always matches what the
+// player can actually see on the map. The photo's colors turn out fairly muted (satellite
+// haze, JPEG compression), so absolute "water is blue" RGB thresholds don't hold up --
+// instead this ranks every cell by how much bluer/greener it is than its own red+opposite
+// channel average, and takes the top slice of *this specific texture's* distribution as
+// water/forest. That adapts to whatever the actual map's palette turns out to be instead
+// of assuming a fixed palette that might not match. Runs async (image decode) and leaves
+// TERRAIN_TYPE_GRID.values null (terrainTypeAt() then reports "open") until it finishes.
+const TERRAIN_TYPE_OPEN = 0, TERRAIN_TYPE_FOREST = 1, TERRAIN_TYPE_WATER = 2;
+const TERRAIN_TYPE_GRID = { cols:0, rows:0, values:null };
+const TERRAIN_WATER_PERCENTILE = 0.95; // top 5% bluest cells
+const TERRAIN_FOREST_PERCENTILE = 0.85; // top 15% greenest of the cells water didn't already claim
+const TERRAIN_COLOR_SAMPLE_BOX = 4; // half-width (px) of the average-color box per cell, to smooth JPEG noise
+function classifyTerrainTypes(base64Texture){
+  if(!base64Texture || !HEIGHT_GRID.uvs) return;
+  const img = new Image();
+  img.onload = ()=>{
+    const cv = document.createElement('canvas');
+    cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+    const ctx = cv.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const W = img.naturalWidth, H = img.naturalHeight;
+    const pixels = ctx.getImageData(0, 0, W, H).data;
+    const {cols, rows, uvs} = HEIGHT_GRID;
+    const n = cols*rows;
+    const blueScores = new Float32Array(n), greenScores = new Float32Array(n);
+    for(let i=0;i<n;i++){
+      const u = uvs[i*2], v = uvs[i*2+1];
+      if(u<0){ continue; } // cell's raycast missed the mesh -- leave both scores at 0 (open)
+      const cx = clamp(Math.round(u*W), 0, W-1), cy = clamp(Math.round(v*H), 0, H-1);
+      let r=0,g=0,b=0,cnt=0;
+      for(let dy=-TERRAIN_COLOR_SAMPLE_BOX; dy<TERRAIN_COLOR_SAMPLE_BOX; dy++){
+        const py = cy+dy; if(py<0||py>=H) continue;
+        for(let dx=-TERRAIN_COLOR_SAMPLE_BOX; dx<TERRAIN_COLOR_SAMPLE_BOX; dx++){
+          const px = cx+dx; if(px<0||px>=W) continue;
+          const idx = (py*W+px)*4;
+          r+=pixels[idx]; g+=pixels[idx+1]; b+=pixels[idx+2]; cnt++;
+        }
+      }
+      if(cnt===0) continue;
+      r/=cnt; g/=cnt; b/=cnt;
+      blueScores[i] = b-(r+g)/2;
+      greenScores[i] = g-(r+b)/2;
+    }
+    const sortedBlue = Float32Array.from(blueScores).sort();
+    const sortedGreen = Float32Array.from(greenScores).sort();
+    const blueThresh = sortedBlue[Math.floor(n*TERRAIN_WATER_PERCENTILE)];
+    const greenThresh = sortedGreen[Math.floor(n*TERRAIN_FOREST_PERCENTILE)];
+    const values = new Uint8Array(n);
+    for(let i=0;i<n;i++){
+      if(blueScores[i] >= blueThresh) values[i] = TERRAIN_TYPE_WATER;
+      else if(greenScores[i] >= greenThresh) values[i] = TERRAIN_TYPE_FOREST;
+      else values[i] = TERRAIN_TYPE_OPEN;
+    }
+    TERRAIN_TYPE_GRID.cols = cols; TERRAIN_TYPE_GRID.rows = rows; TERRAIN_TYPE_GRID.values = values;
+  };
+  img.onerror = ()=>{ console.error('地形分類用テクスチャの読み込みに失敗しました'); };
+  img.src = 'data:image/jpeg;base64,'+base64Texture;
+}
+
+// Nearest-cell lookup (a terrain type is categorical, so no bilinear blending) into
+// TERRAIN_TYPE_GRID, which shares HEIGHT_GRID's exact grid layout.
+function terrainTypeAt(x, y){
+  if(!TERRAIN_TYPE_GRID.values || !HEIGHT_GRID.values) return TERRAIN_TYPE_OPEN;
+  const {x:wx, z:wz} = canvasUnitToWorldXZ(x, y);
+  const c = clamp(Math.round((wx-HEIGHT_GRID.minX)/HEIGHT_GRID.stepX), 0, HEIGHT_GRID.cols-1);
+  const r = clamp(Math.round((wz-HEIGHT_GRID.minZ)/HEIGHT_GRID.stepZ), 0, HEIGHT_GRID.rows-1);
+  return TERRAIN_TYPE_GRID.values[r*HEIGHT_GRID.cols+c];
+}
+function terrainTypeLabel(type){
+  if(type===TERRAIN_TYPE_FOREST) return '森林';
+  if(type===TERRAIN_TYPE_WATER) return '水域';
+  return '開けた土地';
+}
+// See terrainTypeCoverBonus() (defined earlier, alongside the elevation-based
+// terrainCoverBonus) for how this is used.
+const TERRAIN_TYPE_COVER_BONUS = { [TERRAIN_TYPE_FOREST]: 12, [TERRAIN_TYPE_WATER]: -8 };
+const TERRAIN_TYPE_SPEED_MULT = { [TERRAIN_TYPE_FOREST]: 0.7, [TERRAIN_TYPE_WATER]: 0.35 };
 
 // Picks a "nice" (1/2/5 x 10^n) contour interval that yields roughly 10 contour lines
 // across the map's real elevation range, the way a paper topographic map's contour
