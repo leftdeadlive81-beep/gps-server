@@ -2387,6 +2387,13 @@ function closeAchievements(){
   document.getElementById('achievements-overlay').classList.remove('show');
 }
 
+// per user request: fixed the game visibly slowing down over a long play session --
+// this never removed old entries, so every attack/miss/spawn/reveal log line (many per
+// turn, over up to 50 waves) piled up as a permanent DOM node forever, even though only
+// ~120px of them are ever visible (.log scrolls). Late in a run that was thousands of
+// nodes, each new insertBefore/scrollTo paying layout cost across all of them. Capping
+// at LOG_MAX_ENTRIES keeps the visible scrollback generous while bounding DOM size.
+const LOG_MAX_ENTRIES = 300;
 function log(role, who, text){
   const el = document.getElementById('log');
   const cls = role==='op'?'l-op':role==='fdc'?'l-fdc':role==='mortar'?'l-mortar':'l-sys';
@@ -2394,6 +2401,7 @@ function log(role, who, text){
   div.className = cls;
   div.innerHTML = `<b>[${who}]</b> ${text}`;
   el.insertBefore(div, el.firstChild);
+  while(el.childElementCount > LOG_MAX_ENTRIES) el.removeChild(el.lastChild);
   el.scrollTo({top:0, behavior:'smooth'});
 }
 
