@@ -855,6 +855,16 @@ const LAUNCH_INTERVAL = 420;
 // terrain the "arc" reads as hugging the ground instead of flying above it. Projecting a
 // real elevated point (see projectAtHeight) always clears it.
 const ARC_HEIGHT = 700; // per user request: higher apex than before (was 350)
+// per user request: the arc's height baseline is a smooth interpolation between the launch
+// and impact points' OWN terrain heights, not the local terrain directly beneath the
+// shell's current XY -- sampling local terrain there made the drawn trajectory hug every
+// bump along the flight path on hilly ground instead of reading as a clean ballistic arc
+// between two fixed elevations. See projectAtWorldY() (the projection this feeds into,
+// which -- unlike projectAtHeight -- takes an explicit world Y instead of terrain-relative).
+function projectileArcWorldY(startX, startY, endX, endY, prog){
+  const h0 = terrainHeightAt(startX, startY), h1 = terrainHeightAt(endX, endY);
+  return h0 + (h1-h0)*prog + Math.sin(prog*Math.PI)*ARC_HEIGHT;
+}
 
 function rnd(a,b){ return a + Math.random()*(b-a); }
 function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
@@ -6684,15 +6694,17 @@ function drawBoard(){
     });
   }
 
-  // flying projectiles ― arced trajectory. The arc's height is a real world-space offset
-  // above the terrain at each sampled point (projectAtHeight), not a flat screen-pixel nudge
-  // -- see ARC_HEIGHT's comment for why that matters on hilly terrain.
+  // flying projectiles ― arced trajectory. per user request: the arc's height baseline is a
+  // smooth interpolation between the launch and impact points' OWN terrain heights (see
+  // projectileArcWorldY()), not the local terrain directly beneath the shell's current XY --
+  // sampling local terrain there made the drawn trajectory hug every bump along the flight
+  // path on hilly ground instead of reading as a clean ballistic arc between two elevations.
   const nowP = performance.now();
   projectiles.forEach(p=>{
     const prog = clamp((nowP-p.born)/p.duration, 0, 1);
     const gx = p.startX + (p.endX-p.startX)*prog;
     const gy = p.startY + (p.endY-p.startY)*prog;
-    const gp = projectAtHeight(gx, gy, Math.sin(prog*Math.PI)*ARC_HEIGHT);
+    const gp = projectAtWorldY(gx, gy, projectileArcWorldY(p.startX, p.startY, p.endX, p.endY, prog));
     const x = gp.x, y = gp.y;
     const startG = project(p.startX, p.startY);
     const endG = project(p.endX, p.endY);
@@ -6706,7 +6718,7 @@ function drawBoard(){
       const tt = k/arcSteps;
       const agx = p.startX + (p.endX-p.startX)*tt;
       const agy = p.startY + (p.endY-p.startY)*tt;
-      const agp = projectAtHeight(agx, agy, Math.sin(tt*Math.PI)*ARC_HEIGHT);
+      const agp = projectAtWorldY(agx, agy, projectileArcWorldY(p.startX, p.startY, p.endX, p.endY, tt));
       const ax = agp.x, ay = agp.y;
       if(k===0) ctx.moveTo(ax,ay); else ctx.lineTo(ax,ay);
     }
@@ -6732,7 +6744,7 @@ function drawBoard(){
       const tp = clamp(prog-k*0.04,0,1);
       const tgx = p.startX + (p.endX-p.startX)*tp;
       const tgy = p.startY + (p.endY-p.startY)*tp;
-      const tgp = projectAtHeight(tgx, tgy, Math.sin(tp*Math.PI)*ARC_HEIGHT);
+      const tgp = projectAtWorldY(tgx, tgy, projectileArcWorldY(p.startX, p.startY, p.endX, p.endY, tp));
       const tx = tgp.x, ty = tgp.y;
       ctx.beginPath();
       ctx.fillStyle = `rgba(217,164,65,${0.35-k*0.1})`;
@@ -7786,15 +7798,20 @@ function project(cx, cy){
   return projectAtHeight(cx, cy, 0);
 }
 // Like project(), but adds extraH (real world-space units, same frame as terrainHeightAt's
-// output -- i.e. already reflecting TERRAIN_RELIEF_EXAGGERATION) on top of the terrain height
-// before projecting. Used for anything that flies above the ground, like mortar arcs -- see
-// their per-user-request comment for why a screen-pixel offset doesn't work for that.
+// output) on top of the LOCAL terrain height at (cx,cy) before projecting -- e.g. a marker
+// that should float a fixed height above whatever ground is directly beneath it.
 function projectAtHeight(cx, cy, extraH){
+  return projectAtWorldY(cx, cy, terrainHeightAt(cx,cy)+extraH);
+}
+// Screen-space projection of a logical (canvas-unit) XZ point at an EXPLICIT world-space Y,
+// ignoring whatever terrain happens to sit directly beneath that XZ position. Used for
+// anything whose height must NOT track local terrain -- see projectileArcWorldY() for why a
+// mortar shell's flight arc needs exactly this.
+function projectAtWorldY(cx, cy, worldY){
   if(!threeReady || !camera3d) return { x:cx, y:cy, visible:true };
   if(!_projForward){ _projForward = new THREE.Vector3(); _projToPoint = new THREE.Vector3(); }
-  const h = terrainHeightAt(cx,cy) + extraH;
   const {x,z} = canvasUnitToWorldXZ(cx,cy);
-  const worldPt = new THREE.Vector3(x, h, z);
+  const worldPt = new THREE.Vector3(x, worldY, z);
   camera3d.getWorldDirection(_projForward);
   _projToPoint.copy(worldPt).sub(camera3d.position);
   const inFront = _projToPoint.dot(_projForward) > 0.01;
