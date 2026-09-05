@@ -104,6 +104,14 @@ const TARGET_TYPES = {
   vehicle:   {label:'装甲車',       hp:95,  radius:18, mark:ENEMY_MARK_COLOR},
   drone:     {label:'ドローン',     hp:12,  radius:20, mark:ENEMY_MARK_COLOR},
   heli:      {label:'戦闘ヘリ',     hp:150, radius:22, mark:ENEMY_MARK_COLOR},
+  // per user request: a fixed, hardened objective placed deep in enemy territory --
+  // destroying it clears the wave immediately regardless of how many other enemies remain
+  // (see checkEnd()), a high-risk/high-reward alternative to grinding out every target. Its
+  // much higher base HP (scaled by the same hpMult every other type gets) and low base
+  // exposure (see buildEnemyHqTarget/ENEMY_HQ_EXPOSURE -- bunkered) make it meaningfully
+  // tougher than any single normal target, on top of not sharing any type's AI behavior
+  // (it never moves, advances, or counter-attacks -- see enemyCounterAttack's explicit skip).
+  hq:        {label:'敵本部',       hp:400, radius:20, mark:ENEMY_MARK_COLOR},
 };
 const DRONE_INTRO_STAGE = 3;
 const CONTOUR_LEVELS = [0.25, 0.5, 0.75, 1.0, 1.25];
@@ -604,6 +612,15 @@ function effectMultiplier(shell, fuze, type){
     if(shell==='heat') return 0.5;
     return 0.5;
   }
+  // per user request: a hardened structure rewards bunker-busting loadouts (delay-fused HE
+  // penetrates before detonating; HEAT's shaped charge also works against fortifications)
+  // over the proximity/impact fuzes that are actually best against soft/aerial targets.
+  if(type==='hq'){
+    if(shell==='he' && fuze==='delay') return 2.2;
+    if(shell==='heat') return 1.6;
+    if(shell==='he' && fuze==='impact') return 1.3;
+    return 0.5;
+  }
   return 0.5;
 }
 
@@ -616,6 +633,7 @@ const MORTAR_BEST_LOADOUT = {
   vehicle:   {shell:'heat', fuze:'impact',    count:2},
   artillery: {shell:'he',   fuze:'impact',    count:2},
   drone:     {shell:'he',   fuze:'proximity', count:2},
+  hq:        {shell:'he',   fuze:'delay',     count:3},
 };
 function bestMortarLoadoutFor(type){
   const pick = MORTAR_BEST_LOADOUT[type] || {shell:'he', fuze:'impact', count:2};
@@ -1159,6 +1177,34 @@ function buildHeliTarget(hpMult, bearingErrBase, distErrBase){
   };
 }
 
+// per user request: the enemy HQ is a fixed structure, not a spawned unit -- placed at a
+// random point along the map's far right edge (deeper than the normal spot pool's
+// ENEMY_SPAWN_MIN_X..ENEMY_SPAWN_MAX_X box) rather than drawn from generateSpots(), and
+// built separately from the main targets.map() pass since it doesn't fit that pass's
+// infantry-troops-or-generic-unit shape. Always present, every wave (see startStage()).
+const ENEMY_HQ_EXPOSURE = 15; // bunkered -- much harder to hit than EXPOSURE_DEFAULT(50)
+function buildEnemyHqTarget(hpMult, bearingErrBase, distErrBase){
+  const def = TARGET_TYPES.hq;
+  const x = rnd(CANVAS_W-70, CANVAS_W-30);
+  const y = rnd(60, CANVAS_H-60);
+  const hp = Math.round(def.hp*hpMult);
+  const dx = x-OP.x, dy = y-OP.y;
+  const trueBearing = (Math.atan2(dx,-dy)*180/Math.PI+360)%360;
+  const trueDistance = Math.sqrt(dx*dx+dy*dy);
+  return {
+    id:'HQ', type:'hq', def,
+    trueX:x, trueY:y,
+    trueBearing, trueDistance,
+    hp, maxHp:hp,
+    destroyed:false, revealed:false, reconCount:0,
+    bearingErr:bearingErrBase, distErr:distErrBase,
+    bOffset: rnd(-1,1), dOffset: rnd(-1,1),
+    impacts:[], troops:null, formationOffsets:null, formationName:null, speedMult:1,
+    suppressed:0,
+    exposure: ENEMY_HQ_EXPOSURE,
+  };
+}
+
 // per user request: friendly forces must start confined to a real 1km x 1km box on the
 // map's west (left) edge, regardless of which map's real-world scale is currently loaded.
 // WORLD.scaleX/scaleZ (meters per canvas-unit, independent per axis -- see canvasUnitToWorldXZ)
@@ -1249,6 +1295,9 @@ function startStage(){
   });
 
   targets.push(buildHeliTarget(hpMult, bearingErrBase, distErrBase));
+  // per user request: an alternate win condition -- see checkEnd()/computeReward() -- always
+  // present, every wave, placed deep in enemy territory rather than drawn from the spots pool.
+  targets.push(buildEnemyHqTarget(hpMult, bearingErrBase, distErrBase));
 
   // Tear down every leftover 3D marker from whatever the previous state.targets held
   // (normally already empty via resolveEnemyTurn's pruning, but retryStage() can jump
@@ -1415,8 +1464,11 @@ function startStage(){
   debrisParticles = []; wreckSmokes = []; killBanners = [];
 
   document.getElementById('overlay').classList.remove('show');
-  log('sys','システム', `WAVE ${stage} / ${STAGE_COUNT} ― 目標${totalCount}件を確認。天候: ${weather.label}(${weather.desc})。`);
+  log('sys','システム', `WAVE ${stage} / ${STAGE_COUNT} ― 目標${state.targets.length}件を確認。天候: ${weather.label}(${weather.desc})。`);
   log('sys','警報', '戦闘ヘリ1機を確認。ヒットアンドアウェイ戦術(接近→攻撃→離脱)に警戒せよ。');
+  // per user request (idea 3): flags the HQ's existence without giving away its position --
+  // bearing/distance still need the normal recon flow (revealTarget) like any other target.
+  log('sys','情報部', '偵察情報: 敵展開域の奥深くに指揮系統の中枢と思われる陣地を確認。優先撃破に成功すれば残存兵力を問わずWAVEを制圧できる可能性がある(要偵察)。');
   if(stage===1){
     const co = PERSONNEL_ROSTER[0];
     log('sys','司令部', `戦闘団編成完了、総員${PERSONNEL_ROSTER.length}名。総指揮官: ${co.rank} ${co.name}。`);
@@ -2425,6 +2477,10 @@ function enemyCounterAttack(actionTurns){
   for(let i=0;i<actionTurns;i++){
     remaining.forEach(t=>{
       if(t.destroyed) return;
+      // per user request: the enemy HQ is a fixed structure, not a unit with a weapon of its
+      // own -- it never counter-attacks (COUNTER_CHANCE/COUNTER_DAMAGE have no 'hq' entry,
+      // same as 'heli', whose attacks are instead handled entirely by resolveHeliAssault).
+      if(t.type==='hq') return;
       if(allScoutsWiped() && allMortarsWiped()) return;
       const suppressionMult = isSuppressed(t) ? SUPPRESSION_COUNTER_MULT : 1;
       const groupCorrection = t.type==='infantry' ? 1/Math.max(1, infantryGroupCount) : 1;
@@ -4579,8 +4635,16 @@ function checkEnd(){
   }
 
   const remaining = state.targets.filter(t=>!t.destroyed);
-  if(remaining.length===0){
+  // per user request (idea 4): destroying the enemy HQ clears the wave immediately,
+  // regardless of how many other enemies are still alive -- an alternate, high-risk/
+  // high-reward win condition alongside the usual "every target destroyed".
+  const enemyHqTarget = state.targets.find(t=>t.type==='hq');
+  const enemyHqDown = enemyHqTarget && enemyHqTarget.destroyed;
+  if(remaining.length===0 || enemyHqDown){
     state.stageResolved = true;
+    if(enemyHqDown && remaining.length>0){
+      log('sys','司令部', '敵指揮系統の中枢を撃破。残存する敵部隊は指揮を失い、WAVEの制圧を確認。');
+    }
     triggerWaveClearSequence();
     return;
   }
@@ -4672,8 +4736,15 @@ function computeReward(){
   const sniperBonus = Math.round(sniperFrac*100);
   const hqFrac = state.hq.hp/state.hq.maxHp;
   const hqBonus = Math.round(hqFrac*200);
-  const total = Math.round((base+turnsBonus+ammoBonus+hpBonus+infBonus+scoutBonus+sniperBonus+hqBonus) * DIFFICULTIES[state.difficulty].rewardMult);
-  return {base,turnsBonus,ammoBonus,hpBonus,infBonus,scoutBonus,sniperBonus,hqBonus,total};
+  // per user request (idea 5): destroying the enemy HQ (see checkEnd()) is a flat bonus on
+  // top of everything else, so rushing it isn't a worse payout than grinding out every
+  // target -- it's the reward for identifying and hitting a small, well-defended objective
+  // fast, even if that means less time to also clear (and less loot-relevant survival from)
+  // the rest of the wave.
+  const enemyHqTarget = state.targets.find(t=>t.type==='hq');
+  const enemyHqBonus = (enemyHqTarget && enemyHqTarget.destroyed) ? 250 : 0;
+  const total = Math.round((base+turnsBonus+ammoBonus+hpBonus+infBonus+scoutBonus+sniperBonus+hqBonus+enemyHqBonus) * DIFFICULTIES[state.difficulty].rewardMult);
+  return {base,turnsBonus,ammoBonus,hpBonus,infBonus,scoutBonus,sniperBonus,hqBonus,enemyHqBonus,total};
 }
 
 function applyWaveResupply(){
@@ -4755,7 +4826,7 @@ function showStageClear(reward, resupply){
   setOverlayAccent('', 'After-Action Report');
   document.getElementById('overlay-title').textContent = 'WAVE CLEAR';
   document.getElementById('overlay-text').textContent =
-    `WAVE ${state.stage} 撃退成功。報酬 ¥${reward.total.toLocaleString()}(基本¥${reward.base}+速攻¥${reward.turnsBonus}+残弾¥${reward.ammoBonus}+指揮所無傷¥${reward.hqBonus}+砲兵無傷¥${reward.hpBonus}+歩兵無傷¥${reward.infBonus}+斥候無傷¥${reward.scoutBonus}+狙撃無傷¥${reward.sniperBonus}) ／ 所持金 ¥${state.money.toLocaleString()} ／ 補給: 戦果${Math.round(resupply.perf*100)}%によりHE+${resupply.ammoHe}・HEAT+${resupply.ammoHeat}・予備兵力+${resupply.personnel}名`;
+    `WAVE ${state.stage} 撃退成功。報酬 ¥${reward.total.toLocaleString()}(基本¥${reward.base}+速攻¥${reward.turnsBonus}+残弾¥${reward.ammoBonus}+指揮所無傷¥${reward.hqBonus}+砲兵無傷¥${reward.hpBonus}+歩兵無傷¥${reward.infBonus}+斥候無傷¥${reward.scoutBonus}+狙撃無傷¥${reward.sniperBonus}+敵本部撃破¥${reward.enemyHqBonus}) ／ 所持金 ¥${state.money.toLocaleString()} ／ 補給: 戦果${Math.round(resupply.perf*100)}%によりHE+${resupply.ammoHe}・HEAT+${resupply.ammoHeat}・予備兵力+${resupply.personnel}名`;
   document.getElementById('overlay-buttons').innerHTML =
     `<button class="btn primary" onclick="proceedToShop()">次のWAVEへ</button>`;
   ov.classList.add('show');
@@ -6497,6 +6568,24 @@ function drawBoard(){
           ctx.textAlign='center';
           ctx.fillText(t.def.label, e.x, labelY);
         }
+      } else if(t.type==='hq'){
+        // per user request (idea 1/4): reads as a fortified structure, not a mobile unit --
+        // a bordered square (matching the 3D minimap's box shape) instead of the plain circle
+        // used for artillery/vehicle, so it's immediately recognizable as the wave's
+        // alternate win condition.
+        const hqColor = t.revealed ? t.def.mark : '#8f9678';
+        ctx.fillStyle = hqColor;
+        ctx.fillRect(e.x-8, e.y-8, 16, 16);
+        ctx.strokeStyle = LABEL_TEXT_COLOR;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(e.x-8, e.y-8, 16, 16);
+        labelY = e.y+26;
+        if(t.revealed){
+          ctx.fillStyle = LABEL_TEXT_COLOR;
+          ctx.font = 'bold 14px "JetBrains Mono"';
+          ctx.textAlign='center';
+          ctx.fillText(t.def.label, e.x, labelY);
+        }
       } else {
         ctx.fillStyle = t.revealed ? t.def.mark : '#8f9678';
         ctx.beginPath();
@@ -8074,7 +8163,7 @@ function syncUnitMarkers3d(){
     if(!isTargetDetected(t)){ place(key, 0, 0, 'sphere', 0, false); return; }
     const eLogical = estPos(t);
     const e = smoothVisualPos(t, eLogical.x, eLogical.y);
-    const shape = t.type==='vehicle' ? 'box' : t.type==='artillery' ? 'cylinder' : t.type==='drone' ? 'diamond' : t.type==='heli' ? 'cone' : 'sphere';
+    const shape = t.type==='hq' ? 'box' : t.type==='vehicle' ? 'box' : t.type==='artillery' ? 'cylinder' : t.type==='drone' ? 'diamond' : t.type==='heli' ? 'cone' : 'sphere';
     place(key, e.x, e.y, shape, t.revealed ? (TARGET_TYPE_COLOR[t.type]||0xc1453b) : 0x8f9678, true);
   });
 
