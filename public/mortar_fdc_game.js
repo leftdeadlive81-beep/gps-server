@@ -445,12 +445,22 @@ const MORTAR_DISPERSION_UNITS = MORTAR_DISPERSION_M / METERS_PER_UNIT;
 // harder to land than HE (fitting for a precision anti-armor round) but no longer a coin
 // flip stacked three times over just to connect once.
 const SHELL_DISPERSION_MULT = {heat:0.6};
-// mortar crews correct fire onto a snapped (identified) target's true position by this
-// fraction, on top of the raw (often much less accurate) spotted estimate -- halves the
-// effective aiming bias specifically for mortar fire, without touching the shared
-// bearingErr/distErr estimate used elsewhere (sniper aiming, the UI uncertainty circle,
-// squad/sniper approach).
-const MORTAR_FIRE_CORRECTION_FRAC = 0.75;
+// per user request: mortar fire used to auto-correct partway (or, with a scout watching,
+// all the way) from the spotted estimate to a snapped target's TRUE position before impact
+// -- so a shot aimed at the displayed estimate would land somewhere else entirely, which
+// read as broken rather than intentional. Removed: impact is now always exactly the aimed
+// coordinate (see launchMortarVolley) plus normal dispersion. Accuracy instead comes purely
+// from the estimate itself being good (see posErr/MAX_ESTIMATE_ERROR_M below) and from
+// walking fire onto target across volleys (see finalizeVolley's posErr reduction).
+// per user request: the raw spotted-estimate error (posErr, in meters) is now a bounded
+// circular offset from the target's TRUE position -- not an independent bearing (angle) +
+// distance error, which on this map's multi-km engagement ranges let a modest-looking
+// angular error compound into a wildly inaccurate real-world position (a few degrees off at
+// long range is still a huge sideways miss). Capping the absolute offset directly guarantees
+// the estimate is never off by more than this, regardless of target range. Shared by every
+// consumer of a target's estimated position -- sniper aiming, the UI uncertainty circle,
+// squad/sniper approach, and mortar fire alike (see estPos/estPosFromMortar).
+const MAX_ESTIMATE_ERROR_M = 100;
 // per user request ("面白くなる要素" -> 対砲兵レーダー/Shoot & Scoot): firing repeatedly from the
 // same position risks the enemy's counter-battery radar triangulating it. Once a mortar has
 // fired more than MORTAR_CB_SHOTS_THRESHOLD volleys without relocating, each further volley
@@ -581,8 +591,16 @@ function buildEnemyInfantryGroups(stage){
   }
   return groups;
 }
-const FIELD_MARGIN = 130;
-const UNCERTAINTY_CIRCLE_CAP = 120;
+// per user request: the uncertainty ring is a fixed screen-space indicator (its radius is a
+// raw pixel value, not projected from a real ground distance -- see its drawBoard() call
+// site), scaled from t.posErr (canvas units) by UNCERTAINTY_CIRCLE_SCALE and clamped to this
+// min/max pixel range for legibility. Both were retuned alongside MAX_ESTIMATE_ERROR_M: the
+// old range (20-120px) was sized for the previous, often much larger, unbounded distErr
+// values -- posErr now tops out around 13 units (100m), so the old range would have nearly
+// always bottomed out at its 20px floor regardless of actual accuracy.
+const UNCERTAINTY_CIRCLE_MIN = 16;
+const UNCERTAINTY_CIRCLE_CAP = 70;
+const UNCERTAINTY_CIRCLE_SCALE = 5;
 const ORDER_LABEL = {advance:'前進', retreat:'後退', hold:'防御', assault:'突撃', hunt:'追跡攻撃'};
 const MORTAR_ORDER_LABEL = {fire:'射撃', standby:'待機', move:'移動'};
 const MORTAR_ZONE_MIN_X = 40, MORTAR_ZONE_MAX_X = 380;
@@ -1165,7 +1183,7 @@ function generateSpots(n){
 // vehicle/artillery/drone counts, this doesn't scale with stage) -- built separately from the
 // main spots.map() pool below and given its own fixed 'HELI' id plus the extra AI-state
 // fields resolveHeliAssault() needs (heliPhase/heliCooldown/heliBurstLeft/heliAnchor).
-function buildHeliTarget(hpMult, bearingErrBase, distErrBase){
+function buildHeliTarget(hpMult, posErrBase){
   const spot = generateSpots(1)[0];
   const def = TARGET_TYPES.heli;
   const hp = Math.round(def.hp*hpMult);
@@ -1178,7 +1196,7 @@ function buildHeliTarget(hpMult, bearingErrBase, distErrBase){
     trueBearing, trueDistance,
     hp, maxHp:hp,
     destroyed:false, revealed:false, reconCount:0,
-    bearingErr:bearingErrBase, distErr:distErrBase,
+    posErr:posErrBase,
     bOffset: rnd(-1,1), dOffset: rnd(-1,1),
     impacts:[], troops:null, formationOffsets:null, formationName:null, speedMult:1,
     suppressed:0,
@@ -1193,7 +1211,7 @@ function buildHeliTarget(hpMult, bearingErrBase, distErrBase){
 // built separately from the main targets.map() pass since it doesn't fit that pass's
 // infantry-troops-or-generic-unit shape. Always present, every wave (see startStage()).
 const ENEMY_HQ_EXPOSURE = 15; // bunkered -- much harder to hit than EXPOSURE_DEFAULT(50)
-function buildEnemyHqTarget(hpMult, bearingErrBase, distErrBase){
+function buildEnemyHqTarget(hpMult, posErrBase){
   const def = TARGET_TYPES.hq;
   const x = rnd(CANVAS_W-70, CANVAS_W-30);
   const y = rnd(60, CANVAS_H-60);
@@ -1207,7 +1225,7 @@ function buildEnemyHqTarget(hpMult, bearingErrBase, distErrBase){
     trueBearing, trueDistance,
     hp, maxHp:hp,
     destroyed:false, revealed:false, reconCount:0,
-    bearingErr:bearingErrBase, distErr:distErrBase,
+    posErr:posErrBase,
     bOffset: rnd(-1,1), dOffset: rnd(-1,1),
     impacts:[], troops:null, formationOffsets:null, formationName:null, speedMult:1,
     suppressed:0,
@@ -1248,11 +1266,11 @@ function startStage(){
   state.weather = stage===1 ? 'clear' : choice(Object.keys(WEATHER_TYPES));
   const weather = WEATHER_TYPES[state.weather];
   const opticsMult = (state.equipment.optics ? 0.8 : 1) * weather.errMult;
-  // per user request: halved again (bearing 30->15 base, +1->+0.5/stage; distance 120->60
-  // base, +4->+2/stage) -- the estimated enemy position was still reading as too far from
-  // the true position for indirect fire to feel accurate.
-  const bearingErrBase = (15 + (stage-1)*0.5) * opticsMult;
-  const distErrBase = (60 + (stage-1)*2) * opticsMult;
+  // per user request: a bounded circular position estimate (see MAX_ESTIMATE_ERROR_M) that
+  // grows with stage (spotting gets harder against a more dispersed/careful enemy) but is
+  // always clamped to the same real-world cap regardless of stage/optics/weather, so the
+  // estimate is never off by more than that no matter how bad conditions get.
+  const posErrBase = clamp((40 + (stage-1)*1.5) * opticsMult, 15, MAX_ESTIMATE_ERROR_M) / METERS_PER_UNIT;
   const totalCount = infantryGroups.length + otherCount;
   const spots = generateSpots(totalCount);
   const otherTypes = pickTypesForCount(otherCount, stage);
@@ -1285,7 +1303,7 @@ function startStage(){
       destroyed:false,
       revealed:false,
       reconCount:0,
-      bearingErr:bearingErrBase, distErr:distErrBase,
+      posErr:posErrBase,
       bOffset: rnd(-1,1), dOffset: rnd(-1,1),
       impacts:[],
       // per-soldier state for this infantry group -- named "troops" (not "soldiers") to stay
@@ -1304,10 +1322,10 @@ function startStage(){
     };
   });
 
-  targets.push(buildHeliTarget(hpMult, bearingErrBase, distErrBase));
+  targets.push(buildHeliTarget(hpMult, posErrBase));
   // per user request: an alternate win condition -- see checkEnd()/computeReward() -- always
   // present, every wave, placed deep in enemy territory rather than drawn from the spots pool.
-  targets.push(buildEnemyHqTarget(hpMult, bearingErrBase, distErrBase));
+  targets.push(buildEnemyHqTarget(hpMult, posErrBase));
 
   // Tear down every leftover 3D marker from whatever the previous state.targets held
   // (normally already empty via resolveEnemyTurn's pruning, but retryStage() can jump
@@ -1693,17 +1711,37 @@ function deployStage(){
   startStage();
 }
 
-function estPos(t){
-  const bearing = t.trueBearing + t.bOffset*t.bearingErr;
-  const dist = clamp(t.trueDistance + t.dOffset*t.distErr, 20, 1900);
-  const rad = bearing*Math.PI/180;
-  const x = OP.x + dist*Math.sin(rad);
-  const y = OP.y - dist*Math.cos(rad);
+// per user request: a target's estimated position is its TRUE position plus a bounded
+// circular offset (magnitude <= t.posErr, i.e. never more than MAX_ESTIMATE_ERROR_M -- see
+// its comment) rather than an angle+distance error measured from some observer. That means
+// the estimate itself is a single fixed (x,y) regardless of who's asking -- estPos (from OP)
+// and estPosFromMortar (from a specific mortar) now always agree on it; only the bearing/
+// distance TO that shared estimate differs by observer, which is what each still returns for
+// display. t.bOffset/t.dOffset (each independently random in [-1,1], rolled once when the
+// target is created) are normalized down to the unit circle when their combined magnitude
+// exceeds 1, so the offset is uniform-ish over a disk of radius t.posErr rather than a boxy
+// square that could reach posErr*sqrt(2) in the corners.
+// Clamped only enough to keep the marker fully on-canvas (ESTIMATE_CLAMP_MARGIN), NOT the
+// old, much larger FIELD_MARGIN (130) -- that was sized for the previous error model, whose
+// far larger swings needed reining in from drifting into friendly territory. It clipped
+// harmlessly back then, but with the tight new posErr cap, any true position within
+// FIELD_MARGIN of the map edge (routine -- enemies spawn up to CANVAS_W-25) had its estimate
+// yanked back into the clamp regardless of the small random offset, manufacturing a
+// multi-hundred-meter "error" out of nothing but the clamp itself.
+const ESTIMATE_CLAMP_MARGIN = 20;
+function estimatedTargetPos(t){
+  const mag = Math.hypot(t.bOffset, t.dOffset);
+  const scale = mag>1 ? 1/mag : 1;
+  const x = t.trueX + t.bOffset*scale*t.posErr;
+  const y = t.trueY + t.dOffset*scale*t.posErr;
   return {
-    x: clamp(x, FIELD_MARGIN, CANVAS_W-FIELD_MARGIN),
-    y: clamp(y, FIELD_MARGIN, CANVAS_H-FIELD_MARGIN),
-    bearing, dist,
+    x: clamp(x, ESTIMATE_CLAMP_MARGIN, CANVAS_W-ESTIMATE_CLAMP_MARGIN),
+    y: clamp(y, ESTIMATE_CLAMP_MARGIN, CANVAS_H-ESTIMATE_CLAMP_MARGIN),
   };
+}
+function estPos(t){
+  const p = estimatedTargetPos(t);
+  return { x:p.x, y:p.y, bearing: bearingBetween(OP.x, OP.y, p.x, p.y), dist: Math.hypot(p.x-OP.x, p.y-OP.y) };
 }
 
 function computeDispersionAt(){
@@ -1711,19 +1749,8 @@ function computeDispersionAt(){
 }
 
 function estPosFromMortar(mortar, t){
-  const dx = t.trueX-mortar.x, dy = t.trueY-mortar.y;
-  const trueBrg = (Math.atan2(dx,-dy)*180/Math.PI+360)%360;
-  const trueDist = Math.sqrt(dx*dx+dy*dy);
-  const bearing = trueBrg + t.bOffset*t.bearingErr;
-  const dist = clamp(trueDist + t.dOffset*t.distErr, 20, 1900);
-  const rad = bearing*Math.PI/180;
-  const x = mortar.x + dist*Math.sin(rad);
-  const y = mortar.y - dist*Math.cos(rad);
-  return {
-    x: clamp(x, FIELD_MARGIN, CANVAS_W-FIELD_MARGIN),
-    y: clamp(y, FIELD_MARGIN, CANVAS_H-FIELD_MARGIN),
-    bearing, dist,
-  };
+  const p = estimatedTargetPos(t);
+  return { x:p.x, y:p.y, bearing: bearingBetween(mortar.x, mortar.y, p.x, p.y), dist: Math.hypot(p.x-mortar.x, p.y-mortar.y) };
 }
 
 function bearingBetween(fromX, fromY, toX, toY){
@@ -2214,8 +2241,7 @@ function updateRevealed(){
 }
 function performRecon(t){
   t.reconCount += 1;
-  t.bearingErr *= 0.5;
-  t.distErr *= 0.5;
+  t.posErr *= 0.5;
   const e = estPos(t);
   ripples.push({x:e.x, y:e.y, born:performance.now(), life:900});
   if(t.reconCount===2){
@@ -3814,7 +3840,7 @@ function spawnInfantryDrone(source){
     trueX, trueY, trueBearing, trueDistance,
     hp, maxHp:hp,
     destroyed:false, revealed:false, reconCount:0,
-    bearingErr: source.bearingErr, distErr: source.distErr,
+    posErr: source.posErr,
     bOffset: rnd(-1,1), dOffset: rnd(-1,1),
     impacts:[],
     troops: null,
@@ -4302,28 +4328,17 @@ function resolveEnemyTurn(actionTurns){
   }
 }
 
-// per user request: a scout currently holding eyes-on the target (inScoutConeFor, not the
-// isTargetDetected-style inScoutCone which treats "no scouts left" as "everything visible" --
-// that fallback would perversely make every shot perfectly precise once all scouts are dead)
-// gives the mortar a full, error-free correction instead of the usual partial one. Gives
-// scouts a clear, high-value job: babysit the one target you need a guaranteed kill on.
-function scoutHasEyesOn(t){
-  return state.scouts.some(s=>inScoutConeFor(s,t));
-}
 function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVolleyDone){
   // shoot-and-scoot: every volley fired counts against the same-position streak (see
   // resolveMortarCounterBattery); resolveOneMortarDecision resets this back to 0 once the
   // mortar actually completes a relocation.
   mortar.shotsSinceMove = (mortar.shotsSinceMove||0) + 1;
-  // per user request: fire aimed at an identified target is corrected part of the way from
-  // the raw (error-prone) spotted estimate toward the target's true position -- see
-  // MORTAR_FIRE_CORRECTION_FRAC. A manually-clicked bare coordinate (no snappedTarget) has no
-  // true position to correct toward, so it's unaffected. A scout actively watching the target
-  // right now (see scoutHasEyesOn) instead gets the full 100% correction.
-  const scoutGuided = !!(snappedTarget && scoutHasEyesOn(snappedTarget));
-  const correctionFrac = scoutGuided ? 1 : MORTAR_FIRE_CORRECTION_FRAC;
-  const aimX = snappedTarget ? aim.x + (snappedTarget.trueX-aim.x)*correctionFrac : aim.x;
-  const aimY = snappedTarget ? aim.y + (snappedTarget.trueY-aim.y)*correctionFrac : aim.y;
+  // per user request: impact is always exactly the aimed coordinate (plus normal dispersion)
+  // -- no more silent correction toward a snapped target's true position. Accuracy against an
+  // identified target comes entirely from how good the aim point (the current estimate,
+  // see estPos/posErr) already is, and from walking fire onto target across volleys (see
+  // finalizeVolley's posErr reduction), not from the game quietly fixing a bad aim for you.
+  const aimX = aim.x, aimY = aim.y;
   const dispersion = computeDispersionAt() * WEATHER_TYPES[state.weather].dispersionMult * (SHELL_DISPERSION_MULT[shell]||1);
   const base = 25;
 
@@ -4332,7 +4347,6 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
   const aimLabel = snappedTarget ? snappedTarget.id : `座標(方位${Math.round(brg)}°/距離${unitsToMeters(dist)}m)`;
   log('fdc','FDC', `迫撃砲${mortar.id+1}: ${aimLabel} へ射撃要求。${SHELLS[shell]}・${FUZES[fuze]}・${count}発。`);
   log('mortar','迫撃砲班', `迫撃砲${mortar.id+1} 了解。${count}発装填、撃て!`);
-  if(scoutGuided) log('op','斥候', `${snappedTarget.id} を観測中、着弾修正データを送る。`);
 
   let pending = count;
   let hitAny = false;
@@ -4594,8 +4608,7 @@ function finalizeVolley(snappedTarget, hitAny, volleyImpacts){
     const ewDir = dx>=0?'東':'西', nsDir = dy<0?'北':'南';
     const ewAmt = unitsToMeters(Math.abs(dx)), nsAmt = unitsToMeters(Math.abs(dy));
     log('op','斥候', `弾着観測。目標は着弾点より${ewDir}${ewAmt}m、${nsDir}${nsAmt}m。修正要求、次弾に反映せよ。`);
-    snappedTarget.bearingErr *= 0.75;
-    snappedTarget.distErr *= 0.75;
+    snappedTarget.posErr *= 0.75;
   }
 }
 
@@ -5327,7 +5340,7 @@ function mortarBoxHtml(idx){
       infoHtml = `
         <div class="sel-target-info">
           <div class="row1"><span class="id">${snapped.id}</span> ${typeHtml} ${precisionDots(snapped.reconCount)}</div>
-          <div class="meta">本砲基準 方位約${Math.round(e.bearing)}° / 距離約${unitsToMeters(e.dist)}m / 誤差±${unitsToMeters(snapped.distErr)}m</div>
+          <div class="meta">本砲基準 方位約${Math.round(e.bearing)}° / 距離約${unitsToMeters(e.dist)}m / 誤差±${unitsToMeters(snapped.posErr)}m</div>
           <div class="hpbar"><div style="width:${Math.max(0,snapped.hp/snapped.maxHp*100)}%"></div></div>
         </div>
       `;
@@ -5736,14 +5749,11 @@ function renderEnemyCommandBox(){
     return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignTankHunt(${idx})">戦車${idx+1}に攻撃させる${active?'(攻撃中)':''}</button>`;
   }).filter(Boolean).join('');
   const allBtns = mortarBtns + tankBtns + squadBtns;
-  // per user request: make the fire-correction mechanic visible before the player commits a
-  // volley -- without a scout holding eyes-on, mortar fire only closes MORTAR_FIRE_CORRECTION_FRAC
-  // of the observation error, so show how much miss margin (in meters) is still expected.
-  const guided = scoutHasEyesOn(t);
-  const residualErrM = Math.round(unitsToMeters(t.distErr) * (1-MORTAR_FIRE_CORRECTION_FRAC));
-  const precisionHtml = guided
-    ? `<div class="meta" style="margin-bottom:8px;color:var(--green-id);">斥候が観測中 ― 迫撃砲は精密射撃(誤差なし)</div>`
-    : `<div class="meta" style="margin-bottom:8px;color:var(--amber);">未観測 ― 迫撃砲は着弾誤差約${residualErrM}m(斥候をこの目標に向けると誤差なしに)</div>`;
+  // per user request: fire always lands exactly where aimed (plus dispersion) -- no hidden
+  // correction toward the true position -- so this just shows how far off the current
+  // estimate (what you'd actually be aiming at) might still be. Falls with 偵察 (see
+  // performRecon) and with each volley fired at this target (see finalizeVolley).
+  const precisionHtml = `<div class="meta" style="margin-bottom:8px;color:var(--amber);">見積り誤差: 最大約${Math.round(unitsToMeters(t.posErr))}m(偵察・弾着観測で縮小)</div>`;
   box.innerHTML = `
     <div class="cb-head">
       <span class="cb-title">${t.id} ― ${t.revealed?t.def.label:'識別不能'}</span>
@@ -6532,7 +6542,7 @@ function drawBoard(){
       ctx.setLineDash([5,4]);
       ctx.strokeStyle = selected ? 'rgba(217,164,65,0.9)' : 'rgba(217,164,65,0.35)';
       ctx.lineWidth = 1.5;
-      ctx.arc(e.x, e.y, clamp(t.distErr, 20, UNCERTAINTY_CIRCLE_CAP), 0, Math.PI*2);
+      ctx.arc(e.x, e.y, clamp(t.posErr*UNCERTAINTY_CIRCLE_SCALE, UNCERTAINTY_CIRCLE_MIN, UNCERTAINTY_CIRCLE_CAP), 0, Math.PI*2);
       ctx.stroke();
       ctx.setLineDash([]);
 
