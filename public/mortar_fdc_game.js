@@ -6103,6 +6103,25 @@ function drawBoard(){
     });
   }
 
+  // per user request: a terrain-conforming 100m/1km coordinate grid (see
+  // buildGridLineSegments()), drawn the same way as the contour lines below but as its own
+  // base layer underneath them -- minor (100m) lines very faint so they read as a map's grid
+  // squares rather than clutter, major (1km) lines a touch more visible.
+  const strokeGridBucket = (segs, color, width)=>{
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    segs.forEach(seg=>{
+      const p0 = project(seg.x1, seg.y1), p1 = project(seg.x2, seg.y2);
+      if(!p0.visible || !p1.visible) return;
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+    });
+    ctx.stroke();
+  };
+  strokeGridBucket(GRID_LINES.minor, 'rgba(220,225,235,0.12)', 1);
+  strokeGridBucket(GRID_LINES.major, 'rgba(220,225,235,0.28)', 1);
+
   // per user request: topographic-map-style contour lines (see buildContourLines()),
   // drawn the same way roads were above -- reprojected each frame, segments whose
   // endpoints fall off-screen just aren't drawn rather than being connected through.
@@ -7103,6 +7122,42 @@ let treeTrunkMesh3d = null, treeFoliageMesh3d = null, rockMesh3d = null;
 // canvas -- see buildContourLines(). Canvas-unit line segments, re-projected and drawn
 // each frame in drawBoard() like the road overlay.
 const CONTOUR_LINES_CANVAS = [];
+
+// per user request: a terrain-conforming coordinate grid -- 100m minor lines with every
+// 10th (1km) line promoted to "major" -- matching how a real military map's grid squares
+// work. Unlike CONTOUR_LINES_CANVAS, grid position is purely a function of canvas-unit
+// space (a fixed lattice, independent of any specific terrain), so it's built exactly once
+// here rather than rebuilt per wave in regenerateTerrain() -- only the PROJECTED height of
+// each point (sampled by project() via terrainHeightAt at draw time) depends on the current
+// terrain, and that already happens fresh every frame regardless. Each line is chopped into
+// short segments (the same cell size buildContourLines' marching-squares grid uses) so it
+// draws as a sequence of short chords hugging the terrain's actual elevation profile end to
+// end, rather than one long straight 3D line that ignores whatever hill sits along it.
+const GRID_MINOR_SPACING_UNITS = 100/METERS_PER_UNIT;
+const GRID_MAJOR_EVERY = 10; // 10 x 100m minor lines = 1 x 1km major line
+const GRID_LINE_SEGMENT = CONTOUR_CELL;
+function buildGridLineSegments(){
+  const minor = [], major = [];
+  const addSegments = (bucket, fixedIsX, fixedVal, lenMax)=>{
+    for(let t=0; t<lenMax; t+=GRID_LINE_SEGMENT){
+      const t2 = Math.min(t+GRID_LINE_SEGMENT, lenMax);
+      if(fixedIsX) bucket.push({x1:fixedVal, y1:t, x2:fixedVal, y2:t2});
+      else bucket.push({x1:t, y1:fixedVal, x2:t2, y2:fixedVal});
+    }
+  };
+  let idx = 0;
+  for(let x=0; x<=CANVAS_W+0.001; x+=GRID_MINOR_SPACING_UNITS){
+    addSegments((idx % GRID_MAJOR_EVERY === 0) ? major : minor, true, x, CANVAS_H);
+    idx++;
+  }
+  idx = 0;
+  for(let y=0; y<=CANVAS_H+0.001; y+=GRID_MINOR_SPACING_UNITS){
+    addSegments((idx % GRID_MAJOR_EVERY === 0) ? major : minor, false, y, CANVAS_W);
+    idx++;
+  }
+  return {minor, major};
+}
+const GRID_LINES = buildGridLineSegments();
 // On phones, start the camera rotated -90 deg so the friendly<->enemy axis
 // (canvas X: friendly at low X, enemy at high X) reads bottom-to-top on
 // screen (friendly near/bottom, enemy far/top) instead of the desktop's
