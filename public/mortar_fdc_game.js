@@ -7006,6 +7006,9 @@ let threeReady = false;
 // own zoom, since zooming in necessarily pushes the map's corners off-screen.
 let cameraNeedsInitialFit = true;
 let scene3d, camera3d, renderer3d, terrainObject3d;
+// per user request (idea 1): tree/rock props scattered across the terrain (see
+// buildTerrainProps()) so forest patches read as actual forest and hillsides aren't bare.
+let treeTrunkMesh3d = null, treeFoliageMesh3d = null, rockMesh3d = null;
 // Topographic-map-style contour lines, traced directly from elevationAt() (the same
 // function every gameplay formula uses) via a simplified marching-squares pass over the
 // canvas -- see buildContourLines(). Canvas-unit line segments, re-projected and drawn
@@ -7065,6 +7068,29 @@ const PROC_COLOR_FOREST = [0x23,0x38,0x1e], PROC_COLOR_WATER = [0x2c,0x4a,0x5e];
 // Shared by the 3D terrain's texture and the setup screen's seed-preview thumbnails
 // (renderMapSelectBody) so both always show exactly the elevation/forest/water picture
 // elevationAtFor/terrainTypeAtFor actually compute for the given descriptor.
+// per user request (idea 2): breaks up the flat elevation-gradient look with a mottled
+// ground texture -- a coarse octave for patchy variation (dry/muddy patches) and a fine
+// octave for grain, both deterministic from the map's seed so the setup screen's thumbnail
+// (painted by this same function) always matches the in-game texture exactly.
+function hash2(x, y, seed){
+  let h = Math.imul(x|0, 374761393) ^ Math.imul(y|0, 668265263) ^ Math.imul(seed|0, 2246822519);
+  h = Math.imul(h ^ (h>>>15), 2246822519);
+  h ^= h >>> 13;
+  h = Math.imul(h, 3266489917);
+  h ^= h >>> 16;
+  return (h>>>0) / 4294967296;
+}
+function valueNoise2D(x, y, seed){
+  const x0 = Math.floor(x), y0 = Math.floor(y);
+  const tx = smoothstep01(x-x0), ty = smoothstep01(y-y0);
+  const n00 = hash2(x0,   y0,   seed), n10 = hash2(x0+1, y0,   seed);
+  const n01 = hash2(x0,   y0+1, seed), n11 = hash2(x0+1, y0+1, seed);
+  const a = n00 + (n10-n00)*tx;
+  const b = n01 + (n11-n01)*tx;
+  return a + (b-a)*ty; // 0..1
+}
+const PROC_TEXTURE_NOISE_COARSE_CELL = 55, PROC_TEXTURE_NOISE_COARSE_AMOUNT = 22;
+const PROC_TEXTURE_NOISE_FINE_CELL = 12, PROC_TEXTURE_NOISE_FINE_AMOUNT = 12;
 function paintTerrainColors(ctx, w, h, gen){
   const img = ctx.createImageData(w, h);
   for(let py=0; py<h; py++){
@@ -7073,14 +7099,18 @@ function paintTerrainColors(ctx, w, h, gen){
       const cx = (px/w)*CANVAS_W;
       const e = clamp(elevationAtFor(gen, cx, cy), 0, 1);
       const type = terrainTypeAtFor(gen, cx, cy);
-      let r,g,b;
-      if(type===TERRAIN_TYPE_WATER){ [r,g,b] = PROC_COLOR_WATER; }
-      else if(type===TERRAIN_TYPE_FOREST){ [r,g,b] = PROC_COLOR_FOREST; }
+      let r,g,b,noiseMult;
+      if(type===TERRAIN_TYPE_WATER){ [r,g,b] = PROC_COLOR_WATER; noiseMult = 0.35; }
+      else if(type===TERRAIN_TYPE_FOREST){ [r,g,b] = PROC_COLOR_FOREST; noiseMult = 0.6; }
       else {
         r = PROC_COLOR_LOW[0] + (PROC_COLOR_HIGH[0]-PROC_COLOR_LOW[0])*e;
         g = PROC_COLOR_LOW[1] + (PROC_COLOR_HIGH[1]-PROC_COLOR_LOW[1])*e;
         b = PROC_COLOR_LOW[2] + (PROC_COLOR_HIGH[2]-PROC_COLOR_LOW[2])*e;
+        noiseMult = 1;
       }
+      const noise = ((valueNoise2D(cx/PROC_TEXTURE_NOISE_COARSE_CELL, cy/PROC_TEXTURE_NOISE_COARSE_CELL, gen.seed)-0.5)*PROC_TEXTURE_NOISE_COARSE_AMOUNT
+                   + (valueNoise2D(cx/PROC_TEXTURE_NOISE_FINE_CELL, cy/PROC_TEXTURE_NOISE_FINE_CELL, gen.seed+1)-0.5)*PROC_TEXTURE_NOISE_FINE_AMOUNT) * noiseMult;
+      r = clamp(r+noise, 0, 255); g = clamp(g+noise*0.9, 0, 255); b = clamp(b+noise*0.7, 0, 255);
       const idx = (py*w+px)*4;
       img.data[idx] = r; img.data[idx+1] = g; img.data[idx+2] = b; img.data[idx+3] = 255;
     }
@@ -7177,9 +7207,68 @@ function regenerateTerrain(gen){
 
   buildContourLines();
   buildProceduralRoads(gen.roadPaths);
+  buildTerrainProps(gen);
   threeReady = true;
   cameraNeedsInitialFit = true;
   resizeThree();
+}
+
+// per user request (idea 1): scatters tree/rock props over the terrain from gen.trees/
+// gen.rocks (see generateProceduralTerrain()) as instanced meshes -- one draw call per prop
+// type regardless of how many trees/rocks exist, so a few dozen props cost almost nothing.
+// Sized relative to WORLD.scaleX/scaleZ (world units per canvas unit) the same way unit
+// markers already are, so prop size stays sensible however canvas-unit space happens to map
+// to world space.
+function disposeTerrainProps(){
+  [treeTrunkMesh3d, treeFoliageMesh3d, rockMesh3d].forEach(m=>{
+    if(!m) return;
+    scene3d.remove(m);
+    m.geometry.dispose();
+    m.material.dispose();
+  });
+  treeTrunkMesh3d = treeFoliageMesh3d = rockMesh3d = null;
+}
+function buildTerrainProps(gen){
+  disposeTerrainProps();
+  const propScale = Math.max(1.4, (WORLD.scaleX+WORLD.scaleZ)/2*2.2);
+  const m = new THREE.Matrix4();
+  const trees = gen.trees||[];
+  if(trees.length){
+    const trunkGeo = new THREE.CylinderGeometry(0.5*propScale, 0.7*propScale, 5*propScale, 5);
+    const trunkMat = new THREE.MeshStandardMaterial({color:0x4a3826, roughness:0.9});
+    treeTrunkMesh3d = new THREE.InstancedMesh(trunkGeo, trunkMat, trees.length);
+    const foliageGeo = new THREE.ConeGeometry(4*propScale, 10*propScale, 7);
+    const foliageMat = new THREE.MeshStandardMaterial({color:0x2d4a22, roughness:0.85});
+    treeFoliageMesh3d = new THREE.InstancedMesh(foliageGeo, foliageMat, trees.length);
+    trees.forEach((t,i)=>{
+      const groundY = elevationAtFor(gen, t.x, t.y)*PROC_TERRAIN_HEIGHT_SCALE;
+      const {x,z} = canvasUnitToWorldXZ(t.x, t.y);
+      const sc = t.scale;
+      m.compose(new THREE.Vector3(x, groundY+2.5*propScale*sc, z), new THREE.Quaternion(), new THREE.Vector3(sc,sc,sc));
+      treeTrunkMesh3d.setMatrixAt(i, m);
+      m.compose(new THREE.Vector3(x, groundY+7.5*propScale*sc, z), new THREE.Quaternion(), new THREE.Vector3(sc,sc,sc));
+      treeFoliageMesh3d.setMatrixAt(i, m);
+    });
+    treeTrunkMesh3d.instanceMatrix.needsUpdate = true;
+    treeFoliageMesh3d.instanceMatrix.needsUpdate = true;
+    scene3d.add(treeTrunkMesh3d);
+    scene3d.add(treeFoliageMesh3d);
+  }
+  const rocks = gen.rocks||[];
+  if(rocks.length){
+    const rockGeo = new THREE.IcosahedronGeometry(2.2*propScale, 0);
+    const rockMat = new THREE.MeshStandardMaterial({color:0x5c5850, roughness:1, flatShading:true});
+    rockMesh3d = new THREE.InstancedMesh(rockGeo, rockMat, rocks.length);
+    rocks.forEach((r,i)=>{
+      const groundY = elevationAtFor(gen, r.x, r.y)*PROC_TERRAIN_HEIGHT_SCALE;
+      const {x,z} = canvasUnitToWorldXZ(r.x, r.y);
+      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(r.rotX, r.rotY, r.rotZ));
+      m.compose(new THREE.Vector3(x, groundY+1*propScale*r.scale, z), q, new THREE.Vector3(r.scale, r.scale*0.8, r.scale));
+      rockMesh3d.setMatrixAt(i, m);
+    });
+    rockMesh3d.instanceMatrix.needsUpdate = true;
+    scene3d.add(rockMesh3d);
+  }
 }
 
 // ===================== Procedural terrain generation =====================
@@ -7304,7 +7393,31 @@ function generateProceduralTerrain(seed, archetypeKey){
     ];
   }
 
-  return { seed, archetype: key, label: arch.label, hills, forestPatches, river, roadPaths: [roadPath] };
+  // per user request (idea 1): tree/rock placements are part of the descriptor (drawn from
+  // the same rng, after everything else) so they're just as deterministic/reproducible from
+  // seed as the hills/forest/river -- see buildTerrainProps() for how these turn into meshes.
+  const trees = [];
+  forestPatches.forEach(f=>{
+    const count = Math.max(3, Math.round(f.r/16));
+    for(let i=0;i<count;i++){
+      const ang = rng()*Math.PI*2;
+      const rad = Math.sqrt(rng())*f.r*0.85;
+      trees.push({ x: f.x+Math.cos(ang)*rad, y: f.y+Math.sin(ang)*rad, scale: rngRange(rng,0.8,1.3) });
+    }
+  });
+  const ROCK_COUNT = 10;
+  const rocks = [];
+  for(let i=0;i<ROCK_COUNT;i++){
+    let rx, ry, tries=0;
+    do {
+      rx = rngRange(rng, 60, CANVAS_W-60);
+      ry = rngRange(rng, 30, CANVAS_H-30);
+      tries++;
+    } while(tries<20 && river && Math.abs(rx-riverXAt(river,ry))<(river.width/2+15) && Math.abs(ry-river.fordY)>=river.fordHalfHeight);
+    rocks.push({ x:rx, y:ry, scale: rngRange(rng,0.7,1.5), rotX: rng()*Math.PI, rotY: rng()*Math.PI, rotZ: rng()*Math.PI });
+  }
+
+  return { seed, archetype: key, label: arch.label, hills, forestPatches, river, roadPaths: [roadPath], trees, rocks };
 }
 
 const TERRAIN_TYPE_OPEN = 0, TERRAIN_TYPE_FOREST = 1, TERRAIN_TYPE_WATER = 2;
