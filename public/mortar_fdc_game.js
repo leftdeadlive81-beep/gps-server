@@ -385,12 +385,18 @@ const MORTAR_MAINLINE_RANGE_M = 6000;
 const MORTAR_MAINLINE_RANGE_UNITS = MORTAR_MAINLINE_RANGE_M / METERS_PER_UNIT;
 const MORTAR_MAINLINE_HALF_FOV = 15; // degrees either side of the set azimuth (30 deg fan)
 const SCOUT_MAX_RANGE_UNITS = 2000 / METERS_PER_UNIT;
-const ROAD_SPEED_KMH = {vehicle:60, infantry:10, sniper:5, mortar:40, artillery:5};
+// per user request: scout used to be a raw hardcoded step length (50 units/turn -- see the
+// old scoutTerrainAwareStep call site), bypassing this shared km/h table entirely and coming
+// out to ~23km/h, more than double dismounted infantry's pace despite both being foot
+// movement. A light recon team on foot is realistically close to (a bit faster than, given
+// lighter loadout, but not multiples of) a regular squad's pace, hence 12 here.
+const ROAD_SPEED_KMH = {vehicle:60, infantry:10, sniper:5, scout:12, mortar:40, artillery:5};
 const OFF_ROAD_SPEED_MULT = 0.7;
 function kmhToUnitsPerTurn(kmh){ return (kmh*1000/60) / METERS_PER_UNIT; }
 const VEHICLE_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.vehicle);
 const INFANTRY_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.infantry);
 const SNIPER_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.sniper);
+const SCOUT_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.scout);
 const MORTAR_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.mortar) * 0.25; // per user request: mortar move speed to 1/4
 const TANK_MOVE_CAP = VEHICLE_MOVE_CAP * 0.6; // faster than infantry/sniper, slower than the enemy vehicle's full road speed
 const HELI_MOVE_CAP = VEHICLE_MOVE_CAP * 1.8; // flies -- faster than any ground vehicle, ignores roads
@@ -2266,7 +2272,7 @@ function resolveOneScoutDecision(scout, idx){
       else log('sys','FDC', `${t.id} は斥候${idx+1}から視認できず偵察失敗。`);
     }
   } else if(scout.pendingDest){
-    const next = scoutTerrainAwareStep(scout.x, scout.y, scout.pendingDest.x, scout.pendingDest.y, 50);
+    const next = scoutTerrainAwareStep(scout.x, scout.y, scout.pendingDest.x, scout.pendingDest.y, SCOUT_MOVE_CAP);
     scout.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SCOUT_ADVANCE_LIMIT_X);
     scout.y = clamp(next.y, 20, CANVAS_H-20);
     checkMineTrigger('scout', idx, scout.x, scout.y);
