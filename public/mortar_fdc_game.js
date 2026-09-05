@@ -393,6 +393,19 @@ const SCOUT_MAX_RANGE_UNITS = 2000 / METERS_PER_UNIT;
 const ROAD_SPEED_KMH = {vehicle:60, infantry:10, sniper:5, scout:12, mortar:40, artillery:5};
 const OFF_ROAD_SPEED_MULT = 0.7;
 function kmhToUnitsPerTurn(kmh){ return (kmh*1000/60) / METERS_PER_UNIT; }
+// per user request: an in-game mission clock, shown at the top of the screen. Each action-
+// turn already implicitly represents 1 real minute (see kmhToUnitsPerTurn above, which
+// converts unit speeds from km/h on that same assumption), so the displayed clock advances
+// 1 minute per turn too -- driven by state.missionMinutes (a cross-wave counter, unlike
+// state.turns which resets every wave) rather than by wall-clock time.
+const GAME_START_DATETIME = new Date(2033, 4, 7, 8, 0, 0); // 2033-05-07 08:00
+function gameClockNow(){
+  return new Date(GAME_START_DATETIME.getTime() + (state.missionMinutes||0)*60000);
+}
+function formatGameClock(d){
+  const pad = n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 ${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
 const VEHICLE_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.vehicle);
 const INFANTRY_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.infantry);
 const SNIPER_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.sniper);
@@ -992,6 +1005,11 @@ function initGame(){
     illumFlares: [],
     mines: [],
     turns: 0,
+    // per user request: in-game mission clock -- unlike turns (reset to 0 every wave, see
+    // startStage()), this counts every action-turn across the WHOLE campaign since
+    // initGame(), so the displayed date/time (see gameClockNow()) advances continuously
+    // instead of jumping backward each time a new wave starts.
+    missionMinutes: 0,
     targets: [],
     selectedId: null,
     commandBox: null,
@@ -4555,6 +4573,7 @@ function commitDecision(){
   const turnCost = firingMortars.length>0 ? 2 : 1;
 
   state.turns += turnCost;
+  state.missionMinutes += turnCost;
   state.ammo.he -= ammoNeeded.he;
   state.ammo.heat -= ammoNeeded.heat;
 
@@ -5778,6 +5797,7 @@ function renderEnemyCommandBox(){
 }
 
 function renderStats(){
+  document.querySelector('#stat-datetime .value').textContent = formatGameClock(gameClockNow());
   document.querySelector('#stat-stage .value').textContent = state.stage+' / '+STAGE_COUNT;
   document.querySelector('#stat-difficulty .value').textContent = DIFFICULTIES[state.difficulty].label;
   document.querySelector('#stat-weather .value').textContent = WEATHER_TYPES[state.weather].label;
@@ -5796,8 +5816,10 @@ function renderStats(){
   document.getElementById('board-note').textContent = state.placementPending
     ? '手動配置モード ― 地図上の指定範囲内をクリックして、表示中のユニットの初期位置を指定してください'
     : '自軍は左側、敵軍は右側遠方に展開。ドラッグでパン・ホイールでズーム。目標をクリックして選択';
+  const clockNow = gameClockNow();
+  const clockTimeOnly = `${String(clockNow.getHours()).padStart(2,'0')}${String(clockNow.getMinutes()).padStart(2,'0')}`;
   document.getElementById('statbar-mini').textContent =
-    `WAVE ${state.stage}/${STAGE_COUNT} ・ 経過ターン${state.turns} ・ ¥${state.money.toLocaleString()} ・ 兵力${aliveTotal}/${totalRosterCapacity()}`;
+    `${clockTimeOnly} ・ WAVE ${state.stage}/${STAGE_COUNT} ・ 経過ターン${state.turns} ・ ¥${state.money.toLocaleString()} ・ 兵力${aliveTotal}/${totalRosterCapacity()}`;
 
   const revealed = state.targets.filter(t=>t.revealed && !t.destroyed);
   const byType = {};
