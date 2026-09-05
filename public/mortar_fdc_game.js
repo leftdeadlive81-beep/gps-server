@@ -7229,7 +7229,8 @@ const PROC_TEXTURE_SIZE_X = 520, PROC_TEXTURE_SIZE_Z = 184; // 2.826:1, matching
 // Base ground colors across the elevation range (low -> high), and the forest/water zone
 // overlay colors -- painted from the exact same descriptor buildProceduralTerrainMesh()
 // displaces its geometry from, so the picture and the mechanics can't disagree.
-const PROC_COLOR_LOW = [0x3a,0x42,0x28], PROC_COLOR_HIGH = [0x9a,0x8f,0x66];
+// per user request: PROC_COLOR_LOW brightened -- low-lying ground was reading as near-black.
+const PROC_COLOR_LOW = [0x4a,0x52,0x36], PROC_COLOR_HIGH = [0x9a,0x8f,0x66];
 const PROC_COLOR_FOREST = [0x23,0x38,0x1e], PROC_COLOR_WATER = [0x2c,0x4a,0x5e];
 // Shared by the 3D terrain's texture and the setup screen's seed-preview thumbnails
 // (renderMapSelectBody) so both always show exactly the elevation/forest/water picture
@@ -7318,6 +7319,11 @@ function buildProceduralTerrainMesh(gen){
   return new THREE.Mesh(geo, material);
 }
 
+// per user request: dusky sky tone shared by the renderer's clear color and scene3d.fog, so
+// the horizon (where fogged terrain fades into empty background) reads as one continuous sky
+// rather than a visible seam.
+const SKY_COLOR = 0x2b3440;
+
 // Sets up the renderer/scene/camera/lights, which never change once the page loads. The
 // procedural terrain itself is NOT built here -- that happens per-wave (see
 // regenerateTerrain(), called from startStage()) since it now regenerates every wave.
@@ -7329,22 +7335,28 @@ function initThree(){
   }
   renderer3d = new THREE.WebGLRenderer({ canvas: canvas3d, antialias:true });
   renderer3d.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
-  renderer3d.setClearColor(0x11140d, 1);
+  // per user request: the map read as visually "lonely" -- partly because everything past the
+  // terrain mesh's finite edges (sky, horizon, beyond the map boundary) was this same
+  // near-black clear color with nothing to blend into it, so it looked like a void rather
+  // than a horizon. A dusky sky tone, paired with scene3d.fog of the exact same color (set
+  // in updateCameraFromView(), scaled to the current camera distance), lets distant terrain
+  // fade smoothly into the background instead of cutting off sharply.
+  renderer3d.setClearColor(SKY_COLOR, 1);
   // Without matching sRGB output encoding, lit colors (the flat terrain color, unit
   // markers, etc.) come out noticeably darker/duller than authored.
   if('outputEncoding' in renderer3d) renderer3d.outputEncoding = THREE.sRGBEncoding;
   scene3d = new THREE.Scene();
+  scene3d.fog = new THREE.Fog(SKY_COLOR, 1, 2); // near/far kept in sync with camera distance -- see updateCameraFromView()
 
   camera3d = new THREE.PerspectiveCamera(45, 1, 1, 100000);
   scene3d.add(camera3d);
 
-  // per user request: darkened alongside TERRAIN_TEXTURE_BRIGHTNESS -- the renderer uses no
-  // tone mapping, so any pixel whose light*color exceeds 1.0 just clips to flat white. The
-  // old light levels (0.95 ambient + 1.05 directional) were high enough that sun-facing
-  // terrain clipped white regardless of how dark material.color was, masking the brightness
-  // change entirely. Lower levels here leave headroom for material.color to actually show.
-  scene3d.add(new THREE.AmbientLight(0xffffff, 0.55));
-  const sun = new THREE.DirectionalLight(0xfff4e0, 0.6);
+  // per user request: nudged up slightly (alongside brightening PROC_COLOR_LOW) so low-lying
+  // ground doesn't read as near-black -- still comfortably under 1.0 combined with
+  // TERRAIN_TEXTURE_BRIGHTNESS(0.55) so sun-facing terrain doesn't clip to flat white (the
+  // renderer uses no tone mapping).
+  scene3d.add(new THREE.AmbientLight(0xffffff, 0.65));
+  const sun = new THREE.DirectionalLight(0xfff4e0, 0.68);
   sun.position.set(600, 1200, 400);
   scene3d.add(sun);
 
@@ -7852,6 +7864,10 @@ function updateCameraFromView(){
     camera3d.near = Math.max(1, d*0.02);
     camera3d.far = d + (WORLD.maxY-WORLD.minY) + 8000;
     camera3d.updateProjectionMatrix();
+    // per user request: keeps the fog's range relative to the camera's CURRENT distance from
+    // the look-at point, so it reads consistently at any zoom level instead of being tuned
+    // for one specific distance and then too thick/thin once the player zooms.
+    if(scene3d && scene3d.fog){ scene3d.fog.near = d*0.7; scene3d.fog.far = d*2.0; }
   };
 
   // Once per map load, pick a default zoom that fits the whole map on screen. An
