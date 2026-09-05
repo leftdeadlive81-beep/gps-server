@@ -1276,6 +1276,7 @@ function deployBoxSize(){
 
 function startStage(){
   const stage = state.stage;
+  clickCycleState = null;
   pickWaveBgm();
   regenerateTerrain(pickTerrainForStage(stage));
   state.smokeClouds = [];
@@ -5114,36 +5115,10 @@ function handleCanvasClick(evt){
     return;
   }
 
-  let decoyHit = -1, decoyBestD = Infinity;
-  state.decoys.forEach((d,idx)=>{
-    if(d.destroyed) return;
-    const dist = Math.hypot(d.x-px, d.y-py);
-    if(dist<=20 && dist<decoyBestD){ decoyBestD=dist; decoyHit=idx; }
-  });
-  if(decoyHit>=0){
-    state.decoyCommandBox = decoyHit;
-    state.commandBox = null;
-    state.enemyCommandBox = null;
-    render();
-    return;
-  }
-  state.decoyCommandBox = null;
-
-  const enemyHit = findEnemyTargetAt(px, py);
-  if(enemyHit){
-    state.enemyCommandBox = enemyHit.id;
-    state.commandBox = null;
-    render();
-    return;
-  }
-  state.enemyCommandBox = null;
-
-  const unitHit = findFriendlyUnitAt(px, py);
-  if(unitHit){
-    state.commandBox = unitHit;
-  } else {
-    state.commandBox = null;
-  }
+  const hit = resolveClickHit(px, py);
+  state.decoyCommandBox = (hit && hit.type==='decoy') ? hit.payload : null;
+  state.enemyCommandBox = (hit && hit.type==='enemy') ? hit.payload.id : null;
+  state.commandBox = (hit && hit.type==='friendly') ? hit.payload : null;
   render();
 }
 
@@ -5178,32 +5153,55 @@ function canvasToScreen(cx, cy){
   return { x: rect.left + cx/CANVAS_W*rect.width, y: rect.top + cy/CANVAS_H*rect.height };
 }
 
-function findEnemyTargetAt(px, py){
-  let best=null, bestD=Infinity;
+// per user request: selecting units used to hard-prioritize enemy targets (42px hit radius)
+// over friendly units (22px) regardless of which was actually closer to the click, so an
+// enemy near a friendly unit made the friendly unselectable. All candidates (decoy/enemy/
+// friendly) within their own hit radius are now collected together and the one nearest to
+// the click wins. Repeating a click on the same overlapping cluster cycles through the
+// candidates (nearest to farthest, then wraps) instead of re-picking the same nearest one.
+let clickCycleState = null;
+
+function collectClickCandidates(px, py){
+  const candidates = [];
+  state.decoys.forEach((d,idx)=>{
+    if(d.destroyed) return;
+    const dist = Math.hypot(d.x-px, d.y-py);
+    if(dist<=20) candidates.push({ type:'decoy', payload:idx, dist, sig:`decoy:${idx}` });
+  });
   state.targets.forEach(t=>{
     if(t.destroyed || !isTargetDetected(t)) return;
     const vx = t._visX!==undefined ? t._visX : estPos(t).x;
     const vy = t._visY!==undefined ? t._visY : estPos(t).y;
-    const d = Math.hypot(vx-px, vy-py);
-    if(d<bestD){ bestD=d; best=t; }
+    const dist = Math.hypot(vx-px, vy-py);
+    if(dist<=42) candidates.push({ type:'enemy', payload:t, dist, sig:`enemy:${t.id}` });
   });
-  return (best && bestD<=42) ? best : null;
-}
-
-function findFriendlyUnitAt(px, py){
-  const HIT_R = 22;
-  if(state.hq.hp>0 && Math.hypot(state.hq.x-px, state.hq.y-py) <= HIT_R) return {kind:'hq'};
-  for(const {kind, list, alive} of FRIENDLY_KIND_LIST){
-    const arr = list();
-    for(let i=0;i<arr.length;i++){
-      const u = arr[i];
-      if(!alive(u)) continue;
+  if(state.hq.hp>0){
+    const dist = Math.hypot(state.hq.x-px, state.hq.y-py);
+    if(dist<=22) candidates.push({ type:'friendly', payload:{kind:'hq'}, dist, sig:'friendly:hq' });
+  }
+  FRIENDLY_KIND_LIST.forEach(({kind, list, alive})=>{
+    list().forEach((u,idx)=>{
+      if(!alive(u)) return;
       const ux = u._visX!==undefined ? u._visX : u.x;
       const uy = u._visY!==undefined ? u._visY : u.y;
-      if(Math.hypot(ux-px, uy-py) <= HIT_R) return {kind, idx:i};
-    }
+      const dist = Math.hypot(ux-px, uy-py);
+      if(dist<=22) candidates.push({ type:'friendly', payload:{kind, idx}, dist, sig:`friendly:${kind}:${idx}` });
+    });
+  });
+  return candidates;
+}
+
+function resolveClickHit(px, py){
+  const candidates = collectClickCandidates(px, py);
+  if(candidates.length===0){ clickCycleState = null; return null; }
+  const sigSet = candidates.map(c=>c.sig).sort().join('|');
+  if(clickCycleState && clickCycleState.sigSet===sigSet){
+    clickCycleState.idx = (clickCycleState.idx+1) % clickCycleState.order.length;
+    return clickCycleState.order[clickCycleState.idx];
   }
-  return null;
+  const order = candidates.slice().sort((a,b)=>a.dist-b.dist);
+  clickCycleState = { sigSet, order, idx:0 };
+  return order[0];
 }
 
 function closeCommandBox(){
