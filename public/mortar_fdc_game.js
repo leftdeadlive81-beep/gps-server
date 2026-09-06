@@ -163,6 +163,17 @@ const TANK_DUEL_DMG_TO_ENEMY = [18, 32];
 const TANK_INCOMING_DMG = [8, 20];
 const TANK_REPAIR_HP_PER_CALL = 30;
 const TANK_REPAIR_COST_PER_HP = 40;
+// per user request: 味方の対空ミサイル部隊 -- 戦車と同じくHPベース(兵員ロスターなし)。ヘリ・
+// ドローンにのみ交戦可能(対地目標には一切攻撃できない ―― resolveSamOrdersのengageTargets参照)、
+// 長射程・高威力な代わりに装甲が薄く脆い牽引式ランチャーという想定。
+const NUM_SAMS = 1;
+const SAM_MAX_HP = 70;
+const SAM_POS = {x: 200, y: 350};
+const SAM_EXPOSURE = 45; // soft, unarmored launcher vehicle -- easier to hit than infantry
+const SAM_ENGAGE_RANGE = 420;
+const SAM_DUEL_DMG_TO_ENEMY = [45, 75];
+const SAM_REPAIR_HP_PER_CALL = 20;
+const SAM_REPAIR_COST_PER_HP = 50;
 // per user request: 味方の工兵小隊 -- マップ上を歩兵と同じ要領で移動でき、任意の地点にキャッシュを
 // 消費して防壁(壁)を構築できる。工兵自身は戦闘要員ではないので、他の小隊のような交戦ロジックは
 // 持たない(前進/防御/後退での移動と壁の構築のみ)。
@@ -421,6 +432,7 @@ const SNIPER_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.sniper);
 const SCOUT_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.scout);
 const MORTAR_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.mortar) * 0.25; // per user request: mortar move speed to 1/4
 const TANK_MOVE_CAP = VEHICLE_MOVE_CAP * 0.6; // faster than infantry/sniper, slower than the enemy vehicle's full road speed
+const SAM_MOVE_CAP = VEHICLE_MOVE_CAP * 0.4; // towed/wheeled launcher -- slower than the tank
 const HELI_MOVE_CAP = VEHICLE_MOVE_CAP * 1.8; // flies -- faster than any ground vehicle, ignores roads
 const ARTILLERY_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.artillery) * 0.5; // per user request: enemy artillery move speed halved
 const ARTILLERY_STANDOFF_RANGE_M = 300; // artillery repositions closer but holds once within this range of its nearest target
@@ -783,6 +795,33 @@ function drawTankIcon(ctx, cx, cy, size, dead){
   ctx.stroke();
   ctx.restore();
 }
+// per user request: 対空ミサイル部隊 -- 戦車と同様、画像アセットが無いためのベクター描画。
+// 車体(箱)+ 斜め上向きの発射レール + レール先端のミサイル(円)で対空兵器と分かるようにする。
+function drawSamIcon(ctx, cx, cy, size, dead){
+  const w = size*1.5, h = size*0.7;
+  ctx.save();
+  ctx.translate(cx, cy);
+  const col = dead ? '#5c2a25' : FRIENDLY_MARK_COLOR;
+  ctx.fillStyle = col;
+  ctx.strokeStyle = dead ? '#3a1b18' : '#3d5a70';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(-w/2, -h*0.4, w, h, 3);
+  else ctx.rect(-w/2, -h*0.4, w, h);
+  ctx.fill();
+  ctx.stroke();
+  const railTipX = w*0.3, railTipY = -size*1.05;
+  ctx.beginPath();
+  ctx.moveTo(-w*0.15, -h*0.3);
+  ctx.lineTo(railTipX, railTipY);
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(railTipX, railTipY, size*0.14, 0, Math.PI*2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
 // per user request: 工兵小隊 -- ヘルメット(半円)+交差した工具(X)のベクター描画アイコン
 // (戦車と同様、画像アセットが無いため)。
 function drawEngineerIcon(ctx, cx, cy, size, dead){
@@ -1008,6 +1047,7 @@ function initGame(){
     })),
     squads: [],
     tanks: [],
+    sams: [],
     engineers: [],
     walls: [],
     scouts: Array.from({length:NUM_SCOUTS}, (_,i)=>({
@@ -1413,6 +1453,7 @@ function startStage(){
   if(state.snipers) state.snipers = state.snipers.filter(sn=>unitAlive(sn));
   if(state.mortars) state.mortars = state.mortars.filter(m=>m.hp>0);
   if(state.tanks) state.tanks = state.tanks.filter(tk=>tk.hp>0);
+  if(state.sams) state.sams = state.sams.filter(sam=>sam.hp>0);
   if(state.engineers) state.engineers = state.engineers.filter(e=>unitAlive(e));
   // per user request: 防壁(壁)は迫撃砲/戦車と同じく、決心のたびにリセットされる擬陣地とは違い、
   // 波を跨いで恒久的に残る(現実の陣地構築なので、破壊されない限り消えない)。
@@ -1487,6 +1528,16 @@ function startStage(){
       hp: TANK_MAX_HP, maxHp: TANK_MAX_HP,
       exposure: TANK_EXPOSURE,
     }));
+    state.sams = Array.from({length:NUM_SAMS}, (_,i)=>({
+      id: i,
+      order: 'hold',
+      pendingDest: null,
+      huntTargetId: null,
+      x: deployX(SAM_POS.x),
+      y: clamp(deployYMid + (i-(NUM_SAMS-1)/2)*60*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax),
+      hp: SAM_MAX_HP, maxHp: SAM_MAX_HP,
+      exposure: SAM_EXPOSURE,
+    }));
     state.engineers = Array.from({length:NUM_ENGINEERS}, (_,ei)=>({
       id: ei,
       order: 'hold',
@@ -1523,6 +1574,9 @@ function startStage(){
     state.tanks.forEach(tk=>{
       tk.order = 'hold'; tk.pendingDest = null; tk.huntTargetId = null;
     });
+    state.sams.forEach(sam=>{
+      sam.order = 'hold'; sam.pendingDest = null; sam.huntTargetId = null;
+    });
     state.engineers.forEach(e=>{
       e.order = 'hold'; e.pendingDest = null; e.reinforceUsed = false;
     });
@@ -1542,7 +1596,7 @@ function startStage(){
   state.stageStartSnapshot = JSON.parse(JSON.stringify({
     ammo: state.ammo, turns: state.turns, reserve: state.reserve, reserveRoster: state.reserveRoster, hq: state.hq,
     mortars: state.mortars, squads: state.squads, scouts: state.scouts, snipers: state.snipers,
-    tanks: state.tanks, engineers: state.engineers, walls: state.walls,
+    tanks: state.tanks, sams: state.sams, engineers: state.engineers, walls: state.walls,
   }));
   ripples = []; projectiles = []; flashes = []; enemyTracers = [];
   debrisParticles = []; wreckSmokes = []; killBanners = [];
@@ -1672,6 +1726,7 @@ function retryStage(){
   state.scouts = snap.scouts;
   state.snipers = snap.snipers;
   state.tanks = snap.tanks;
+  state.sams = snap.sams;
   state.engineers = snap.engineers;
   state.walls = snap.walls;
   startStage();
@@ -2174,6 +2229,11 @@ function armTankMoveOrder(idx){
   state.commandBox = null;
   render();
 }
+function armSamMoveOrder(idx){
+  state.orderMode = {kind:'sam-move', idx};
+  state.commandBox = null;
+  render();
+}
 // per user request: 指揮所も移動できるように(移動速度は歩兵と同一 -- applyHqMovement で
 // INFANTRY_MOVE_CAP を使う)。HQ は配列ではなく単一オブジェクトなので idx を持たない点だけ
 // tank/squad の同名関数と異なる。
@@ -2190,6 +2250,12 @@ function clearHqDest(){
 function clearTankDest(idx){
   if(!state.tanks[idx]) return;
   state.tanks[idx].pendingDest = null;
+  state.orderMode = null;
+  render();
+}
+function clearSamDest(idx){
+  if(!state.sams[idx]) return;
+  state.sams[idx].pendingDest = null;
   state.orderMode = null;
   render();
 }
@@ -2802,7 +2868,9 @@ function resolveSquadOrders(actionTurns){
 
       let engageTargets = state.targets.filter(t=>!t.destroyed && t.type==='infantry');
       if(sq.order==='hunt' && sq.huntTargetId){
-        const huntTarget = state.targets.find(t=>t.id===sq.huntTargetId && !t.destroyed);
+        // per user request: small arms can't effectively engage aircraft -- anti-air is the
+        // SAM's job now (see resolveSamOrders).
+        const huntTarget = state.targets.find(t=>t.id===sq.huntTargetId && !t.destroyed && t.type!=='heli' && t.type!=='drone');
         if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
       }
       if(engageTargets.length===0) return;
@@ -2912,6 +2980,97 @@ function allTanksWiped(){
   return !state.tanks.length || state.tanks.every(tk=>tk.hp<=0);
 }
 
+// per user request: 対空ミサイル部隊 -- 移動は戦車と同じ枠組み(pendingDest/advance/retreat/
+// hunt、FEBA線を前進/後退の目標にする)を流用。
+function applySamMovement(sam, idx){
+  if(sam.pendingDest){
+    const next = terrainAwareStep(sam.x, sam.y, sam.pendingDest.x, sam.pendingDest.y, SAM_MOVE_CAP);
+    sam.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+    sam.y = clamp(next.y, 30, CANVAS_H-30);
+    checkMineTrigger('sam', idx, sam.x, sam.y);
+    if(Math.hypot(sam.x-sam.pendingDest.x, sam.y-sam.pendingDest.y) < 12){
+      sam.pendingDest = null;
+      log('sys','前線', `対空${idx+1}、指定地点に到着。`);
+    }
+    return;
+  }
+  if(sam.order==='advance'){
+    const next = terrainAwareStep(sam.x, sam.y, state.febaX, sam.y, SAM_MOVE_CAP);
+    sam.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
+    sam.y = clamp(next.y, 30, CANVAS_H-30);
+  } else if(sam.order==='retreat'){
+    const next = terrainAwareStep(sam.x, sam.y, state.febaX, sam.y, SAM_MOVE_CAP);
+    sam.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
+    sam.y = clamp(next.y, 30, CANVAS_H-30);
+  } else if(sam.order==='hunt' && sam.huntTargetId){
+    const target = state.targets.find(t=>t.id===sam.huntTargetId);
+    if(!target || target.destroyed){
+      sam.huntTargetId = null;
+      sam.order = 'hold';
+      log('sys','前線', `対空${idx+1}、攻撃目標を喪失(撃破/消失)。待機に移行。`);
+    } else {
+      const e = estPos(target);
+      const dist = Math.hypot(e.x-sam.x, e.y-sam.y);
+      if(dist > SAM_ENGAGE_RANGE*0.8){
+        const next = terrainAwareStep(sam.x, sam.y, e.x, e.y, SAM_MOVE_CAP);
+        sam.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+        sam.y = clamp(next.y, 30, CANVAS_H-30);
+      }
+    }
+  }
+  checkMineTrigger('sam', idx, sam.x, sam.y);
+}
+
+function allSamsWiped(){
+  return !state.sams.length || state.sams.every(sam=>sam.hp<=0);
+}
+
+// per user request: 対地目標(歩兵・車両・砲兵)には一切交戦できない(engageTargetsがheli/drone
+// のみ) ―― 陸上部隊には無力な代わりに、対空目標には高威力。戦車のような被弾デュエルは持たない
+// (迫撃砲と同様、被害はcheckFriendlyFireAt経由の対砲兵射撃やヘリ自身のAIからのみ発生する)。
+function resolveSamOrders(actionTurns){
+  let anyEvent = false;
+  for(let i=0;i<actionTurns;i++){
+    state.sams.forEach((sam, idx)=>{
+      if(sam.hp<=0) return;
+      applySamMovement(sam, idx);
+
+      let engageTargets = state.targets.filter(t=>!t.destroyed && (t.type==='heli' || t.type==='drone'));
+      if(sam.order==='hunt' && sam.huntTargetId){
+        const huntTarget = state.targets.find(t=>t.id===sam.huntTargetId && !t.destroyed && (t.type==='heli' || t.type==='drone'));
+        if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
+      }
+      if(engageTargets.length===0) return;
+      let dmgMult=1;
+      if(sam.order==='hunt'){ dmgMult=1.5; }
+      else if(sam.order==='hold'){ dmgMult=0.9; }
+      else if(sam.order==='retreat'){ dmgMult=0.5; }
+
+      engageTargets.forEach(t=>{
+        if(t.destroyed) return;
+        const e = estPos(t);
+        const dist = Math.hypot(e.x-sam.x, e.y-sam.y);
+        if(dist > SAM_ENGAGE_RANGE) return;
+        if(revealTarget(t)){
+          log('op','斥候', `対空${idx+1}が${t.id}と交戦、<b>${t.def.label}</b>と識別。`);
+        }
+        const samAltMult = altitudeBonus(sam.x, sam.y, t.trueX, t.trueY);
+        const enemyExposureMult = exposureNormalizedMult(getTargetExposure(t));
+        const dmgToEnemy = Math.round(rnd(SAM_DUEL_DMG_TO_ENEMY[0], SAM_DUEL_DMG_TO_ENEMY[1]) * dmgMult * samAltMult * enemyExposureMult);
+        applyDamageToTarget(t, dmgToEnemy);
+        anyEvent = true;
+        enemyTracers.push({startX:sam.x, startY:sam.y, endX:e.x, endY:e.y, born:performance.now(), duration:220});
+        if(t.hp<=0 && !t.destroyed){
+          t.destroyed = true; t.hp = 0;
+          log('op','斥候', `${t.id} 対空${idx+1}との交戦で撃破を確認。`);
+          onTargetDestroyed(t);
+        }
+      });
+    });
+  }
+  return anyEvent;
+}
+
 function resolveTankOrders(actionTurns){
   let anyEvent = false;
   for(let i=0;i<actionTurns;i++){
@@ -2921,7 +3080,9 @@ function resolveTankOrders(actionTurns){
 
       let engageTargets = state.targets.filter(t=>!t.destroyed && (t.type==='infantry' || t.type==='vehicle'));
       if(tank.order==='hunt' && tank.huntTargetId){
-        const huntTarget = state.targets.find(t=>t.id===tank.huntTargetId && !t.destroyed);
+        // per user request: direct-fire tank guns can't effectively engage aircraft -- anti-air
+        // is the SAM's job now (see resolveSamOrders).
+        const huntTarget = state.targets.find(t=>t.id===tank.huntTargetId && !t.destroyed && t.type!=='heli' && t.type!=='drone');
         if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
       }
       if(engageTargets.length===0) return;
@@ -3044,6 +3205,9 @@ function findTargetOnSniperLine(sn){
   let best=null, bestProj=Infinity;
   state.targets.forEach(t=>{
     if(t.destroyed) return;
+    // per user request: small arms can't effectively engage aircraft -- anti-air is the SAM's
+    // job now (see resolveSamOrders).
+    if(t.type==='heli' || t.type==='drone') return;
     const vx = t.trueX-sn.x, vy = t.trueY-sn.y;
     const proj = vx*dirX + vy*dirY;
     if(proj<0 || proj>SNIPER_AIM_RANGE_UNITS) return;
@@ -3068,6 +3232,7 @@ function findAutoSniperTarget(sn){
   let best=null, bd=Infinity;
   state.targets.forEach(t=>{
     if(t.destroyed) return;
+    if(t.type==='heli' || t.type==='drone') return;
     if(!isTargetDetected(t)) return;
     const dist = Math.hypot(t.trueX-sn.x, t.trueY-sn.y);
     if(dist > SNIPER_RANGE_UNITS) return;
@@ -3121,7 +3286,7 @@ function resolveSniperOrders(actionTurns){
 
       if(sn.pendingSnipeTargetId){
         const t = state.targets.find(x=>x.id===sn.pendingSnipeTargetId);
-        if(!t || t.destroyed){
+        if(!t || t.destroyed || t.type==='heli' || t.type==='drone'){
           sn.pendingSnipeTargetId = null;
         } else if(isTargetDetected(t)){
           const dist = Math.hypot(t.trueX-sn.x, t.trueY-sn.y);
@@ -3174,6 +3339,11 @@ function setTankOrder(idx, order){
   state.tanks[idx].order = order;
   render();
 }
+function setSamOrder(idx, order){
+  if(!state.sams[idx]) return;
+  state.sams[idx].order = order;
+  render();
+}
 
 function setSniperOrder(idx, order){
   if(!state.snipers[idx]) return;
@@ -3208,6 +3378,7 @@ const SMART_UNIT_TYPES = {
   squad:  {label:'小隊',   list:()=>state.squads,  isAlive:sq=>sq.soldiers.some(s=>s.alive), nameOf:i=>`第${i+1}小隊`},
   sniper: {label:'狙撃',   list:()=>state.snipers, isAlive:sn=>sn.soldiers.some(s=>s.alive), nameOf:i=>`狙撃${i+1}班`},
   tank:   {label:'戦車',   list:()=>state.tanks,   isAlive:tk=>tk.hp>0, nameOf:i=>`戦車${i+1}`},
+  sam:    {label:'対空',   list:()=>state.sams,    isAlive:sam=>sam.hp>0, nameOf:i=>`対空${i+1}`},
 };
 
 // kind: 'instant' (no further input, just a confirm step) / 'target' (pick from known
@@ -3241,6 +3412,13 @@ const SMART_ACTIONS = {
     {key:'snipe_target', label:'狙撃目標指定', kind:'target'},
   ],
   tank: [
+    {key:'advance', label:'前進', kind:'instant'},
+    {key:'hold', label:'防御', kind:'instant'},
+    {key:'retreat', label:'後退', kind:'instant'},
+    {key:'move', label:'移動(精密指定)', kind:'map'},
+    {key:'hunt_target', label:'攻撃目標指定', kind:'target'},
+  ],
+  sam: [
     {key:'advance', label:'前進', kind:'instant'},
     {key:'hold', label:'防御', kind:'instant'},
     {key:'retreat', label:'後退', kind:'instant'},
@@ -3393,7 +3571,7 @@ function applySmartOrder(targetId){
     } else if(unitType==='squad'){
       const sq = state.squads[idx];
       if(['advance','hold','assault','retreat'].includes(actionKey)) setSquadOrder(idx, actionKey);
-      else if(actionKey==='hunt_target' && target){
+      else if(actionKey==='hunt_target' && target && target.type!=='heli' && target.type!=='drone'){
         sq.order = 'hunt';
         sq.huntTargetId = target.id;
         sq.pendingDest = null;
@@ -3409,16 +3587,24 @@ function applySmartOrder(targetId){
     } else if(unitType==='sniper'){
       const sn = state.snipers[idx];
       if(['advance','hold','retreat'].includes(actionKey)) setSniperOrder(idx, actionKey);
-      else if(actionKey==='snipe_target' && target){
+      else if(actionKey==='snipe_target' && target && target.type!=='heli' && target.type!=='drone'){
         sn.pendingSnipeTargetId = target.id;
       }
     } else if(unitType==='tank'){
       const tk = state.tanks[idx];
       if(['advance','hold','retreat'].includes(actionKey)) setTankOrder(idx, actionKey);
-      else if(actionKey==='hunt_target' && target){
+      else if(actionKey==='hunt_target' && target && target.type!=='heli' && target.type!=='drone'){
         tk.order = 'hunt';
         tk.huntTargetId = target.id;
         tk.pendingDest = null;
+      }
+    } else if(unitType==='sam'){
+      const sam = state.sams[idx];
+      if(['advance','hold','retreat'].includes(actionKey)) setSamOrder(idx, actionKey);
+      else if(actionKey==='hunt_target' && target && (target.type==='heli' || target.type==='drone')){
+        sam.order = 'hunt';
+        sam.huntTargetId = target.id;
+        sam.pendingDest = null;
       }
     }
   });
@@ -3473,7 +3659,13 @@ function renderSmartOrder(){
   if(step===4){
     const actionDef = SMART_ACTIONS[smartWizard.unitType].find(a=>a.key===smartWizard.actionKey);
     if(actionDef.kind==='target'){
-      const knownTargets = state.targets.filter(t=>!t.destroyed && isTargetDetected(t));
+      // per user request: SAM can only be assigned air targets (heli/drone); squad/tank/
+      // sniper direct-fire weapons can no longer be assigned air targets at all -- anti-air is
+      // the SAM's job now.
+      const typeGate = smartWizard.unitType==='sam' ? (t=>t.type==='heli'||t.type==='drone')
+        : ['squad','tank','sniper'].includes(smartWizard.unitType) ? (t=>t.type!=='heli'&&t.type!=='drone')
+        : ()=>true;
+      const knownTargets = state.targets.filter(t=>!t.destroyed && isTargetDetected(t) && typeGate(t));
       body.innerHTML = backBtn + `
         <div class="meta" style="margin-bottom:8px;">どの目標ですか?</div>
         ${knownTargets.length ? knownTargets.map(t=>`<div class="shop-row"><div>
@@ -3651,6 +3843,7 @@ const FRIENDLY_KIND_LIST = [
   { kind:'scout',    list:()=>state.scouts,    alive:u=>unitAlive(u),                label:i=>`斥候${i+1}` },
   { kind:'mortar',   list:()=>state.mortars,   alive:u=>u.hp>0,                       label:i=>`迫撃砲${i+1}` },
   { kind:'tank',     list:()=>state.tanks,     alive:u=>u.hp>0,                       label:i=>`戦車${i+1}` },
+  { kind:'sam',      list:()=>state.sams,      alive:u=>u.hp>0,                       label:i=>`対空${i+1}` },
   { kind:'squad',    list:()=>state.squads,    alive:u=>u.soldiers.some(s=>s.alive),  label:i=>`第${i+1}小隊` },
   { kind:'sniper',   list:()=>state.snipers,   alive:u=>u.soldiers.some(s=>s.alive),  label:i=>`狙撃${i+1}班` },
   { kind:'engineer', list:()=>state.engineers, alive:u=>u.soldiers.some(s=>s.alive),  label:()=>'工兵小隊' },
@@ -3689,6 +3882,10 @@ function getUnitExposure(candidate){
   if(candidate.kind==='tank'){
     const tk = state.tanks[candidate.idx];
     return tk.exposure + terrainCoverTotal(tk.x, tk.y);
+  }
+  if(candidate.kind==='sam'){
+    const sam = state.sams[candidate.idx];
+    return sam.exposure + terrainCoverTotal(sam.x, sam.y);
   }
   if(candidate.kind==='scout'){
     const u = state.scouts[candidate.idx];
@@ -3736,6 +3933,9 @@ function nearestFriendlyAsset(x, y, includeSquads){
     });
     state.tanks.forEach((tk,idx)=>{
       if(tk.hp>0) candidates.push({kind:'tank', idx, x:tk.x, y:tk.y});
+    });
+    state.sams.forEach((sam,idx)=>{
+      if(sam.hp>0) candidates.push({kind:'sam', idx, x:sam.x, y:sam.y});
     });
     state.engineers.forEach((en,idx)=>{
       if(en.soldiers.some(s=>s.alive)) candidates.push({kind:'engineer', idx, x:en.x, y:en.y});
@@ -3858,6 +4058,14 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
     if(tank.hp <= tank.maxHp*0.2) state.hpDroppedLow = true;
     log('sys','被弾', `${sourceLabel}が戦車${target.idx+1}を攻撃。被害 ${dmg}。`);
     if(wasAlive && tank.hp<=0) spawnDestructionEffect(tank.x, tank.y, `戦車${target.idx+1} 撃破!`, FRIENDLY_MARK_COLOR);
+  } else if(target.kind==='sam'){
+    const sam = state.sams[target.idx];
+    if(!sam) return;
+    const wasAlive = sam.hp>0;
+    sam.hp = Math.max(0, sam.hp-dmg);
+    if(sam.hp <= sam.maxHp*0.2) state.hpDroppedLow = true;
+    log('sys','被弾', `${sourceLabel}が対空${target.idx+1}を攻撃。被害 ${dmg}。`);
+    if(wasAlive && sam.hp<=0) spawnDestructionEffect(sam.x, sam.y, `対空${target.idx+1} 撃破!`, FRIENDLY_MARK_COLOR);
   } else if(target.kind==='engineer'){
     const en = state.engineers[target.idx];
     if(!en) return;
@@ -4357,16 +4565,20 @@ function resolveEnemyTurn(actionTurns){
   if(!allTanksWiped()){
     tankEvent = resolveTankOrders(actionTurns);
   }
+  let samEvent = false;
+  if(!allSamsWiped()){
+    samEvent = resolveSamOrders(actionTurns);
+  }
   if(!allEngineersWiped()){
     resolveEngineerOrders(actionTurns);
   }
-  if(!hit && !infEvent && !sniperEvent && !tankEvent && !advanced && !assaulted && !heliEvent && !swarmed && !cbEvent && !antiDroned){
+  if(!hit && !infEvent && !sniperEvent && !tankEvent && !samEvent && !advanced && !assaulted && !heliEvent && !swarmed && !cbEvent && !antiDroned){
     log('sys','敵ターン', '目立った動きなし。');
   }
   // per user request: 交戦時のサウンド -- looping battlefield-combat ambience plays while
   // squads/snipers are actively engaging this turn, and pauses again once nothing is
   // actively engaging.
-  if(infEvent || sniperEvent || tankEvent || antiDroned || heliEvent) playCombatAmbience(); else stopCombatAmbience();
+  if(infEvent || sniperEvent || tankEvent || samEvent || antiDroned || heliEvent) playCombatAmbience(); else stopCombatAmbience();
   state.targets.forEach(t=>{
     if(t.suppressed>0) t.suppressed = Math.max(0, t.suppressed-actionTurns);
   });
@@ -5044,6 +5256,9 @@ function handleCanvasClick(evt){
       } else if(mode.unitType==='tank'){
         const tk = state.tanks[idx];
         tk.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+      } else if(mode.unitType==='sam'){
+        const sam = state.sams[idx];
+        sam.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
       }
     });
     log('sys','司令部', `スマート操作: ${SMART_UNIT_TYPES[mode.unitType].label} ${idxs.length}隊に移動目標を指示。`);
@@ -5071,6 +5286,15 @@ function handleCanvasClick(evt){
           y: clamp(py, 30, CANVAS_H-30),
         };
         log('sys','前線', `戦車${mode.idx+1}に移動目標を指示。`);
+      }
+    } else if(mode.kind==='sam-move'){
+      const sam = state.sams[mode.idx];
+      if(sam){
+        sam.pendingDest = {
+          x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X),
+          y: clamp(py, 30, CANVAS_H-30),
+        };
+        log('sys','前線', `対空${mode.idx+1}に移動目標を指示。`);
       }
     } else if(mode.kind==='hq-move'){
       state.hq.pendingDest = {
@@ -5282,7 +5506,7 @@ function assignSquadHunt(idx){
   if(!sq || !sq.soldiers.some(s=>s.alive)) return;
   const targetId = state.enemyCommandBox;
   const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
-  if(!target) return;
+  if(!target || target.type==='heli' || target.type==='drone') return;
   if(sq.order==='hunt' && sq.huntTargetId===target.id){
     clearSquadHunt(idx);
     log('sys','前線', `第${idx+1}小隊、${target.id}への攻撃指示を解除。`);
@@ -5307,7 +5531,7 @@ function assignTankHunt(idx){
   if(!tank || tank.hp<=0) return;
   const targetId = state.enemyCommandBox;
   const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
-  if(!target) return;
+  if(!target || target.type==='heli' || target.type==='drone') return;
   if(tank.order==='hunt' && tank.huntTargetId===target.id){
     clearTankHunt(idx);
     log('sys','前線', `戦車${idx+1}、${target.id}への攻撃指示を解除。`);
@@ -5336,6 +5560,46 @@ function repairTank(idx){
   tank.hp = Math.min(tank.maxHp, tank.hp+restoreHp);
   state.turns += 1;
   log('sys','工兵', `戦車${idx+1}、応急修復完了(+${restoreHp}HP)。¥${cost}を消費(現在HP ${tank.hp}/${tank.maxHp})。`);
+  resolveEnemyTurn(1);
+  checkEnd();
+  render();
+}
+// per user request: 対空ミサイル部隊 -- 戦車のhunt/repairと同じ枠組みだが、割り当て可能なのは
+// ヘリ・ドローンのみ(対地目標は選べない)。
+function assignSamHunt(idx){
+  const sam = state.sams[idx];
+  if(!sam || sam.hp<=0) return;
+  const targetId = state.enemyCommandBox;
+  const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
+  if(!target || (target.type!=='heli' && target.type!=='drone')) return;
+  if(sam.order==='hunt' && sam.huntTargetId===target.id){
+    clearSamHunt(idx);
+    log('sys','前線', `対空${idx+1}、${target.id}への攻撃指示を解除。`);
+    return;
+  }
+  sam.order = 'hunt';
+  sam.huntTargetId = target.id;
+  sam.pendingDest = null;
+  log('sys','前線', `対空${idx+1}、${target.id} を攻撃目標に指示。`);
+  render();
+}
+function clearSamHunt(idx){
+  const sam = state.sams[idx];
+  if(!sam) return;
+  sam.huntTargetId = null;
+  if(sam.order==='hunt') sam.order = 'hold';
+  render();
+}
+function repairSam(idx){
+  const sam = state.sams[idx];
+  if(!state || state.stageResolved || !sam || sam.hp<=0 || sam.hp>=sam.maxHp) return;
+  const restoreHp = Math.min(SAM_REPAIR_HP_PER_CALL, sam.maxHp-sam.hp);
+  const cost = Math.round(SAM_REPAIR_COST_PER_HP*restoreHp);
+  if(state.money < cost){ log('sys','システム','資金が不足しています。'); return; }
+  state.money -= cost;
+  sam.hp = Math.min(sam.maxHp, sam.hp+restoreHp);
+  state.turns += 1;
+  log('sys','工兵', `対空${idx+1}、応急修復完了(+${restoreHp}HP)。¥${cost}を消費(現在HP ${sam.hp}/${sam.maxHp})。`);
   resolveEnemyTurn(1);
   checkEnd();
   render();
@@ -5648,6 +5912,40 @@ function tankBoxHtml(idx){
   `;
 }
 
+// per user request: 対空ミサイル部隊 -- 戦車のcommand box構成をそのまま流用。攻撃目標は
+// ヘリ・ドローンのみ(renderEnemyCommandBoxのsamBtnsで既に絞り込み済み)。
+function samBoxHtml(idx){
+  const sam = state.sams[idx];
+  const dead = sam.hp<=0;
+  const btns = ['advance','hold','retreat'].map(o=>
+    `<button class="btn squad-order-btn ${sam.order===o?'active':''}" ${dead?'disabled':''} onclick="setSamOrder(${idx},'${o}')">${ORDER_LABEL[o]}</button>`
+  ).join('');
+  const arming = state.orderMode && state.orderMode.kind==='sam-move' && state.orderMode.idx===idx;
+  const destStatus = arming ? '地図をクリックして移動先指定…' : (sam.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
+  const huntTarget = sam.huntTargetId ? state.targets.find(t=>t.id===sam.huntTargetId) : null;
+  const huntStatus = (huntTarget && !huntTarget.destroyed)
+    ? `攻撃目標: ${huntTarget.id} (${huntTarget.revealed?huntTarget.def.label:'識別不能'})`
+    : null;
+  if(dead) return `<div class="empty-hint" style="padding:4px 0;color:var(--red);">撃破</div>`;
+  const repairAmount = Math.min(SAM_REPAIR_HP_PER_CALL, sam.maxHp-sam.hp);
+  const repairCost = Math.round(SAM_REPAIR_COST_PER_HP*repairAmount);
+  const canRepair = sam.hp<sam.maxHp && state.money>=repairCost;
+  return `
+    <div class="meta">HP: ${sam.hp} / ${sam.maxHp}</div>
+    <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,sam.hp/sam.maxHp*100)}%"></div></div>
+    ${exposureMetaHtml(getUnitExposure({kind:'sam', idx}))}
+    <div class="meta" style="margin-bottom:6px;color:var(--muted);">対空目標(ヘリ・ドローン)専任 ― 対地目標には交戦不可</div>
+    <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
+    <div class="row-2" style="margin-bottom:6px;">
+      <button class="btn ${arming?'active squad-order-btn':''}" onclick="armSamMoveOrder(${idx})">移動先を指定</button>
+      <button class="btn" ${!sam.pendingDest?'disabled':''} onclick="clearSamDest(${idx})">解除</button>
+    </div>
+    <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
+    ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearSamHunt(${idx})">攻撃目標を解除</button>` : ''}
+    <button class="btn" ${canRepair?'':'disabled'} onclick="repairSam(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${sam.hp>=sam.maxHp?' ・ HP満タン':''}</button>
+  `;
+}
+
 // per user request: 工兵小隊 -- 移動は小隊と同じ(前進/防御/後退+精密移動先指定)だが交戦はしない。
 // 追加で、任意の地点にキャッシュ ¥WALL_BUILD_COST を消費して防壁(壁)を構築できる
 // (工兵自身がその場に居なくてもよい、という要望通り、地図クリックのみで即時建設)。
@@ -5759,6 +6057,12 @@ function renderCommandBox(){
     title = `戦車${state.commandBox.idx+1}`;
     bodyHtml = tankBoxHtml(state.commandBox.idx);
     pos = canvasToScreen(tank._visX!==undefined?tank._visX:tank.x, tank._visY!==undefined?tank._visY:tank.y);
+  } else if(kind==='sam'){
+    const sam = state.sams[state.commandBox.idx];
+    if(!sam || sam.hp<=0){ box.style.display='none'; return; }
+    title = `対空${state.commandBox.idx+1}`;
+    bodyHtml = samBoxHtml(state.commandBox.idx);
+    pos = canvasToScreen(sam._visX!==undefined?sam._visX:sam.x, sam._visY!==undefined?sam._visY:sam.y);
   } else if(kind==='sniper'){
     const sn = state.snipers[state.commandBox.idx];
     if(!sn){ box.style.display='none'; return; }
@@ -5820,20 +6124,28 @@ function renderEnemyCommandBox(){
     const active = m.order==='fire' && m.pendingFire && m.pendingFire.snappedId===t.id;
     return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignMortarFire(${idx})">迫撃砲${idx+1}に攻撃させる${active?'(照準中)':''}</button>`;
   }).filter(Boolean).join('');
+  // per user request: 対地の直接照準兵器(小隊/戦車/狙撃)はもはや対空目標(ヘリ・ドローン)を
+  // 直接狙い撃てない -- 対空はSAM専任(下のsamBtns)。
+  const isAirTarget = t.type==='heli' || t.type==='drone';
   // per user request: snipers are no longer assignable from here -- they already
   // auto-engage anything crossing their own aim line (see resolveSniperOrders),
   // and are aimed via the "狙撃目標を指定"/"射撃方向を指定" buttons in their own unit box.
-  const squadBtns = state.squads.map((sq,idx)=>{
+  const squadBtns = isAirTarget ? '' : state.squads.map((sq,idx)=>{
     if(!sq.soldiers.some(s=>s.alive)) return '';
     const active = sq.order==='hunt' && sq.huntTargetId===t.id;
     return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignSquadHunt(${idx})">第${idx+1}小隊に攻撃させる${active?'(攻撃中)':''}</button>`;
   }).filter(Boolean).join('');
-  const tankBtns = state.tanks.map((tank,idx)=>{
+  const tankBtns = isAirTarget ? '' : state.tanks.map((tank,idx)=>{
     if(tank.hp<=0) return '';
     const active = tank.order==='hunt' && tank.huntTargetId===t.id;
     return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignTankHunt(${idx})">戦車${idx+1}に攻撃させる${active?'(攻撃中)':''}</button>`;
   }).filter(Boolean).join('');
-  const allBtns = mortarBtns + tankBtns + squadBtns;
+  const samBtns = !isAirTarget ? '' : state.sams.map((sam,idx)=>{
+    if(sam.hp<=0) return '';
+    const active = sam.order==='hunt' && sam.huntTargetId===t.id;
+    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignSamHunt(${idx})">対空${idx+1}に攻撃させる${active?'(攻撃中)':''}</button>`;
+  }).filter(Boolean).join('');
+  const allBtns = mortarBtns + tankBtns + samBtns + squadBtns;
   // per user request: fire always lands exactly where aimed (plus dispersion) -- no hidden
   // correction toward the true position -- so this just shows how far off the current
   // estimate (what you'd actually be aiming at) might still be. Falls with 偵察 (see
@@ -5913,6 +6225,9 @@ function renderStats(){
   });
   state.tanks.forEach((tk,i)=>{
     rows.push(forceRow(`戦${i+1}`, tk.hp/tk.maxHp, tk.hp>0?Math.round(tk.hp/tk.maxHp*100)+'%':'撃破', 'var(--blue-id)', 'tank', i));
+  });
+  state.sams.forEach((sam,i)=>{
+    rows.push(forceRow(`対空${i+1}`, sam.hp/sam.maxHp, sam.hp>0?Math.round(sam.hp/sam.maxHp*100)+'%':'撃破', 'var(--blue-id)', 'sam', i));
   });
   state.scouts.forEach((s,i)=>{
     const alive = unitAliveCount(s);
@@ -6082,6 +6397,7 @@ function drawMinimap(){
   if(state.hq && state.hq.hp>0) friendlyPts.push([state.hq.x, state.hq.y]);
   state.mortars.forEach(m=>{ if(m.hp>0) friendlyPts.push([m.x, m.y]); });
   state.tanks.forEach(tk=>{ if(tk.hp>0) friendlyPts.push([tk.x, tk.y]); });
+  state.sams.forEach(sam=>{ if(sam.hp>0) friendlyPts.push([sam.x, sam.y]); });
   state.scouts.forEach(s=>{ if(unitAlive(s)) friendlyPts.push([s.x, s.y]); });
   state.squads.forEach(sq=>{ if(sq.soldiers.some(s=>s.alive)) friendlyPts.push([sq.x, sq.y]); });
   state.snipers.forEach(sn=>{ if(sn.soldiers.some(s=>s.alive)) friendlyPts.push([sn.x, sn.y]); });
@@ -6454,6 +6770,48 @@ function drawBoard(){
           ctx.strokeStyle = 'rgba(193,69,59,0.35)';
           ctx.lineWidth = 1;
           ctx.moveTo(tVis.x, tVis.y);
+          ctx.lineTo(e.x, e.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+    }
+  });
+
+  // per user request: 対空ミサイル部隊マーカー -- 戦車と同じ描画パターン(drawSamIconのベクター
+  // アイコン)。攻撃線はヘリ/ドローンのみに引かれる(戦車の攻撃目標線と同様の見た目)。
+  state.sams.forEach((sam, samIdx)=>{
+    const samVisL = smoothVisualPos(sam, sam.x, sam.y);
+    const samVis = project(samVisL.x, samVisL.y);
+    const samAlive = sam.hp>0;
+    ctx.save();
+    ctx.translate(samVis.x, samVis.y);
+    drawSamIcon(ctx, 0, 0, scaledIconH(16), !samAlive);
+    drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='sam' && state.commandBox.idx===samIdx);
+    ctx.fillStyle = LABEL_TEXT_COLOR;
+    ctx.font = '15px "JetBrains Mono"';
+    ctx.textAlign='center';
+    ctx.fillText(samAlive?`対空${sam.id+1}`:`対空${sam.id+1}(撃破)`, 0, 44);
+    if(samAlive){
+      const samOrderLabel = sam.pendingDest ? `${ORDER_LABEL[sam.order]}→移動` : ORDER_LABEL[sam.order];
+      ctx.fillStyle = LABEL_TEXT_COLOR;
+      ctx.font = 'bold 13px "JetBrains Mono"';
+      ctx.fillText(`[${samOrderLabel}]`, 0, 62);
+    }
+    ctx.restore();
+
+    if(samAlive){
+      drawAttritionBar(ctx, samVis.x+18, samVis.y-2, sam.hp/sam.maxHp);
+      if(sam.order==='hunt' && sam.huntTargetId){
+        const t = state.targets.find(x=>x.id===sam.huntTargetId);
+        if(t && !t.destroyed && isTargetDetected(t)){
+          const eL = estPos(t);
+          const e = project(eL.x, eL.y);
+          ctx.beginPath();
+          ctx.setLineDash([3,3]);
+          ctx.strokeStyle = 'rgba(193,69,59,0.35)';
+          ctx.lineWidth = 1;
+          ctx.moveTo(samVis.x, samVis.y);
           ctx.lineTo(e.x, e.y);
           ctx.stroke();
           ctx.setLineDash([]);
@@ -8348,6 +8706,7 @@ function syncUnitMarkers3d(){
   // hidden here instead of placed.
   state.mortars.forEach((m,i)=>{ seen['mortar'+i]=true; hideMarker3d('mortar'+i); });
   state.tanks.forEach((tk,i)=>{ seen['tank'+i]=true; hideMarker3d('tank'+i); });
+  state.sams.forEach((sam,i)=>{ seen['sam'+i]=true; hideMarker3d('sam'+i); });
   state.scouts.forEach((s,i)=>{ seen['scout'+i]=true; hideMarker3d('scout'+i); });
   state.squads.forEach((sq,i)=>{ seen['squad'+i]=true; hideMarker3d('squad'+i); });
   state.snipers.forEach((sn,i)=>{ seen['sniper'+i]=true; hideMarker3d('sniper'+i); });
@@ -8486,6 +8845,7 @@ function repositionOpenCommandBoxes(){
       const unit = kind==='hq' ? state.hq
         : kind==='mortar' ? state.mortars[idx]
         : kind==='tank' ? state.tanks[idx]
+        : kind==='sam' ? state.sams[idx]
         : kind==='scout' ? state.scouts[idx]
         : kind==='squad' ? state.squads[idx]
         : kind==='sniper' ? state.snipers[idx]
