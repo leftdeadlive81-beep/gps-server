@@ -225,6 +225,17 @@ const WALL_MAX_HP = 140;
 const WALL_BUILD_COST = 900;
 const MAX_WALLS = 6;
 const WALL_AVOID_PENALTY = 10; // dominates terrainAwareStep's progress/slope score so units steer around a wall instead of walking straight into it
+// per user request: 塹壕(線方式) -- 工兵が地図上の2点をクリックして掘る、始点/終点を結ぶ直線状の
+// 陣地。壁と違って射線も移動も遮らない(隠れつつ外を撃てる/撃たれる、どちらも可能)代わりに、
+// その線の近くにいる歩兵系の味方(小隊/狙撃/工兵/斥候)の掩蔽率を底上げする(getUnitExposure
+// 参照)。土木構造物として通常の交戦では破壊されない(壁のような直撃判定を持たない)ので、防壁
+// のようなHPは持たせていない -- 一度掘れば波を跨いで恒久的に残る。
+const TRENCH_BUILD_COST = 500;
+const TRENCH_RADIUS = 20; // distance from the trench LINE within which a unit gets the bonus
+const TRENCH_COVER_BONUS = 25; // same units/sign as terrainCoverBonus/terrainTypeCoverBonus
+const MAX_TRENCHES = 6;
+const TRENCH_LINE_COLOR = 'rgba(139,105,60,0.9)';
+const TRENCH_LINE_WIDTH = 3;
 // per user request: a wave-clear reward can add a whole new squad/scout team at runtime
 // (see addNewSquad/addNewScout), so these can no longer be fixed constants -- they're
 // recomputed from the live roster each time so the roster display/perfectSquad achievement
@@ -1086,6 +1097,7 @@ function initGame(){
     sams: [],
     engineers: [],
     walls: [],
+    trenches: [],
     scouts: Array.from({length:NUM_SCOUTS}, (_,i)=>({
       id:i, x:SCOUT_X, y:SCOUT_UPPER_Y+i*40, watchAngle:90,
       soldiers: makeSoldiers(ROSTER_SCOUT_TEAMS[i]), pendingDest:null, pendingReconTargetId:null,
@@ -1586,6 +1598,7 @@ function startStage(){
       exposure: EXPOSURE_DEFAULT,
     }));
     state.walls = [];
+    state.trenches = [];
     state.hq = {x:HQ_X, y:HQ_Y, hp:HQ_MAX_HP, maxHp:HQ_MAX_HP, exposure:EXPOSURE_DEFAULT, coverBuilt:false, pendingDest:null};
     state.reserve = RESERVE_SIZE;
     state.reserveRoster = ROSTER_RESERVE_INITIAL.slice();
@@ -1632,7 +1645,7 @@ function startStage(){
   state.stageStartSnapshot = JSON.parse(JSON.stringify({
     ammo: state.ammo, turns: state.turns, reserve: state.reserve, reserveRoster: state.reserveRoster, hq: state.hq,
     mortars: state.mortars, squads: state.squads, scouts: state.scouts, snipers: state.snipers,
-    tanks: state.tanks, sams: state.sams, engineers: state.engineers, walls: state.walls,
+    tanks: state.tanks, sams: state.sams, engineers: state.engineers, walls: state.walls, trenches: state.trenches,
   }));
   ripples = []; projectiles = []; flashes = []; enemyTracers = [];
   debrisParticles = []; wreckSmokes = []; killBanners = [];
@@ -1765,6 +1778,7 @@ function retryStage(){
   state.sams = snap.sams;
   state.engineers = snap.engineers;
   state.walls = snap.walls;
+  state.trenches = snap.trenches;
   startStage();
 }
 
@@ -2163,6 +2177,24 @@ function terrainCoverTotal(x, y){
   return terrainCoverBonus(x, y) + terrainTypeCoverBonus(x, y);
 }
 
+function distanceToSegment(px, py, x1, y1, x2, y2){
+  const dx = x2-x1, dy = y2-y1;
+  const lenSq = dx*dx+dy*dy;
+  if(lenSq < 1e-6) return Math.hypot(px-x1, py-y1);
+  const t = clamp(((px-x1)*dx + (py-y1)*dy) / lenSq, 0, 1);
+  return Math.hypot(px-(x1+dx*t), py-(y1+dy*t));
+}
+// per user request: 塹壕の掩蔽ボーナス -- getUnitExposureの歩兵系の分岐(小隊/狙撃/工兵/斥候)
+// のみから呼ばれる、味方専用の効果(敵はここでは対象外 -- terrainCoverTotalのように
+// getTargetExposureと共有していない)。
+function trenchCoverBonusAt(x, y){
+  if(!state || !state.trenches || !state.trenches.length) return 0;
+  for(const tr of state.trenches){
+    if(distanceToSegment(x, y, tr.x1, tr.y1, tr.x2, tr.y2) <= TRENCH_RADIUS) return TRENCH_COVER_BONUS;
+  }
+  return 0;
+}
+
 function hasLineOfSight(fromX,fromY,toX,toY){
   const EYE_HEIGHT = 0.12;
   const dist = Math.hypot(toX-fromX, toY-fromY);
@@ -2334,6 +2366,33 @@ function buildWallAt(x, y){
   wallIdCounter += 1;
   state.walls.push({ id: wallIdCounter, x, y, hp: WALL_MAX_HP, maxHp: WALL_MAX_HP });
   log('sys','工兵', `工兵小隊、指定地点に防壁を構築(¥${WALL_BUILD_COST}を消費)。`);
+  return true;
+}
+// per user request: 塹壕(線方式) -- 壁と同じく工兵自身がその場に居る必要はないが、地図を2回
+// クリックして始点→終点を指定する(1回目の後、state.orderModeを'trench-build-p2'に付け替えて
+// 2回目のクリックを待つ)。射線は遮らない(壁と違ってwallBlockingLineOfFire的な判定は持たない)
+// 代わりに、線の近くにいる歩兵系の味方の掩蔽率を上げる(trenchCoverBonusAt/getUnitExposure)。
+let trenchIdCounter = 0;
+function armTrenchBuildOrder(idx){
+  if(!state.engineers[idx] || !unitAlive(state.engineers[idx])) return;
+  state.orderMode = {kind:'trench-build-p1', idx};
+  state.commandBox = null;
+  render();
+}
+function buildTrenchAt(x1, y1, x2, y2){
+  if(state.trenches.length >= MAX_TRENCHES){
+    log('sys','システム', `塹壕は最大${MAX_TRENCHES}本まで。`);
+    return false;
+  }
+  if(state.money < TRENCH_BUILD_COST){
+    log('sys','システム', `資金が不足しています(塹壕構築 ¥${TRENCH_BUILD_COST})。`);
+    return false;
+  }
+  state.money -= TRENCH_BUILD_COST;
+  trenchIdCounter += 1;
+  const lengthM = Math.round(Math.hypot(x2-x1, y2-y1) * METERS_PER_UNIT);
+  state.trenches.push({ id: trenchIdCounter, x1, y1, x2, y2 });
+  log('sys','工兵', `工兵小隊、指定区間に塹壕を構築(全長約${lengthM}m・¥${TRENCH_BUILD_COST}を消費)。`);
   return true;
 }
 function clearSquadDest(idx){
@@ -3933,19 +3992,19 @@ function getUnitExposure(candidate){
   }
   if(candidate.kind==='scout'){
     const u = state.scouts[candidate.idx];
-    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y);
+    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y) + trenchCoverBonusAt(u.x, u.y);
   }
   if(candidate.kind==='squad'){
     const u = state.squads[candidate.idx];
-    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y);
+    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y) + trenchCoverBonusAt(u.x, u.y);
   }
   if(candidate.kind==='sniper'){
     const u = state.snipers[candidate.idx];
-    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y);
+    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y) + trenchCoverBonusAt(u.x, u.y);
   }
   if(candidate.kind==='engineer'){
     const u = state.engineers[candidate.idx];
-    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y);
+    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y) + trenchCoverBonusAt(u.x, u.y);
   }
   return EXPOSURE_DEFAULT;
 }
@@ -5362,6 +5421,14 @@ function handleCanvasClick(evt){
       }
     } else if(mode.kind==='wall-build'){
       buildWallAt(clamp(px, 10, CANVAS_W-10), clamp(py, 20, CANVAS_H-20));
+    } else if(mode.kind==='trench-build-p1'){
+      // per user request: 塹壕は2点指定 -- 1回目のクリックで始点を記録し、orderModeを次の
+      // ステップに付け替えて2回目のクリック(終点)を待つ。
+      state.orderMode = { kind:'trench-build-p2', idx:mode.idx,
+        x1: clamp(px, 10, CANVAS_W-10), y1: clamp(py, 20, CANVAS_H-20) };
+      log('sys','工兵', `塹壕: 始点を指定。終点を地図でクリックしてください。`);
+    } else if(mode.kind==='trench-build-p2'){
+      buildTrenchAt(mode.x1, mode.y1, clamp(px, 10, CANVAS_W-10), clamp(py, 20, CANVAS_H-20));
     } else if(mode.kind==='scout-move'){
       const scout = state.scouts[mode.idx];
       if(scout){
@@ -6008,13 +6075,22 @@ function engineerBoxHtml(idx){
   ).join('');
   const armingMove = state.orderMode && state.orderMode.kind==='engineer-move' && state.orderMode.idx===idx;
   const armingWall = state.orderMode && state.orderMode.kind==='wall-build' && state.orderMode.idx===idx;
+  const armingTrench = state.orderMode && (state.orderMode.kind==='trench-build-p1' || state.orderMode.kind==='trench-build-p2') && state.orderMode.idx===idx;
   const destStatus = armingMove ? '地図をクリックして移動先指定…' : (en.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
   const wallCapReached = state.walls.length >= MAX_WALLS;
   const wallMoneyShort = state.money < WALL_BUILD_COST;
+  const trenchCapReached = state.trenches.length >= MAX_TRENCHES;
+  const trenchMoneyShort = state.money < TRENCH_BUILD_COST;
   const wallStatus = armingWall ? '地図をクリックして防壁の建設地点を指定…'
     : wallCapReached ? `防壁は上限(${MAX_WALLS}基)に達しています`
     : wallMoneyShort ? `資金不足(建設費 ¥${WALL_BUILD_COST})`
     : `現在の防壁: ${state.walls.length}/${MAX_WALLS}基`;
+  const trenchStatus = state.orderMode && state.orderMode.kind==='trench-build-p2' && state.orderMode.idx===idx
+    ? '地図をクリックして塹壕の終点を指定…'
+    : armingTrench ? '地図をクリックして塹壕の始点を指定…'
+    : trenchCapReached ? `塹壕は上限(${MAX_TRENCHES}本)に達しています`
+    : trenchMoneyShort ? `資金不足(建設費 ¥${TRENCH_BUILD_COST})`
+    : `現在の塹壕: ${state.trenches.length}/${MAX_TRENCHES}本`;
   return `
     <div class="meta">${alive}/${en.soldiers.length}名</div>
     ${exposureMetaHtml(getUnitExposure({kind:'engineer', idx}))}
@@ -6027,6 +6103,8 @@ function engineerBoxHtml(idx){
     <div class="meta" style="margin-bottom:8px;">${destStatus}</div>
     <button class="btn ${armingWall?'active squad-order-btn':''}" ${wallCapReached||wallMoneyShort?'disabled':''} style="width:100%;margin-bottom:4px;" onclick="armWallBuildOrder(${idx})">防壁を構築(¥${WALL_BUILD_COST}・地図で地点指定)</button>
     <div class="meta" style="margin-bottom:8px;">${wallStatus}</div>
+    <button class="btn ${armingTrench?'active squad-order-btn':''}" ${trenchCapReached||trenchMoneyShort?'disabled':''} style="width:100%;margin-bottom:4px;" onclick="armTrenchBuildOrder(${idx})">塹壕を構築(¥${TRENCH_BUILD_COST}・地図で始点→終点指定)</button>
+    <div class="meta" style="margin-bottom:8px;">${trenchStatus}</div>
     ${soldierRosterHtml(en.soldiers)}
   `;
 }
@@ -6861,6 +6939,12 @@ function drawBoard(){
     if(w.hp>0) drawAttritionBar(ctx, wVis.x+20, wVis.y, w.hp/w.maxHp);
   });
 
+  // per user request: 塹壕(線方式) -- 壁と違い射線を遮らないので身代わり被弾やHPバーはない。
+  // 地形に沿う短いコードで描画(FEBA線/グリッド線と同じ技法)。
+  state.trenches.forEach(tr=>{
+    strokeGridBucket(choppedLineSegments(tr.x1, tr.y1, tr.x2, tr.y2), TRENCH_LINE_COLOR, TRENCH_LINE_WIDTH);
+  });
+
   // 工兵小隊 (自軍) ― HP制ではなく小隊と同じ soldiers ロスター制、戦闘はせず移動+壁構築のみ
   state.engineers.forEach((en, enIdx)=>{
     const enVisL = smoothVisualPos(en, en.x, en.y);
@@ -7631,6 +7715,18 @@ function febaLineSegments(x){
   const segs = [];
   for(let y=0; y<CANVAS_H; y+=GRID_LINE_SEGMENT){
     segs.push({x1:x, y1:y, x2:x, y2:Math.min(y+GRID_LINE_SEGMENT, CANVAS_H)});
+  }
+  return segs;
+}
+// per user request: 塹壕(線方式) -- 任意方向の直線を、同じ短いコード分割方式(terrain-hugging)
+// で描画するための汎用版。
+function choppedLineSegments(x1, y1, x2, y2){
+  const totalLen = Math.hypot(x2-x1, y2-y1);
+  const steps = Math.max(1, Math.ceil(totalLen/GRID_LINE_SEGMENT));
+  const segs = [];
+  for(let i=0;i<steps;i++){
+    const t0 = i/steps, t1 = (i+1)/steps;
+    segs.push({x1:x1+(x2-x1)*t0, y1:y1+(y2-y1)*t0, x2:x1+(x2-x1)*t1, y2:y1+(y2-y1)*t1});
   }
   return segs;
 }
