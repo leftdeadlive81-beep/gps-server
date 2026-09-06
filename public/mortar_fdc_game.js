@@ -520,6 +520,17 @@ const ROAD_NODE_SNAP_RADIUS_UNITS = ROAD_NODE_SNAP_RADIUS_M / METERS_PER_UNIT;
 // far worse off than HE just because its kill radius is smaller.
 const MORTAR_DISPERSION_M = 60;
 const MORTAR_DISPERSION_UNITS = MORTAR_DISPERSION_M / METERS_PER_UNIT;
+// per user request: a minimum effective range -- real mortars can't safely/ballistically drop
+// a round this close to their own position (charge/angle-of-fall limits), but nothing stopped
+// the player from designating a fire mission on top of the mortar's own grid square. Enforced
+// at every fire-mission designation entry point (see mortarTooCloseToFire()) by rejecting the
+// designation outright rather than silently relocating it -- the player should see exactly why
+// nothing happened rather than have their click land somewhere they didn't aim it.
+const MORTAR_MIN_RANGE_M = 150;
+const MORTAR_MIN_RANGE_UNITS = MORTAR_MIN_RANGE_M / METERS_PER_UNIT;
+function mortarTooCloseToFire(mortar, x, y){
+  return Math.hypot(x-mortar.x, y-mortar.y) < MORTAR_MIN_RANGE_UNITS;
+}
 // HEAT's kill radius (40m) is much tighter than HE's (100m), so sharing one dispersion value
 // would leave anti-armor fire (~20% hit/shot at sigma=60) far less reliable than HE (~75%).
 // Tightening HEAT's effective dispersion (sigma=60*0.6=36) brings it to ~46%/shot -- still
@@ -3799,9 +3810,13 @@ function applySmartOrder(targetId){
       if(actionKey==='standby') setMortarOrder(idx, 'standby');
       else if(actionKey==='fire_target' && target){
         const e = estPosFromMortar(m, target);
-        m.pendingFire = {x:e.x, y:e.y, snappedId:target.id};
-        applyBestMortarLoadout(m, target);
-        m.order = 'fire';
+        if(mortarTooCloseToFire(m, e.x, e.y)){
+          log('sys','システム', `迫撃砲${idx+1}、${target.id}は近すぎます(最低射程${MORTAR_MIN_RANGE_M}m)。攻撃指示を却下。`);
+        } else {
+          m.pendingFire = {x:e.x, y:e.y, snappedId:target.id};
+          applyBestMortarLoadout(m, target);
+          m.order = 'fire';
+        }
       }
     } else if(unitType==='scout'){
       const s = state.scouts[idx];
@@ -5649,8 +5664,11 @@ function handleCanvasClick(evt){
     } else if(mode.kind==='mortar-target'){
       const mortar = state.mortars[mode.idx];
       if(mortar){
-        setPendingFireAt(px, py, sx, sy, mortar);
-        log('fdc','FDC', `迫撃砲${mode.idx+1}、攻撃地点を了解。`);
+        if(setPendingFireAt(px, py, sx, sy, mortar)){
+          log('fdc','FDC', `迫撃砲${mode.idx+1}、攻撃地点を了解。`);
+        } else {
+          log('sys','システム', `迫撃砲${mode.idx+1}、目標が近すぎます(最低射程${MORTAR_MIN_RANGE_M}m)。攻撃地点を再指定してください。`);
+        }
       }
     } else if(mode.kind==='mortar-move'){
       const mortar = state.mortars[mode.idx];
@@ -5719,18 +5737,23 @@ function nearestVisibleTargetForScreen(sx, sy, maxPx){
   return (best && bestD<=maxPx) ? best : null;
 }
 
+// Returns true if a fire mission was actually designated, false if rejected (too close --
+// see MORTAR_MIN_RANGE_UNITS/mortarTooCloseToFire) so the caller can log the right message.
 function setPendingFireAt(px, py, sx, sy, mortar){
   const best = nearestVisibleTargetForScreen(sx, sy, 42);
   if(best){
-    state.selectedId = best.id;
     const e = estPosFromMortar(mortar, best);
+    if(mortarTooCloseToFire(mortar, e.x, e.y)) return false;
+    state.selectedId = best.id;
     mortar.pendingFire = {x:e.x, y:e.y, snappedId:best.id};
     applyBestMortarLoadout(mortar, best);
   } else {
+    if(mortarTooCloseToFire(mortar, px, py)) return false;
     state.selectedId = null;
     mortar.pendingFire = {x:px, y:py, snappedId:null};
   }
   mortar.order = 'fire';
+  return true;
 }
 
 function canvasToScreen(cx, cy){
@@ -5935,6 +5958,11 @@ function assignMortarFire(idx){
     return;
   }
   const e = estPosFromMortar(mortar, target);
+  if(mortarTooCloseToFire(mortar, e.x, e.y)){
+    log('sys','システム', `迫撃砲${idx+1}、${target.id}は近すぎます(最低射程${MORTAR_MIN_RANGE_M}m)。攻撃指示を却下。`);
+    render();
+    return;
+  }
   mortar.pendingFire = {x:e.x, y:e.y, snappedId:target.id};
   applyBestMortarLoadout(mortar, target);
   mortar.order = 'fire';
@@ -6965,6 +6993,31 @@ function drawBoard(){
     const mVisL = smoothVisualPos(mortar, mortar.x, mortar.y);
     const mVis = project(mVisL.x, mVisL.y);
     const mAlive = mortar.hp>0;
+    // per user request: minimum effective range dead zone (see MORTAR_MIN_RANGE_UNITS) drawn
+    // as a true world-space circle -- same ground-plane-projection + anisotropy correction as
+    // the scout observation cone below, NOT a fixed screen-space arc (see that block's comment
+    // for why a screen-space arc would misrepresent an actual world-space distance under a
+    // tilted camera).
+    if(mAlive){
+      const aniso = (WORLD.scaleZ>0.0001) ? (WORLD.scaleX/WORLD.scaleZ) : 1;
+      const steps = 24;
+      ctx.beginPath();
+      for(let i=0;i<=steps;i++){
+        const rad = (i/steps)*Math.PI*2;
+        const pL = {
+          x: mVisL.x + MORTAR_MIN_RANGE_UNITS*Math.sin(rad),
+          y: mVisL.y - MORTAR_MIN_RANGE_UNITS*aniso*Math.cos(rad),
+        };
+        const p = project(pL.x, pL.y);
+        if(i===0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+      }
+      ctx.closePath();
+      ctx.strokeStyle = 'rgba(217,80,60,0.45)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3,3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
     ctx.save();
     ctx.translate(mVis.x,mVis.y);
     // per user request: custom mortar icon image (our side only) in place of the old triangle
