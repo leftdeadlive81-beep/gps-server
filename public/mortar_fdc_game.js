@@ -534,6 +534,13 @@ const STANDING_ORDER_LABEL = {
   low_hp_retreat: '損耗50%で後退',
 };
 function unitsToMeters(u){ return Math.round(u*METERS_PER_UNIT); }
+// per user request: a safety net for when the logical position jumps further than any single
+// commit's movement could plausibly cover (e.g. several auto-commit ticks piling up during a
+// main-thread stall before the render loop catches up) -- sliding the marker there over the
+// normal tween window would read as it flying across the map or teleporting. The largest
+// legitimate single-commit move is a fast vehicle over a 2-turn (mortar-fired) commit, well
+// under half of this.
+const ANOMALOUS_JUMP_UNITS = 400;
 function smoothVisualPos(obj, targetX, targetY){
   const now = performance.now();
   if(obj._visX===undefined || obj._visY===undefined){
@@ -546,6 +553,13 @@ function smoothVisualPos(obj, targetX, targetY){
     return {x:obj._visX, y:obj._visY};
   }
   if(obj._tweenToX!==targetX || obj._tweenToY!==targetY){
+    if(Math.hypot(targetX-obj._visX, targetY-obj._visY) > ANOMALOUS_JUMP_UNITS){
+      obj._visX = targetX; obj._visY = targetY;
+      obj._tweenFromX = targetX; obj._tweenFromY = targetY;
+      obj._tweenToX = targetX; obj._tweenToY = targetY;
+      obj._tweenStartAt = now;
+      return {x:obj._visX, y:obj._visY};
+    }
     // The underlying logical position moved since the last tween's target -- start a new
     // tween from wherever the marker visually is *right now* (which may still be mid-tween)
     // so redirecting never pops/snaps.
@@ -4543,6 +4557,27 @@ function setGameSpeed(speed){
   log('sys','システム', `進行速度を${GAME_SPEED_LABEL[speed]}(${(GAME_SPEED_INTERVALS[speed]/1000).toFixed(2)}秒間隔)に変更。`);
   render();
 }
+// per user request: pause auto-commit while the tab is hidden (backgrounded/minimized).
+// setInterval keeps firing commitDecision() in a hidden tab (browsers only throttle
+// background timers, they don't stop them), while the requestAnimationFrame-driven render
+// loop that drives smoothVisualPos() is fully paused by the browser -- so several turns'
+// worth of movement pile up invisibly and then have to be crammed into a single fixed-length
+// tween the moment the tab is shown again, reading as units flying across the map or
+// teleporting. Resuming on visibility restores the same interval so play isn't otherwise
+// affected.
+let autoCommitPausedByVisibility = false;
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden){
+    if(autoCommitTimer){
+      clearInterval(autoCommitTimer);
+      autoCommitTimer = null;
+      autoCommitPausedByVisibility = true;
+    }
+  } else if(autoCommitPausedByVisibility){
+    autoCommitPausedByVisibility = false;
+    autoCommitTimer = setInterval(autoCommitTick, GAME_SPEED_INTERVALS[state.gameSpeed]);
+  }
+});
 
 function commitDecision(){
   if(!state || state.stageResolved || state.animating || state.snipeMortarStrikesPending>0 || state.placementPending || state.decoyPlacementPending) return;
