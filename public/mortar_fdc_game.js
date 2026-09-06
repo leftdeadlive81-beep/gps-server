@@ -782,11 +782,97 @@ let ripples = [];
 let projectiles = [];
 let flashes = [];
 let enemyTracers = [];
+// per user request (richer graphics/effects): every small-arms exchange (see the
+// enemyTracers.push call sites throughout combat resolution) now also pops a quick, tiny
+// flash at the SHOOTER's own position -- distinct from the existing impact flash pushed
+// when a tracer lands (updateEnemyTracers) -- so firing itself reads as a muzzle flash
+// instead of only the hit. Centralized here so every call site gets it for free.
+function fireTracer(startX, startY, endX, endY, duration){
+  const now = performance.now();
+  enemyTracers.push({startX, startY, endX, endY, born:now, duration});
+  flashes.push({x:startX, y:startY, born:now, life:120, muzzle:true});
+}
 // per user request: a bigger "destroyed" flourish (explosion+debris, rising wreck smoke,
 // a floating kill banner), shared by both sides -- see spawnDestructionEffect().
 let debrisParticles = [];
 let wreckSmokes = [];
 let killBanners = [];
+// per user request (richer graphics/effects): rain streaks / drifting fog wisps layered over
+// the existing flat weather tint (see WEATHER_TYPES) so weather reads as something happening
+// in the air rather than just a color filter over the map. Regenerated whenever state.weather
+// changes (ensureWeatherParticles(), called from drawBoard()); purely cosmetic, so it lives
+// outside `state` and isn't reset/serialized anywhere else.
+let weatherParticles = [];
+let weatherParticleKind = null;
+// w/h are the board canvas's actual pixel dimensions (cv.width/height in drawBoard -- the
+// container's real CSS pixel size, see resizeThree() -- NOT CANVAS_W/CANVAS_H, which are the
+// logical 1300x460 world-unit space); particles are a pure screen-space overlay like the
+// weather tint rect right above this call, so they need the same pixel space that uses.
+function ensureWeatherParticles(w, h){
+  const kind = state && state.weather;
+  if(kind === weatherParticleKind) return;
+  weatherParticleKind = kind;
+  weatherParticles = [];
+  if(kind === 'rain'){
+    for(let i=0;i<90;i++) weatherParticles.push({x:Math.random()*w, y:Math.random()*h, len:rnd(10,22), speed:rnd(9,15)});
+  } else if(kind === 'fog'){
+    for(let i=0;i<14;i++) weatherParticles.push({x:Math.random()*w, y:Math.random()*h, r:rnd(30,70), speed:rnd(0.15,0.4), alpha:rnd(0.03,0.07)});
+  }
+}
+// per user request (richer graphics/effects): a fast, bright expanding ring layered on top
+// of the flash/debris for a physically forceful "boom" -- kept as its own array/style rather
+// than reusing `ripples` (the slower amber recon-ping animation) so the two don't compete.
+let shockwaves = [];
+// per user request (richer graphics/effects): brief THREE.PointLight bursts placed in the 3D
+// scene at explosion sites (see spawnDestructionEffect) so an impact lights up the terrain
+// mesh itself, not just the 2D canvas overlay. Tracked as an array and cleaned up once per
+// frame (updateImpactLights(), called from loop()) rather than a per-light requestAnimationFrame
+// chain -- spawnDestructionEffect's own comments note a multi-kill burst must stay cheap in
+// aggregate, so this follows the same array+cap pattern as MAX_DEBRIS_PARTICLES.
+let impactLights = [];
+const MAX_IMPACT_LIGHTS = 6;
+function spawnImpactLight(x, y){
+  if(typeof THREE === 'undefined' || !scene3d) return;
+  if(impactLights.length >= MAX_IMPACT_LIGHTS){
+    const oldest = impactLights.shift();
+    scene3d.remove(oldest.light);
+  }
+  const {x:wx, z:wz} = canvasUnitToWorldXZ(x, y);
+  const wy = terrainHeightAt(x, y) + 40; // above ground so it doesn't clip into the terrain mesh
+  const baseIntensity = 6;
+  const light = new THREE.PointLight(0xffb060, baseIntensity, 900, 2);
+  light.position.set(wx, wy, wz);
+  scene3d.add(light);
+  impactLights.push({light, born:performance.now(), life:450, baseIntensity});
+}
+function updateImpactLights(){
+  if(!impactLights.length) return;
+  const now = performance.now();
+  impactLights = impactLights.filter(l=>{
+    const t = (now-l.born)/l.life;
+    if(t>=1){ scene3d && scene3d.remove(l.light); return false; }
+    l.light.intensity = l.baseIntensity*(1-t);
+    return true;
+  });
+}
+
+// per user request (richer graphics/effects): a brief, decaying random jitter applied to the
+// whole board draw (see drawBoard()'s ctx.translate), triggered by nearby explosions so impacts
+// read as physically forceful. Purely a draw-time offset -- never touches state.camera or any
+// projection/hit-testing math, so clicks/selection/screen-space picking stay unaffected.
+let shakeStartedAt = 0, shakeDurationMs = 0, shakeMag = 0;
+function triggerShake(mag, durationMs){
+  if(mag <= shakeMag && performance.now() < shakeStartedAt+shakeDurationMs) return;
+  shakeStartedAt = performance.now();
+  shakeDurationMs = durationMs;
+  shakeMag = mag;
+}
+function currentShakeOffset(){
+  const t = performance.now() - shakeStartedAt;
+  if(t < 0 || t > shakeDurationMs) return {x:0, y:0};
+  const amt = shakeMag * (1 - t/shakeDurationMs);
+  return { x:(Math.random()*2-1)*amt, y:(Math.random()*2-1)*amt };
+}
 
 // per user request: friendly (our side only) infantry squad icon, drawn as a flat
 // screen-space sprite via ctx.drawImage() at the marker's already-projected 2D point --
@@ -1153,7 +1239,8 @@ function initGame(){
     febaX: SQUAD_ADVANCE_LIMIT_X,
   };
   ripples = []; projectiles = []; flashes = []; enemyTracers = [];
-  debrisParticles = []; wreckSmokes = []; killBanners = [];
+  debrisParticles = []; wreckSmokes = []; killBanners = []; shockwaves = [];
+  impactLights.forEach(l=>scene3d && scene3d.remove(l.light)); impactLights = [];
   document.getElementById('log').innerHTML='';
   log('sys', 'システム', `コンシム v${GAME_VERSION} 起動。マップと配置方法を選択し、作戦を開始せよ。`);
   rollMapSeedCandidates();
@@ -1660,7 +1747,8 @@ function startStage(){
     tanks: state.tanks, sams: state.sams, engineers: state.engineers, walls: state.walls, trenches: state.trenches,
   }));
   ripples = []; projectiles = []; flashes = []; enemyTracers = [];
-  debrisParticles = []; wreckSmokes = []; killBanners = [];
+  debrisParticles = []; wreckSmokes = []; killBanners = []; shockwaves = [];
+  impactLights.forEach(l=>scene3d && scene3d.remove(l.light)); impactLights = [];
 
   document.getElementById('overlay').classList.remove('show');
   log('sys','システム', `WAVE ${stage} / ${STAGE_COUNT} ― 目標${state.targets.length}件を確認。天候: ${weather.label}(${weather.desc})。`);
@@ -2613,6 +2701,20 @@ function spawnDestructionEffect(x, y, label, color){
   }
   flashes.push({x, y, born, life:800, big:true});
   flashes.push({x, y, born: born+130, life:650, big:true});
+  shockwaves.push({x, y, born, life:520});
+  spawnImpactLight(x, y);
+  // screen shake, scaled by how close the impact lands to screen center -- full strength near
+  // the middle of the view, fading to none past ~420px so an explosion off in a corner of a
+  // wide-angle view doesn't jolt the whole screen.
+  const sp = project(x, y);
+  if(sp.visible){
+    // project() returns pixels in the actual on-screen container space (MAP_VIEW.containerW/H,
+    // set from the board canvas's real CSS size in resizeThree()) -- NOT CANVAS_W/CANVAS_H,
+    // which are the logical 1300x460 world-unit space -- so the center must use the same space.
+    const distFromCenter = Math.hypot(sp.x-MAP_VIEW.containerW/2, sp.y-MAP_VIEW.containerH/2);
+    const near = clamp(1 - distFromCenter/420, 0, 1);
+    if(near > 0) triggerShake(7*near, 260);
+  }
   for(let i=0;i<14;i++){
     const ang = Math.random()*Math.PI*2;
     const spd = rnd(40, 150);
@@ -2807,7 +2909,7 @@ function enemyCounterAttack(actionTurns){
           });
         } else if(rollExposureHit(getUnitExposure(near))){
           damageFriendlyAsset(near, dmg, sourceLabel);
-          enemyTracers.push({startX:e.x, startY:e.y, endX:near.x, endY:near.y, born:performance.now(), duration:320});
+          fireTracer(e.x, e.y, near.x, near.y, 320);
         } else {
           log('sys','回避', `${sourceLabel}を受けたが、${friendlyFireCandidateLabel(near)}は掩蔽率により被弾を免れた。`);
         }
@@ -3021,8 +3123,8 @@ function resolveSquadOrders(actionTurns){
         applyDamageToTarget(t, dmgToEnemy);
         anyEvent = true;
         // per user request: show a shooting animation for the squad's own outgoing fire too,
-        // not just the enemy's return fire on a casualty (see the enemyTracers.push below)
-        enemyTracers.push({startX:sq.x, startY:sq.y, endX:e.x, endY:e.y, born:performance.now(), duration:220});
+        // not just the enemy's return fire on a casualty (see fireTracer() below)
+        fireTracer(sq.x, sq.y, e.x, e.y, 220);
         if(t.hp<=0 && !t.destroyed){
           t.destroyed = true; t.hp = 0;
           log('op','斥候', `${t.id} 第${sqIdx+1}小隊との交戦で撃破を確認。`);
@@ -3035,7 +3137,7 @@ function resolveSquadOrders(actionTurns){
           const victim = choice(curAlive);
           victim.alive = false;
           log('sys','前線', `第${sqIdx+1}小隊、${t.id}との交戦で<b>${victim.rank} ${victim.name}</b> 戦死。残存 ${sq.soldiers.filter(s=>s.alive).length}/${sq.soldiers.length}名。`);
-          enemyTracers.push({startX:e.x, startY:e.y, endX:sq.x, endY:sq.y, born:performance.now(), duration:280});
+          fireTracer(e.x, e.y, sq.x, sq.y, 280);
           unitSpeakInjury('squad', sqIdx);
         }
       });
@@ -3173,7 +3275,7 @@ function resolveSamOrders(actionTurns){
         const dmgToEnemy = Math.round(rnd(SAM_DUEL_DMG_TO_ENEMY[0], SAM_DUEL_DMG_TO_ENEMY[1]) * dmgMult * samAltMult * enemyExposureMult);
         applyDamageToTarget(t, dmgToEnemy);
         anyEvent = true;
-        enemyTracers.push({startX:sam.x, startY:sam.y, endX:e.x, endY:e.y, born:performance.now(), duration:220});
+        fireTracer(sam.x, sam.y, e.x, e.y, 220);
         if(t.hp<=0 && !t.destroyed){
           t.destroyed = true; t.hp = 0;
           log('op','斥候', `${t.id} 対空${idx+1}との交戦で撃破を確認。`);
@@ -3226,7 +3328,7 @@ function resolveTankOrders(actionTurns){
         const dmgToEnemy = Math.round(rnd(TANK_DUEL_DMG_TO_ENEMY[0], TANK_DUEL_DMG_TO_ENEMY[1]) * dmgMult * tankAltMult * suppressionDmgMult * enemyExposureMult);
         applyDamageToTarget(t, dmgToEnemy);
         anyEvent = true;
-        enemyTracers.push({startX:tank.x, startY:tank.y, endX:e.x, endY:e.y, born:performance.now(), duration:220});
+        fireTracer(tank.x, tank.y, e.x, e.y, 220);
         if(t.hp<=0 && !t.destroyed){
           t.destroyed = true; t.hp = 0;
           log('op','斥候', `${t.id} 戦車${idx+1}との交戦で撃破を確認。`);
@@ -3240,7 +3342,7 @@ function resolveTankOrders(actionTurns){
           const wasAlive = tank.hp>0;
           tank.hp = Math.max(0, tank.hp-dmg);
           log('sys','前線', `戦車${idx+1}、${t.id}との交戦で被弾(-${dmg}HP、残り${tank.hp}/${tank.maxHp})。`);
-          enemyTracers.push({startX:e.x, startY:e.y, endX:tank.x, endY:tank.y, born:performance.now(), duration:280});
+          fireTracer(e.x, e.y, tank.x, tank.y, 280);
           if(wasAlive && tank.hp<=0){
             log('sys','前線', `戦車${idx+1}、撃破される。`);
             spawnDestructionEffect(tank.x, tank.y, `戦車${idx+1} 撃破!`, FRIENDLY_MARK_COLOR);
@@ -3301,7 +3403,7 @@ function sniperEngageTarget(sn, t){
   log('mortar','狙撃', isExecute
     ? `狙撃${sn.id+1}班、${t.id}へ<b>止めの一撃</b>。撃破を確認。`
     : `狙撃${sn.id+1}班、${t.id}に精密射撃(効果 ${dmg})。`);
-  enemyTracers.push({startX:sn.x, startY:sn.y, endX:t.trueX, endY:t.trueY, born:performance.now(), duration:180});
+  fireTracer(sn.x, sn.y, t.trueX, t.trueY, 180);
   if(t.hp<=0 && !t.destroyed){
     t.destroyed = true; t.hp = 0;
     log('fdc','FDC', `${t.id} 狙撃により<b>撃破を確認</b>。`);
@@ -4400,7 +4502,7 @@ function resolveVehicleAssault(actionTurns){
           const altMult = altitudeBonus(t.trueX, t.trueY, near.x, near.y);
           const dmg = Math.round(rnd(VEHICLE_ASSAULT_DAMAGE[0], VEHICLE_ASSAULT_DAMAGE[1]) * altMult);
           damageFriendlyAsset(near, dmg, `${t.id}(装甲車)の突撃`);
-          enemyTracers.push({startX:e.x, startY:e.y, endX:near.x, endY:near.y, born:performance.now(), duration:260});
+          fireTracer(e.x, e.y, near.x, near.y, 260);
         } else {
           log('sys','回避', `${t.id}(装甲車)の突撃を受けたが、${friendlyFireCandidateLabel(near)}は掩蔽率により被弾を免れた。`);
         }
@@ -4513,7 +4615,7 @@ function resolveHeliAssault(actionTurns){
         const altMult = altitudeBonus(h.trueX, h.trueY, near.x, near.y);
         const dmg = Math.round(rnd(HELI_ATTACK_DAMAGE[0], HELI_ATTACK_DAMAGE[1]) * altMult);
         damageFriendlyAsset(near, dmg, `${h.id}(戦闘ヘリ)の攻撃`);
-        enemyTracers.push({startX:e.x, startY:e.y, endX:near.x, endY:near.y, born:performance.now(), duration:260});
+        fireTracer(e.x, e.y, near.x, near.y, 260);
       } else {
         log('sys','回避', `${h.id}(戦闘ヘリ)の攻撃を受けたが、${friendlyFireCandidateLabel(near)}は掩蔽率により被弾を免れた。`);
       }
@@ -4548,7 +4650,7 @@ function resolveSquadAntiDrone(actionTurns){
         if(Math.random() < SQUAD_ANTI_DRONE_HIT_CHANCE){
           const dmg = Math.round(rnd(SQUAD_ANTI_DRONE_DMG[0], SQUAD_ANTI_DRONE_DMG[1]));
           t.hp -= dmg;
-          enemyTracers.push({startX:sq.x, startY:sq.y, endX:t.trueX, endY:t.trueY, born:performance.now(), duration:150});
+          fireTracer(sq.x, sq.y, t.trueX, t.trueY, 150);
           if(t.hp<=0 && !t.destroyed){
             t.destroyed = true; t.hp = 0;
             log('op','前線', `第${sqIdx+1}小隊が${t.id}を対空射撃で<b>撃墜</b>。`);
@@ -4583,7 +4685,7 @@ function resolveDroneSwarm(actionTurns){
         if(rollExposureHit(getUnitExposure(near))){
           const dmg = Math.round(rnd(DRONE_DETONATE_DAMAGE[0], DRONE_DETONATE_DAMAGE[1]));
           damageFriendlyAsset(near, dmg, `${t.id}(ドローン)の自爆`);
-          enemyTracers.push({startX:e.x, startY:e.y, endX:near.x, endY:near.y, born:performance.now(), duration:180});
+          fireTracer(e.x, e.y, near.x, near.y, 180);
         } else {
           log('sys','回避', `${t.id}(ドローン)が自爆したが、${friendlyFireCandidateLabel(near)}は掩蔽率により被弾を免れた。`);
         }
@@ -4822,7 +4924,7 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
               state.illumFlares.push({x:ix, y:iy, born:performance.now(), turnsLeft:ILLUM_DURATION_TURNS});
               log('mortar','観測', `弾着${i+1}: 照明弾、上空で破裂。光弾が降下しながら半径${Math.round(ILLUM_RADIUS_M)}mを照射(${ILLUM_DURATION_TURNS}ターン持続)。`);
             } else if(shell==='smoke'){
-              state.smokeClouds.push({x:ix, y:iy, turnsLeft:SMOKE_DURATION_TURNS});
+              state.smokeClouds.push({x:ix, y:iy, turnsLeft:SMOKE_DURATION_TURNS, born:performance.now()});
               log('mortar','観測', `弾着${i+1}: 発煙弾展開。半径${Math.round(SMOKE_RADIUS_M)}mを遮蔽(${SMOKE_DURATION_TURNS}ターン持続)。`);
             } else {
               let revealedCount = 0;
@@ -6683,6 +6785,11 @@ function drawBoard(){
   const cv = document.getElementById('board');
   const ctx = cv.getContext('2d');
   ctx.clearRect(0,0,cv.width,cv.height);
+  // screen shake (see triggerShake(), fired by spawnDestructionEffect) -- a plain draw-time
+  // offset around the whole board, restored at the very end of this function.
+  ctx.save();
+  const shakeOff = currentShakeOffset();
+  ctx.translate(shakeOff.x, shakeOff.y);
   const nowWander = performance.now();
 
   // roads: graphics intentionally suppressed (movement no longer road-follows;
@@ -7433,6 +7540,16 @@ function drawBoard(){
   flashes.forEach(f=>{
     const p = (nowP-f.born)/f.life;
     const fp = project(f.x, f.y);
+    // muzzle flashes (see fireTracer()) are a tiny, near-instant bright core at the shooter's
+    // own position -- no ring, no big/small scaling -- kept visually distinct from the
+    // ring+core impact/explosion language below.
+    if(f.muzzle){
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(255,235,180,${Math.max(0,1-p)})`;
+      ctx.arc(fp.x, fp.y, Math.max(0, 4.5*(1-p)), 0, Math.PI*2);
+      ctx.fill();
+      return;
+    }
     const scale = f.big ? 3.4 : 1;
     ctx.beginPath();
     ctx.strokeStyle = f.big ? `rgba(255,235,205,${1-p})` : `rgba(255,140,60,${1-p})`;
@@ -7448,6 +7565,20 @@ function drawBoard(){
     ctx.fillStyle = f.big ? `rgba(255,240,210,${(1-p)*0.9})` : `rgba(255,200,120,${(1-p)*0.8})`;
     ctx.arc(fp.x, fp.y, Math.max(0,(f.big?22:6)-p*(f.big?22:6)), 0, Math.PI*2);
     ctx.fill();
+  });
+
+  // explosion shockwaves ― a fast, bright expanding ring layered on top of the flash/debris
+  // for a physically forceful "boom" (see spawnDestructionEffect). Kept separate from
+  // `ripples` (the slower amber recon-ping animation below) so the two don't compete visually.
+  shockwaves = shockwaves.filter(s => nowP-s.born < s.life);
+  shockwaves.forEach(s=>{
+    const p = (nowP-s.born)/s.life;
+    const sp2 = project(s.x, s.y);
+    ctx.beginPath();
+    ctx.strokeStyle = `rgba(255,255,240,${(1-p)*0.85})`;
+    ctx.lineWidth = 4*(1-p*0.6);
+    ctx.arc(sp2.x, sp2.y, 10+p*95, 0, Math.PI*2);
+    ctx.stroke();
   });
 
   // debris particles ― fragments flung outward from a destruction, falling with gravity
@@ -7523,20 +7654,27 @@ function drawBoard(){
     ctx.stroke();
   });
 
-  // smoke clouds (発煙弾) ― billowing, semi-transparent blobs that fade as they age
+  // smoke clouds (発煙弾) ― billowing, semi-transparent blobs that fade as they age. The
+  // billow/drift/wobble below runs on real elapsed time (c.born) rather than c.turnsLeft
+  // (which only ticks once per game turn) so the cloud keeps moving continuously between
+  // turns instead of sitting frozen as a static image.
   (state.smokeClouds||[]).forEach(c=>{
     const cp = project(c.x, c.y);
     if(!cp.visible) return;
     const age = 1 - clamp(c.turnsLeft/SMOKE_DURATION_TURNS, 0, 1);
     const alpha = 0.5 - age*0.2;
+    const t = (performance.now() - (c.born||0)) / 1000;
+    const grow = 1 + t*0.06;
+    const rise = t*3;
     const puffs = [
       {dx:0, dy:0, r:26}, {dx:-14, dy:6, r:18}, {dx:14, dy:5, r:19},
       {dx:-6, dy:-12, r:16}, {dx:9, dy:-10, r:15},
     ];
-    puffs.forEach(pf=>{
+    puffs.forEach((pf,i)=>{
+      const wob = Math.sin(t*0.7 + i*1.7) * 4;
       ctx.beginPath();
       ctx.fillStyle = `rgba(210,210,205,${alpha})`;
-      ctx.arc(cp.x+pf.dx, cp.y+pf.dy, pf.r, 0, Math.PI*2);
+      ctx.arc(cp.x+pf.dx*grow+wob, cp.y+pf.dy*grow-rise, pf.r*grow, 0, Math.PI*2);
       ctx.fill();
     });
   });
@@ -7596,6 +7734,30 @@ function drawBoard(){
     ctx.fillRect(0,0,cv.width,cv.height);
   }
 
+  // weather particles (rain streaks / drifting fog wisps) ― see ensureWeatherParticles()
+  ensureWeatherParticles(cv.width, cv.height);
+  if(state.weather === 'rain'){
+    ctx.strokeStyle = 'rgba(200,215,230,0.35)';
+    ctx.lineWidth = 1;
+    weatherParticles.forEach(p=>{
+      p.y += p.speed; p.x -= p.speed*0.25;
+      if(p.y > cv.height){ p.y = -p.len; p.x = Math.random()*cv.width; }
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x - p.len*0.25, p.y + p.len);
+      ctx.stroke();
+    });
+  } else if(state.weather === 'fog'){
+    weatherParticles.forEach(p=>{
+      p.x += p.speed;
+      if(p.x - p.r > cv.width) p.x = -p.r;
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(210,215,205,${p.alpha})`;
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      ctx.fill();
+    });
+  }
+
   // manual placement highlight ― pulses around the unit awaiting a click-placed position
   if(state.placementPending){
     const item = state.placementQueue[state.placementIndex];
@@ -7618,6 +7780,7 @@ function drawBoard(){
   }
 
   drawCallouts(ctx);
+  ctx.restore();
 }
 
 // ===================== Voice callouts (speech bubbles) =====================
@@ -9196,6 +9359,7 @@ function anyOverlayShown(){
 function loop(){
   updateProjectiles();
   updateEnemyTracers();
+  updateImpactLights();
   if(state){
     repositionOpenCommandBoxes();
   }
