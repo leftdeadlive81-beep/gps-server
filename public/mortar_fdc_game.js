@@ -4955,6 +4955,15 @@ function handleCanvasClick(evt){
     px = pxPixel/rect.width*CANVAS_W;
     py = pyPixel/rect.height*CANVAS_H;
   }
+  // per user request: selecting an existing unit/target used to raycast the click onto the
+  // terrain mesh and compare GROUND (x,y) distances -- exact when the camera looks straight
+  // down, but under a tilted camera a tiny mismatch between the analytic terrainHeightAt()
+  // used to place icons and the actual (triangulated) mesh surface the raycaster hits gets
+  // magnified into a large screen-space offset, so you had to tap noticeably above a unit to
+  // hit it. sx/sy is the click in the SAME space icons are drawn in (project()'s output), so
+  // hit-testing against it is exactly WYSIWYG regardless of camera angle.
+  const sx = threeReady ? pxPixel : px;
+  const sy = threeReady ? pyPixel : py;
 
   if(state.placementPending){
     handlePlacementClick(px, py);
@@ -5043,15 +5052,8 @@ function handleCanvasClick(evt){
       }
     } else if(mode.kind==='scout-recon'){
       const scout = state.scouts[mode.idx];
-      let best=null, bestD=Infinity;
-      state.targets.forEach(t=>{
-        if(t.destroyed || !isTargetDetected(t)) return;
-        const vx = t._visX!==undefined ? t._visX : estPos(t).x;
-        const vy = t._visY!==undefined ? t._visY : estPos(t).y;
-        const d = Math.hypot(vx-px, vy-py);
-        if(d<bestD){ bestD=d; best=t; }
-      });
-      if(scout && best && bestD<=42){
+      const best = nearestVisibleTargetForScreen(sx, sy, 42);
+      if(scout && best){
         scout.pendingReconTargetId = best.id;
         scout.pendingDest = null;
         log('op','斥候', `斥候${mode.idx+1}、${best.id} を偵察目標に指示。`);
@@ -5061,7 +5063,7 @@ function handleCanvasClick(evt){
     } else if(mode.kind==='mortar-target'){
       const mortar = state.mortars[mode.idx];
       if(mortar){
-        setPendingFireAt(px, py, mortar);
+        setPendingFireAt(px, py, sx, sy, mortar);
         log('fdc','FDC', `迫撃砲${mode.idx+1}、攻撃地点を了解。`);
       }
     } else if(mode.kind==='mortar-move'){
@@ -5084,15 +5086,8 @@ function handleCanvasClick(evt){
       }
     } else if(mode.kind==='sniper-target'){
       const sn = state.snipers[mode.idx];
-      let best=null, bestD=Infinity;
-      state.targets.forEach(t=>{
-        if(t.destroyed || !isTargetDetected(t)) return;
-        const vx = t._visX!==undefined ? t._visX : estPos(t).x;
-        const vy = t._visY!==undefined ? t._visY : estPos(t).y;
-        const d = Math.hypot(vx-px, vy-py);
-        if(d<bestD){ bestD=d; best=t; }
-      });
-      if(sn && best && bestD<=42){
+      const best = nearestVisibleTargetForScreen(sx, sy, 42);
+      if(sn && best){
         sn.pendingSnipeTargetId = best.id;
         log('mortar','狙撃', `狙撃${mode.idx+1}班、${best.id} を狙撃目標に指示。`);
       } else {
@@ -5115,23 +5110,32 @@ function handleCanvasClick(evt){
     return;
   }
 
-  const hit = resolveClickHit(px, py);
+  const hit = resolveClickHit(sx, sy);
   state.decoyCommandBox = (hit && hit.type==='decoy') ? hit.payload : null;
   state.enemyCommandBox = (hit && hit.type==='enemy') ? hit.payload.id : null;
   state.commandBox = (hit && hit.type==='friendly') ? hit.payload : null;
   render();
 }
 
-function setPendingFireAt(px, py, mortar){
+// per user request: shared "which detected target is under this screen point" lookup, used
+// by every tap-to-target flow (fire mission snap, sniper target, scout recon) so they all get
+// the same screen-space (camera-angle-independent) hit-testing fix in one place.
+function nearestVisibleTargetForScreen(sx, sy, maxPx){
   let best=null, bestD=Infinity;
   state.targets.forEach(t=>{
     if(t.destroyed || !isTargetDetected(t)) return;
     const vx = t._visX!==undefined ? t._visX : estPos(t).x;
     const vy = t._visY!==undefined ? t._visY : estPos(t).y;
-    const d = Math.hypot(vx-px, vy-py);
+    const p = project(vx, vy);
+    const d = Math.hypot(p.x-sx, p.y-sy);
     if(d<bestD){ bestD=d; best=t; }
   });
-  if(best && bestD<=42){
+  return (best && bestD<=maxPx) ? best : null;
+}
+
+function setPendingFireAt(px, py, sx, sy, mortar){
+  const best = nearestVisibleTargetForScreen(sx, sy, 42);
+  if(best){
     state.selectedId = best.id;
     const e = estPosFromMortar(mortar, best);
     mortar.pendingFire = {x:e.x, y:e.y, snappedId:best.id};
@@ -5161,22 +5165,27 @@ function canvasToScreen(cx, cy){
 // candidates (nearest to farthest, then wraps) instead of re-picking the same nearest one.
 let clickCycleState = null;
 
-function collectClickCandidates(px, py){
+function collectClickCandidates(sx, sy){
   const candidates = [];
   state.decoys.forEach((d,idx)=>{
     if(d.destroyed) return;
-    const dist = Math.hypot(d.x-px, d.y-py);
+    const p = project(d.x, d.y);
+    const dist = Math.hypot(p.x-sx, p.y-sy);
     if(dist<=20) candidates.push({ type:'decoy', payload:idx, dist, sig:`decoy:${idx}` });
   });
   state.targets.forEach(t=>{
     if(t.destroyed || !isTargetDetected(t)) return;
     const vx = t._visX!==undefined ? t._visX : estPos(t).x;
     const vy = t._visY!==undefined ? t._visY : estPos(t).y;
-    const dist = Math.hypot(vx-px, vy-py);
+    const p = project(vx, vy);
+    const dist = Math.hypot(p.x-sx, p.y-sy);
     if(dist<=42) candidates.push({ type:'enemy', payload:t, dist, sig:`enemy:${t.id}` });
   });
   if(state.hq.hp>0){
-    const dist = Math.hypot(state.hq.x-px, state.hq.y-py);
+    const hqx = state.hq._visX!==undefined ? state.hq._visX : state.hq.x;
+    const hqy = state.hq._visY!==undefined ? state.hq._visY : state.hq.y;
+    const p = project(hqx, hqy);
+    const dist = Math.hypot(p.x-sx, p.y-sy);
     if(dist<=22) candidates.push({ type:'friendly', payload:{kind:'hq'}, dist, sig:'friendly:hq' });
   }
   FRIENDLY_KIND_LIST.forEach(({kind, list, alive})=>{
@@ -5184,15 +5193,16 @@ function collectClickCandidates(px, py){
       if(!alive(u)) return;
       const ux = u._visX!==undefined ? u._visX : u.x;
       const uy = u._visY!==undefined ? u._visY : u.y;
-      const dist = Math.hypot(ux-px, uy-py);
+      const p = project(ux, uy);
+      const dist = Math.hypot(p.x-sx, p.y-sy);
       if(dist<=22) candidates.push({ type:'friendly', payload:{kind, idx}, dist, sig:`friendly:${kind}:${idx}` });
     });
   });
   return candidates;
 }
 
-function resolveClickHit(px, py){
-  const candidates = collectClickCandidates(px, py);
+function resolveClickHit(sx, sy){
+  const candidates = collectClickCandidates(sx, sy);
   if(candidates.length===0){ clickCycleState = null; return null; }
   const sigSet = candidates.map(c=>c.sig).sort().join('|');
   if(clickCycleState && clickCycleState.sigSet===sigSet){
