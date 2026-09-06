@@ -118,9 +118,12 @@ const CONTOUR_LEVELS = [0.25, 0.5, 0.75, 1.0, 1.25];
 const CONTOUR_CELL = 22;
 const SHELLS = {he:'榴弾(HE)', heat:'対戦車榴弾(HEAT)', smoke:'発煙弾', marker:'マーカー弾', illum:'照明弾'};
 const FUZES  = {impact:'着発信管', proximity:'近接信管', delay:'遅延信管'};
-const COUNTER_CHANCE = {infantry:0.06, artillery:0.19, vehicle:0.05, drone:0.04};
+// per user request: artillery's chance/damage nudged up (0.19->0.22, [28,48]->[30,50]) to
+// partly offset its shortened effective range (was ~7.4km, now a fixed 5km -- see
+// ARTILLERY_FIRE_RANGE_M) so overall threat stays comparable despite covering less of the map.
+const COUNTER_CHANCE = {infantry:0.06, artillery:0.22, vehicle:0.05, drone:0.04};
 // per user request: enemy attack power doubled
-const COUNTER_DAMAGE = {infantry:[8,18], artillery:[28,48], vehicle:[10,18], drone:[4,10]};
+const COUNTER_DAMAGE = {infantry:[8,18], artillery:[30,50], vehicle:[10,18], drone:[4,10]};
 const VEHICLE_ASSAULT_RANGE = 100;
 const VEHICLE_ASSAULT_DAMAGE = [20,36];
 const DRONE_SPEED = 70;
@@ -158,7 +161,11 @@ const NUM_TANKS = 2;
 const TANK_MAX_HP = 220;
 const TANK_POS = {x: 320, y: 230};
 const TANK_EXPOSURE = 65; // armored -- harder to hit than a foot unit at EXPOSURE_DEFAULT (50)
-const TANK_ENGAGE_RANGE = 150;
+// per user request: bumped from 150 (≈1150m) to 325 (2500m) -- a modern tank main gun can
+// realistically hit out to 2-3km, so at the old range tanks had to close most of the way
+// through the enemy artillery's engagement envelope (now 5km, see ARTILLERY_FIRE_RANGE_M)
+// before they could shoot back at all.
+const TANK_ENGAGE_RANGE = 325;
 const TANK_DUEL_DMG_TO_ENEMY = [18, 32];
 const TANK_INCOMING_DMG = [8, 20];
 const TANK_REPAIR_HP_PER_CALL = 30;
@@ -170,7 +177,11 @@ const NUM_SAMS = 1;
 const SAM_MAX_HP = 70;
 const SAM_POS = {x: 200, y: 350};
 const SAM_EXPOSURE = 45; // soft, unarmored launcher vehicle -- easier to hit than infantry
-const SAM_ENGAGE_RANGE = 420;
+// per user request: bumped from 420 (≈3230m) to 715 (5500m) -- a real SAM's standoff
+// advantage over ground-based indirect fire is a big part of its identity, so it should
+// reach at least as far as the enemy artillery it's meant to counter (5km, see
+// ARTILLERY_FIRE_RANGE_M).
+const SAM_ENGAGE_RANGE = 715;
 const SAM_DUEL_DMG_TO_ENEMY = [45, 75];
 const SAM_REPAIR_HP_PER_CALL = 20;
 const SAM_REPAIR_COST_PER_HP = 50;
