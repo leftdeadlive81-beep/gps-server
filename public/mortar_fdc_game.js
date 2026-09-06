@@ -32,6 +32,13 @@ const SCOUT_HALF_FOV_WIDE = 32.5;
 const PRICE_EQUIP = {armor:1200, optics:1000, wideView:900, extMag:800};
 const REINFORCE_COST_PER_SOLDIER = 220;
 const REINFORCE_MAX_PER_CALL = 2;
+// per user request: 大休止 -- a free (no money, no reserve pool) alternative to paid
+// reinforcement. The unit's own wounded gradually return to duty over REST_DURATION_TURNS
+// turns instead of a fresh recruit filling the slot, but the unit takes no orders, moves
+// nowhere, and does not engage for the whole duration -- it stays exactly where it was and
+// can still be attacked/killed like any other unit sitting still (this is the risk that pays
+// for a free, gradual full recovery instead of a capped, instant, paid one).
+const REST_DURATION_TURNS = 120;
 
 // per user request: a veteran system for retention -- soldiers (squad/scout/sniper, the
 // front-line personnel with individual alive-state) who survive a wave gain XP; every
@@ -693,14 +700,14 @@ function buildEnemyInfantryGroups(stage){
 const UNCERTAINTY_CIRCLE_MIN = 16;
 const UNCERTAINTY_CIRCLE_CAP = 70;
 const UNCERTAINTY_CIRCLE_SCALE = 5;
-const ORDER_LABEL = {advance:'前進', retreat:'後退', hold:'防御', assault:'突撃', hunt:'追跡攻撃'};
+const ORDER_LABEL = {advance:'前進', retreat:'後退', hold:'防御', assault:'突撃', hunt:'追跡攻撃', resting:'大休止'};
 const MORTAR_ORDER_LABEL = {fire:'射撃', standby:'待機', move:'移動'};
 // per user request: a compact icon per order, used both in each unit's own order buttons
 // (icon+label, so the current/target order is recognizable without reading text) and as the
 // on-map status marker (icon ALONE, replacing the old bracketed Japanese text) -- packed
 // friendly deployment areas were rendering as an unreadable wall of overlapping labels on
 // small screens, and a single glyph per unit is the single biggest lever on that footprint.
-const ORDER_ICON = {advance:'▲', retreat:'▼', hold:'■', assault:'◆', hunt:'◎'};
+const ORDER_ICON = {advance:'▲', retreat:'▼', hold:'■', assault:'◆', hunt:'◎', resting:'Z'};
 const MORTAR_ORDER_ICON = {fire:'●', standby:'■', move:'✦'};
 function mortarStatusIcon(mortar){
   if(mortar.order==='move') return mortar.pendingDest ? '➤' : '✦';
@@ -1615,9 +1622,13 @@ function startStage(){
       m.order = 'standby'; m.pendingFire = null; m.pendingDest = null; m.mainlineAngle = null;
     });
     state.squads.forEach(sq=>{
+      // per user request: 大休止中は次のウェーブが始まっても中断されない(orderを'hold'に
+      // 戻してしまうと大休止中の表示が消えてしまうため)。
+      if(sq.resting) return;
       sq.order = 'hold'; sq.pendingDest = null; sq.huntTargetId = null; sq.reinforceUsed = false;
     });
     state.snipers.forEach(sn=>{
+      if(sn.resting) return;
       sn.order = 'hold'; sn.pendingDest = null; sn.pendingSnipeTargetId = null; sn.aimAngle = null; sn.reinforceUsed = false;
     });
     state.tanks.forEach(tk=>{
@@ -1627,6 +1638,7 @@ function startStage(){
       sam.order = 'hold'; sam.pendingDest = null; sam.huntTargetId = null;
     });
     state.engineers.forEach(e=>{
+      if(e.resting) return;
       e.order = 'hold'; e.pendingDest = null; e.reinforceUsed = false;
     });
     state.hq.coverBuilt = false;
@@ -2283,11 +2295,12 @@ function visibilityBlockReason(t){
 }
 function rotateScout(idx, delta){
   const scout = state.scouts[idx];
-  if(!scout) return;
+  if(!scout || scout.resting) return;
   scout.watchAngle = (scout.watchAngle + delta + 360) % 360;
   render();
 }
 function armSquadMoveOrder(idx){
+  if(state.squads[idx] && state.squads[idx].resting) return;
   state.orderMode = {kind:'squad', idx};
   state.commandBox = null;
   render();
@@ -2328,11 +2341,12 @@ function clearSamDest(idx){
   render();
 }
 function setEngineerOrder(idx, order){
-  if(!state.engineers[idx]) return;
+  if(!state.engineers[idx] || state.engineers[idx].resting) return;
   state.engineers[idx].order = order;
   render();
 }
 function armEngineerMoveOrder(idx){
+  if(state.engineers[idx] && state.engineers[idx].resting) return;
   state.orderMode = {kind:'engineer-move', idx};
   state.commandBox = null;
   render();
@@ -2348,7 +2362,7 @@ function clearEngineerDest(idx){
 // MAX_WALLS/建設費 WALL_BUILD_COST/HP WALL_MAX_HP。
 let wallIdCounter = 0;
 function armWallBuildOrder(idx){
-  if(!state.engineers[idx] || !unitAlive(state.engineers[idx])) return;
+  if(!state.engineers[idx] || !unitAlive(state.engineers[idx]) || state.engineers[idx].resting) return;
   state.orderMode = {kind:'wall-build', idx};
   state.commandBox = null;
   render();
@@ -2374,7 +2388,7 @@ function buildWallAt(x, y){
 // 代わりに、線の近くにいる歩兵系の味方の掩蔽率を上げる(trenchCoverBonusAt/getUnitExposure)。
 let trenchIdCounter = 0;
 function armTrenchBuildOrder(idx){
-  if(!state.engineers[idx] || !unitAlive(state.engineers[idx])) return;
+  if(!state.engineers[idx] || !unitAlive(state.engineers[idx]) || state.engineers[idx].resting) return;
   state.orderMode = {kind:'trench-build-p1', idx};
   state.commandBox = null;
   render();
@@ -2402,12 +2416,14 @@ function clearSquadDest(idx){
   render();
 }
 function armScoutMoveOrder(idx){
+  if(state.scouts[idx] && state.scouts[idx].resting) return;
   state.orderMode = {kind:'scout-move', idx};
   state.commandBox = null;
   unitSpeakOrder('scout', idx);
   render();
 }
 function armScoutReconOrder(idx){
+  if(state.scouts[idx] && state.scouts[idx].resting) return;
   state.orderMode = {kind:'scout-recon', idx};
   state.commandBox = null;
   unitSpeakOrder('scout', idx);
@@ -2474,6 +2490,7 @@ function performRecon(t){
 }
 function resolveOneScoutDecision(scout, idx){
   if(!unitAlive(scout)) return;
+  if(scout.resting){ tickUnitRest(scout, `斥候${idx+1}班`); return; }
   if(scout.pendingReconTargetId){
     const t = state.targets.find(x=>x.id===scout.pendingReconTargetId);
     scout.pendingReconTargetId = null;
@@ -2943,6 +2960,7 @@ function resolveEngineerOrders(actionTurns){
     state.engineers.forEach((en, enIdx)=>{
       const aliveSoldiers = en.soldiers.filter(s=>s.alive);
       if(aliveSoldiers.length===0) return;
+      if(en.resting){ tickUnitRest(en, '工兵小隊'); return; }
       applyStandingOrder(en, '工兵小隊', false);
       const beforeX = en.x, beforeY = en.y;
       applyEngineerMovement(en, enIdx);
@@ -2958,6 +2976,7 @@ function resolveSquadOrders(actionTurns){
     state.squads.forEach((sq, sqIdx)=>{
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
       if(aliveSoldiers.length===0) return;
+      if(sq.resting){ tickUnitRest(sq, `第${sqIdx+1}小隊`); return; }
       applyStandingOrder(sq, `第${sqIdx+1}小隊`, true);
       applySquadMovement(sq, sqIdx);
 
@@ -3376,6 +3395,7 @@ function resolveSniperOrders(actionTurns){
     state.snipers.forEach(sn=>{
       const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
       if(aliveSoldiers.length===0) return;
+      if(sn.resting){ tickUnitRest(sn, `狙撃${sn.id+1}班`); return; }
       applyStandingOrder(sn, `狙撃${sn.id+1}班`, false);
       applySniperMovement(sn);
 
@@ -3423,7 +3443,7 @@ function resolveSniperOrders(actionTurns){
 }
 
 function setSquadOrder(idx, order){
-  if(!state.squads[idx]) return;
+  if(!state.squads[idx] || state.squads[idx].resting) return;
   state.squads[idx].order = order;
   unitSpeakOrder('squad', idx);
   render();
@@ -3441,7 +3461,7 @@ function setSamOrder(idx, order){
 }
 
 function setSniperOrder(idx, order){
-  if(!state.snipers[idx]) return;
+  if(!state.snipers[idx] || state.snipers[idx].resting) return;
   state.snipers[idx].order = order;
   unitSpeakOrder('sniper', idx);
   render();
@@ -3469,9 +3489,11 @@ let smartWizard = {step:1, unitType:null, unitScope:null, actionKey:null};
 
 const SMART_UNIT_TYPES = {
   mortar: {label:'迫撃砲', list:()=>state.mortars, isAlive:m=>m.hp>0, nameOf:i=>`迫撃砲${i+1}`},
-  scout:  {label:'斥候',   list:()=>state.scouts,  isAlive:s=>unitAliveCount(s)>0, nameOf:i=>`斥候${i+1}`},
-  squad:  {label:'小隊',   list:()=>state.squads,  isAlive:sq=>sq.soldiers.some(s=>s.alive), nameOf:i=>`第${i+1}小隊`},
-  sniper: {label:'狙撃',   list:()=>state.snipers, isAlive:sn=>sn.soldiers.some(s=>s.alive), nameOf:i=>`狙撃${i+1}班`},
+  // per user request: 大休止中のユニットはスマート操作の選択リストにも出さない(命令を一切
+  // 受け付けないため)。
+  scout:  {label:'斥候',   list:()=>state.scouts,  isAlive:s=>unitAliveCount(s)>0 && !s.resting, nameOf:i=>`斥候${i+1}`},
+  squad:  {label:'小隊',   list:()=>state.squads,  isAlive:sq=>sq.soldiers.some(s=>s.alive) && !sq.resting, nameOf:i=>`第${i+1}小隊`},
+  sniper: {label:'狙撃',   list:()=>state.snipers, isAlive:sn=>sn.soldiers.some(s=>s.alive) && !sn.resting, nameOf:i=>`狙撃${i+1}班`},
   tank:   {label:'戦車',   list:()=>state.tanks,   isAlive:tk=>tk.hp>0, nameOf:i=>`戦車${i+1}`},
   sam:    {label:'対空',   list:()=>state.sams,    isAlive:sam=>sam.hp>0, nameOf:i=>`対空${i+1}`},
 };
@@ -3790,7 +3812,7 @@ function renderSmartOrder(){
 }
 
 function armSniperMoveOrder(idx){
-  if(!state.snipers[idx]) return;
+  if(!state.snipers[idx] || state.snipers[idx].resting) return;
   state.orderMode = {kind:'sniper-move', idx};
   state.commandBox = null;
   render();
@@ -3802,7 +3824,7 @@ function clearSniperDest(idx){
   render();
 }
 function armSniperTargetOrder(idx){
-  if(!state.snipers[idx]) return;
+  if(!state.snipers[idx] || state.snipers[idx].resting) return;
   state.orderMode = {kind:'sniper-target', idx};
   state.commandBox = null;
   render();
@@ -3814,7 +3836,7 @@ function clearSniperTarget(idx){
 }
 function armSniperAimOrder(idx){
   const sn = state.snipers[idx];
-  if(!sn) return;
+  if(!sn || sn.resting) return;
   state.orderMode = {kind:'sniper-aim', idx};
   state.commandBox = null;
   unitSpeakOrder('sniper', idx);
@@ -3851,7 +3873,7 @@ function reinforceUnitLabel(kind, idx){
 function requestReinforcement(kind, idx){
   if(!state || state.stageResolved) return;
   const unit = kind==='squad' ? state.squads[idx] : kind==='scout' ? state.scouts[idx] : state.snipers[idx];
-  if(!unit || unit.reinforceUsed) return;
+  if(!unit || unit.reinforceUsed || unit.resting) return;
   const deadCount = unit.soldiers.filter(s=>!s.alive).length;
   if(deadCount===0) return;
   const restoreCount = Math.min(REINFORCE_MAX_PER_CALL, deadCount, state.reserve);
@@ -3878,6 +3900,65 @@ function requestReinforcement(kind, idx){
   resolveEnemyTurn(1);
   checkEnd();
   render();
+}
+
+// per user request: 大休止 -- see REST_DURATION_TURNS above. Shared across every soldier-
+// roster unit type (squad/scout/sniper/engineer); scouts have no 'order' field the way the
+// others do, hence the `'order' in unit` guards throughout.
+function restUnitRef(kind, idx){
+  if(kind==='squad') return state.squads[idx];
+  if(kind==='scout') return state.scouts[idx];
+  if(kind==='sniper') return state.snipers[idx];
+  if(kind==='engineer') return state.engineers[idx];
+  return null;
+}
+function restUnitLabel(kind, idx){
+  if(kind==='squad') return `第${idx+1}小隊`;
+  if(kind==='scout') return `斥候${idx+1}班`;
+  if(kind==='sniper') return `狙撃${idx+1}班`;
+  if(kind==='engineer') return `工兵小隊`;
+  return '';
+}
+function startRest(kind, idx){
+  if(!state || state.stageResolved) return;
+  const unit = restUnitRef(kind, idx);
+  if(!unit || unitAliveCount(unit)<=0 || unit.resting) return;
+  const deadCount = unit.soldiers.length - unitAliveCount(unit);
+  if(deadCount<=0){ log('sys','システム','欠員がないため大休止の必要がありません。'); return; }
+  unit.resting = true;
+  unit.restTurnsLeft = REST_DURATION_TURNS;
+  unit.restDeficitStart = deadCount;
+  unit.restRevived = 0;
+  unit.pendingDest = null;
+  if('order' in unit) unit.order = 'resting';
+  if('huntTargetId' in unit) unit.huntTargetId = null;
+  if('pendingSnipeTargetId' in unit) unit.pendingSnipeTargetId = null;
+  if('pendingReconTargetId' in unit) unit.pendingReconTargetId = null;
+  if('aimAngle' in unit) unit.aimAngle = null;
+  log('sys','前線', `${restUnitLabel(kind,idx)}、大休止を開始。以後${REST_DURATION_TURNS}ターンは一切の命令を受け付けない代わりに、欠員(${deadCount}名)が徐々に戦列へ復帰する。`);
+  render();
+}
+// Ticks one unit's rest by exactly one action-turn -- called from inside each type's own
+// resolve*Orders per-turn loop so it advances at the same actionTurns granularity (2 ticks on
+// a mortar-fired commit, same as every other per-turn effect) instead of once per commitDecision
+// regardless of how many turns that commit actually spent.
+function tickUnitRest(unit, label){
+  if(!unit.resting) return;
+  unit.restTurnsLeft -= 1;
+  const elapsed = REST_DURATION_TURNS - unit.restTurnsLeft;
+  const shouldBeRevived = Math.floor(unit.restDeficitStart * elapsed / REST_DURATION_TURNS);
+  while(unit.restRevived < shouldBeRevived){
+    const victim = unit.soldiers.find(s=>!s.alive);
+    if(!victim) break;
+    victim.alive = true;
+    unit.restRevived += 1;
+  }
+  if(unit.restTurnsLeft<=0){
+    unit.resting = false;
+    unit.restTurnsLeft = 0;
+    if('order' in unit) unit.order = 'hold';
+    log('sys','前線', `${label}、大休止終了。戦列に復帰。`);
+  }
 }
 
 // per user request: a once-per-WAVE defensive action for HQ (matching the once-per-wave
@@ -5619,7 +5700,7 @@ function closeEnemyCommandBox(){
 // within range.
 function assignSquadHunt(idx){
   const sq = state.squads[idx];
-  if(!sq || !sq.soldiers.some(s=>s.alive)) return;
+  if(!sq || !sq.soldiers.some(s=>s.alive) || sq.resting) return;
   const targetId = state.enemyCommandBox;
   const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
   if(!target || target.type==='heli' || target.type==='drone') return;
@@ -5910,14 +5991,26 @@ function soldierRosterHtml(soldiers){
   return `<div class="roster-list">${rows}</div>`;
 }
 
+// per user request: 大休止 -- shared by squad/scout/sniper/engineer boxes, same as
+// reinforceButtonHtml below. While resting, shows progress instead of an action button;
+// otherwise offers the button whenever the unit has at least one casualty to recover from.
+function restButtonHtml(kind, idx, unit){
+  if(unit.resting){
+    return `<div class="meta" style="margin-bottom:8px;color:var(--amber);">大休止中 ― 残り${unit.restTurnsLeft}ターン(回復 ${unit.restRevived}/${unit.restDeficitStart}名)。命令は一切受け付けません。</div>`;
+  }
+  const deadCount = unit.soldiers.length - unitAliveCount(unit);
+  if(deadCount<=0) return '';
+  return `<button class="btn" style="margin-bottom:8px;" onclick="startRest('${kind}',${idx})">大休止を命じる(${REST_DURATION_TURNS}ターン・欠員${deadCount}名が徐々に回復)</button>`;
+}
 function reinforceButtonHtml(kind, idx, unit){
   const alive = unitAliveCount(unit);
   const deadCount = unit.soldiers.length-alive;
   if(deadCount<=0) return '';
   const restoreCount = Math.min(REINFORCE_MAX_PER_CALL, deadCount, state.reserve);
   const reinforceCost = REINFORCE_COST_PER_SOLDIER*Math.max(restoreCount,1);
-  const reinforceDisabled = unit.reinforceUsed || restoreCount<=0 || state.money<reinforceCost;
-  const reinforceLabel = unit.reinforceUsed ? '予備兵力要請済み'
+  const reinforceDisabled = unit.reinforceUsed || unit.resting || restoreCount<=0 || state.money<reinforceCost;
+  const reinforceLabel = unit.resting ? '大休止中は要請不可'
+    : unit.reinforceUsed ? '予備兵力要請済み'
     : restoreCount<=0 ? '予備兵力なし'
     : `予備兵力要請 (${restoreCount}名 ¥${reinforceCost})`;
   return `<button class="btn" ${reinforceDisabled?'disabled':''} onclick="requestReinforcement('${kind}',${idx})">${reinforceLabel}</button>`;
@@ -5926,7 +6019,7 @@ function reinforceButtonHtml(kind, idx, unit){
 function scoutBoxHtml(idx){
   const scout = state.scouts[idx];
   const alive = unitAliveCount(scout);
-  const dead = alive<=0;
+  const dead = alive<=0 || scout.resting;
   const armingMove = state.orderMode && state.orderMode.kind==='scout-move' && state.orderMode.idx===idx;
   const armingRecon = state.orderMode && state.orderMode.kind==='scout-recon' && state.orderMode.idx===idx;
   let orderStatus = '行動: 未設定(観測のみ)';
@@ -5935,10 +6028,11 @@ function scoutBoxHtml(idx){
   else if(scout.pendingDest) orderStatus = '行動: 移動先へ前進予定';
   else if(scout.pendingReconTargetId) orderStatus = `行動: ${scout.pendingReconTargetId} を偵察予定`;
   return `
-    <div class="meta">${dead?'戦闘不能':alive+'/'+scout.soldiers.length+'名'} ・ 標高: ${elevationLabel(elevationAt(scout.x,scout.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(scout.x,scout.y))}</div>
+    <div class="meta">${alive<=0?'戦闘不能':alive+'/'+scout.soldiers.length+'名'} ・ 標高: ${elevationLabel(elevationAt(scout.x,scout.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(scout.x,scout.y))}</div>
     ${exposureMetaHtml(getUnitExposure({kind:'scout', idx}))}
     <div class="meta">観測方向: ${Math.round(scout.watchAngle)}° (視野約${Math.round(scoutHalfFov()*2)}°)</div>
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/scout.soldiers.length*100)}%"></div></div>
+    ${restButtonHtml('scout', idx, scout)}
     <div class="row-2" style="margin-bottom:6px;">
       <button class="btn ${armingMove?'active squad-order-btn':''}" ${dead?'disabled':''} onclick="armScoutMoveOrder(${idx})">移動先を指定</button>
       <button class="btn ${armingRecon?'active squad-order-btn':''}" ${dead?'disabled':''} onclick="armScoutReconOrder(${idx})">偵察目標を指定</button>
@@ -5971,7 +6065,7 @@ function standingOrderSelectHtml(kind, idx, unit, allowAssault){
 function squadBoxHtml(idx){
   const sq = state.squads[idx];
   const alive = sq.soldiers.filter(s=>s.alive).length;
-  const wiped = alive===0;
+  const wiped = alive===0 || sq.resting;
   const btns = ['advance','hold','assault','retreat'].map(o=>
     `<button class="btn squad-order-btn ${sq.order===o?'active':''}" ${wiped?'disabled':''} onclick="setSquadOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
@@ -5984,6 +6078,7 @@ function squadBoxHtml(idx){
   return `
     <div class="meta">${alive} / ${sq.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sq.x,sq.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(sq.x,sq.y))}</div>
     ${exposureMetaHtml(getUnitExposure({kind:'squad', idx}))}
+    ${restButtonHtml('squad', idx, sq)}
     <div class="squad-orders" style="margin:6px 0;">${btns}</div>
     <div class="row-2" style="margin-bottom:6px;">
       <button class="btn ${arming?'active squad-order-btn':''}" ${wiped?'disabled':''} onclick="armSquadMoveOrder(${idx})">移動先を指定</button>
@@ -6070,8 +6165,9 @@ function engineerBoxHtml(idx){
   const alive = unitAliveCount(en);
   const dead = alive<=0;
   if(dead) return `<div class="empty-hint" style="padding:4px 0;color:var(--red);">全滅</div>`;
+  const resting = en.resting;
   const btns = ['advance','hold','retreat'].map(o=>
-    `<button class="btn squad-order-btn ${en.order===o?'active':''}" onclick="setEngineerOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
+    `<button class="btn squad-order-btn ${en.order===o?'active':''}" ${resting?'disabled':''} onclick="setEngineerOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
   const armingMove = state.orderMode && state.orderMode.kind==='engineer-move' && state.orderMode.idx===idx;
   const armingWall = state.orderMode && state.orderMode.kind==='wall-build' && state.orderMode.idx===idx;
@@ -6095,15 +6191,16 @@ function engineerBoxHtml(idx){
     <div class="meta">${alive}/${en.soldiers.length}名</div>
     ${exposureMetaHtml(getUnitExposure({kind:'engineer', idx}))}
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/en.soldiers.length*100)}%"></div></div>
+    ${restButtonHtml('engineer', idx, en)}
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
     <div class="row-2" style="margin-bottom:6px;">
-      <button class="btn ${armingMove?'active squad-order-btn':''}" onclick="armEngineerMoveOrder(${idx})">移動先を指定</button>
+      <button class="btn ${armingMove?'active squad-order-btn':''}" ${resting?'disabled':''} onclick="armEngineerMoveOrder(${idx})">移動先を指定</button>
       <button class="btn" ${!en.pendingDest?'disabled':''} onclick="clearEngineerDest(${idx})">解除</button>
     </div>
     <div class="meta" style="margin-bottom:8px;">${destStatus}</div>
-    <button class="btn ${armingWall?'active squad-order-btn':''}" ${wallCapReached||wallMoneyShort?'disabled':''} style="width:100%;margin-bottom:4px;" onclick="armWallBuildOrder(${idx})">防壁を構築(¥${WALL_BUILD_COST}・地図で地点指定)</button>
+    <button class="btn ${armingWall?'active squad-order-btn':''}" ${resting||wallCapReached||wallMoneyShort?'disabled':''} style="width:100%;margin-bottom:4px;" onclick="armWallBuildOrder(${idx})">防壁を構築(¥${WALL_BUILD_COST}・地図で地点指定)</button>
     <div class="meta" style="margin-bottom:8px;">${wallStatus}</div>
-    <button class="btn ${armingTrench?'active squad-order-btn':''}" ${trenchCapReached||trenchMoneyShort?'disabled':''} style="width:100%;margin-bottom:4px;" onclick="armTrenchBuildOrder(${idx})">塹壕を構築(¥${TRENCH_BUILD_COST}・地図で始点→終点指定)</button>
+    <button class="btn ${armingTrench?'active squad-order-btn':''}" ${resting||trenchCapReached||trenchMoneyShort?'disabled':''} style="width:100%;margin-bottom:4px;" onclick="armTrenchBuildOrder(${idx})">塹壕を構築(¥${TRENCH_BUILD_COST}・地図で始点→終点指定)</button>
     <div class="meta" style="margin-bottom:8px;">${trenchStatus}</div>
     ${soldierRosterHtml(en.soldiers)}
   `;
@@ -6112,7 +6209,7 @@ function engineerBoxHtml(idx){
 function sniperBoxHtml(idx){
   const sn = state.snipers[idx];
   const alive = sn.soldiers.filter(s=>s.alive).length;
-  const wiped = alive===0;
+  const wiped = alive===0 || sn.resting;
   const btns = ['advance','hold','retreat'].map(o=>
     `<button class="btn squad-order-btn ${sn.order===o?'active':''}" ${wiped?'disabled':''} onclick="setSniperOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
@@ -6132,6 +6229,7 @@ function sniperBoxHtml(idx){
   return `
     <div class="meta">${alive} / ${sn.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sn.x,sn.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(sn.x,sn.y))} ・ 有効射程約${SNIPER_RANGE_M}m</div>
     ${exposureMetaHtml(getUnitExposure({kind:'sniper', idx}))}
+    ${restButtonHtml('sniper', idx, sn)}
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
     <div class="row-2" style="margin-bottom:6px;">
       <button class="btn ${arming?'active squad-order-btn':''}" ${wiped?'disabled':''} onclick="armSniperMoveOrder(${idx})">移動先を指定</button>
@@ -6841,7 +6939,8 @@ function drawBoard(){
     ctx.fillText(scoutAlive?`斥候${scout.id+1} ${aliveCount}/${scout.soldiers.length}`:`斥候${scout.id+1}(戦闘不能)`, 0, -20);
     if(scoutAlive){
       let scoutOrderLabel = '[観測]';
-      if(scout.pendingReconTargetId) scoutOrderLabel = '[偵察]';
+      if(scout.resting) scoutOrderLabel = '[大休止]';
+      else if(scout.pendingReconTargetId) scoutOrderLabel = '[偵察]';
       else if(scout.pendingDest) scoutOrderLabel = '[移動]';
       ctx.fillStyle = LABEL_TEXT_COLOR;
       ctx.font = 'bold 13px "JetBrains Mono"';
@@ -8589,7 +8688,12 @@ function decoyLongPressEnd(){
 // same screen-space hit-testing as normal unit selection (collectClickCandidates) so what you
 // can long-press exactly matches what you can tap, at any camera angle.
 function nearestQuickOrderUnitAt(sx, sy){
-  const candidates = collectClickCandidates(sx, sy).filter(c=>c.type==='friendly' && QUICK_ORDER_KINDS[c.payload.kind]);
+  // per user request: a unit on 大休止 takes no orders at all, so it isn't offered here either.
+  const candidates = collectClickCandidates(sx, sy).filter(c=>{
+    if(c.type!=='friendly' || !QUICK_ORDER_KINDS[c.payload.kind]) return false;
+    const unit = restUnitRef(c.payload.kind, c.payload.idx);
+    return !unit || !unit.resting;
+  });
   if(!candidates.length) return null;
   candidates.sort((a,b)=>a.dist-b.dist);
   return candidates[0].payload; // {kind, idx}
