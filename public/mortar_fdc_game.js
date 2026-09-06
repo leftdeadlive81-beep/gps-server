@@ -787,10 +787,24 @@ let enemyTracers = [];
 // flash at the SHOOTER's own position -- distinct from the existing impact flash pushed
 // when a tracer lands (updateEnemyTracers) -- so firing itself reads as a muzzle flash
 // instead of only the hit. Centralized here so every call site gets it for free.
-function fireTracer(startX, startY, endX, endY, duration){
+// per user request (richer graphics/effects): each weapon family now reads visually
+// distinct instead of every shot in the game sharing one straight orange tracer -- see
+// MUZZLE_STYLE and the enemyTracers.forEach weapon-type branches in drawBoard() for the
+// actual look of each. weaponType defaults to 'rifle' (small arms: squad/sniper/anti-drone
+// point defense/generic enemy infantry) when a call site doesn't specify one.
+const MUZZLE_STYLE = {
+  rifle:   {color:'255,235,180', scale:1,   life:120},
+  cannon:  {color:'255,225,150', scale:2.2, life:170},
+  missile: {color:'255,210,140', scale:1.6, life:150},
+  heli:    {color:'255,190,150', scale:1.4, life:130},
+  drone:   {color:'255,120,90',  scale:1.1, life:110},
+};
+function fireTracer(startX, startY, endX, endY, duration, weaponType){
+  const wt = weaponType || 'rifle';
   const now = performance.now();
-  enemyTracers.push({startX, startY, endX, endY, born:now, duration});
-  flashes.push({x:startX, y:startY, born:now, life:120, muzzle:true});
+  enemyTracers.push({startX, startY, endX, endY, born:now, duration, weaponType:wt});
+  const st = MUZZLE_STYLE[wt] || MUZZLE_STYLE.rifle;
+  flashes.push({x:startX, y:startY, born:now, life:st.life, muzzle:true, weaponType:wt});
 }
 // per user request: a bigger "destroyed" flourish (explosion+debris, rising wreck smoke,
 // a floating kill banner), shared by both sides -- see spawnDestructionEffect().
@@ -2909,7 +2923,7 @@ function enemyCounterAttack(actionTurns){
           });
         } else if(rollExposureHit(getUnitExposure(near))){
           damageFriendlyAsset(near, dmg, sourceLabel);
-          fireTracer(e.x, e.y, near.x, near.y, 320);
+          fireTracer(e.x, e.y, near.x, near.y, 320, t.type==='vehicle' ? 'cannon' : 'rifle');
         } else {
           log('sys','回避', `${sourceLabel}を受けたが、${friendlyFireCandidateLabel(near)}は掩蔽率により被弾を免れた。`);
         }
@@ -3124,7 +3138,7 @@ function resolveSquadOrders(actionTurns){
         anyEvent = true;
         // per user request: show a shooting animation for the squad's own outgoing fire too,
         // not just the enemy's return fire on a casualty (see fireTracer() below)
-        fireTracer(sq.x, sq.y, e.x, e.y, 220);
+        fireTracer(sq.x, sq.y, e.x, e.y, 220, 'rifle');
         if(t.hp<=0 && !t.destroyed){
           t.destroyed = true; t.hp = 0;
           log('op','斥候', `${t.id} 第${sqIdx+1}小隊との交戦で撃破を確認。`);
@@ -3137,7 +3151,7 @@ function resolveSquadOrders(actionTurns){
           const victim = choice(curAlive);
           victim.alive = false;
           log('sys','前線', `第${sqIdx+1}小隊、${t.id}との交戦で<b>${victim.rank} ${victim.name}</b> 戦死。残存 ${sq.soldiers.filter(s=>s.alive).length}/${sq.soldiers.length}名。`);
-          fireTracer(e.x, e.y, sq.x, sq.y, 280);
+          fireTracer(e.x, e.y, sq.x, sq.y, 280, 'rifle');
           unitSpeakInjury('squad', sqIdx);
         }
       });
@@ -3275,7 +3289,7 @@ function resolveSamOrders(actionTurns){
         const dmgToEnemy = Math.round(rnd(SAM_DUEL_DMG_TO_ENEMY[0], SAM_DUEL_DMG_TO_ENEMY[1]) * dmgMult * samAltMult * enemyExposureMult);
         applyDamageToTarget(t, dmgToEnemy);
         anyEvent = true;
-        fireTracer(sam.x, sam.y, e.x, e.y, 220);
+        fireTracer(sam.x, sam.y, e.x, e.y, 220, 'missile');
         if(t.hp<=0 && !t.destroyed){
           t.destroyed = true; t.hp = 0;
           log('op','斥候', `${t.id} 対空${idx+1}との交戦で撃破を確認。`);
@@ -3328,7 +3342,7 @@ function resolveTankOrders(actionTurns){
         const dmgToEnemy = Math.round(rnd(TANK_DUEL_DMG_TO_ENEMY[0], TANK_DUEL_DMG_TO_ENEMY[1]) * dmgMult * tankAltMult * suppressionDmgMult * enemyExposureMult);
         applyDamageToTarget(t, dmgToEnemy);
         anyEvent = true;
-        fireTracer(tank.x, tank.y, e.x, e.y, 220);
+        fireTracer(tank.x, tank.y, e.x, e.y, 220, 'cannon');
         if(t.hp<=0 && !t.destroyed){
           t.destroyed = true; t.hp = 0;
           log('op','斥候', `${t.id} 戦車${idx+1}との交戦で撃破を確認。`);
@@ -3342,7 +3356,7 @@ function resolveTankOrders(actionTurns){
           const wasAlive = tank.hp>0;
           tank.hp = Math.max(0, tank.hp-dmg);
           log('sys','前線', `戦車${idx+1}、${t.id}との交戦で被弾(-${dmg}HP、残り${tank.hp}/${tank.maxHp})。`);
-          fireTracer(e.x, e.y, tank.x, tank.y, 280);
+          fireTracer(e.x, e.y, tank.x, tank.y, 280, t.type==='vehicle' ? 'cannon' : 'rifle');
           if(wasAlive && tank.hp<=0){
             log('sys','前線', `戦車${idx+1}、撃破される。`);
             spawnDestructionEffect(tank.x, tank.y, `戦車${idx+1} 撃破!`, FRIENDLY_MARK_COLOR);
@@ -3403,7 +3417,7 @@ function sniperEngageTarget(sn, t){
   log('mortar','狙撃', isExecute
     ? `狙撃${sn.id+1}班、${t.id}へ<b>止めの一撃</b>。撃破を確認。`
     : `狙撃${sn.id+1}班、${t.id}に精密射撃(効果 ${dmg})。`);
-  fireTracer(sn.x, sn.y, t.trueX, t.trueY, 180);
+  fireTracer(sn.x, sn.y, t.trueX, t.trueY, 180, 'rifle');
   if(t.hp<=0 && !t.destroyed){
     t.destroyed = true; t.hp = 0;
     log('fdc','FDC', `${t.id} 狙撃により<b>撃破を確認</b>。`);
@@ -4502,7 +4516,7 @@ function resolveVehicleAssault(actionTurns){
           const altMult = altitudeBonus(t.trueX, t.trueY, near.x, near.y);
           const dmg = Math.round(rnd(VEHICLE_ASSAULT_DAMAGE[0], VEHICLE_ASSAULT_DAMAGE[1]) * altMult);
           damageFriendlyAsset(near, dmg, `${t.id}(装甲車)の突撃`);
-          fireTracer(e.x, e.y, near.x, near.y, 260);
+          fireTracer(e.x, e.y, near.x, near.y, 260, 'cannon');
         } else {
           log('sys','回避', `${t.id}(装甲車)の突撃を受けたが、${friendlyFireCandidateLabel(near)}は掩蔽率により被弾を免れた。`);
         }
@@ -4615,7 +4629,7 @@ function resolveHeliAssault(actionTurns){
         const altMult = altitudeBonus(h.trueX, h.trueY, near.x, near.y);
         const dmg = Math.round(rnd(HELI_ATTACK_DAMAGE[0], HELI_ATTACK_DAMAGE[1]) * altMult);
         damageFriendlyAsset(near, dmg, `${h.id}(戦闘ヘリ)の攻撃`);
-        fireTracer(e.x, e.y, near.x, near.y, 260);
+        fireTracer(e.x, e.y, near.x, near.y, 260, 'heli');
       } else {
         log('sys','回避', `${h.id}(戦闘ヘリ)の攻撃を受けたが、${friendlyFireCandidateLabel(near)}は掩蔽率により被弾を免れた。`);
       }
@@ -4650,7 +4664,7 @@ function resolveSquadAntiDrone(actionTurns){
         if(Math.random() < SQUAD_ANTI_DRONE_HIT_CHANCE){
           const dmg = Math.round(rnd(SQUAD_ANTI_DRONE_DMG[0], SQUAD_ANTI_DRONE_DMG[1]));
           t.hp -= dmg;
-          fireTracer(sq.x, sq.y, t.trueX, t.trueY, 150);
+          fireTracer(sq.x, sq.y, t.trueX, t.trueY, 150, 'rifle');
           if(t.hp<=0 && !t.destroyed){
             t.destroyed = true; t.hp = 0;
             log('op','前線', `第${sqIdx+1}小隊が${t.id}を対空射撃で<b>撃墜</b>。`);
@@ -4685,7 +4699,7 @@ function resolveDroneSwarm(actionTurns){
         if(rollExposureHit(getUnitExposure(near))){
           const dmg = Math.round(rnd(DRONE_DETONATE_DAMAGE[0], DRONE_DETONATE_DAMAGE[1]));
           damageFriendlyAsset(near, dmg, `${t.id}(ドローン)の自爆`);
-          fireTracer(e.x, e.y, near.x, near.y, 180);
+          fireTracer(e.x, e.y, near.x, near.y, 180, 'drone');
         } else {
           log('sys','回避', `${t.id}(ドローン)が自爆したが、${friendlyFireCandidateLabel(near)}は掩蔽率により被弾を免れた。`);
         }
@@ -7502,9 +7516,58 @@ function drawBoard(){
     ctx.fill();
   });
 
-  // enemy tracers ― incoming fire (counter-attack on FDC / infantry duel casualties)
+  // enemy tracers ― incoming/outgoing direct fire (counter-attack on FDC / infantry duel
+  // casualties / all outgoing friendly fire, see fireTracer()). Rendering branches on
+  // tr.weaponType so each weapon family reads distinctly instead of one shared straight
+  // orange tracer for every shot in the game (per user request).
   enemyTracers.forEach(tr=>{
     const prog = clamp((nowP-tr.born)/tr.duration, 0, 1);
+    const wt = tr.weaponType || 'rifle';
+
+    if(wt === 'missile'){
+      // guided SAM missile: a wobbling smoke trail (not an instant straight line) so it
+      // reads as something flying rather than a hitscan shot, with a bright flame at the tip.
+      const dx = tr.endX-tr.startX, dy = tr.endY-tr.startY;
+      const len = Math.hypot(dx,dy) || 1;
+      const nx = -dy/len, ny = dx/len;
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(215,215,210,0.55)';
+      ctx.lineWidth = 2.2;
+      const SEGS = 10;
+      for(let s=0;s<=SEGS;s++){
+        const sp = Math.min(prog, s/SEGS);
+        const lx = tr.startX+dx*sp, ly = tr.startY+dy*sp;
+        const wob = Math.sin(sp*Math.PI*3 + tr.born*0.01) * 6 * Math.sin(sp*Math.PI);
+        const wp = project(lx+nx*wob, ly+ny*wob);
+        if(s===0) ctx.moveTo(wp.x, wp.y); else ctx.lineTo(wp.x, wp.y);
+      }
+      ctx.stroke();
+      const tip = project(tr.startX+dx*prog, tr.startY+dy*prog);
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(255,170,80,0.95)';
+      ctx.arc(tip.x, tip.y, 3.4, 0, Math.PI*2);
+      ctx.fill();
+      return;
+    }
+
+    if(wt === 'drone'){
+      // suicide drone dive: an accelerating red point punching straight at the target,
+      // not a tracer line -- reads as a body/warhead closing in, not a shot being fired.
+      const ease = prog*prog;
+      const dp = project(tr.startX+(tr.endX-tr.startX)*ease, tr.startY+(tr.endY-tr.startY)*ease);
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(255,90,70,0.9)';
+      ctx.arc(dp.x, dp.y, 3+prog*2, 0, Math.PI*2);
+      ctx.fill();
+      return;
+    }
+
+    // rifle (small arms: squad/sniper/anti-drone point defense/generic enemy infantry),
+    // cannon (tank/vehicle direct-fire guns), and heli (attack helicopter gun/rocket runs)
+    // all share this trailing-tracer-with-shell shape, differing only in color/thickness.
+    const style = wt==='cannon' ? {trail:'255,235,200,0.4', core:'255,235,205,0.95', shell:'#fff6dd', width:4,   shellR:4.2}
+                : wt==='heli'   ? {trail:'255,110,90,0.35',  core:'255,120,95,0.95',  shell:'#ffcabe', width:2.4, shellR:3}
+                :                 {trail:'255,120,80,0.3',   core:'255,140,80,0.9',   shell:'#ffcf9e', width:2,   shellR:2.8};
     const gx = tr.startX + (tr.endX-tr.startX)*prog;
     const gy = tr.startY + (tr.endY-tr.startY)*prog;
     const gp = project(gx, gy);
@@ -7516,20 +7579,20 @@ function drawBoard(){
     const startG = project(tr.startX, tr.startY);
     const endG = project(tr.endX, tr.endY);
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(255,120,80,0.3)';
+    ctx.strokeStyle = `rgba(${style.trail})`;
     ctx.lineWidth = 1;
     ctx.moveTo(startG.x, startG.y);
     ctx.lineTo(endG.x, endG.y);
     ctx.stroke();
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(255,140,80,0.9)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = `rgba(${style.core})`;
+    ctx.lineWidth = style.width;
     ctx.moveTo(tgp.x, tgp.y);
     ctx.lineTo(x, y);
     ctx.stroke();
     ctx.beginPath();
-    ctx.fillStyle = '#ffcf9e';
-    ctx.arc(x, y, 2.8, 0, Math.PI*2);
+    ctx.fillStyle = style.shell;
+    ctx.arc(x, y, style.shellR, 0, Math.PI*2);
     ctx.fill();
   });
 
@@ -7544,9 +7607,10 @@ function drawBoard(){
     // own position -- no ring, no big/small scaling -- kept visually distinct from the
     // ring+core impact/explosion language below.
     if(f.muzzle){
+      const mst = MUZZLE_STYLE[f.weaponType] || MUZZLE_STYLE.rifle;
       ctx.beginPath();
-      ctx.fillStyle = `rgba(255,235,180,${Math.max(0,1-p)})`;
-      ctx.arc(fp.x, fp.y, Math.max(0, 4.5*(1-p)), 0, Math.PI*2);
+      ctx.fillStyle = `rgba(${mst.color},${Math.max(0,1-p)})`;
+      ctx.arc(fp.x, fp.y, Math.max(0, 4.5*mst.scale*(1-p)), 0, Math.PI*2);
       ctx.fill();
       return;
     }
