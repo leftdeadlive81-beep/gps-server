@@ -2909,8 +2909,10 @@ function enemyCounterAttack(actionTurns){
         if(t.type==='infantry' && near.dist > SQUAD_ENGAGE_RANGE) return;
         if(t.type==='artillery' && near.dist > ARTILLERY_FIRE_RANGE_UNITS) return;
         // per user request: 工兵の防壁は地上の直接照準射撃(歩兵/車両)も遮る -- 曲射弾を
-        // 撃つ砲兵と、上空を飛ぶドローンは対象外(壁は防がない)。
+        // 撃つ砲兵と、上空を飛ぶドローンは対象外(壁は防がない)。丘などの地形も同様に直接照準
+        // 射撃だけを遮る -- 味方のresolveSquadOrders/resolveTankOrdersに揃えた対称な扱い。
         if(t.type==='infantry' || t.type==='vehicle'){
+          if(!hasLineOfSight(t.trueX, t.trueY, near.x, near.y)) return;
           const blockWall = wallBlockingLineOfFire(t.trueX, t.trueY, near.x, near.y);
           if(blockWall){
             const [wlo,whi] = COUNTER_DAMAGE[t.type];
@@ -4537,7 +4539,7 @@ function resolveVehicleAssault(actionTurns){
       if(t.destroyed) return;
       const near = nearestFriendlyAsset(t.trueX, t.trueY, true);
       if(!near) return;
-      if(near.dist <= VEHICLE_ASSAULT_RANGE){
+      if(near.dist <= VEHICLE_ASSAULT_RANGE && hasLineOfSight(t.trueX, t.trueY, near.x, near.y)){
         anyEvent = true;
         const blockWall = wallBlockingLineOfFire(t.trueX, t.trueY, near.x, near.y);
         if(blockWall){
