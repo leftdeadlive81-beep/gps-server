@@ -1133,6 +1133,20 @@ function projectileArcWorldY(startX, startY, endX, endY, prog){
   const h0 = terrainHeightAt(startX, startY), h1 = terrainHeightAt(endX, endY);
   return h0 + (h1-h0)*prog + Math.sin(prog*Math.PI)*ARC_HEIGHT;
 }
+// per user request: same start/end-height blend as projectileArcWorldY, but without the arc
+// term -- for direct-fire tracers (rifle/cannon/heli/missile/drone, see fireTracer()), which
+// travel in a straight line rather than a lobbed shell. Their in-flight points used to be
+// projected with project()/projectAtHeight, which samples the LOCAL terrain height directly
+// beneath each point -- on hilly ground that made the drawn tracer visually climb up and over
+// any hill between shooter and target instead of flying a straight line through the air, even
+// though hasLineOfSight()/the new squad/tank LOS gating already prevent an actually-blocked
+// shot from happening in the first place. This only needs fixing for the ENDPOINTS' own
+// heights blended smoothly -- the endpoints themselves are correctly at their own local ground
+// height already (that's literally where the shooter/target stand).
+function tracerWorldY(startX, startY, endX, endY, prog){
+  const h0 = terrainHeightAt(startX, startY), h1 = terrainHeightAt(endX, endY);
+  return h0 + (h1-h0)*prog;
+}
 
 function rnd(a,b){ return a + Math.random()*(b-a); }
 function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
@@ -3125,6 +3139,10 @@ function resolveSquadOrders(actionTurns){
         const e = estPos(t);
         const dist = Math.hypot(e.x-sq.x, e.y-sq.y);
         if(dist > SQUAD_ENGAGE_RANGE) return;
+        // per user request: 丘などの地形に完全に遮蔽された目標とは交戦できない -- 狙撃兵は
+        // 既にhasLineOfSightでこれを判定しているが、歩兵小隊にはこのチェックが漏れていて、
+        // 丘の向こうの敵も普通に撃ち抜けてしまっていた。
+        if(!hasLineOfSight(sq.x, sq.y, t.trueX, t.trueY)) return;
         // per user request: 工兵の防壁(壁)は直接照準の銃撃も遮る -- 射線上に壁があれば、
         // 目標の代わりに壁が被弾する。
         const blockWall = wallBlockingLineOfFire(sq.x, sq.y, t.trueX, t.trueY);
@@ -3337,6 +3355,9 @@ function resolveTankOrders(actionTurns){
         const e = estPos(t);
         const dist = Math.hypot(e.x-tank.x, e.y-tank.y);
         if(dist > TANK_ENGAGE_RANGE) return;
+        // per user request: 丘に完全に遮蔽された目標とは交戦できない(狙撃兵と同じ扱い -- 詳細は
+        // resolveSquadOrdersの同様のhasLineOfSightチェックのコメントを参照)。
+        if(!hasLineOfSight(tank.x, tank.y, t.trueX, t.trueY)) return;
         const blockWall = wallBlockingLineOfFire(tank.x, tank.y, t.trueX, t.trueY);
         if(blockWall){
           anyEvent = true;
@@ -7591,11 +7612,11 @@ function drawBoard(){
         const sp = Math.min(prog, s/SEGS);
         const lx = tr.startX+dx*sp, ly = tr.startY+dy*sp;
         const wob = Math.sin(sp*Math.PI*3 + tr.born*0.01) * 6 * Math.sin(sp*Math.PI);
-        const wp = project(lx+nx*wob, ly+ny*wob);
+        const wp = projectAtWorldY(lx+nx*wob, ly+ny*wob, tracerWorldY(tr.startX,tr.startY,tr.endX,tr.endY,sp));
         if(s===0) ctx.moveTo(wp.x, wp.y); else ctx.lineTo(wp.x, wp.y);
       }
       ctx.stroke();
-      const tip = project(tr.startX+dx*prog, tr.startY+dy*prog);
+      const tip = projectAtWorldY(tr.startX+dx*prog, tr.startY+dy*prog, tracerWorldY(tr.startX,tr.startY,tr.endX,tr.endY,prog));
       ctx.beginPath();
       ctx.fillStyle = 'rgba(255,170,80,0.95)';
       ctx.arc(tip.x, tip.y, 3.4, 0, Math.PI*2);
@@ -7607,7 +7628,7 @@ function drawBoard(){
       // suicide drone dive: an accelerating red point punching straight at the target,
       // not a tracer line -- reads as a body/warhead closing in, not a shot being fired.
       const ease = prog*prog;
-      const dp = project(tr.startX+(tr.endX-tr.startX)*ease, tr.startY+(tr.endY-tr.startY)*ease);
+      const dp = projectAtWorldY(tr.startX+(tr.endX-tr.startX)*ease, tr.startY+(tr.endY-tr.startY)*ease, tracerWorldY(tr.startX,tr.startY,tr.endX,tr.endY,ease));
       ctx.beginPath();
       ctx.fillStyle = 'rgba(255,90,70,0.9)';
       ctx.arc(dp.x, dp.y, 3+prog*2, 0, Math.PI*2);
@@ -7623,12 +7644,12 @@ function drawBoard(){
                 :                 {trail:'255,120,80,0.3',   core:'255,140,80,0.9',   shell:'#ffcf9e', width:2,   shellR:2.8};
     const gx = tr.startX + (tr.endX-tr.startX)*prog;
     const gy = tr.startY + (tr.endY-tr.startY)*prog;
-    const gp = project(gx, gy);
+    const gp = projectAtWorldY(gx, gy, tracerWorldY(tr.startX,tr.startY,tr.endX,tr.endY,prog));
     const x = gp.x, y = gp.y;
     const trailProg = Math.max(0, prog-0.25);
     const tgx = tr.startX + (tr.endX-tr.startX)*trailProg;
     const tgy = tr.startY + (tr.endY-tr.startY)*trailProg;
-    const tgp = project(tgx, tgy);
+    const tgp = projectAtWorldY(tgx, tgy, tracerWorldY(tr.startX,tr.startY,tr.endX,tr.endY,trailProg));
     const startG = project(tr.startX, tr.startY);
     const endG = project(tr.endX, tr.endY);
     ctx.beginPath();
