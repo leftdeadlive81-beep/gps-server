@@ -361,6 +361,15 @@
      silently overridden by that rule's own font-size/padding, which is what was happening
      when this lived up near .decision-box/.decision-summary earlier in the file. */
   .decision-btn{font-size:12px;padding:2px 9px;letter-spacing:0.5px;box-shadow:0 0 0 1px rgba(217,164,65,0.25);}
+  /* per user request: long-press quick-order popup -- a row of large icon-only buttons, same
+     specificity note as .decision-btn above (must come after the base select,.btn rule to win
+     the cascade). */
+  .quick-order-box{padding:6px;width:auto;}
+  .quick-order-row{display:flex;gap:6px;}
+  .quick-order-icon-btn{
+    width:46px;height:46px;flex:0 0 auto;font-size:22px;padding:0;
+    display:flex;align-items:center;justify-content:center;
+  }
   .row-2{display:flex;gap:8px;}
   .row-2 > div, .row-2 > button{flex:1;}
 

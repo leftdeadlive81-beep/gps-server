@@ -193,6 +193,19 @@ const DECOY_LURE_MULT_DAY = 0.6;
 const DECOY_LURE_MULT_NIGHT = 0.3;
 const DECOY_LONGPRESS_MS = 550;
 const DECOY_LONGPRESS_MOVE_TOLERANCE_PX = 10;
+// per user request: long-press a friendly order-bearing unit for a compact icon-only quick
+// order popup, instead of always needing the full command box or the multi-step スマート操作
+// wizard for a simple stance change. A plain short tap still opens the full command box as
+// before -- this is a faster path alongside it, not a replacement.
+const UNIT_LONGPRESS_MS = 480;
+const UNIT_LONGPRESS_MOVE_TOLERANCE_PX = 10;
+const QUICK_ORDER_KINDS = {
+  squad:    {orders:['advance','hold','assault','retreat'], setter:setSquadOrder},
+  tank:     {orders:['advance','hold','retreat'],           setter:setTankOrder},
+  sam:      {orders:['advance','hold','retreat'],           setter:setSamOrder},
+  sniper:   {orders:['advance','hold','retreat'],           setter:setSniperOrder},
+  engineer: {orders:['advance','hold','retreat'],           setter:setEngineerOrder},
+};
 // per user request: 工兵が構築する防壁(壁) -- 敵味方問わず地上ユニットの移動と直接照準の
 // 銃撃/突撃を遮り(terrainAwareStep/hasLineOfSight/各交戦ロジックに組み込む)、それ自体もHPを
 // 持つ障害物。迫撃砲/敵砲兵のような曲射弾は上を越えて着弾する(壁は防がない)。
@@ -661,6 +674,19 @@ const UNCERTAINTY_CIRCLE_CAP = 70;
 const UNCERTAINTY_CIRCLE_SCALE = 5;
 const ORDER_LABEL = {advance:'前進', retreat:'後退', hold:'防御', assault:'突撃', hunt:'追跡攻撃'};
 const MORTAR_ORDER_LABEL = {fire:'射撃', standby:'待機', move:'移動'};
+// per user request: a compact icon per order, used both in each unit's own order buttons
+// (icon+label, so the current/target order is recognizable without reading text) and as the
+// on-map status marker (icon ALONE, replacing the old bracketed Japanese text) -- packed
+// friendly deployment areas were rendering as an unreadable wall of overlapping labels on
+// small screens, and a single glyph per unit is the single biggest lever on that footprint.
+const ORDER_ICON = {advance:'▲', retreat:'▼', hold:'■', assault:'◆', hunt:'◎'};
+const MORTAR_ORDER_ICON = {fire:'●', standby:'■', move:'✦'};
+function mortarStatusIcon(mortar){
+  if(mortar.order==='move') return mortar.pendingDest ? '➤' : '✦';
+  if(mortar.pendingFire) return '●';
+  if(mortar.order==='fire') return '◐';
+  return '■';
+}
 const MORTAR_ZONE_MIN_X = 40, MORTAR_ZONE_MAX_X = 380;
 
 function effectMultiplier(shell, fuze, type){
@@ -3439,10 +3465,18 @@ function resolveSmartUnitIdxs(unitType, unitScope){
 }
 
 function openSmartOrder(){
+  // per user request: fixes a bug where a unit/enemy/decoy command box left open from a
+  // previous map tap stayed stacked on top of this drawer through every step, blocking its
+  // content -- close any open command box first so the wizard is never obscured.
+  state.commandBox = null;
+  state.enemyCommandBox = null;
+  state.decoyCommandBox = null;
+  closeQuickOrder();
   smartWizard = {step:1, unitType:null, unitScope:null, actionKey:null};
   renderSmartOrder();
   document.getElementById('smart-order-drawer').classList.add('open');
   document.getElementById('drawer-backdrop').classList.add('show');
+  render();
 }
 function closeSmartOrder(){
   document.getElementById('smart-order-drawer').classList.remove('open');
@@ -4807,6 +4841,7 @@ document.addEventListener('visibilitychange', ()=>{
 
 function commitDecision(){
   if(!state || state.stageResolved || state.animating || state.snipeMortarStrikesPending>0 || state.placementPending || state.decoyPlacementPending) return;
+  closeQuickOrder();
 
   // A mortar whose queued shot can't be afforded only cancels THAT mortar's
   // order (reverts to standby) -- it must never block the whole decision
@@ -5204,6 +5239,10 @@ function selectNextTarget(){
 function handleCanvasClick(evt){
   if(!state || state.stageResolved || state.animating || state.snipeMortarStrikesPending>0) return;
   if(mapDragMoved) return;
+  // A genuine new tap elsewhere always dismisses a stale quick-order popup from an earlier
+  // long-press (the click that opened it never reaches here -- it's the one mapDragMoved just
+  // suppressed above).
+  closeQuickOrder();
   const cv = document.getElementById('board');
   const rect = cv.getBoundingClientRect();
   const pxPixel = evt.clientX-rect.left, pyPixel = evt.clientY-rect.top;
@@ -5658,7 +5697,7 @@ function mortarBoxHtml(idx){
   const armingMove = state.orderMode && state.orderMode.kind==='mortar-move' && state.orderMode.idx===idx;
 
   const stanceBtns = ['fire','standby','move'].map(o=>
-    `<button class="btn squad-order-btn ${order===o?'active':''}" ${dead?'disabled':''} onclick="setMortarOrder(${idx},'${o}')">${MORTAR_ORDER_LABEL[o]}</button>`
+    `<button class="btn squad-order-btn ${order===o?'active':''}" ${dead?'disabled':''} onclick="setMortarOrder(${idx},'${o}')">${MORTAR_ORDER_ICON[o]} ${MORTAR_ORDER_LABEL[o]}</button>`
   ).join('');
 
   let bodyHtml = '';
@@ -5857,7 +5896,7 @@ function squadBoxHtml(idx){
   const alive = sq.soldiers.filter(s=>s.alive).length;
   const wiped = alive===0;
   const btns = ['advance','hold','assault','retreat'].map(o=>
-    `<button class="btn squad-order-btn ${sq.order===o?'active':''}" ${wiped?'disabled':''} onclick="setSquadOrder(${idx},'${o}')">${ORDER_LABEL[o]}</button>`
+    `<button class="btn squad-order-btn ${sq.order===o?'active':''}" ${wiped?'disabled':''} onclick="setSquadOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
   const arming = state.orderMode && state.orderMode.kind==='squad' && state.orderMode.idx===idx;
   const destStatus = arming ? '地図をクリックして移動先指定…' : (sq.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
@@ -5885,7 +5924,7 @@ function tankBoxHtml(idx){
   const tank = state.tanks[idx];
   const dead = tank.hp<=0;
   const btns = ['advance','hold','retreat'].map(o=>
-    `<button class="btn squad-order-btn ${tank.order===o?'active':''}" ${dead?'disabled':''} onclick="setTankOrder(${idx},'${o}')">${ORDER_LABEL[o]}</button>`
+    `<button class="btn squad-order-btn ${tank.order===o?'active':''}" ${dead?'disabled':''} onclick="setTankOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
   const arming = state.orderMode && state.orderMode.kind==='tank-move' && state.orderMode.idx===idx;
   const destStatus = arming ? '地図をクリックして移動先指定…' : (tank.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
@@ -5918,7 +5957,7 @@ function samBoxHtml(idx){
   const sam = state.sams[idx];
   const dead = sam.hp<=0;
   const btns = ['advance','hold','retreat'].map(o=>
-    `<button class="btn squad-order-btn ${sam.order===o?'active':''}" ${dead?'disabled':''} onclick="setSamOrder(${idx},'${o}')">${ORDER_LABEL[o]}</button>`
+    `<button class="btn squad-order-btn ${sam.order===o?'active':''}" ${dead?'disabled':''} onclick="setSamOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
   const arming = state.orderMode && state.orderMode.kind==='sam-move' && state.orderMode.idx===idx;
   const destStatus = arming ? '地図をクリックして移動先指定…' : (sam.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
@@ -5955,7 +5994,7 @@ function engineerBoxHtml(idx){
   const dead = alive<=0;
   if(dead) return `<div class="empty-hint" style="padding:4px 0;color:var(--red);">全滅</div>`;
   const btns = ['advance','hold','retreat'].map(o=>
-    `<button class="btn squad-order-btn ${en.order===o?'active':''}" onclick="setEngineerOrder(${idx},'${o}')">${ORDER_LABEL[o]}</button>`
+    `<button class="btn squad-order-btn ${en.order===o?'active':''}" onclick="setEngineerOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
   const armingMove = state.orderMode && state.orderMode.kind==='engineer-move' && state.orderMode.idx===idx;
   const armingWall = state.orderMode && state.orderMode.kind==='wall-build' && state.orderMode.idx===idx;
@@ -5987,7 +6026,7 @@ function sniperBoxHtml(idx){
   const alive = sn.soldiers.filter(s=>s.alive).length;
   const wiped = alive===0;
   const btns = ['advance','hold','retreat'].map(o=>
-    `<button class="btn squad-order-btn ${sn.order===o?'active':''}" ${wiped?'disabled':''} onclick="setSniperOrder(${idx},'${o}')">${ORDER_LABEL[o]}</button>`
+    `<button class="btn squad-order-btn ${sn.order===o?'active':''}" ${wiped?'disabled':''} onclick="setSniperOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
   const arming = state.orderMode && state.orderMode.kind==='sniper-move' && state.orderMode.idx===idx;
   const armingTarget = state.orderMode && state.orderMode.kind==='sniper-target' && state.orderMode.idx===idx;
@@ -6639,16 +6678,7 @@ function drawBoard(){
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign='center';
-    ctx.fillText(mAlive?`迫撃砲${mortar.id+1}`:`迫撃砲${mortar.id+1}(戦闘不能)`, 0, 44);
-    if(mAlive){
-      let mOrderLabel = '[待機]';
-      if(mortar.order==='move') mOrderLabel = mortar.pendingDest ? '[移動中]' : '[移動待ち]';
-      else if(mortar.pendingFire) mOrderLabel = '[射撃準備]';
-      else if(mortar.order==='fire') mOrderLabel = '[攻撃地点待ち]';
-      ctx.fillStyle = LABEL_TEXT_COLOR;
-      ctx.font = 'bold 13px "JetBrains Mono"';
-      ctx.fillText(mOrderLabel, 0, 62);
-    }
+    ctx.fillText(mAlive?`迫撃砲${mortar.id+1} ${mortarStatusIcon(mortar)}`:`迫撃砲${mortar.id+1}(戦闘不能)`, 0, 44);
     ctx.restore();
 
     if(mAlive){
@@ -6749,13 +6779,11 @@ function drawBoard(){
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign='center';
-    ctx.fillText(tAlive?`戦車${tank.id+1}`:`戦車${tank.id+1}(撃破)`, 0, 44);
-    if(tAlive){
-      const tOrderLabel = tank.pendingDest ? `${ORDER_LABEL[tank.order]}→移動` : ORDER_LABEL[tank.order];
-      ctx.fillStyle = LABEL_TEXT_COLOR;
-      ctx.font = 'bold 13px "JetBrains Mono"';
-      ctx.fillText(`[${tOrderLabel}]`, 0, 62);
-    }
+    // per user request: order status shown as a single icon glyph (see ORDER_ICON) instead of
+    // bracketed Japanese text, and merged onto the name's own line -- packed friendly deployment
+    // areas were an unreadable wall of overlapping two-line labels on small screens.
+    const tOrderIcon = ORDER_ICON[tank.order] + (tank.pendingDest ? '→' : '');
+    ctx.fillText(tAlive?`戦車${tank.id+1} ${tOrderIcon}`:`戦車${tank.id+1}(撃破)`, 0, 44);
     ctx.restore();
 
     if(tAlive){
@@ -6791,13 +6819,8 @@ function drawBoard(){
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign='center';
-    ctx.fillText(samAlive?`対空${sam.id+1}`:`対空${sam.id+1}(撃破)`, 0, 44);
-    if(samAlive){
-      const samOrderLabel = sam.pendingDest ? `${ORDER_LABEL[sam.order]}→移動` : ORDER_LABEL[sam.order];
-      ctx.fillStyle = LABEL_TEXT_COLOR;
-      ctx.font = 'bold 13px "JetBrains Mono"';
-      ctx.fillText(`[${samOrderLabel}]`, 0, 62);
-    }
+    const samOrderIcon = ORDER_ICON[sam.order] + (sam.pendingDest ? '→' : '');
+    ctx.fillText(samAlive?`対空${sam.id+1} ${samOrderIcon}`:`対空${sam.id+1}(撃破)`, 0, 44);
     ctx.restore();
 
     if(samAlive){
@@ -6840,12 +6863,8 @@ function drawBoard(){
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '14px "JetBrains Mono"';
     ctx.textAlign='center';
-    ctx.fillText(`工兵 ${aliveSoldiers.length}/${en.soldiers.length}`, 0, 28);
-    if(aliveSoldiers.length>0){
-      const enOrderLabel = en.pendingDest ? `${ORDER_LABEL[en.order]}→移動` : ORDER_LABEL[en.order];
-      ctx.font = 'bold 13px "JetBrains Mono"';
-      ctx.fillText(`[${enOrderLabel}]`, 0, 44);
-    }
+    const enOrderIcon = aliveSoldiers.length>0 ? ` ${ORDER_ICON[en.order]}${en.pendingDest?'→':''}` : '';
+    ctx.fillText(`工兵 ${aliveSoldiers.length}/${en.soldiers.length}${enOrderIcon}`, 0, 28);
     ctx.restore();
     if(aliveSoldiers.length>0) drawAttritionBar(ctx, enVis.x+18, enVis.y, aliveSoldiers.length/en.soldiers.length);
   });
@@ -6862,8 +6881,8 @@ function drawBoard(){
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
       ctx.textAlign='center';
-      const sqOrderLabel = sq.pendingDest ? `${ORDER_LABEL[sq.order]}→移動` : ORDER_LABEL[sq.order];
-      ctx.fillText(`第${sqIdx+1}小隊 ${aliveSoldiers.length}/${sq.soldiers.length} [${sqOrderLabel}]`, sqVis.x, sqVis.y+28);
+      const sqOrderIcon = ORDER_ICON[sq.order] + (sq.pendingDest ? '→' : '');
+      ctx.fillText(`第${sqIdx+1}小隊 ${aliveSoldiers.length}/${sq.soldiers.length} ${sqOrderIcon}`, sqVis.x, sqVis.y+28);
 
       if(aliveSoldiers.length>0){
         state.targets.filter(t=>!t.destroyed && t.type==='infantry' && isTargetDetected(t)).forEach(t=>{
@@ -6897,8 +6916,8 @@ function drawBoard(){
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
       ctx.textAlign='center';
-      const snOrderLabel = sn.pendingDest ? `${ORDER_LABEL[sn.order]}→移動` : ORDER_LABEL[sn.order];
-      ctx.fillText(`狙撃${snIdx+1}班 ${aliveSoldiers.length}/${sn.soldiers.length} [${snOrderLabel}]`, snVis.x, snVis.y+27);
+      const snOrderIcon = ORDER_ICON[sn.order] + (sn.pendingDest ? '→' : '');
+      ctx.fillText(`狙撃${snIdx+1}班 ${aliveSoldiers.length}/${sn.soldiers.length} ${snOrderIcon}`, snVis.x, snVis.y+27);
 
       if(aliveSoldiers.length>0 && sn.pendingSnipeTargetId){
         const t = state.targets.find(x=>x.id===sn.pendingSnipeTargetId);
@@ -8460,6 +8479,78 @@ function decoyLongPressEnd(){
   clearTimeout(decoyLongPressTimer);
 }
 
+// per user request: long-press quick order popup (see QUICK_ORDER_KINDS above). Shares the
+// same screen-space hit-testing as normal unit selection (collectClickCandidates) so what you
+// can long-press exactly matches what you can tap, at any camera angle.
+function nearestQuickOrderUnitAt(sx, sy){
+  const candidates = collectClickCandidates(sx, sy).filter(c=>c.type==='friendly' && QUICK_ORDER_KINDS[c.payload.kind]);
+  if(!candidates.length) return null;
+  candidates.sort((a,b)=>a.dist-b.dist);
+  return candidates[0].payload; // {kind, idx}
+}
+let quickOrderTarget = null;
+let unitLongPressTimer = null;
+let unitLongPressX = 0, unitLongPressY = 0, unitLongPressMoved = false;
+function unitLongPressStart(clientX, clientY){
+  clearTimeout(unitLongPressTimer);
+  if(!state || state.stageResolved || state.animating || state.placementPending || state.decoyPlacementPending
+    || state.orderMode || state.smartOrderMode) return;
+  unitLongPressX = clientX; unitLongPressY = clientY; unitLongPressMoved = false;
+  unitLongPressTimer = setTimeout(()=>{
+    if(unitLongPressMoved) return;
+    const rect = document.getElementById('board').getBoundingClientRect();
+    const px = unitLongPressX-rect.left, py = unitLongPressY-rect.top;
+    const sx = threeReady ? px : px/rect.width*CANVAS_W;
+    const sy = threeReady ? py : py/rect.height*CANVAS_H;
+    const target = nearestQuickOrderUnitAt(sx, sy);
+    if(target) openQuickOrder(target, unitLongPressX, unitLongPressY);
+  }, UNIT_LONGPRESS_MS);
+}
+function unitLongPressMove(clientX, clientY){
+  if(Math.hypot(clientX-unitLongPressX, clientY-unitLongPressY) > UNIT_LONGPRESS_MOVE_TOLERANCE_PX){
+    unitLongPressMoved = true;
+    clearTimeout(unitLongPressTimer);
+  }
+}
+function unitLongPressEnd(){
+  clearTimeout(unitLongPressTimer);
+}
+function openQuickOrder(target, clientX, clientY){
+  quickOrderTarget = target;
+  state.commandBox = null;
+  state.enemyCommandBox = null;
+  state.decoyCommandBox = null;
+  // the mousedown/touchstart that started this long-press will still end in a click/touchend
+  // shortly after -- suppress it (same flag the normal pan-drag path uses) so that click
+  // doesn't also try to open the full command box right under this popup.
+  mapDragMoved = true;
+  renderQuickOrderBox(clientX, clientY);
+  render();
+}
+function closeQuickOrder(){
+  if(!quickOrderTarget) return;
+  quickOrderTarget = null;
+  const box = document.getElementById('quick-order-box');
+  if(box) box.style.display = 'none';
+}
+function quickOrderSet(order){
+  if(!quickOrderTarget) return;
+  const def = QUICK_ORDER_KINDS[quickOrderTarget.kind];
+  if(def) def.setter(quickOrderTarget.idx, order);
+  closeQuickOrder();
+}
+function renderQuickOrderBox(clientX, clientY){
+  const box = document.getElementById('quick-order-box');
+  if(!box || !quickOrderTarget){ if(box) box.style.display='none'; return; }
+  const def = QUICK_ORDER_KINDS[quickOrderTarget.kind];
+  if(!def){ box.style.display='none'; return; }
+  const btns = def.orders.map(o=>
+    `<button class="btn quick-order-icon-btn" onclick="quickOrderSet('${o}')" title="${ORDER_LABEL[o]}">${ORDER_ICON[o]}</button>`
+  ).join('');
+  box.innerHTML = `<div class="quick-order-row">${btns}</div>`;
+  positionCommandBox(box, {x:clientX, y:clientY}, 46*def.orders.length+6*(def.orders.length-1));
+}
+
 function setupMapControls(){
   // Attached to #board (the topmost overlay canvas) since it visually covers
   // #board3d and would otherwise swallow all pointer events before they reach it.
@@ -8491,6 +8582,7 @@ function setupMapControls(){
     lastX = e.clientX; lastY = e.clientY;
     mapFocusTarget = null;
     decoyLongPressStart(e.clientX, e.clientY);
+    unitLongPressStart(e.clientX, e.clientY);
     if(mode==='pan'){
       const rect = el.getBoundingClientRect();
       dragGround = groundPlaneCanvasUnitAt(e.clientX-rect.left, e.clientY-rect.top);
@@ -8498,6 +8590,7 @@ function setupMapControls(){
   });
   window.addEventListener('mousemove', e=>{
     decoyLongPressMove(e.clientX, e.clientY);
+    unitLongPressMove(e.clientX, e.clientY);
     if(!mode) return;
     const dx = e.clientX-lastX, dy = e.clientY-lastY;
     if(Math.abs(dx)>2 || Math.abs(dy)>2) mapDragMoved = true;
@@ -8519,7 +8612,7 @@ function setupMapControls(){
       }
     }
   });
-  window.addEventListener('mouseup', ()=>{ mode = null; dragGround = null; decoyLongPressEnd(); });
+  window.addEventListener('mouseup', ()=>{ mode = null; dragGround = null; decoyLongPressEnd(); unitLongPressEnd(); });
 
   el.addEventListener('wheel', e=>{
     e.preventDefault();
@@ -8563,6 +8656,7 @@ function setupMapControls(){
       touchMode = grabFebaAt(touchLastX, touchLastY) ? 'feba' : 'pan';
       mapDragMoved=false;
       decoyLongPressStart(touchLastX, touchLastY);
+      unitLongPressStart(touchLastX, touchLastY);
       dragGround = groundPlaneCanvasUnitAt(lx, ly);
     } else if(e.touches.length===2){
       // A second finger means this is a pinch/rotate gesture, never a tap, so
@@ -8585,6 +8679,7 @@ function setupMapControls(){
       dragFebaTo(touchLastX, touchLastY);
     } else if(touchMode==='pan' && e.touches.length===1){
       decoyLongPressMove(e.touches[0].clientX, e.touches[0].clientY);
+      unitLongPressMove(e.touches[0].clientX, e.touches[0].clientY);
       const dx = e.touches[0].clientX-touchLastX, dy = e.touches[0].clientY-touchLastY;
       if(Math.abs(dx)>2 || Math.abs(dy)>2) mapDragMoved = true;
       touchLastX = e.touches[0].clientX; touchLastY = e.touches[0].clientY;
@@ -8616,6 +8711,7 @@ function setupMapControls(){
   }, {passive:false});
   el.addEventListener('touchend', e=>{
     decoyLongPressEnd();
+    unitLongPressEnd();
     if(e.touches.length===1){
       // Dropping from two fingers to one: resume panning from the remaining
       // finger's current position instead of snapping/jumping.
