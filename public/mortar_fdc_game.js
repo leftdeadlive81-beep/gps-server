@@ -450,11 +450,10 @@ const HELI_MOVE_CAP = VEHICLE_MOVE_CAP * 1.8; // flies -- faster than any ground
 const ARTILLERY_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.artillery) * 0.5; // per user request: enemy artillery move speed halved
 const ARTILLERY_STANDOFF_RANGE_M = 300; // artillery repositions closer but holds once within this range of its nearest target
 const ARTILLERY_STANDOFF_RANGE_UNITS = ARTILLERY_STANDOFF_RANGE_M / METERS_PER_UNIT;
-// per user request: 敵の迫撃砲(砲兵)の有効射程を7割に削減 -- それまで enemyCounterAttack は
-// artillery の距離を一切見ておらず(コメント通り "unlimited range" が意図的な仕様だった)、
-// 事実上マップ全域のどこからでも着弾していた。その「これまでの実質射程」= マップ対角線いっぱい
-// を100%とみなし、その7割を新たな上限として導入する。
-const ARTILLERY_FIRE_RANGE_UNITS = Math.round(Math.hypot(CANVAS_W, CANVAS_H) * 0.7);
+// per user request: 敵の迫撃砲(砲兵)の有効射程を実測5kmに設定(以前はマップ対角線の7割
+// ≒7.4kmの間接的な値だった)。
+const ARTILLERY_FIRE_RANGE_M = 5000;
+const ARTILLERY_FIRE_RANGE_UNITS = ARTILLERY_FIRE_RANGE_M / METERS_PER_UNIT;
 const KM_UNIT = 1000 / METERS_PER_UNIT;
 const ENEMY_SPAWN_RANGE_M = 1500;
 const ENEMY_SPAWN_RANGE_UNITS = ENEMY_SPAWN_RANGE_M / METERS_PER_UNIT;
