@@ -613,6 +613,30 @@ const STANDING_ORDER_LABEL = {
   low_hp_retreat: '損耗50%で後退',
 };
 function unitsToMeters(u){ return Math.round(u*METERS_PER_UNIT); }
+const FRIENDLY_SPACING_RADIUS = 34;
+const FRIENDLY_SPACING_PUSH = 8;
+function maintainFriendlySpacing(){
+  const units = [
+    ...state.squads.map((u,i)=>({u, kind:'squad', idx:i})),
+    ...state.snipers.map((u,i)=>({u, kind:'sniper', idx:i})),
+    ...state.tanks.map((u,i)=>({u, kind:'tank', idx:i})),
+    ...state.sams.map((u,i)=>({u, kind:'sam', idx:i})),
+    ...state.engineers.map((u,i)=>({u, kind:'engineer', idx:i})),
+  ].filter(({u})=>u.hp===undefined ? unitAlive(u) : u.hp>0);
+  for(let i=0;i<units.length;i++){
+    for(let j=i+1;j<units.length;j++){
+      const a = units[i].u, b = units[j].u;
+      const dx = b.x-a.x, dy = b.y-a.y, dist = Math.hypot(dx,dy);
+      if(dist>=FRIENDLY_SPACING_RADIUS) continue;
+      const nx = dist>0 ? dx/dist : 1, ny = dist>0 ? dy/dist : 0;
+      const push = Math.min(FRIENDLY_SPACING_PUSH, (FRIENDLY_SPACING_RADIUS-dist)/2);
+      a.x = clamp(a.x-nx*push, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+      a.y = clamp(a.y-ny*push, 30, CANVAS_H-30);
+      b.x = clamp(b.x+nx*push, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+      b.y = clamp(b.y+ny*push, 30, CANVAS_H-30);
+    }
+  }
+}
 // per user request: a safety net for when the logical position jumps further than any single
 // commit's movement could plausibly cover (e.g. several auto-commit ticks piling up during a
 // main-thread stall before the render loop catches up) -- sliding the marker there over the
@@ -5161,6 +5185,9 @@ function resolveEnemyTurn(actionTurns){
   if(!allEngineersWiped()){
     resolveEngineerOrders(actionTurns);
   }
+  // Keep independently commanded formations from collapsing into one marker while
+  // they advance toward the same FEBA or contact point in real time.
+  maintainFriendlySpacing();
   if(!hit && !infEvent && !sniperEvent && !tankEvent && !samEvent && !advanced && !assaulted && !heliEvent && !swarmed && !cbEvent && !antiDroned && !antiVehicled){
     log('sys','敵ターン', '目立った動きなし。');
   }
