@@ -8197,6 +8197,11 @@ const PROC_TEXTURE_SIZE_X = 520, PROC_TEXTURE_SIZE_Z = 184; // 2.826:1, matching
 // per user request: PROC_COLOR_LOW brightened -- low-lying ground was reading as near-black.
 const PROC_COLOR_LOW = [0x4a,0x52,0x36], PROC_COLOR_HIGH = [0x9a,0x8f,0x66];
 const PROC_COLOR_FOREST = [0x23,0x38,0x1e], PROC_COLOR_WATER = [0x2c,0x4a,0x5e];
+// per user request: the forest tint alone read as a flat, "cheap" green -- these paint
+// mottled tree-canopy clumps (dark/light blotches at PROC_CANOPY_CELL scale) plus sparse
+// bare-earth clearings, on top of the flat PROC_COLOR_FOREST tint below.
+const PROC_CANOPY_CELL = 22, PROC_CANOPY_DARK = [0x16,0x24,0x12], PROC_CANOPY_LIGHT = [0x36,0x52,0x2c];
+const PROC_CLEARING_CELL = 24, PROC_CLEARING_EDGE0 = 0.82, PROC_CLEARING_EDGE1 = 0.9, PROC_CLEARING_COLOR = [0xb3,0x8a,0x66];
 // Shared by the 3D terrain's texture and the setup screen's seed-preview thumbnails
 // (renderMapSelectBody) so both always show exactly the elevation/forest/water picture
 // elevationAtFor/terrainTypeAtFor actually compute for the given descriptor.
@@ -8233,7 +8238,20 @@ function paintTerrainColors(ctx, w, h, gen){
       const type = terrainTypeAtFor(gen, cx, cy);
       let r,g,b,noiseMult;
       if(type===TERRAIN_TYPE_WATER){ [r,g,b] = PROC_COLOR_WATER; noiseMult = 0.35; }
-      else if(type===TERRAIN_TYPE_FOREST){ [r,g,b] = PROC_COLOR_FOREST; noiseMult = 0.6; }
+      else if(type===TERRAIN_TYPE_FOREST){
+        const canopyN = valueNoise2D(cx/PROC_CANOPY_CELL, cy/PROC_CANOPY_CELL, gen.seed+7);
+        r = PROC_CANOPY_DARK[0] + (PROC_CANOPY_LIGHT[0]-PROC_CANOPY_DARK[0])*canopyN;
+        g = PROC_CANOPY_DARK[1] + (PROC_CANOPY_LIGHT[1]-PROC_CANOPY_DARK[1])*canopyN;
+        b = PROC_CANOPY_DARK[2] + (PROC_CANOPY_LIGHT[2]-PROC_CANOPY_DARK[2])*canopyN;
+        const clearingN = valueNoise2D(cx/PROC_CLEARING_CELL, cy/PROC_CLEARING_CELL, gen.seed+13);
+        const clearingT = smoothstep01(clamp((clearingN-PROC_CLEARING_EDGE0)/(PROC_CLEARING_EDGE1-PROC_CLEARING_EDGE0), 0, 1));
+        if(clearingT > 0){
+          r += (PROC_CLEARING_COLOR[0]-r)*clearingT;
+          g += (PROC_CLEARING_COLOR[1]-g)*clearingT;
+          b += (PROC_CLEARING_COLOR[2]-b)*clearingT;
+        }
+        noiseMult = 0.6;
+      }
       else {
         r = PROC_COLOR_LOW[0] + (PROC_COLOR_HIGH[0]-PROC_COLOR_LOW[0])*e;
         g = PROC_COLOR_LOW[1] + (PROC_COLOR_HIGH[1]-PROC_COLOR_LOW[1])*e;
