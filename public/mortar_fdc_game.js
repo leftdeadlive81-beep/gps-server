@@ -578,11 +578,17 @@ const MORTAR_CB_STRIKE_DMG = [56, 84]; // per user request: enemy attack power d
 // fraction of whichever interval is active (see visualTweenDurationMs()) so marker motion
 // still finishes just before the next tick, at any speed.
 const GAME_SPEED_INTERVALS = { slow: 2000, normal: 1000, fast: 500 };
-const GAME_SPEED_LABEL = { slow: '低速', normal: '通常', fast: '高速' };
+const GAME_SPEED_LABEL = { slow: '0.5x', normal: '1x', fast: '2x' };
 // per user request: 3-position slider instead of 3 stacked buttons -- index order for the
 // <input type="range"> in renderDecisionPanel().
 const GAME_SPEED_ORDER = ['slow', 'normal', 'fast'];
 function setGameSpeedByIndex(idx){ setGameSpeed(GAME_SPEED_ORDER[idx]); }
+const WEAPON_FIRE_INTERVAL = { squad:3, tank:4, sam:3, sniper:5 };
+const WEAPON_FIRE_OFFSET = { squad:0, tank:1, sam:2, sniper:3 };
+function unitMayFire(kind, index, tick){
+  const interval = WEAPON_FIRE_INTERVAL[kind] || 3;
+  return ((tick + index*2 + WEAPON_FIRE_OFFSET[kind]) % interval) === 0;
+}
 function visualTweenDurationMs(){
   const ms = GAME_SPEED_INTERVALS[(state && state.gameSpeed) || 'normal'];
   return Math.round(ms*0.96);
@@ -816,6 +822,7 @@ function fireTracer(startX, startY, endX, endY, duration, weaponType){
   enemyTracers.push({startX, startY, endX, endY, born:now, duration, weaponType:wt});
   const st = MUZZLE_STYLE[wt] || MUZZLE_STYLE.rifle;
   flashes.push({x:startX, y:startY, born:now, life:st.life, muzzle:true, weaponType:wt});
+  spawn3dMuzzleFlash(startX, startY, wt);
 }
 // per user request: a bigger "destroyed" flourish (explosion+debris, rising wreck smoke,
 // a floating kill banner), shared by both sides -- see spawnDestructionEffect().
@@ -856,6 +863,110 @@ let shockwaves = [];
 // aggregate, so this follows the same array+cap pattern as MAX_DEBRIS_PARTICLES.
 let impactLights = [];
 const MAX_IMPACT_LIGHTS = 6;
+let effects3d = [];
+const MAX_EFFECTS_3D = 80;
+function effectWorldPosition(x, y, lift){
+  const pos = canvasUnitToWorldXZ(x, y);
+  return new THREE.Vector3(pos.x, terrainHeightAt(x, y)+(lift||0), pos.z);
+}
+function disposeEffect3d(effect){
+  if(scene3d) scene3d.remove(effect.group);
+  effect.group.traverse(child=>{
+    if(child.geometry) child.geometry.dispose();
+    if(child.material) child.material.dispose();
+  });
+}
+function addEffect3d(group, born, life, update){
+  if(!scene3d) return;
+  scene3d.add(group);
+  effects3d.push({group, born, life, lastUpdate:born, update});
+  while(effects3d.length > MAX_EFFECTS_3D) disposeEffect3d(effects3d.shift());
+}
+function spawn3dMuzzleFlash(x, y, weaponType){
+  if(typeof THREE === 'undefined' || !scene3d) return;
+  const p = effectWorldPosition(x, y, 18);
+  const group = new THREE.Group();
+  const color = weaponType==='drone' ? 0xff7048 : weaponType==='cannon' ? 0xffc15d : 0xffe0a0;
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry((weaponType==='cannon'?16:10), 8, 6),
+    new THREE.MeshBasicMaterial({color, transparent:true})
+  );
+  group.add(core);
+  group.position.copy(p);
+  addEffect3d(group, performance.now(), weaponType==='cannon'?180:110, (e,t)=>{
+    const scale = 1 + t*2.5;
+    e.group.scale.set(scale, scale, scale);
+    core.material.opacity = 1-t;
+  });
+}
+function spawn3dImpactEffect(x, y, kind){
+  if(typeof THREE === 'undefined' || !scene3d) return;
+  const p = effectWorldPosition(x, y, kind==='smoke' ? 8 : 4);
+  const group = new THREE.Group();
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(8, 13, 20),
+    new THREE.MeshBasicMaterial({color:kind==='smoke'?0x8b927d:0xffb45d, transparent:true, side:THREE.DoubleSide})
+  );
+  ring.rotation.x = -Math.PI/2;
+  group.add(ring);
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(kind==='smoke'?18:13, 8, 6),
+    new THREE.MeshBasicMaterial({color:kind==='smoke'?0x7b8274:0xff7b35, transparent:true})
+  );
+  core.position.y = 10;
+  group.add(core);
+  for(let i=0;i<6;i++){
+    const spark = new THREE.Mesh(
+      new THREE.SphereGeometry(3.5, 6, 5),
+      new THREE.MeshBasicMaterial({color:0xffd18a, transparent:true})
+    );
+    spark.userData.v = new THREE.Vector3(rnd(-55,55), rnd(35,95), rnd(-55,55));
+    group.add(spark);
+  }
+  group.position.copy(p);
+  const life = kind==='smoke' ? 1800 : 650;
+  addEffect3d(group, performance.now(), life, (e,t,dt)=>{
+    ring.scale.setScalar(1+t*8);
+    ring.material.opacity = (1-t)*0.8;
+    core.scale.setScalar(1+t*1.5);
+    core.material.opacity = (1-t)*0.8;
+    e.group.children.slice(2).forEach(spark=>{
+      spark.position.addScaledVector(spark.userData.v, dt/1000);
+      spark.userData.v.y -= 130*dt/1000;
+      spark.material.opacity = 1-t;
+    });
+    if(kind==='smoke') e.group.rotation.y += dt*0.0004;
+  });
+  triggerCameraCinematic(x, y, kind==='explosion'?Math.min(MAP_ZOOM_MAX, MAP_VIEW.zoom*1.35):Math.min(MAP_ZOOM_MAX, MAP_VIEW.zoom*1.18), kind==='explosion'?850:500, kind==='explosion'?180:80);
+}
+function spawn3dProjectile(startX, startY, endX, endY, duration){
+  if(typeof THREE === 'undefined' || !scene3d) return;
+  const group = new THREE.Group();
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(5, 8, 6),
+    new THREE.MeshBasicMaterial({color:0xffd38a, transparent:true})
+  );
+  group.add(mesh);
+  const born = performance.now();
+  triggerCameraCinematic(endX, endY, Math.min(MAP_ZOOM_MAX, MAP_VIEW.zoom*1.12), Math.min(900, duration), 0);
+  addEffect3d(group, born, duration, (e,t)=>{
+    const x = startX+(endX-startX)*t;
+    const y = startY+(endY-startY)*t;
+    e.group.position.copy(effectWorldPosition(x, y, 35+Math.sin(t*Math.PI)*100));
+    mesh.material.opacity = 0.95;
+  });
+}
+function update3dEffects(){
+  if(!effects3d.length) return;
+  const now = performance.now();
+  effects3d = effects3d.filter(effect=>{
+    const elapsed = now-effect.born;
+    if(elapsed >= effect.life){ disposeEffect3d(effect); return false; }
+    effect.update(effect, elapsed/effect.life, Math.min(50, now-effect.lastUpdate));
+    effect.lastUpdate = now;
+    return true;
+  });
+}
 function spawnImpactLight(x, y){
   if(typeof THREE === 'undefined' || !scene3d) return;
   if(impactLights.length >= MAX_IMPACT_LIGHTS){
@@ -1888,6 +1999,7 @@ function applyDecoyPlacementMode(mode){
     log('sys','工兵', `擬陣地、手動設置モード。地図を長押しして最大${MAX_DECOYS}箇所を指定せよ。`);
   }
   render();
+  if(!state.decoyPlacementPending) startRealtimeLoop();
 }
 function placeDecoyAt(x, y){
   if(!state.decoyPlacementPending || state.decoys.length>=MAX_DECOYS) return;
@@ -1901,6 +2013,7 @@ function finishDecoyPlacement(){
   state.decoyPlacementPending = false;
   log('sys','工兵', `擬陣地の設置完了(${state.decoys.length}箇所)。`);
   render();
+  startRealtimeLoop();
 }
 
 function retryStage(){
@@ -2742,6 +2855,7 @@ function spawnDestructionEffect(x, y, label, color){
   flashes.push({x, y, born: born+130, life:650, big:true});
   shockwaves.push({x, y, born, life:520});
   spawnImpactLight(x, y);
+  spawn3dImpactEffect(x, y, 'explosion');
   // screen shake, scaled by how close the impact lands to screen center -- full strength near
   // the middle of the view, fading to none past ~420px so an explosion off in a corner of a
   // wide-angle view doesn't jolt the whole screen.
@@ -2962,6 +3076,10 @@ function enemyCounterAttack(actionTurns){
   for(let i=0;i<actionTurns;i++){
     remaining.forEach(t=>{
       if(t.destroyed) return;
+      // Enemy formations also use staggered fire windows; otherwise the real-time
+      // resolver makes every visible contact shoot on the same simulation slice.
+      const targetIndex = remaining.indexOf(t);
+      if(((state.turns + i + targetIndex) % 3) !== 0) return;
       // per user request: the enemy HQ is a fixed structure, not a unit with a weapon of its
       // own -- it never counter-attacks (COUNTER_CHANCE/COUNTER_DAMAGE have no 'hq' entry,
       // same as 'heli', whose attacks are instead handled entirely by resolveHeliAssault).
@@ -3022,6 +3140,7 @@ function enemyCounterAttack(actionTurns){
               render();
             }
           });
+          spawn3dProjectile(e.x, e.y, near.x, near.y, FLIGHT_DURATION);
         } else if(rollExposureHit(getUnitExposure(near))){
           damageFriendlyAsset(near, dmg, sourceLabel);
           fireTracer(e.x, e.y, near.x, near.y, 320, t.type==='vehicle' ? 'cannon' : 'rifle');
@@ -3193,6 +3312,7 @@ function resolveSquadOrders(actionTurns){
     state.squads.forEach((sq, sqIdx)=>{
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
       if(aliveSoldiers.length===0) return;
+      if(!unitMayFire('squad', sqIdx, state.turns+i+1)) return;
       if(sq.resting){ tickUnitRest(sq, `第${sqIdx+1}小隊`); return; }
       applyStandingOrder(sq, `第${sqIdx+1}小隊`, true);
       applySquadMovement(sq, sqIdx);
@@ -3207,12 +3327,15 @@ function resolveSquadOrders(actionTurns){
         if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
       }
       if(engageTargets.length===0) return;
+      if(!unitMayFire('squad', sqIdx, state.turns+i)) return;
       let dmgMult=1, casualtyMult=1;
       if(sq.order==='assault' || sq.order==='hunt'){ dmgMult=1.6; casualtyMult=1.5; }
       else if(sq.order==='hold'){ dmgMult=0.9; casualtyMult=0.6; }
       else if(sq.order==='retreat'){ dmgMult=0.5; casualtyMult=0.7; }
 
+      let firedThisTick = false;
       engageTargets.forEach(t=>{
+        if(firedThisTick) return;
         if(t.destroyed) return;
         const e = estPos(t);
         const dist = Math.hypot(e.x-sq.x, e.y-sq.y);
@@ -3243,6 +3366,7 @@ function resolveSquadOrders(actionTurns){
         const dmgToEnemy = Math.round(rnd(INFANTRY_DUEL_DMG_TO_ENEMY[0], INFANTRY_DUEL_DMG_TO_ENEMY[1]) * strengthFrac * dmgMult * squadAltMult * suppressionDmgMult * enemyExposureMult * vetDmgMult);
         applyDamageToTarget(t, dmgToEnemy);
         anyEvent = true;
+        firedThisTick = true;
         // per user request: show a shooting animation for the squad's own outgoing fire too,
         // not just the enemy's return fire on a casualty (see fireTracer() below)
         fireTracer(sq.x, sq.y, e.x, e.y, 220, 'rifle');
@@ -3378,12 +3502,15 @@ function resolveSamOrders(actionTurns){
         if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
       }
       if(engageTargets.length===0) return;
+      if(!unitMayFire('sam', idx, state.turns+i)) return;
       let dmgMult=1;
       if(sam.order==='hunt'){ dmgMult=1.5; }
       else if(sam.order==='hold'){ dmgMult=0.9; }
       else if(sam.order==='retreat'){ dmgMult=0.5; }
 
+      let firedThisTick = false;
       engageTargets.forEach(t=>{
+        if(firedThisTick) return;
         if(t.destroyed) return;
         const e = estPos(t);
         const dist = Math.hypot(e.x-sam.x, e.y-sam.y);
@@ -3396,6 +3523,7 @@ function resolveSamOrders(actionTurns){
         const dmgToEnemy = Math.round(rnd(SAM_DUEL_DMG_TO_ENEMY[0], SAM_DUEL_DMG_TO_ENEMY[1]) * dmgMult * samAltMult * enemyExposureMult);
         applyDamageToTarget(t, dmgToEnemy);
         anyEvent = true;
+        firedThisTick = true;
         fireTracer(sam.x, sam.y, e.x, e.y, 220, 'missile');
         if(t.hp<=0 && !t.destroyed){
           t.destroyed = true; t.hp = 0;
@@ -3423,12 +3551,15 @@ function resolveTankOrders(actionTurns){
         if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
       }
       if(engageTargets.length===0) return;
+      if(!unitMayFire('tank', idx, state.turns+i)) return;
       let dmgMult=1, incomingMult=1;
       if(tank.order==='hunt'){ dmgMult=1.5; incomingMult=1.3; }
       else if(tank.order==='hold'){ dmgMult=0.9; incomingMult=0.7; }
       else if(tank.order==='retreat'){ dmgMult=0.5; incomingMult=0.6; }
 
+      let firedThisTick = false;
       engageTargets.forEach(t=>{
+        if(firedThisTick) return;
         if(t.destroyed || tank.hp<=0) return;
         const e = estPos(t);
         const dist = Math.hypot(e.x-tank.x, e.y-tank.y);
@@ -3452,6 +3583,7 @@ function resolveTankOrders(actionTurns){
         const dmgToEnemy = Math.round(rnd(TANK_DUEL_DMG_TO_ENEMY[0], TANK_DUEL_DMG_TO_ENEMY[1]) * dmgMult * tankAltMult * suppressionDmgMult * enemyExposureMult);
         applyDamageToTarget(t, dmgToEnemy);
         anyEvent = true;
+        firedThisTick = true;
         fireTracer(tank.x, tank.y, e.x, e.y, 220, 'cannon');
         if(t.hp<=0 && !t.destroyed){
           t.destroyed = true; t.hp = 0;
@@ -3624,6 +3756,7 @@ function resolveSniperOrders(actionTurns){
       if(sn.resting){ tickUnitRest(sn, `狙撃${sn.id+1}班`); return; }
       applyStandingOrder(sn, `狙撃${sn.id+1}班`, false);
       applySniperMovement(sn);
+      if(!unitMayFire('sniper', sn.id, state.turns+i)) return;
 
       if(sn.pendingSnipeTargetId){
         const t = state.targets.find(x=>x.id===sn.pendingSnipeTargetId);
@@ -4808,6 +4941,7 @@ function resolveSquadAntiVehicle(actionTurns){
     state.squads.forEach((sq, sqIdx)=>{
       const curAlive = sq.soldiers.filter(s=>s.alive);
       if(curAlive.length===0) return;
+      if(!unitMayFire('squad', sqIdx, state.turns+i+2)) return;
       state.targets.forEach(t=>{
         if(t.destroyed || t.type!=='vehicle') return;
         if(Math.hypot(t.trueX-sq.x, t.trueY-sq.y) > VEHICLE_ASSAULT_RANGE) return;
@@ -4997,7 +5131,6 @@ function resolveMortarCounterBattery(actionTurns){
 }
 
 function resolveEnemyTurn(actionTurns){
-  log('sys','敵ターン', '━━━ 敵が行動 ━━━');
   maybePlaceMine();
   resolveHqMovement(actionTurns);
   const advanced = advanceEnemyInfantry(actionTurns);
@@ -5092,9 +5225,11 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
             hitAny = true;
             if(shell==='illum'){
               state.illumFlares.push({x:ix, y:iy, born:performance.now(), turnsLeft:ILLUM_DURATION_TURNS});
+              spawn3dImpactEffect(ix, iy, 'explosion');
               log('mortar','観測', `弾着${i+1}: 照明弾、上空で破裂。光弾が降下しながら半径${Math.round(ILLUM_RADIUS_M)}mを照射(${ILLUM_DURATION_TURNS}ターン持続)。`);
             } else if(shell==='smoke'){
               state.smokeClouds.push({x:ix, y:iy, turnsLeft:SMOKE_DURATION_TURNS, born:performance.now()});
+              spawn3dImpactEffect(ix, iy, 'smoke');
               log('mortar','観測', `弾着${i+1}: 発煙弾展開。半径${Math.round(SMOKE_RADIUS_M)}mを遮蔽(${SMOKE_DURATION_TURNS}ターン持続)。`);
             } else {
               let revealedCount = 0;
@@ -5199,31 +5334,32 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
           render();
         }
       });
+      spawn3dProjectile(mortar.x, mortar.y-16, ix, iy, FLIGHT_DURATION);
     }, i*LAUNCH_INTERVAL);
   }
 }
 
-// per user request: an "自動" toggle button beside 決心 that presses it automatically at a
-// player-selectable pace (see GAME_SPEED_INTERVALS/setGameSpeed) until pressed again.
-// commitDecision() already no-ops safely whenever it isn't valid to commit (animating, stage
-// resolved, placement pending, etc.), so the interval can just keep firing blindly without
-// needing its own state checks.
+// Real-time simulation loop. The resolver still uses one-second simulation slices so existing
+// movement, ballistic timing, and damage rules remain stable, but no 決心 input is required.
 let autoCommitTimer = null;
 function isAutoCommitRunning(){ return autoCommitTimer!==null; }
 function autoCommitTick(){
-  // per user request: pause auto-commit while any unit instruction panel is open, so it
-  // doesn't advance the turn out from under the player mid-decision
-  if(state.commandBox || state.enemyCommandBox || state.decoyCommandBox) return;
   commitDecision();
+}
+function startRealtimeLoop(){
+  if(!state || state.stageResolved || state.placementPending || state.decoyPlacementPending || autoCommitTimer) return;
+  autoCommitTimer = setInterval(autoCommitTick, GAME_SPEED_INTERVALS[state.gameSpeed]);
+  log('sys','システム', `リアルタイム戦闘開始(${GAME_SPEED_LABEL[state.gameSpeed]})。命令は即時反映されます。`);
+  autoCommitTick();
+  render();
 }
 function toggleAutoCommit(){
   if(autoCommitTimer){
     clearInterval(autoCommitTimer);
     autoCommitTimer = null;
-    log('sys','システム', '状況を停止。');
+    log('sys','システム', 'リアルタイム戦闘を一時停止。');
   } else {
-    autoCommitTimer = setInterval(autoCommitTick, GAME_SPEED_INTERVALS[state.gameSpeed]);
-    log('sys','システム', `状況開始(${GAME_SPEED_LABEL[state.gameSpeed]}・${(GAME_SPEED_INTERVALS[state.gameSpeed]/1000).toFixed(2)}秒間隔で進行)。`);
+    startRealtimeLoop();
   }
   render();
 }
@@ -5236,7 +5372,7 @@ function setGameSpeed(speed){
     clearInterval(autoCommitTimer);
     autoCommitTimer = setInterval(autoCommitTick, GAME_SPEED_INTERVALS[speed]);
   }
-  log('sys','システム', `進行速度を${GAME_SPEED_LABEL[speed]}(${(GAME_SPEED_INTERVALS[speed]/1000).toFixed(2)}秒間隔)に変更。`);
+  log('sys','システム', `リアルタイム速度を${GAME_SPEED_LABEL[speed]}に変更。`);
   render();
 }
 // per user request: pause auto-commit while the tab is hidden (backgrounded/minimized).
@@ -5257,7 +5393,7 @@ document.addEventListener('visibilitychange', ()=>{
     }
   } else if(autoCommitPausedByVisibility){
     autoCommitPausedByVisibility = false;
-    autoCommitTimer = setInterval(autoCommitTick, GAME_SPEED_INTERVALS[state.gameSpeed]);
+    startRealtimeLoop();
   }
 });
 
@@ -5272,8 +5408,12 @@ function commitDecision(){
   // the same shortfall and return before anything else ever resolves.
   let heBudget = state.ammo.he, heatBudget = state.ammo.heat;
   const firingMortars = [];
+  const queuedMortars = state.mortars.filter(m=>m.hp>0 && m.pendingFire);
+  const selectedMortarId = queuedMortars.length
+    ? queuedMortars[Math.floor(state.turns/2) % queuedMortars.length].id
+    : null;
   state.mortars.forEach(m=>{
-    if(m.hp<=0 || !m.pendingFire) return;
+    if(m.hp<=0 || !m.pendingFire || m.id!==selectedMortarId) return;
     if(m.fireShell==='he' || m.fireShell==='heat'){
       const budget = m.fireShell==='he' ? heBudget : heatBudget;
       if(m.fireCount > budget){
@@ -5302,7 +5442,6 @@ function commitDecision(){
   state.illumFlares = state.illumFlares.filter(f=>f.turnsLeft>0);
 
   speakCoordination();
-  log('sys','司令部', '━━━ 決心 ━━━');
   resolveScoutDecision();
   resolveMortarDecision();
   resolveEnemyTurn(turnCost);
@@ -5365,6 +5504,7 @@ function updateProjectiles(){
     const prog = (now-p.born)/p.duration;
     if(prog >= 1){
       flashes.push({x:p.endX, y:p.endY, born:now, life:400});
+      spawn3dImpactEffect(p.endX, p.endY, 'impact');
       p.onLand();
       return false;
     }
@@ -5379,6 +5519,7 @@ function updateEnemyTracers(){
     const prog = (now-tr.born)/tr.duration;
     if(prog >= 1){
       flashes.push({x:tr.endX, y:tr.endY, born:now, life:350});
+      spawn3dImpactEffect(tr.endX, tr.endY, 'impact');
       return false;
     }
     return true;
@@ -6681,7 +6822,7 @@ function renderStats(){
   document.querySelector('#stat-difficulty .value').textContent = DIFFICULTIES[state.difficulty].label;
   document.querySelector('#stat-weather .value').textContent = WEATHER_TYPES[state.weather].label;
   document.querySelector('#stat-achievements .value').textContent = unlockedAchievements.size+' / '+Object.keys(ACHIEVEMENTS).length;
-  document.querySelector('#stat-turns .value').textContent = state.turns;
+  document.querySelector('#stat-turns .value').textContent = `${state.missionMinutes}分`;
   document.querySelector('#stat-money .value').textContent = '¥'+state.money.toLocaleString();
   const remainingTargets = state.targets.filter(t=>!t.destroyed).length;
   document.getElementById('stat-left').textContent = remainingTargets + ' / ' + state.targetsSpawnedTotal;
@@ -6698,7 +6839,7 @@ function renderStats(){
   const clockNow = gameClockNow();
   const clockTimeOnly = `${String(clockNow.getHours()).padStart(2,'0')}${String(clockNow.getMinutes()).padStart(2,'0')}`;
   document.getElementById('statbar-mini').textContent =
-    `${clockTimeOnly} ・ WAVE ${state.stage}/${STAGE_COUNT} ・ 経過ターン${state.turns} ・ ¥${state.money.toLocaleString()} ・ 兵力${aliveTotal}/${totalRosterCapacity()}`;
+    `${clockTimeOnly} ・ WAVE ${state.stage}/${STAGE_COUNT} ・ 経過${state.missionMinutes}分 ・ ¥${state.money.toLocaleString()} ・ 兵力${aliveTotal}/${totalRosterCapacity()}`;
 
   const revealed = state.targets.filter(t=>t.revealed && !t.destroyed);
   const byType = {};
@@ -6822,7 +6963,7 @@ function renderDecisionPanel(){
             oninput="setGameSpeedByIndex(this.value)" title="進行速度">
           <span class="speed-slider-label">${GAME_SPEED_LABEL[state.gameSpeed]}</span>
         </div>
-        <button class="btn primary decision-btn" ${disabled?'disabled':''} onclick="toggleAutoCommit()">${isAutoCommitRunning()?'状況中':'状況開始'}</button>
+        <button class="btn primary decision-btn" ${state.stageResolved?'disabled':''} onclick="toggleAutoCommit()">${isAutoCommitRunning()?'戦闘中':'戦闘開始'}</button>
       </div>
     </div>
   `; });
@@ -8277,6 +8418,24 @@ const MAP_VIEW = {
 };
 const MAP_ZOOM_MIN = 0.35, MAP_ZOOM_MAX = 9; // per user request: allow zooming in further (was 5)
 const MAP_POLAR_MIN = 0.12, MAP_POLAR_MAX = 1.45;
+let cameraCinematic = null;
+function triggerCameraCinematic(x, y, zoom, duration, holdMs){
+  if(!camera3d || !MAP_VIEW.containerW) return;
+  const now = performance.now();
+  const current = cameraCinematic && cameraCinematic.returnView
+    ? cameraCinematic.returnView
+    : {cx:MAP_VIEW.cx, cy:MAP_VIEW.cy, zoom:MAP_VIEW.zoom};
+  cameraCinematic = {
+    returnView: current,
+    target:{x, y, zoom:clamp(zoom, MAP_ZOOM_MIN, MAP_ZOOM_MAX)},
+    started:now,
+    duration:Math.max(250, duration||700),
+    holdUntil:now+Math.max(0, holdMs||0),
+  };
+}
+function cancelCameraCinematic(){
+  cameraCinematic = null;
+}
 // scaleX/scaleZ are independent (not a single uniform unitsPerCanvasUnit) so that
 // canvas-unit space (0..CANVAS_W, 0..CANVAS_H) always covers the FULL loaded terrain
 // mesh in both directions, whatever its real-world aspect ratio happens to be. A single
@@ -8985,8 +9144,25 @@ function projectAtWorldY(cx, cy, worldY){
 
 function updateCameraFromView(){
   if(!camera3d) return;
-  const look = canvasUnitToWorldXZ(MAP_VIEW.cx, MAP_VIEW.cy);
-  const lookY = terrainHeightAt(MAP_VIEW.cx, MAP_VIEW.cy);
+  let viewCx = MAP_VIEW.cx, viewCy = MAP_VIEW.cy, viewZoom = MAP_VIEW.zoom;
+  if(cameraCinematic){
+    const now = performance.now();
+    const c = cameraCinematic;
+    const elapsed = now-c.started;
+    if(elapsed >= c.duration){
+      cameraCinematic = null;
+    } else {
+      const t = clamp(elapsed/c.duration, 0, 1);
+      const ease = t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
+      const hold = now < c.holdUntil;
+      const blend = hold ? 1 : ease;
+      viewCx = c.returnView.cx + (c.target.x-c.returnView.cx)*blend;
+      viewCy = c.returnView.cy + (c.target.y-c.returnView.cy)*blend;
+      viewZoom = c.returnView.zoom + (c.target.zoom-c.returnView.zoom)*blend;
+    }
+  }
+  const look = canvasUnitToWorldXZ(viewCx, viewCy);
+  const lookY = terrainHeightAt(viewCx, viewCy);
   camera3d.aspect = (MAP_VIEW.containerW||1)/(MAP_VIEW.containerH||1);
   const fieldW = (CANVAS_W*WORLD.scaleX) || 200;
   const fieldH = (CANVAS_H*WORLD.scaleZ) || 200;
@@ -9068,7 +9244,7 @@ function updateCameraFromView(){
     cameraNeedsInitialFit = false;
   }
 
-  applyDist((diag*0.9)/MAP_VIEW.zoom);
+  applyDist((diag*0.9)/viewZoom);
 }
 
 function resizeThree(){
@@ -9295,6 +9471,7 @@ function setupMapControls(){
   let mode = null, lastX=0, lastY=0, dragGround=null;
   el.addEventListener('mousedown', e=>{
     mapDragMoved = false;
+    cancelCameraCinematic();
     mode = grabFebaAt(e.clientX, e.clientY) ? 'feba' : (e.button===2 ? 'rotate' : 'pan');
     lastX = e.clientX; lastY = e.clientY;
     mapFocusTarget = null;
@@ -9333,6 +9510,7 @@ function setupMapControls(){
 
   el.addEventListener('wheel', e=>{
     e.preventDefault();
+    cancelCameraCinematic();
     mapFocusTarget = null;
     const factor = e.deltaY<0 ? 1.12 : 1/1.12;
     MAP_VIEW.zoom = clamp(MAP_VIEW.zoom*factor, MAP_ZOOM_MIN, MAP_ZOOM_MAX);
@@ -9361,6 +9539,7 @@ function setupMapControls(){
     y:(touches[0].clientY+touches[1].clientY)/2,
   });
   el.addEventListener('touchstart', e=>{
+    cancelCameraCinematic();
     mapFocusTarget = null;
     if(e.touches.length===1){
       touchLastX=e.touches[0].clientX; touchLastY=e.touches[0].clientY;
@@ -9456,16 +9635,71 @@ function setupMapControls(){
 }
 
 function makeMarkerMesh3d(shape, colorHex){
-  let geo;
-  const s = ()=> Math.max(0.6, (WORLD.scaleX+WORLD.scaleZ)/2*10);
-  if(shape==='cone') geo = new THREE.ConeGeometry(s()*0.55, s()*1.3, 8);
-  else if(shape==='diamond') geo = new THREE.OctahedronGeometry(s()*0.7);
-  else if(shape==='box') geo = new THREE.BoxGeometry(s()*0.9, s()*0.7, s()*0.9);
-  else if(shape==='cylinder') geo = new THREE.CylinderGeometry(s()*0.5, s()*0.5, s()*1.1, 10);
-  else geo = new THREE.SphereGeometry(s()*0.6, 10, 8);
-  const mat = new THREE.MeshStandardMaterial({ color: colorHex, roughness:0.7, metalness:0.05 });
-  const mesh = new THREE.Mesh(geo, mat);
-  return mesh;
+  const group = new THREE.Group();
+  const s = Math.max(0.6, (WORLD.scaleX+WORLD.scaleZ)/2*10);
+  const mat = color=>new THREE.MeshStandardMaterial({color, roughness:0.7, metalness:0.05});
+  const add = (geometry, material, y=0, z=0)=>{
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(0, y, z);
+    group.add(mesh);
+    return mesh;
+  };
+  const addFlag = (color)=>{
+    add(new THREE.CylinderGeometry(s*0.035, s*0.035, s*1.8, 6), mat(0x3b3024), s*0.9);
+    const flag = add(new THREE.PlaneGeometry(s*0.65, s*0.32), mat(color), s*1.58);
+    flag.position.x = s*0.32;
+    flag.rotation.y = Math.PI/2;
+  };
+  const addBarrel = (color, length, height)=>{
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(s*0.08, s*0.1, length, 8), mat(color));
+    barrel.rotation.x = Math.PI/2;
+    barrel.position.set(0, height, length/2);
+    group.add(barrel);
+  };
+  if(shape==='tank'){
+    add(new THREE.BoxGeometry(s*1.4, s*0.42, s*1.9), mat(colorHex), s*0.25);
+    add(new THREE.BoxGeometry(s*0.72, s*0.28, s*0.72), mat(0x42576b), s*0.6);
+    addBarrel(0x2a3238, s*1.15, s*0.68);
+    addFlag(colorHex);
+  } else if(shape==='mortar'){
+    add(new THREE.CylinderGeometry(s*0.5, s*0.58, s*0.24, 8), mat(colorHex), s*0.12);
+    const tube = add(new THREE.CylinderGeometry(s*0.12, s*0.16, s*0.95, 8), mat(0x3d4649), s*0.65);
+    tube.rotation.z = -Math.PI*0.28;
+    addFlag(colorHex);
+  } else if(shape==='sam'){
+    add(new THREE.BoxGeometry(s*1.2, s*0.28, s*1.2), mat(colorHex), s*0.16);
+    add(new THREE.CylinderGeometry(s*0.18, s*0.24, s*0.65, 8), mat(0x39454d), s*0.55);
+    addBarrel(0x9aafbd, s*0.75, s*0.7);
+    addFlag(colorHex);
+  } else if(shape==='infantry' || shape==='scout' || shape==='sniper'){
+    const count = shape==='infantry' ? 5 : 3;
+    const positions = shape==='infantry'
+      ? [[-0.42,0.1],[-0.21,-0.14],[0,0.14],[0.21,-0.14],[0.42,0.1]]
+      : [[-0.3,0.1],[0,-0.12],[0.3,0.1]];
+    positions.slice(0,count).forEach(([x,z])=>{
+      const soldier = add(new THREE.CylinderGeometry(s*0.13, s*0.15, s*0.42, 8), mat(colorHex), s*0.3, z*s*0.8);
+      soldier.position.x = x*s*0.8;
+      add(new THREE.SphereGeometry(s*0.14, 8, 6), mat(0xd1b28a), s*0.58, z*s*0.8).position.x = x*s*0.8;
+    });
+    addFlag(shape==='sniper' ? 0xc5c0a5 : colorHex);
+  } else if(shape==='engineer'){
+    add(new THREE.BoxGeometry(s*0.9, s*0.3, s*0.7), mat(colorHex), s*0.2);
+    add(new THREE.CylinderGeometry(s*0.22, s*0.22, s*0.8, 8), mat(0x6b573f), s*0.7);
+    addFlag(colorHex);
+  } else if(shape==='hq'){
+    add(new THREE.BoxGeometry(s*1.2, s*0.8, s*1.2), mat(colorHex), s*0.4);
+    add(new THREE.ConeGeometry(s*0.85, s*0.7, 4), mat(0x4b5961), s*1.15);
+    addFlag(colorHex);
+  } else {
+    let geo;
+    if(shape==='cone') geo = new THREE.ConeGeometry(s*0.55, s*1.3, 8);
+    else if(shape==='diamond') geo = new THREE.OctahedronGeometry(s*0.7);
+    else if(shape==='box') geo = new THREE.BoxGeometry(s*0.9, s*0.7, s*0.9);
+    else if(shape==='cylinder') geo = new THREE.CylinderGeometry(s*0.5, s*0.5, s*1.1, 10);
+    else geo = new THREE.SphereGeometry(s*0.6, 10, 8);
+    add(geo, mat(colorHex), s*0.5);
+  }
+  return group;
 }
 
 function getMarker3d(key, shape, colorHex){
@@ -9489,8 +9723,13 @@ function disposeMarker3d(key){
   const m = unitMarkers3d[key];
   if(!m) return;
   if(scene3d) scene3d.remove(m);
-  if(m.geometry) m.geometry.dispose();
-  if(m.material) m.material.dispose();
+  m.traverse(child=>{
+    if(child.geometry) child.geometry.dispose();
+    if(child.material){
+      if(Array.isArray(child.material)) child.material.forEach(material=>material.dispose());
+      else child.material.dispose();
+    }
+  });
   delete unitMarkers3d[key];
 }
 
@@ -9512,7 +9751,7 @@ function syncUnitMarkers3d(){
   // per user request: HQ is now movable -- use its smoothed visual position (set by
   // drawBoard's smoothVisualPos call) so this 3D box marker eases along with the 2D icon
   // instead of snapping straight to the logical position each tick.
-  place('hq', state.hq._visX!==undefined?state.hq._visX:state.hq.x, state.hq._visY!==undefined?state.hq._visY:state.hq.y, 'box', state.hq.hp>0 ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
+  place('hq', state.hq._visX!==undefined?state.hq._visX:state.hq.x, state.hq._visY!==undefined?state.hq._visY:state.hq.y, 'hq', state.hq.hp>0 ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
   // Primitive 3D unit markers are intentionally kept separate from the 2D labels/HUD.
   // This is the first full-3D pass: the shapes can later be replaced by GLTF models
   // without changing game state or order logic.
@@ -9520,13 +9759,13 @@ function syncUnitMarkers3d(){
     const p = smoothVisualPos(unit, unit.x, unit.y);
     place(key, p.x, p.y, shape, alive ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
   };
-  state.mortars.forEach((m,i)=>friendlyUnit('mortar'+i, m, 'cylinder', m.hp>0));
-  state.tanks.forEach((tk,i)=>friendlyUnit('tank'+i, tk, 'box', tk.hp>0));
-  state.sams.forEach((sam,i)=>friendlyUnit('sam'+i, sam, 'cone', sam.hp>0));
-  state.scouts.forEach((s,i)=>friendlyUnit('scout'+i, s, 'diamond', unitAlive(s)));
-  state.squads.forEach((sq,i)=>friendlyUnit('squad'+i, sq, 'sphere', unitAlive(sq)));
-  state.snipers.forEach((sn,i)=>friendlyUnit('sniper'+i, sn, 'cone', unitAlive(sn)));
-  state.engineers.forEach((en,i)=>friendlyUnit('engineer'+i, en, 'box', unitAlive(en)));
+  state.mortars.forEach((m,i)=>friendlyUnit('mortar'+i, m, 'mortar', m.hp>0));
+  state.tanks.forEach((tk,i)=>friendlyUnit('tank'+i, tk, 'tank', tk.hp>0));
+  state.sams.forEach((sam,i)=>friendlyUnit('sam'+i, sam, 'sam', sam.hp>0));
+  state.scouts.forEach((s,i)=>friendlyUnit('scout'+i, s, 'scout', unitAlive(s)));
+  state.squads.forEach((sq,i)=>friendlyUnit('squad'+i, sq, 'infantry', unitAlive(sq)));
+  state.snipers.forEach((sn,i)=>friendlyUnit('sniper'+i, sn, 'sniper', unitAlive(sn)));
+  state.engineers.forEach((en,i)=>friendlyUnit('engineer'+i, en, 'engineer', unitAlive(en)));
   // per user request: 防壁(壁) -- 他の自軍ユニットと違い専用の2Dベクター描画に加えて、
   // 3Dミニマップ上でも障害物として視認できるよう箱形メッシュを配置する。
   state.walls.forEach(w=>{
@@ -9540,7 +9779,7 @@ function syncUnitMarkers3d(){
     if(!isTargetDetected(t)){ place(key, 0, 0, 'sphere', 0, false); return; }
     const eLogical = estPos(t);
     const e = smoothVisualPos(t, eLogical.x, eLogical.y);
-    const shape = t.type==='hq' ? 'box' : t.type==='vehicle' ? 'box' : t.type==='artillery' ? 'cylinder' : t.type==='drone' ? 'diamond' : t.type==='heli' ? 'cone' : 'sphere';
+    const shape = t.type==='hq' ? 'hq' : t.type==='vehicle' ? 'tank' : t.type==='artillery' ? 'cylinder' : t.type==='drone' ? 'diamond' : t.type==='heli' ? 'cone' : 'sphere';
     place(key, e.x, e.y, shape, t.revealed ? (TARGET_TYPE_COLOR[t.type]||0xc1453b) : 0x8f9678, true);
   });
 
@@ -9706,6 +9945,7 @@ function anyOverlayShown(){
 function loop(){
   updateProjectiles();
   updateEnemyTracers();
+  update3dEffects();
   updateImpactLights();
   if(state){
     repositionOpenCommandBoxes();
