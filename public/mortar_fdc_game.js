@@ -8202,6 +8202,18 @@ const PROC_COLOR_FOREST = [0x23,0x38,0x1e], PROC_COLOR_WATER = [0x2c,0x4a,0x5e];
 // bare-earth clearings, on top of the flat PROC_COLOR_FOREST tint below.
 const PROC_CANOPY_CELL = 22, PROC_CANOPY_DARK = [0x16,0x24,0x12], PROC_CANOPY_LIGHT = [0x36,0x52,0x2c];
 const PROC_CLEARING_CELL = 24, PROC_CLEARING_EDGE0 = 0.82, PROC_CLEARING_EDGE1 = 0.9, PROC_CLEARING_COLOR = [0xb3,0x8a,0x66];
+// per user request: open (non-forest, non-water) ground read as flat/monochrome, especially
+// over low-relief terrain where the elevation gradient above has little to work with -- the
+// existing PROC_TEXTURE_NOISE_* grain further below is too fine/low-amplitude to read as real
+// variation. Same technique as the forest canopy mottling above, scaled for open plains: a
+// coarse two-tone blend for broad patchy variation, plus occasional larger dry/bare-earth
+// patches, both deterministic from the seed.
+// Amplitude picked to land in the same ballpark as the forest canopy's full dark/light color
+// swing (~30-45 per channel) rather than the much subtler PROC_TEXTURE_NOISE_* grain -- at the
+// scene's fairly dim, untone-mapped lighting (see initThree()'s Ambient/DirectionalLight),
+// anything weaker visually flattened out to almost nothing once actually lit and rendered.
+const PROC_OPEN_MOTTLE_CELL = 40, PROC_OPEN_MOTTLE_AMOUNT = 40;
+const PROC_DRY_PATCH_CELL = 60, PROC_DRY_PATCH_EDGE0 = 0.58, PROC_DRY_PATCH_EDGE1 = 0.72, PROC_DRY_PATCH_COLOR = [0x8c,0x7a,0x4c];
 // Shared by the 3D terrain's texture and the setup screen's seed-preview thumbnails
 // (renderMapSelectBody) so both always show exactly the elevation/forest/water picture
 // elevationAtFor/terrainTypeAtFor actually compute for the given descriptor.
@@ -8256,6 +8268,15 @@ function paintTerrainColors(ctx, w, h, gen){
         r = PROC_COLOR_LOW[0] + (PROC_COLOR_HIGH[0]-PROC_COLOR_LOW[0])*e;
         g = PROC_COLOR_LOW[1] + (PROC_COLOR_HIGH[1]-PROC_COLOR_LOW[1])*e;
         b = PROC_COLOR_LOW[2] + (PROC_COLOR_HIGH[2]-PROC_COLOR_LOW[2])*e;
+        const mottleN = (valueNoise2D(cx/PROC_OPEN_MOTTLE_CELL, cy/PROC_OPEN_MOTTLE_CELL, gen.seed+19) - 0.5) * PROC_OPEN_MOTTLE_AMOUNT;
+        r += mottleN; g += mottleN*0.85; b += mottleN*0.55;
+        const dryN = valueNoise2D(cx/PROC_DRY_PATCH_CELL, cy/PROC_DRY_PATCH_CELL, gen.seed+23);
+        const dryT = smoothstep01(clamp((dryN-PROC_DRY_PATCH_EDGE0)/(PROC_DRY_PATCH_EDGE1-PROC_DRY_PATCH_EDGE0), 0, 1));
+        if(dryT > 0){
+          r += (PROC_DRY_PATCH_COLOR[0]-r)*dryT;
+          g += (PROC_DRY_PATCH_COLOR[1]-g)*dryT;
+          b += (PROC_DRY_PATCH_COLOR[2]-b)*dryT;
+        }
         noiseMult = 1;
       }
       const noise = ((valueNoise2D(cx/PROC_TEXTURE_NOISE_COARSE_CELL, cy/PROC_TEXTURE_NOISE_COARSE_CELL, gen.seed)-0.5)*PROC_TEXTURE_NOISE_COARSE_AMOUNT
