@@ -2813,6 +2813,80 @@ function closeAllDrawers(){
   document.getElementById('drawer-backdrop').classList.remove('show');
 }
 
+const GEMINI_API_KEY_STORAGE = 'mortar-fdc-gemini-api-key';
+const GEMINI_MODEL = 'gemini-2.5-flash';
+
+function appendGeminiMessage(role, text){
+  const messages = document.getElementById('gemini-messages');
+  if(!messages) return;
+  const message = document.createElement('div');
+  message.className = `gemini-message ${role}`;
+  const label = document.createElement('span');
+  label.className = 'gemini-message-label';
+  label.textContent = role === 'user' ? 'あなた' : role === 'error' ? 'エラー' : 'Gemini';
+  message.append(label, document.createTextNode(text));
+  messages.appendChild(message);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function saveGeminiApiKey(){
+  const input = document.getElementById('gemini-api-key');
+  const key = input ? input.value.trim() : '';
+  if(!key){
+    appendGeminiMessage('error', 'APIキーを入力してください。');
+    return;
+  }
+  localStorage.setItem(GEMINI_API_KEY_STORAGE, key);
+  input.value = '';
+  appendGeminiMessage('model', 'APIキーを保存しました。作戦について質問できます。');
+}
+
+function clearGeminiApiKey(){
+  localStorage.removeItem(GEMINI_API_KEY_STORAGE);
+  const input = document.getElementById('gemini-api-key');
+  if(input) input.value = '';
+  appendGeminiMessage('model', '保存済みのAPIキーを削除しました。');
+}
+
+async function sendGeminiMessage(event){
+  event.preventDefault();
+  const input = document.getElementById('gemini-input');
+  const text = input ? input.value.trim() : '';
+  const apiKey = localStorage.getItem(GEMINI_API_KEY_STORAGE);
+  if(!text) return;
+  if(!apiKey){
+    appendGeminiMessage('error', '先にGoogle AI StudioのAPIキーを保存してください。');
+    return;
+  }
+  input.value = '';
+  appendGeminiMessage('user', text);
+  const prompt = [
+    'あなたは汎用AIアシスタントです。日本語で、質問の意図に沿って簡潔かつ実用的に回答してください。',
+    `ユーザーの質問: ${text}`,
+  ].join('\n');
+  try{
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({contents:[{role:'user', parts:[{text:prompt}]}]}),
+      },
+    );
+    const data = await response.json();
+    if(!response.ok){
+      throw new Error(data.error && data.error.message ? data.error.message : `HTTP ${response.status}`);
+    }
+    const candidates = data.candidates && data.candidates[0];
+    const parts = candidates && candidates.content && candidates.content.parts;
+    const answer = Array.isArray(parts) ? parts.map(part=>part.text || '').join('').trim() : '';
+    if(!answer) throw new Error('Geminiから有効な応答がありませんでした。');
+    appendGeminiMessage('model', answer);
+  }catch(error){
+    appendGeminiMessage('error', `通信に失敗しました: ${error.message}`);
+  }
+}
+
 function toggleMapFullscreen(){
   const el = document.documentElement;
   const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
@@ -9439,17 +9513,20 @@ function syncUnitMarkers3d(){
   // drawBoard's smoothVisualPos call) so this 3D box marker eases along with the 2D icon
   // instead of snapping straight to the logical position each tick.
   place('hq', state.hq._visX!==undefined?state.hq._visX:state.hq.x, state.hq._visY!==undefined?state.hq._visY:state.hq.y, 'box', state.hq.hp>0 ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
-  // per user request: mortar/scout/squad/sniper now have their own 2D icon image drawn on
-  // the overlay canvas (see drawUnitIcon in drawBoard()) -- the old 3D primitive mesh for
-  // each (cone/diamond/box/cylinder) was showing through behind/around that icon, so it's
-  // hidden here instead of placed.
-  state.mortars.forEach((m,i)=>{ seen['mortar'+i]=true; hideMarker3d('mortar'+i); });
-  state.tanks.forEach((tk,i)=>{ seen['tank'+i]=true; hideMarker3d('tank'+i); });
-  state.sams.forEach((sam,i)=>{ seen['sam'+i]=true; hideMarker3d('sam'+i); });
-  state.scouts.forEach((s,i)=>{ seen['scout'+i]=true; hideMarker3d('scout'+i); });
-  state.squads.forEach((sq,i)=>{ seen['squad'+i]=true; hideMarker3d('squad'+i); });
-  state.snipers.forEach((sn,i)=>{ seen['sniper'+i]=true; hideMarker3d('sniper'+i); });
-  state.engineers.forEach((en,i)=>{ seen['engineer'+i]=true; hideMarker3d('engineer'+i); });
+  // Primitive 3D unit markers are intentionally kept separate from the 2D labels/HUD.
+  // This is the first full-3D pass: the shapes can later be replaced by GLTF models
+  // without changing game state or order logic.
+  const friendlyUnit = (key, unit, shape, alive)=>{
+    const p = smoothVisualPos(unit, unit.x, unit.y);
+    place(key, p.x, p.y, shape, alive ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
+  };
+  state.mortars.forEach((m,i)=>friendlyUnit('mortar'+i, m, 'cylinder', m.hp>0));
+  state.tanks.forEach((tk,i)=>friendlyUnit('tank'+i, tk, 'box', tk.hp>0));
+  state.sams.forEach((sam,i)=>friendlyUnit('sam'+i, sam, 'cone', sam.hp>0));
+  state.scouts.forEach((s,i)=>friendlyUnit('scout'+i, s, 'diamond', unitAlive(s)));
+  state.squads.forEach((sq,i)=>friendlyUnit('squad'+i, sq, 'sphere', unitAlive(sq)));
+  state.snipers.forEach((sn,i)=>friendlyUnit('sniper'+i, sn, 'cone', unitAlive(sn)));
+  state.engineers.forEach((en,i)=>friendlyUnit('engineer'+i, en, 'box', unitAlive(en)));
   // per user request: 防壁(壁) -- 他の自軍ユニットと違い専用の2Dベクター描画に加えて、
   // 3Dミニマップ上でも障害物として視認できるよう箱形メッシュを配置する。
   state.walls.forEach(w=>{

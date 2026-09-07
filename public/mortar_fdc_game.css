@@ -429,6 +429,26 @@
   .ach-status.unlocked{color:var(--green-id);}
   .ach-status.locked{color:var(--muted);}
 
+  .gemini-drawer{z-index:50;}
+  .gemini-notice{font-size:11px;color:var(--muted);line-height:1.45;margin-bottom:8px;}
+  .gemini-settings,.gemini-form{display:flex;gap:6px;align-items:center;}
+  .gemini-settings{margin-bottom:8px;}
+  .gemini-settings input,.gemini-form input{
+    min-width:0;flex:1;background:var(--panel-2);border:1px solid var(--edge);
+    border-radius:3px;color:var(--ink);padding:8px;font:12px var(--font-body);
+  }
+  .gemini-settings .btn,.gemini-form .btn{width:auto;padding:8px 10px;white-space:nowrap;}
+  .gemini-messages{
+    flex:1;min-height:100px;overflow-y:auto;background:var(--bg-2);
+    border:1px solid var(--edge-dim);border-radius:3px;padding:8px;margin-bottom:8px;
+  }
+  .gemini-message{font-size:12px;line-height:1.5;margin-bottom:8px;white-space:pre-wrap;}
+  .gemini-message:last-child{margin-bottom:0;}
+  .gemini-message.user{color:var(--amber);}
+  .gemini-message.model{color:var(--ink);}
+  .gemini-message.error{color:var(--red);}
+  .gemini-message-label{font:10px var(--font-mono);color:var(--muted);margin-right:6px;}
+
   .shop-row.reward-squad{border-left:3px solid var(--blue-id);}
   .shop-row.reward-scout{border-left:3px solid var(--green-id);}
   .shop-row.reward-ammo{border-left:3px solid var(--amber);}
