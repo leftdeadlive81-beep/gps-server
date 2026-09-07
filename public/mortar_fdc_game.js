@@ -583,6 +583,7 @@ const GAME_SPEED_LABEL = { slow: '0.5x', normal: '1x', fast: '2x' };
 // <input type="range"> in renderDecisionPanel().
 const GAME_SPEED_ORDER = ['slow', 'normal', 'fast'];
 function setGameSpeedByIndex(idx){ setGameSpeed(GAME_SPEED_ORDER[idx]); }
+const MORTAR_RELOAD_MS = 650;
 const WEAPON_FIRE_INTERVAL = { squad:3, tank:4, sam:3, sniper:5 };
 const WEAPON_FIRE_OFFSET = { squad:0, tank:1, sam:2, sniper:3 };
 function unitMayFire(kind, index, tick){
@@ -751,6 +752,7 @@ const MORTAR_ORDER_LABEL = {fire:'射撃', standby:'待機', move:'移動'};
 const ORDER_ICON = {advance:'▲', retreat:'▼', hold:'■', assault:'◆', hunt:'◎', resting:'Z'};
 const MORTAR_ORDER_ICON = {fire:'●', standby:'■', move:'✦'};
 function mortarStatusIcon(mortar){
+  if(mortar.reloadingUntil && performance.now() < mortar.reloadingUntil) return '⟳';
   if(mortar.order==='move') return mortar.pendingDest ? '➤' : '✦';
   if(mortar.pendingFire) return '●';
   if(mortar.order==='fire') return '◐';
@@ -3155,6 +3157,7 @@ function enemyCounterAttack(actionTurns){
             endX: near.x, endY: near.y,
             born: performance.now(),
             duration: FLIGHT_DURATION,
+            trajectory: 'arc',
             onLand: ()=>{
               if(rollExposureHit(getUnitExposure(near))){
                 damageFriendlyAsset(near, dmg, sourceLabel);
@@ -5131,6 +5134,7 @@ function resolveMortarCounterBattery(actionTurns){
             endX: mortar.x, endY: mortar.y,
             born: performance.now(),
             duration: FLIGHT_DURATION,
+            trajectory: 'arc',
             onLand: ()=>{
               const dmg = Math.round(rnd(MORTAR_CB_STRIKE_DMG[0], MORTAR_CB_STRIKE_DMG[1]) * DIFFICULTIES[state.difficulty].counterMult);
               damageFriendlyAsset({kind:'mortar', idx:mortar.id}, dmg, '敵対砲兵レーダーによる制圧射撃');
@@ -5235,10 +5239,14 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
   let pending = count;
   let hitAny = false;
   const volleyImpacts = [];
+  const reloadStart = performance.now();
+  mortar.reloadingUntil = reloadStart + MORTAR_RELOAD_MS + Math.max(0, count-1)*LAUNCH_INTERVAL;
+  render();
 
   for(let i=0;i<count;i++){
     setTimeout(()=>{
       playSfx('mortarFire', 0.14);
+      mortar.reloadingUntil = performance.now() + MORTAR_RELOAD_MS;
       const ix = aimX + gauss()*dispersion;
       const iy = aimY + gauss()*dispersion;
       projectiles.push({
@@ -5246,6 +5254,7 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
         endX: ix, endY: iy,
         born: performance.now(),
         duration: FLIGHT_DURATION,
+        trajectory: 'arc',
         onLand: ()=>{
           volleyImpacts.push({x:ix,y:iy});
           if(shell==='illum' || shell==='smoke' || shell==='marker'){
@@ -5270,6 +5279,7 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
             }
             pending -= 1;
             if(pending <= 0){
+              mortar.reloadingUntil = 0;
               finalizeVolley(snappedTarget, hitAny, volleyImpacts);
               onVolleyDone();
             }
@@ -5304,6 +5314,7 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
             log('mortar','観測', `弾着${i+1}: <b>空中炸裂</b>。近接信管がドローン${dronesInBurst.length}機を同時に捕捉、一掃した。`);
             pending -= 1;
             if(pending <= 0){
+              mortar.reloadingUntil = 0;
               finalizeVolley(snappedTarget, hitAny, volleyImpacts);
               onVolleyDone();
             }
@@ -5355,6 +5366,7 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
           }
           pending -= 1;
           if(pending <= 0){
+            mortar.reloadingUntil = 0;
             finalizeVolley(snappedTarget, hitAny, volleyImpacts);
             onVolleyDone();
           }
@@ -7344,6 +7356,14 @@ function drawBoard(){
       ctx.stroke();
       ctx.setLineDash([]);
     }
+    if(mAlive && mortar.reloadingUntil && performance.now() < mortar.reloadingUntil){
+      const reloadLeft = clamp((mortar.reloadingUntil-performance.now())/MORTAR_RELOAD_MS, 0, 1);
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(232,210,58,0.9)';
+      ctx.lineWidth = 2;
+      ctx.arc(0, 0, 16, -Math.PI/2, -Math.PI/2 + Math.PI*2*(1-reloadLeft));
+      ctx.stroke();
+    }
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign='center';
@@ -7823,7 +7843,10 @@ function drawBoard(){
     const prog = clamp((nowP-p.born)/p.duration, 0, 1);
     const gx = p.startX + (p.endX-p.startX)*prog;
     const gy = p.startY + (p.endY-p.startY)*prog;
-    const gp = projectAtWorldY(gx, gy, projectileArcWorldY(p.startX, p.startY, p.endX, p.endY, prog));
+    const isArc = p.trajectory === 'arc';
+    const gp = isArc
+      ? projectAtWorldY(gx, gy, projectileArcWorldY(p.startX, p.startY, p.endX, p.endY, prog))
+      : project(gx, gy);
     const x = gp.x, y = gp.y;
     const startG = project(p.startX, p.startY);
     const endG = project(p.endX, p.endY);
@@ -7831,19 +7854,21 @@ function drawBoard(){
     // per user request: full parabolic arc curve for the whole flight (敵味方問わず --
     // this projectiles[] array is shared by friendly mortar volleys and enemy indirect
     // fire/counter-battery alike), shown in addition to the existing moving-dot + trail.
-    ctx.beginPath();
-    const arcSteps = 20;
-    for(let k=0;k<=arcSteps;k++){
-      const tt = k/arcSteps;
-      const agx = p.startX + (p.endX-p.startX)*tt;
-      const agy = p.startY + (p.endY-p.startY)*tt;
-      const agp = projectAtWorldY(agx, agy, projectileArcWorldY(p.startX, p.startY, p.endX, p.endY, tt));
-      const ax = agp.x, ay = agp.y;
-      if(k===0) ctx.moveTo(ax,ay); else ctx.lineTo(ax,ay);
+    if(isArc){
+      ctx.beginPath();
+      const arcSteps = 20;
+      for(let k=0;k<=arcSteps;k++){
+        const tt = k/arcSteps;
+        const agx = p.startX + (p.endX-p.startX)*tt;
+        const agy = p.startY + (p.endY-p.startY)*tt;
+        const agp = projectAtWorldY(agx, agy, projectileArcWorldY(p.startX, p.startY, p.endX, p.endY, tt));
+        const ax = agp.x, ay = agp.y;
+        if(k===0) ctx.moveTo(ax,ay); else ctx.lineTo(ax,ay);
+      }
+      ctx.strokeStyle = 'rgba(217,164,65,0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
     }
-    ctx.strokeStyle = 'rgba(217,164,65,0.4)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
 
     // faint dashed ground track + aim point ring
     ctx.beginPath();
@@ -7863,7 +7888,9 @@ function drawBoard(){
       const tp = clamp(prog-k*0.04,0,1);
       const tgx = p.startX + (p.endX-p.startX)*tp;
       const tgy = p.startY + (p.endY-p.startY)*tp;
-      const tgp = projectAtWorldY(tgx, tgy, projectileArcWorldY(p.startX, p.startY, p.endX, p.endY, tp));
+      const tgp = isArc
+        ? projectAtWorldY(tgx, tgy, projectileArcWorldY(p.startX, p.startY, p.endX, p.endY, tp))
+        : project(tgx, tgy);
       const tx = tgp.x, ty = tgp.y;
       ctx.beginPath();
       ctx.fillStyle = `rgba(217,164,65,${0.35-k*0.1})`;
