@@ -8871,7 +8871,22 @@ function updateCameraFromView(){
     // per user request: keeps the fog's range relative to the camera's CURRENT distance from
     // the look-at point, so it reads consistently at any zoom level instead of being tuned
     // for one specific distance and then too thick/thin once the player zooms.
-    if(scene3d && scene3d.fog){ scene3d.fog.near = d*0.7; scene3d.fog.far = d*2.0; }
+    //
+    // per user request: the plain d*0.7/d*2.0 above assumed every visible ground point sits at
+    // roughly camera-distance d, which only holds for a straight-down view. Under an oblique/
+    // tilted camera (MAP_VIEW.polar > 0) a grazing view toward the horizon puts midground/
+    // background ground points at far more than d from the camera even though they're still
+    // close to the look-at point in world-XZ terms -- with the old fixed multiple, almost the
+    // entire visible terrain beyond the near foreground fogged out to flat SKY_COLOR the moment
+    // the camera tilted (exactly the "battlefield reads as one flat color" symptom). Scaling
+    // both distances by 1/cos(polar) -- bounded, since MAP_POLAR_MAX caps polar well short of
+    // 90 deg -- pushes the fog band out with the tilt so it still reaches the actual visible
+    // ground depth, while a shallow/top-down view keeps the original, already-correct distances.
+    if(scene3d && scene3d.fog){
+      const obliqueFactor = 1 / Math.max(0.1, Math.cos(MAP_VIEW.polar));
+      scene3d.fog.near = d*0.7*obliqueFactor;
+      scene3d.fog.far = d*2.0*obliqueFactor;
+    }
   };
 
   // Once per map load, pick a default zoom that fits the whole map on screen. An
