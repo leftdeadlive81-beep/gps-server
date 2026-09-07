@@ -3123,7 +3123,9 @@ function resolveSquadOrders(actionTurns){
       applyStandingOrder(sq, `第${sqIdx+1}小隊`, true);
       applySquadMovement(sq, sqIdx);
 
-      let engageTargets = state.targets.filter(t=>!t.destroyed && t.type==='infantry');
+      // per user request: 砲兵は無装甲の砲側員なので、歩兵と同じ通常の交戦対象に含める
+      // (以前は歩兵タイプのみが対象で、真横にいる砲兵さえ無視して撃たなかった)。
+      let engageTargets = state.targets.filter(t=>!t.destroyed && (t.type==='infantry' || t.type==='artillery'));
       if(sq.order==='hunt' && sq.huntTargetId){
         // per user request: small arms can't effectively engage aircraft -- anti-air is the
         // SAM's job now (see resolveSamOrders).
@@ -4719,6 +4721,47 @@ function resolveSquadAntiDrone(actionTurns){
   return anyEvent;
 }
 
+// per user request: small arms are nearly useless against armor, but real infantry standing
+// right next to an enemy vehicle wouldn't just do nothing -- they'd shoot back somehow. Mirrors
+// the existing REACTIVE anti-tank counter-fire (see resolveVehicleAssault's near.kind==='squad'
+// branch: 50% chance, exposure-gated, 2-6 damage) but lets the squad initiate it too, at the
+// same point-blank range (VEHICLE_ASSAULT_RANGE) the enemy vehicle itself would use to assault --
+// independent of the squad's current order/standing order (always on), same as
+// resolveSquadAntiDrone above.
+function resolveSquadAntiVehicle(actionTurns){
+  let anyEvent = false;
+  for(let i=0;i<actionTurns;i++){
+    state.squads.forEach((sq, sqIdx)=>{
+      const curAlive = sq.soldiers.filter(s=>s.alive);
+      if(curAlive.length===0) return;
+      state.targets.forEach(t=>{
+        if(t.destroyed || t.type!=='vehicle') return;
+        if(Math.hypot(t.trueX-sq.x, t.trueY-sq.y) > VEHICLE_ASSAULT_RANGE) return;
+        if(!hasLineOfSight(sq.x, sq.y, t.trueX, t.trueY)) return;
+        if(wallBlockingLineOfFire(sq.x, sq.y, t.trueX, t.trueY)) return;
+        anyEvent = true;
+        if(revealTarget(t)){
+          log('op','斥候', `${t.id} を至近距離で捕捉、<b>${t.def.label}</b>と識別。`);
+        }
+        if(Math.random() < 0.5 && rollExposureHit(getTargetExposure(t))){
+          const antiTankMult = altitudeBonus(sq.x, sq.y, t.trueX, t.trueY);
+          const antiTankDmg = Math.round(rnd(2,6) * antiTankMult);
+          t.hp -= antiTankDmg;
+          fireTracer(sq.x, sq.y, t.trueX, t.trueY, 220, 'rifle');
+          if(t.hp<=0 && !t.destroyed){
+            t.destroyed = true; t.hp = 0;
+            log('op','前線', `第${sqIdx+1}小隊が${t.id}を対戦車射撃で<b>撃破</b>。`);
+            onTargetDestroyed(t);
+          } else {
+            log('op','前線', `第${sqIdx+1}小隊が至近距離の${t.id}へ対戦車射撃(効果 ${antiTankDmg})。`);
+          }
+        }
+      });
+    });
+  }
+  return anyEvent;
+}
+
 function resolveDroneSwarm(actionTurns){
   const drones = state.targets.filter(t=>!t.destroyed && t.type==='drone');
   if(drones.length===0) return false;
@@ -4888,6 +4931,7 @@ function resolveEnemyTurn(actionTurns){
   const assaulted = resolveVehicleAssault(actionTurns);
   const heliEvent = resolveHeliAssault(actionTurns);
   const antiDroned = resolveSquadAntiDrone(actionTurns);
+  const antiVehicled = resolveSquadAntiVehicle(actionTurns);
   const swarmed = resolveDroneSwarm(actionTurns);
   const hit = enemyCounterAttack(actionTurns);
   const cbEvent = resolveMortarCounterBattery(actionTurns);
@@ -4910,7 +4954,7 @@ function resolveEnemyTurn(actionTurns){
   if(!allEngineersWiped()){
     resolveEngineerOrders(actionTurns);
   }
-  if(!hit && !infEvent && !sniperEvent && !tankEvent && !samEvent && !advanced && !assaulted && !heliEvent && !swarmed && !cbEvent && !antiDroned){
+  if(!hit && !infEvent && !sniperEvent && !tankEvent && !samEvent && !advanced && !assaulted && !heliEvent && !swarmed && !cbEvent && !antiDroned && !antiVehicled){
     log('sys','敵ターン', '目立った動きなし。');
   }
   // per user request: 交戦時のサウンド -- looping battlefield-combat ambience plays while
