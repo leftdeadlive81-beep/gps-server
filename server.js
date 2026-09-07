@@ -85,7 +85,19 @@ const io = new Server(server, {
     }
 });
 
-app.use(express.static("public"));
+// per user request: mortar_fdc_game.js/html/css are iterated on constantly, but plain
+// express.static sends no Cache-Control at all -- browsers (mobile ones especially) then
+// apply their own heuristic caching and can keep serving a stale bundle for a long time after
+// a new deploy, with no way for the page to know it's stale. Forcing no-cache makes every load
+// revalidate with the server (a cheap 304 when nothing changed) instead of trusting a
+// potentially long-lived heuristic cache.
+app.use(express.static("public", {
+    setHeaders: (res, filePath) => {
+        if (/\.(js|css|html)$/.test(filePath)) {
+            res.setHeader("Cache-Control", "no-cache");
+        }
+    }
+}));
 app.use(express.json());
 
 // Puttanモバイル(Capacitor)アプリなど別オリジンからの/api/*呼び出しを許可
