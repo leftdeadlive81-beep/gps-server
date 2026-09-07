@@ -8320,7 +8320,23 @@ function buildProceduralTerrainMesh(gen){
     map: buildProceduralTexture(gen),
     color: new THREE.Color(TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TEXTURE_BRIGHTNESS),
   });
-  return new THREE.Mesh(geo, material);
+  const mesh = new THREE.Mesh(geo, material);
+  // per user request: the geometry above is built directly in raw canvas-unit space
+  // (X:[0,CANVAS_W], Z:[0,CANVAS_H]) since elevationAtFor/terrainTypeAtFor take raw
+  // canvas-unit coordinates -- but every OTHER 3D-facing consumer (camera position/lookAt,
+  // unit/projectile/prop placement) maps canvas-unit XZ into world space via
+  // canvasUnitToWorldXZ, which scales by WORLD.scaleX/scaleZ (METERS_PER_UNIT). Without this
+  // scale, the mesh's actual world footprint (at most 1300x460 units) sat almost entirely
+  // outside the camera's orbit around the correctly-scaled look-at point (thousands of units
+  // out) -- only a sliver of it near the world origin ever fell in view. That's the real cause
+  // behind "the battlefield is one flat color": the solid textured ground was rendering fine,
+  // just almost never on screen -- everything that looked like terrain (grid lines, contour
+  // lines, trees, unit markers) is drawn independently via canvasUnitToWorldXZ and so still
+  // lined up correctly with each other, masking that the ground surface itself was missing.
+  // Y is left unscaled since vertex heights above are already computed in world-height units
+  // (elevation * PROC_TERRAIN_HEIGHT_SCALE, which itself already bakes in METERS_PER_UNIT).
+  mesh.scale.set(WORLD.scaleX, 1, WORLD.scaleZ);
+  return mesh;
 }
 
 // per user request: dusky sky tone shared by the renderer's clear color and scene3d.fog, so
@@ -8868,24 +8884,40 @@ function updateCameraFromView(){
     camera3d.near = Math.max(1, d*0.02);
     camera3d.far = d + (WORLD.maxY-WORLD.minY) + 8000;
     camera3d.updateProjectionMatrix();
-    // per user request: keeps the fog's range relative to the camera's CURRENT distance from
-    // the look-at point, so it reads consistently at any zoom level instead of being tuned
-    // for one specific distance and then too thick/thin once the player zooms.
+    // per user request: fog.near/far used to be a fixed multiple of d (camera-to-lookAt
+    // distance) -- first d*0.7/d*2.0, then also scaled by 1/cos(polar) for tilt. Both still
+    // assumed the visible ground's depth range scales with d alone, which breaks down at the
+    // default "whole map fits on screen" zoom: fitting the whole map needs a specific d for
+    // the map's on-screen SIZE, but says nothing about how much farther the top of the screen
+    // (near the horizon, under any tilt at all) actually is from the camera than d -- that gap
+    // can be many times d even at a modest tilt once the field of view is wide enough to show
+    // the whole map. The old formulas fogged out almost the entire map to flat SKY_COLOR at
+    // exactly this (very common, it's the default) zoom level.
     //
-    // per user request: the plain d*0.7/d*2.0 above assumed every visible ground point sits at
-    // roughly camera-distance d, which only holds for a straight-down view. Under an oblique/
-    // tilted camera (MAP_VIEW.polar > 0) a grazing view toward the horizon puts midground/
-    // background ground points at far more than d from the camera even though they're still
-    // close to the look-at point in world-XZ terms -- with the old fixed multiple, almost the
-    // entire visible terrain beyond the near foreground fogged out to flat SKY_COLOR the moment
-    // the camera tilted (exactly the "battlefield reads as one flat color" symptom). Scaling
-    // both distances by 1/cos(polar) -- bounded, since MAP_POLAR_MAX caps polar well short of
-    // 90 deg -- pushes the fog band out with the tilt so it still reaches the actual visible
-    // ground depth, while a shallow/top-down view keeps the original, already-correct distances.
+    // Fixed properly by measuring the REAL farthest visible ground distance: ray-cast from the
+    // camera through several points along the top edge of the screen (the farthest part of the
+    // view under any downward tilt) onto the ground reference plane, exactly like clicks
+    // resolve a screen point to a world position (see groundPlaneCanvasUnitAt) -- but keeping
+    // the ray's own camera-relative distance instead of the hit's canvas-unit coordinates.
     if(scene3d && scene3d.fog){
-      const obliqueFactor = 1 / Math.max(0.1, Math.cos(MAP_VIEW.polar));
-      scene3d.fog.near = d*0.7*obliqueFactor;
-      scene3d.fog.far = d*2.0*obliqueFactor;
+      let maxDepth = 0;
+      for(const fx of [0, 0.25, 0.5, 0.75, 1]){
+        for(const fy of [1, 0.85, 0.65]){ // top edge first; fall back lower if it's above the horizon
+          const ndcVec = new THREE.Vector3(fx*2-1, fy*2-1, 0.5).unproject(camera3d);
+          const rayDir = ndcVec.sub(camera3d.position).normalize();
+          const t = Math.abs(rayDir.y) < 1e-6 ? -1 : (WORLD.refY - camera3d.position.y)/rayDir.y;
+          if(t > maxDepth) maxDepth = t;
+        }
+      }
+      if(maxDepth > 0){
+        scene3d.fog.near = maxDepth*0.45;
+        scene3d.fog.far = maxDepth*1.15;
+      } else {
+        // every sampled ray pointed above the horizon (e.g. looking mostly at open sky) --
+        // fall back to the old distance-based estimate rather than leaving fog at a stale value.
+        scene3d.fog.near = d*0.7;
+        scene3d.fog.far = d*2.0;
+      }
     }
   };
 
