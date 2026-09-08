@@ -7451,13 +7451,12 @@ function drawBoard(){
   state.scouts.forEach(scout=>{
     const scoutVisL = smoothVisualPos(scout, scout.x, scout.y);
     const scoutVis = project(scoutVisL.x, scoutVisL.y);
-    if(unitAlive(scout)){
+    if(unitAlive(scout) && scoutVis.visible){
       const coneLen = SCOUT_MAX_RANGE_UNITS;
       const halfFov = scoutHalfFov();
       const steps = 24;
       const aniso = (WORLD.scaleZ>0.0001) ? (WORLD.scaleX/WORLD.scaleZ) : 1;
-      ctx.beginPath();
-      ctx.moveTo(scoutVis.x, scoutVis.y);
+      const boundary = [];
       for(let i=0;i<=steps;i++){
         const ang = scout.watchAngle - halfFov + (halfFov*2)*(i/steps);
         const rad = ang*Math.PI/180;
@@ -7466,8 +7465,14 @@ function drawBoard(){
           y: scoutVisL.y - coneLen*aniso*Math.cos(rad),
         };
         const p = project(pL.x, pL.y);
-        ctx.lineTo(p.x, p.y);
+        if(!p.visible || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
+        boundary.push(p);
       }
+      ctx.beginPath();
+      ctx.moveTo(scoutVis.x, scoutVis.y);
+      boundary.forEach(p=>{
+        ctx.lineTo(p.x, p.y);
+      });
       ctx.closePath();
       ctx.fillStyle = 'rgba(111,155,191,0.14)';
       ctx.fill();
