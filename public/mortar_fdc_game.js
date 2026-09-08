@@ -2597,7 +2597,10 @@ function localDetection(t){
   });
 }
 function isTargetDetected(t){
-  return !!bestSensorForTarget(t) || localDetection(t);
+  if(t._detectedThisRender!==undefined) return t._detectedThisRender;
+  const detected = !!bestSensorForTarget(t) || localDetection(t);
+  t._detectedThisRender = detected;
+  return detected;
 }
 function visibilityBlockReasonFor(scout, t){
   if(!unitAlive(scout)) return 'angle';
@@ -2780,6 +2783,7 @@ function updateRevealed(){
   state.targets.forEach(t=>{
     if(t.destroyed) return;
     const sensor = bestSensorForTarget(t);
+    t._detectedThisRender = !!sensor || localDetection(t);
     if(sensor){
       t.lastKnownX = t.trueX;
       t.lastKnownY = t.trueY;
@@ -10200,6 +10204,7 @@ function renderThreeFrame(){
 }
 
 function render(){
+  state.targets.forEach(t=>{ delete t._detectedThisRender; });
   updateRevealed();
   renderStats();
   selectNextTarget();
