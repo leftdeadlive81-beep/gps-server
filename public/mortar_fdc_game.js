@@ -447,6 +447,12 @@ const MORTAR_MAINLINE_RANGE_M = 6000;
 const MORTAR_MAINLINE_RANGE_UNITS = MORTAR_MAINLINE_RANGE_M / METERS_PER_UNIT;
 const MORTAR_MAINLINE_HALF_FOV = 15; // degrees either side of the set azimuth (30 deg fan)
 const SCOUT_MAX_RANGE_UNITS = 2000 / METERS_PER_UNIT;
+const SENSOR_RANGE_UNITS = {
+  scout: SCOUT_MAX_RANGE_UNITS,
+  heli: 5000 / METERS_PER_UNIT,
+  tank: 900 / METERS_PER_UNIT,
+  mortar: 300 / METERS_PER_UNIT,
+};
 // per user request: scout used to be a raw hardcoded step length (50 units/turn -- see the
 // old scoutTerrainAwareStep call site), bypassing this shared km/h table entirely and coming
 // out to ~23km/h, more than double dismounted infantry's pace despite both being foot
@@ -476,6 +482,7 @@ const MORTAR_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.mortar) * 0.25; // per 
 const TANK_MOVE_CAP = VEHICLE_MOVE_CAP * 0.6; // faster than infantry/sniper, slower than the enemy vehicle's full road speed
 const SAM_MOVE_CAP = VEHICLE_MOVE_CAP * 0.4; // towed/wheeled launcher -- slower than the tank
 const HELI_MOVE_CAP = VEHICLE_MOVE_CAP * 1.8; // flies -- faster than any ground vehicle, ignores roads
+const FRIENDLY_HELI_MOVE_UNITS = HELI_MOVE_CAP * 0.8;
 const ARTILLERY_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.artillery) * 0.5; // per user request: enemy artillery move speed halved
 const ARTILLERY_STANDOFF_RANGE_M = 300; // artillery repositions closer but holds once within this range of its nearest target
 const ARTILLERY_STANDOFF_RANGE_UNITS = ARTILLERY_STANDOFF_RANGE_M / METERS_PER_UNIT;
@@ -1397,6 +1404,7 @@ function initGame(){
       soldiers: makeSoldiers(ROSTER_SCOUT_TEAMS[i]), pendingDest:null, pendingReconTargetId:null,
       exposure: SCOUT_EXPOSURE,
     })),
+    helis: [],
     snipers: [],
     hq: {x:HQ_X, y:HQ_Y, hp:HQ_MAX_HP, maxHp:HQ_MAX_HP, exposure:EXPOSURE_DEFAULT},
     reserve: RESERVE_SIZE,
@@ -1827,6 +1835,10 @@ function startStage(){
         exposure: SCOUT_EXPOSURE,
       };
     });
+    if(!state.helis || state.helis.length===0){
+      state.helis = [{id:0, x:deployX(OP_HOME_X+180), y:deployYMid- deployBoxH*0.35,
+        hp:120, maxHp:120, exposure:EXPOSURE_DEFAULT, orbitAngle:0, observationBonus:0}];
+    }
     state.mortars = Array.from({length:NUM_MORTARS}, (_,i)=>({
       id:i, x:deployX(OP_HOME_X), y:clamp(deployYMid+(i-(NUM_MORTARS-1)/2)*40*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax), hp:100, maxHp:100,
       order:'standby', pendingFire:null, pendingDest:null,
@@ -1945,7 +1957,7 @@ function startStage(){
   state.stageStartSnapshot = JSON.parse(JSON.stringify({
     ammo: state.ammo, turns: state.turns, reserve: state.reserve, reserveRoster: state.reserveRoster, hq: state.hq,
     mortars: state.mortars, squads: state.squads, scouts: state.scouts, snipers: state.snipers,
-    tanks: state.tanks, sams: state.sams, engineers: state.engineers, walls: state.walls, trenches: state.trenches,
+    tanks: state.tanks, sams: state.sams, helis: state.helis, engineers: state.engineers, walls: state.walls, trenches: state.trenches,
   }));
   ripples = []; projectiles = []; flashes = []; enemyTracers = [];
   debrisParticles = []; wreckSmokes = []; killBanners = []; shockwaves = [];
@@ -2079,6 +2091,7 @@ function retryStage(){
   state.snipers = snap.snipers;
   state.tanks = snap.tanks;
   state.sams = snap.sams;
+  state.helis = snap.helis || [];
   state.engineers = snap.engineers;
   state.walls = snap.walls;
   state.trenches = snap.trenches;
@@ -2196,8 +2209,13 @@ const ESTIMATE_CLAMP_MARGIN = 20;
 function estimatedTargetPos(t){
   const mag = Math.hypot(t.bOffset, t.dOffset);
   const scale = mag>1 ? 1/mag : 1;
-  const x = t.trueX + t.bOffset*scale*t.posErr;
-  const y = t.trueY + t.dOffset*scale*t.posErr;
+  const tracked = t.lastKnownX!==undefined && !isTargetDetected(t);
+  const originX = tracked ? t.lastKnownX : t.trueX;
+  const originY = tracked ? t.lastKnownY : t.trueY;
+  const staleTurns = tracked ? Math.max(0, (state.turns||0)-(t.lastSeenTurn||0)) : 0;
+  const staleDrift = tracked ? Math.min(MAX_ESTIMATE_ERROR_M/METERS_PER_UNIT, staleTurns*8) : 0;
+  const x = originX + t.bOffset*scale*(t.posErr+staleDrift);
+  const y = originY + t.dOffset*scale*(t.posErr+staleDrift);
   return {
     x: clamp(x, ESTIMATE_CLAMP_MARGIN, CANVAS_W-ESTIMATE_CLAMP_MARGIN),
     y: clamp(y, ESTIMATE_CLAMP_MARGIN, CANVAS_H-ESTIMATE_CLAMP_MARGIN),
@@ -2501,6 +2519,7 @@ function trenchCoverBonusAt(x, y){
 function hasLineOfSight(fromX,fromY,toX,toY){
   const EYE_HEIGHT = 0.12;
   const dist = Math.hypot(toX-fromX, toY-fromY);
+  if(terrainTypeAt(toX,toY)===TERRAIN_TYPE_FOREST) return false;
   const steps = Math.max(6, Math.floor(dist/25));
   const fromE = elevationAt(fromX,fromY)+EYE_HEIGHT;
   const toE = elevationAt(toX,toY)+EYE_HEIGHT;
@@ -2512,6 +2531,7 @@ function hasLineOfSight(fromX,fromY,toX,toY){
     const y = fromY+(toY-fromY)*t;
     const sightE = fromE+(toE-fromE)*t;
     if(elevationAt(x,y) > sightE+0.02) return false;
+    if(terrainTypeAt(x,y)===TERRAIN_TYPE_FOREST) return false;
     if(smokeClouds && smokeClouds.some(c=>Math.hypot(x-c.x,y-c.y) <= SMOKE_RADIUS_UNITS)) return false;
     // per user request: 工兵の防壁(壁)も視線を遮る -- 地形/煙と同じ扱いで、壁の向こうは見えない。
     if(walls && walls.some(w=>w.hp>0 && Math.hypot(x-w.x,y-w.y) <= WALL_RADIUS)) return false;
@@ -2533,6 +2553,24 @@ function inScoutConeFor(scout, t){
 function inScoutCone(t){
   if(!state.scouts || state.scouts.length===0) return true;
   return state.scouts.some(s=>inScoutConeFor(s,t));
+}
+function sensorSeesTarget(kind, unit, t){
+  if(!unit || (unit.hp!==undefined ? unit.hp<=0 : !unitAlive(unit))) return false;
+  const range = SENSOR_RANGE_UNITS[kind] || 0;
+  if(Math.hypot(t.trueX-unit.x, t.trueY-unit.y) > range) return false;
+  if(kind==='scout') return inScoutConeFor(unit, t);
+  if(kind==='heli') return hasLineOfSight(unit.x, unit.y, t.trueX, t.trueY);
+  return hasLineOfSight(unit.x, unit.y, t.trueX, t.trueY);
+}
+function bestSensorForTarget(t){
+  const sensors = [];
+  (state.scouts||[]).forEach((u,idx)=>sensors.push({kind:'scout',idx,u}));
+  (state.helis||[]).forEach((u,idx)=>sensors.push({kind:'heli',idx,u}));
+  (state.tanks||[]).forEach((u,idx)=>sensors.push({kind:'tank',idx,u}));
+  (state.mortars||[]).forEach((u,idx)=>sensors.push({kind:'mortar',idx,u}));
+  (state.squads||[]).forEach((u,idx)=>sensors.push({kind:'infantry',idx,u}));
+  (state.snipers||[]).forEach((u,idx)=>sensors.push({kind:'infantry',idx,u}));
+  return sensors.find(sensor=>sensorSeesTarget(sensor.kind, sensor.u, t)) || null;
 }
 function localDetection(t){
   const nearMortar = state.mortars.some(m=>m.hp>0 && Math.hypot(t.trueX-m.x, t.trueY-m.y) <= DETECTION_RANGE.artillery);
@@ -2559,10 +2597,7 @@ function localDetection(t){
   });
 }
 function isTargetDetected(t){
-  // per user request: 戦闘ヘリは常時見えているものとする -- ドローンと同様、斥候の視界/接触に
-  // 関係なく常に現在位置が追跡される(スポット位置がフェードして推定円になることはない)。
-  if(t.type==='heli') return true;
-  return inScoutCone(t) || localDetection(t);
+  return !!bestSensorForTarget(t) || localDetection(t);
 }
 function visibilityBlockReasonFor(scout, t){
   if(!unitAlive(scout)) return 'angle';
@@ -2738,16 +2773,26 @@ function updateRevealed(){
   if(!state) return;
   const contactFriendlies = [];
   state.scouts.forEach((s,i)=>{ if(unitAlive(s)) contactFriendlies.push({kind:'scout', idx:i, u:s}); });
+  (state.helis||[]).forEach((h,i)=>{ if(h.hp>0) contactFriendlies.push({kind:'heli', idx:i, u:h}); });
   state.mortars.forEach((m,i)=>{ if(m.hp>0) contactFriendlies.push({kind:'mortar', idx:i, u:m}); });
   state.squads.forEach((sq,i)=>{ if(sq.soldiers.some(s=>s.alive)) contactFriendlies.push({kind:'squad', idx:i, u:sq}); });
   state.snipers.forEach((sn,i)=>{ if(sn.soldiers.some(s=>s.alive)) contactFriendlies.push({kind:'sniper', idx:i, u:sn}); });
   state.targets.forEach(t=>{
-    if(t.destroyed || t.revealed) return;
+    if(t.destroyed) return;
+    const sensor = bestSensorForTarget(t);
+    if(sensor){
+      t.lastKnownX = t.trueX;
+      t.lastKnownY = t.trueY;
+      t.lastSeenTurn = state.turns;
+      t.lastSeenBy = sensor.kind;
+      t.trackingConfidence = sensor.kind==='heli' ? 0.95 : sensor.kind==='scout' ? 0.85 : 0.65;
+    }
+    if(t.revealed) return;
     let reason = null;
     let detector = null;
-    if(inScoutCone(t)){
-      reason = '視認';
-      detector = contactFriendlies.find(f=>f.kind==='scout');
+    if(sensor){
+      reason = sensor.kind==='heli' ? 'ヘリ観測' : sensor.kind==='tank' ? '戦車観測' : '視認';
+      detector = contactFriendlies.find(f=>f.kind===sensor.kind && f.idx===sensor.idx);
     } else {
       const near = contactFriendlies.find(f=>Math.hypot(f.u.x-t.trueX, f.u.y-t.trueY) <= CONTACT_RANGE_UNITS);
       if(near){ reason = '接触'; detector = near; }
@@ -2803,6 +2848,19 @@ function resolveOneScoutDecision(scout, idx){
 }
 function resolveScoutDecision(){
   state.scouts.forEach((scout,idx)=>resolveOneScoutDecision(scout, idx));
+}
+function resolveFriendlyHeliTurn(actionTurns){
+  (state.helis||[]).forEach(heli=>{
+    if(heli.hp<=0) return;
+    for(let i=0;i<actionTurns;i++){
+      heli.orbitAngle = (heli.orbitAngle + 0.22) % (Math.PI*2);
+      const targetX = clamp(900 + Math.cos(heli.orbitAngle)*260, 520, CANVAS_W-260);
+      const targetY = clamp(CANVAS_H/2 + Math.sin(heli.orbitAngle)*150, 40, CANVAS_H-40);
+      const next = terrainAwareStep(heli.x, heli.y, targetX, targetY, FRIENDLY_HELI_MOVE_UNITS, true);
+      heli.x = next.x;
+      heli.y = next.y;
+    }
+  });
 }
 function allScoutsWiped(){
   return state.scouts.every(s=>!unitAlive(s));
@@ -4441,6 +4499,7 @@ function hqBoxHtml(){
 const FRIENDLY_KIND_LIST = [
   { kind:'scout',    list:()=>state.scouts,    alive:u=>unitAlive(u),                label:i=>`斥候${i+1}` },
   { kind:'mortar',   list:()=>state.mortars,   alive:u=>u.hp>0,                       label:i=>`迫撃砲${i+1}` },
+  { kind:'heli',     list:()=>state.helis||[], alive:u=>u.hp>0,                      label:i=>`ヘリ${i+1}` },
   { kind:'tank',     list:()=>state.tanks,     alive:u=>u.hp>0,                       label:i=>`戦車${i+1}` },
   { kind:'sam',      list:()=>state.sams,      alive:u=>u.hp>0,                       label:i=>`対空${i+1}` },
   { kind:'squad',    list:()=>state.squads,    alive:u=>u.soldiers.some(s=>s.alive),  label:i=>`第${i+1}小隊` },
@@ -4477,6 +4536,10 @@ function getUnitExposure(candidate){
   if(candidate.kind==='mortar'){
     const m = state.mortars[candidate.idx];
     return m.exposure + terrainCoverTotal(m.x, m.y);
+  }
+  if(candidate.kind==='heli'){
+    const h = state.helis[candidate.idx];
+    return h.exposure + terrainCoverTotal(h.x, h.y);
   }
   if(candidate.kind==='tank'){
     const tk = state.tanks[candidate.idx];
@@ -4522,6 +4585,9 @@ function nearestFriendlyAsset(x, y, includeSquads){
   });
   state.mortars.forEach((m,idx)=>{
     if(m.hp>0) candidates.push({kind:'mortar', idx, x:m.x, y:m.y});
+  });
+  (state.helis||[]).forEach((h,idx)=>{
+    if(h.hp>0) candidates.push({kind:'heli', idx, x:h.x, y:h.y});
   });
   if(includeSquads){
     state.squads.forEach((sq,idx)=>{
@@ -4649,6 +4715,13 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
     log('sys','被弾', `${sourceLabel}が迫撃砲${target.idx+1}を攻撃。被害 ${dmg}。`);
     if(mortar.hp>0) unitSpeak('mortar', target.idx, 'warning');
     else if(wasAlive) spawnDestructionEffect(mortar.x, mortar.y, `迫撃砲${target.idx+1} 戦闘不能!`, FRIENDLY_MARK_COLOR);
+  } else if(target.kind==='heli'){
+    const heli = state.helis && state.helis[target.idx];
+    if(!heli) return;
+    const wasAlive = heli.hp>0;
+    heli.hp = Math.max(0, heli.hp-dmg);
+    log('sys','被弾', `${sourceLabel}がヘリ${target.idx+1}を攻撃。被害 ${dmg}。`);
+    if(wasAlive && heli.hp<=0) spawnDestructionEffect(heli.x, heli.y, `ヘリ${target.idx+1} 撃墜!`, FRIENDLY_MARK_COLOR);
   } else if(target.kind==='tank'){
     const tank = state.tanks[target.idx];
     if(!tank) return;
@@ -5064,6 +5137,24 @@ function resolveDroneSwarm(actionTurns){
   return anyEvent;
 }
 
+function resolveEnemyEvasion(actionTurns){
+  let moved = false;
+  state.targets.filter(t=>!t.destroyed && t.revealed && (t.type==='infantry' || t.type==='vehicle')).forEach(t=>{
+    if(Math.random() > 0.35) return;
+    const near = nearestFriendlyAsset(t.trueX, t.trueY, false);
+    if(!near || near.dist>900/METERS_PER_UNIT) return;
+    const dx = t.trueX-near.x, dy = t.trueY-near.y;
+    const dist = Math.hypot(dx,dy)||1;
+    const goal = {x:clamp(t.trueX+dx/dist*180, 40, CANVAS_W-30), y:clamp(t.trueY+dy/dist*100, 30, CANVAS_H-30)};
+    const next = terrainAwareStep(t.trueX, t.trueY, goal.x, goal.y, t.type==='vehicle' ? TANK_MOVE_CAP : INFANTRY_MOVE_CAP);
+    t.trueX = next.x; t.trueY = next.y;
+    t._alertState = 'withdraw';
+    moved = true;
+  });
+  if(moved) log('sys','敵AI','発見された敵部隊が散開・退避を開始。');
+  return moved;
+}
+
 function advanceEnemyInfantry(actionTurns){
   const enemyInfantry = state.targets.filter(t=>!t.destroyed && t.type==='infantry');
   if(enemyInfantry.length===0) return false;
@@ -5125,7 +5216,12 @@ function advanceEnemyInfantry(actionTurns){
         const retreating = suppressed && Math.random() < SUPPRESSION_RETREAT_CHANCE;
         const aimX = retreating ? t.trueX + (t.trueX-moveGoal.x) : moveGoal.x;
         const aimY = retreating ? t.trueY + (t.trueY-moveGoal.y) : moveGoal.y;
-        const next = terrainAwareStep(t.trueX, t.trueY, aimX, aimY, step);
+        const roadNear = nearestRoadPoint(t.trueX, t.trueY);
+        const roadPath = roadNear && roadNear.dist < ROAD_PULL_RADIUS*1.5
+          ? findRoadPath(t.trueX, t.trueY, aimX, aimY) : null;
+        const next = roadPath
+          ? advanceAlongPath(t.trueX, t.trueY, roadPath, step)
+          : terrainAwareStep(t.trueX, t.trueY, aimX, aimY, step);
         t.trueX = Math.max(minX, next.x);
         t.trueY = clamp(next.y, 30, CANVAS_H-30);
         const dx = t.trueX-OP.x, dy = t.trueY-OP.y;
@@ -5190,6 +5286,7 @@ function resolveEnemyTurn(actionTurns){
   const repositioned = advanceEnemyArtillery(actionTurns);
   const assaulted = resolveVehicleAssault(actionTurns);
   const heliEvent = resolveHeliAssault(actionTurns);
+  const evaded = resolveEnemyEvasion(actionTurns);
   const antiDroned = resolveSquadAntiDrone(actionTurns);
   const antiVehicled = resolveSquadAntiVehicle(actionTurns);
   const swarmed = resolveDroneSwarm(actionTurns);
@@ -5217,7 +5314,7 @@ function resolveEnemyTurn(actionTurns){
   // Keep independently commanded formations from collapsing into one marker while
   // they advance toward the same FEBA or contact point in real time.
   maintainFriendlySpacing();
-  if(!hit && !infEvent && !sniperEvent && !tankEvent && !samEvent && !advanced && !assaulted && !heliEvent && !swarmed && !cbEvent && !antiDroned && !antiVehicled){
+  if(!hit && !infEvent && !sniperEvent && !tankEvent && !samEvent && !advanced && !assaulted && !heliEvent && !evaded && !swarmed && !cbEvent && !antiDroned && !antiVehicled){
     log('sys','敵ターン', '目立った動きなし。');
   }
   // per user request: 交戦時のサウンド -- looping battlefield-combat ambience plays while
@@ -5507,6 +5604,7 @@ function commitDecision(){
 
   speakCoordination();
   resolveScoutDecision();
+  resolveFriendlyHeliTurn(turnCost);
   resolveMortarDecision();
   resolveEnemyTurn(turnCost);
 
@@ -5557,8 +5655,12 @@ function finalizeVolley(snappedTarget, hitAny, volleyImpacts){
     const dx = snappedTarget.trueX-avgX, dy = snappedTarget.trueY-avgY;
     const ewDir = dx>=0?'東':'西', nsDir = dy<0?'北':'南';
     const ewAmt = unitsToMeters(Math.abs(dx)), nsAmt = unitsToMeters(Math.abs(dy));
-    log('op','斥候', `弾着観測。目標は着弾点より${ewDir}${ewAmt}m、${nsDir}${nsAmt}m。修正要求、次弾に反映せよ。`);
-    snappedTarget.posErr *= 0.75;
+    const observer = bestSensorForTarget(snappedTarget);
+    const observerLabel = observer && observer.kind==='heli' ? 'ヘリ' : '斥候';
+    const quality = observer && observer.kind==='heli' ? 0.55 : 0.35;
+    log('op', observerLabel, `弾着観測。目標は着弾点より${ewDir}${ewAmt}m、${nsDir}${nsAmt}m。${observerLabel}観測補正を次弾に反映。`);
+    snappedTarget.posErr *= 1-quality;
+    snappedTarget.trackingConfidence = Math.min(1, (snappedTarget.trackingConfidence||0.4)+quality*0.25);
   }
 }
 
@@ -6865,7 +6967,11 @@ function renderEnemyCommandBox(){
   // correction toward the true position -- so this just shows how far off the current
   // estimate (what you'd actually be aiming at) might still be. Falls with 偵察 (see
   // performRecon) and with each volley fired at this target (see finalizeVolley).
-  const precisionHtml = `<div class="meta" style="margin-bottom:8px;color:var(--amber);">見積り誤差: 最大約${Math.round(unitsToMeters(t.posErr))}m(偵察・弾着観測で縮小)</div>`;
+  const staleTurns = t.lastSeenTurn===undefined ? null : Math.max(0, state.turns-t.lastSeenTurn);
+  const contactHtml = t.lastKnownX===undefined
+    ? '最終確認位置: 未取得'
+    : `最終確認: ${staleTurns===0?'現在接触':`${staleTurns}ターン前`} / ${t.lastSeenBy==='heli'?'ヘリ':t.lastSeenBy==='scout'?'斥候':'地上部隊'} / 信頼度 ${Math.round((t.trackingConfidence||0.4)*100)}%`;
+  const precisionHtml = `<div class="meta" style="margin-bottom:8px;color:var(--amber);">${contactHtml}<br>見積り誤差: 最大約${Math.round(unitsToMeters(t.posErr))}m(偵察・弾着観測で縮小)</div>`;
   box.innerHTML = `
     <div class="cb-head">
       <span class="cb-title">${t.id} ― ${t.revealed?t.def.label:'識別不能'}</span>
@@ -6943,6 +7049,9 @@ function renderStats(){
   });
   state.sams.forEach((sam,i)=>{
     rows.push(forceRow(`対空${i+1}`, sam.hp/sam.maxHp, sam.hp>0?Math.round(sam.hp/sam.maxHp*100)+'%':'撃破', 'var(--blue-id)', 'sam', i));
+  });
+  (state.helis||[]).forEach((heli,i)=>{
+    rows.push(forceRow(`ヘリ${i+1}`, heli.hp/heli.maxHp, heli.hp>0?Math.round(heli.hp/heli.maxHp*100)+'%':'撃墜', 'var(--blue-id)'));
   });
   state.scouts.forEach((s,i)=>{
     const alive = unitAliveCount(s);
@@ -7125,6 +7234,7 @@ function drawMinimap(){
   state.tanks.forEach(tk=>{ if(tk.hp>0) friendlyPts.push([tk.x, tk.y]); });
   state.sams.forEach(sam=>{ if(sam.hp>0) friendlyPts.push([sam.x, sam.y]); });
   state.scouts.forEach(s=>{ if(unitAlive(s)) friendlyPts.push([s.x, s.y]); });
+  (state.helis||[]).forEach(h=>{ if(h.hp>0) friendlyPts.push([h.x, h.y]); });
   state.squads.forEach(sq=>{ if(sq.soldiers.some(s=>s.alive)) friendlyPts.push([sq.x, sq.y]); });
   state.snipers.forEach(sn=>{ if(sn.soldiers.some(s=>s.alive)) friendlyPts.push([sn.x, sn.y]); });
   ctx.fillStyle = FRIENDLY_MARK_COLOR;
@@ -7483,6 +7593,23 @@ function drawBoard(){
   });
 
   // scout markers (自軍, left side) ― 斥候, vulnerable to enemy attack
+  (state.helis||[]).forEach((heli, heliIdx)=>{
+    const p = project(heli.x, heli.y);
+    if(heli.hp<=0) return;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.fillStyle = FRIENDLY_MARK_COLOR;
+    ctx.strokeStyle = '#d9a441';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0,-12); ctx.lineTo(16,0); ctx.lineTo(0,12); ctx.lineTo(-16,0); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = LABEL_TEXT_COLOR;
+    ctx.font = '15px "JetBrains Mono"';
+    ctx.textAlign = 'center';
+    ctx.fillText(`ヘリ${heliIdx+1} [観測]`, 0, -20);
+    ctx.restore();
+  });
   state.scouts.forEach((scout, scIdx)=>{
     const scoutVisL = smoothVisualPos(scout, scout.x, scout.y);
     const scoutVis = project(scoutVisL.x, scoutVisL.y);
@@ -9964,6 +10091,19 @@ function updateTankHeading3d(marker, unit, visualX, visualY){
   // The imported OBJ's nose points toward local -Z; the procedural fallback points +Z.
   marker.rotation.y = travelHeading + (tankModelTemplate3d ? Math.PI : 0);
 }
+function updateHeliHeading3d(marker, target, visualX, visualY){
+  const prevX = target._heliMarkerX;
+  const prevY = target._heliMarkerY;
+  target._heliMarkerX = visualX;
+  target._heliMarkerY = visualY;
+  if(prevX===undefined || prevY===undefined) return;
+  const dx = visualX-prevX;
+  const dz = visualY-prevY;
+  if(Math.hypot(dx,dz) < 0.01) return;
+  const travelHeading = Math.atan2(dx, dz);
+  // The imported FBX helicopter's nose points toward local -Z.
+  marker.rotation.y = travelHeading + Math.PI;
+}
 function hideMarker3d(key){
   const m = unitMarkers3d[key];
   if(m) m.visible = false;
@@ -10012,10 +10152,12 @@ function syncUnitMarkers3d(){
     const p = smoothVisualPos(unit, unit.x, unit.y);
     place(key, p.x, p.y, shape, alive ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
     if(shape==='tank') updateTankHeading3d(unitMarkers3d[key], unit, p.x, p.y);
+    if(shape==='heli') updateHeliHeading3d(unitMarkers3d[key], unit, p.x, p.y);
   };
   state.mortars.forEach((m,i)=>friendlyUnit('mortar'+i, m, 'mortar', m.hp>0));
   state.tanks.forEach((tk,i)=>friendlyUnit('tank'+i, tk, 'tank', tk.hp>0));
   state.sams.forEach((sam,i)=>friendlyUnit('sam'+i, sam, 'sam', sam.hp>0));
+  (state.helis||[]).forEach((heli,i)=>friendlyUnit('heli'+i, heli, 'heli', heli.hp>0));
   state.scouts.forEach((s,i)=>friendlyUnit('scout'+i, s, 'scout', unitAlive(s)));
   state.squads.forEach((sq,i)=>friendlyUnit('squad'+i, sq, 'infantry', unitAlive(sq)));
   state.snipers.forEach((sn,i)=>friendlyUnit('sniper'+i, sn, 'sniper', unitAlive(sn)));
@@ -10035,6 +10177,7 @@ function syncUnitMarkers3d(){
     const e = smoothVisualPos(t, eLogical.x, eLogical.y);
     const shape = t.type==='hq' ? 'hq' : t.type==='vehicle' ? 'tank' : t.type==='artillery' ? 'cylinder' : t.type==='drone' ? 'diamond' : t.type==='heli' ? 'heli' : 'sphere';
     place(key, e.x, e.y, shape, t.revealed ? (TARGET_TYPE_COLOR[t.type]||0xc1453b) : 0x8f9678, true);
+    if(shape==='heli') updateHeliHeading3d(unitMarkers3d[key], t, e.x, e.y);
   });
 
   Object.keys(unitMarkers3d).forEach(key=>{
