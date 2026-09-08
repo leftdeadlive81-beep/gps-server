@@ -1,8 +1,8 @@
 const GAME_VERSION = '0.2';
-const CANVAS_W = 1300, CANVAS_H = 460;
-const OP_HOME_X = 90, OP_HOME_Y = 230;
+const CANVAS_W = 2600, CANVAS_H = 460;
+const OP_HOME_X = 180, OP_HOME_Y = 230;
 const OP = {x: OP_HOME_X, y: OP_HOME_Y};
-const HQ_X = 30, HQ_Y = 230;
+const HQ_X = 60, HQ_Y = 230;
 const HQ_MAX_HP = 200;
 // per user request: HQ previously had no player-facing defenses at all (fixed position,
 // fixed exposure, no repair) despite enemy targeting logic actively preferring it (see
@@ -23,7 +23,7 @@ function hitChanceFromExposure(exposure){
 function exposureNormalizedMult(exposure){
   return hitChanceFromExposure(exposure) / hitChanceFromExposure(EXPOSURE_DEFAULT);
 }
-const SCOUT_X = 230;
+const SCOUT_X = 460;
 const SCOUT_UPPER_Y = 55;
 const SCOUT_LOWER_Y = 405;
 const INITIAL_DEPLOY_SPACING_MULT = 1.4; // widens the gap between units of the same type at first-wave deployment
@@ -73,7 +73,7 @@ const WEATHER_TYPES = {
   night: {label:'夜間', dispersionMult:1.2,  counterMult:0.7,  errMult:1.2,  tint:'rgba(10,15,35,0.28)',    desc:'敵反撃頻度低下、照準精度も低下'},
 };
 const EQUIP_LABEL = {armor:'強化装甲', optics:'精密照準器', wideView:'広角観測機材', extMag:'予備弾倉'};
-const FRIENDLY_INF_POS = {x: 350, y: 230};
+const FRIENDLY_INF_POS = {x: 700, y: 230};
 const SNIPER_POS = {x: 290, y: 230};
 const STAGE_COUNT = 50;
 const PRICE_HE = 35;
@@ -401,14 +401,14 @@ const SCOUT_FORMATION_OFFSETS = [
 const SNIPER_FORMATION_OFFSETS = [
   {dx:-14,dy:-8},{dx:0,dy:-12},{dx:14,dy:-8},{dx:-8,dy:9},{dx:8,dy:9},
 ];
-const SCOUT_ADVANCE_LIMIT_X = 1100;
-const SQUAD_RETREAT_LIMIT_X = 150;
+const SCOUT_ADVANCE_LIMIT_X = 2200;
+const SQUAD_RETREAT_LIMIT_X = 300;
 // per user request: SQUAD_ADVANCE_LIMIT_X's old role (the fixed X the "前進" order advanced
 // to) is now the player-draggable FEBA line (see state.febaX, drawn in drawBoard() and
 // dragged via setupMapControls()). This constant survives only as febaX's initial value and
 // the drag range's bounds.
-const SQUAD_ADVANCE_LIMIT_X = 620;
-const SQUAD_ASSAULT_LIMIT_X = 1150;
+const SQUAD_ADVANCE_LIMIT_X = 1240;
+const SQUAD_ASSAULT_LIMIT_X = 2300;
 const FEBA_MIN_X = SQUAD_RETREAT_LIMIT_X;
 const FEBA_MAX_X = SQUAD_ASSAULT_LIMIT_X;
 const FEBA_LINE_COLOR = 'rgba(50,130,255,0.95)';
@@ -416,7 +416,7 @@ const FEBA_LINE_WIDTH = 4;
 const FEBA_GRAB_PX = 16;
 const SQUAD_ENGAGE_RANGE = 100;
 const DETECTION_RANGE = {infantry:100, artillery:50};
-const MAP_WIDTH_KM = 10;
+const MAP_WIDTH_KM = 20;
 const METERS_PER_UNIT = (MAP_WIDTH_KM*1000) / CANVAS_W;
 const CONTACT_RANGE_M = 200;
 const CONTACT_RANGE_UNITS = CONTACT_RANGE_M / METERS_PER_UNIT;
@@ -592,7 +592,10 @@ function unitMayFire(kind, index, tick){
 }
 function visualTweenDurationMs(){
   const ms = GAME_SPEED_INTERVALS[(state && state.gameSpeed) || 'normal'];
-  return Math.round(ms*0.96);
+  // Keep the next movement target slightly ahead of the visual marker. This removes the
+  // brief stop at the end of each simulation slice and makes successive orders read as one
+  // continuous movement instead of "advance, pause, advance".
+  return Math.round(ms*1.15);
 }
 function smoothstep01(t){ return t*t*(3-2*t); }
 const SUPPRESSION_TURNS = 3;
@@ -1064,11 +1067,30 @@ enemyInfantryIcon.src = 'icons/e-infant.png';
 function scaledIconH(baseH){
   return baseH * clamp(Math.sqrt(MAP_VIEW.zoom), 0.6, 2.2);
 }
+function drawUnitBase(ctx, size, dead){
+  ctx.save();
+  ctx.fillStyle = dead ? 'rgba(35,18,18,.88)' : 'rgba(8,18,24,.9)';
+  ctx.strokeStyle = dead ? 'rgba(224,90,79,.9)' : 'rgba(160,205,232,.9)';
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = dead ? 'rgba(224,90,79,.45)' : 'rgba(80,180,255,.4)';
+  ctx.shadowBlur = 8;
+  ctx.beginPath();
+  ctx.ellipse(0, size*.2, size*.72, size*.28, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
 function drawUnitIcon(ctx, img, cx, cy, targetH, dead){
+  ctx.save();
+  ctx.translate(cx, cy);
+  drawUnitBase(ctx, targetH, dead);
+  ctx.restore();
   if(!img.complete || !img.naturalWidth) return;
   const w = targetH * (img.naturalWidth/img.naturalHeight);
   ctx.save();
   if(dead) ctx.filter = 'grayscale(1) brightness(0.5)';
+  ctx.shadowColor = dead ? 'rgba(224,90,79,.4)' : 'rgba(70,170,255,.5)';
+  ctx.shadowBlur = 7;
   ctx.drawImage(img, cx-w/2, cy-targetH/2, w, targetH);
   ctx.restore();
 }
@@ -1078,6 +1100,7 @@ function drawTankIcon(ctx, cx, cy, size, dead){
   const w = size*1.6, h = size*0.9;
   ctx.save();
   ctx.translate(cx, cy);
+  drawUnitBase(ctx, size, dead);
   ctx.fillStyle = dead ? '#5c2a25' : FRIENDLY_MARK_COLOR;
   ctx.strokeStyle = dead ? '#3a1b18' : '#3d5a70';
   ctx.lineWidth = 1.5;
@@ -1103,6 +1126,7 @@ function drawSamIcon(ctx, cx, cy, size, dead){
   const w = size*1.5, h = size*0.7;
   ctx.save();
   ctx.translate(cx, cy);
+  drawUnitBase(ctx, size, dead);
   const col = dead ? '#5c2a25' : FRIENDLY_MARK_COLOR;
   ctx.fillStyle = col;
   ctx.strokeStyle = dead ? '#3a1b18' : '#3d5a70';
@@ -1129,6 +1153,7 @@ function drawSamIcon(ctx, cx, cy, size, dead){
 function drawEngineerIcon(ctx, cx, cy, size, dead){
   ctx.save();
   ctx.translate(cx, cy);
+  drawUnitBase(ctx, size, dead);
   const col = dead ? '#5c2a25' : FRIENDLY_MARK_COLOR;
   ctx.fillStyle = col;
   ctx.strokeStyle = dead ? '#3a1b18' : '#3d5a70';
@@ -7082,6 +7107,17 @@ function drawMinimap(){
   ctx.clearRect(0,0,w,h);
   const sx = wx => (wx/CANVAS_W)*w;
   const sy = wy => (wy/CANVAS_H)*h;
+  (state.roads||[]).forEach((road, roadIdx)=>{
+    const kind = (state.roadKinds||[])[roadIdx] || 'main';
+    ctx.beginPath();
+    road.forEach((p, i)=>{
+      if(i===0) ctx.moveTo(sx(p.x), sy(p.y));
+      else ctx.lineTo(sx(p.x), sy(p.y));
+    });
+    ctx.strokeStyle = kind==='dirt' ? 'rgba(150,110,70,0.8)' : kind==='branch' ? 'rgba(145,145,120,0.85)' : 'rgba(185,181,155,0.9)';
+    ctx.lineWidth = kind==='dirt' ? 1 : 1.5;
+    ctx.stroke();
+  });
 
   const friendlyPts = [];
   if(state.hq && state.hq.hp>0) friendlyPts.push([state.hq.x, state.hq.y]);
@@ -7155,12 +7191,24 @@ function drawBoard(){
   ctx.translate(shakeOff.x, shakeOff.y);
   const nowWander = performance.now();
 
-  // roads: graphics intentionally suppressed (movement no longer road-follows;
-  // only the road judgment in nearestRoadPoint/state.roads remains, used for
-  // the on-road speed bonus). Points that fall behind/outside the camera view
-  // are skipped rather than connected-through, so distant road segments never
-  // draw a stray line straight across the screen.
-  if(false && state.roads){
+  // Roads are drawn over the 3D terrain as a crisp tactical-map overlay. The
+  // terrain texture carries the broad road surface; this pass adds lane/edge
+  // definition without making distant segments connect through the camera.
+  if(state.roads){
+    const projectRoad = road=>{
+      const points = [];
+      for(let i=0;i<road.length-1;i++){
+        const a = road[i], b = road[i+1];
+        const steps = Math.max(1, Math.ceil(Math.hypot(b.x-a.x, b.y-a.y)/18));
+        for(let j=0;j<steps;j++){
+          const t = j/steps;
+          points.push(project(a.x+(b.x-a.x)*t, a.y+(b.y-a.y)*t));
+        }
+      }
+      const last = road[road.length-1];
+      if(last) points.push(project(last.x,last.y));
+      return points;
+    };
     const strokePath = (proj, color, width, dash)=>{
       ctx.beginPath();
       ctx.strokeStyle = color;
@@ -7177,10 +7225,14 @@ function drawBoard(){
       ctx.stroke();
       if(dash) ctx.setLineDash([]);
     };
-    state.roads.forEach(road=>{
-      const proj = road.map(p=>project(p.x,p.y));
-      strokePath(proj, 'rgba(196,168,110,0.55)', 5, null);
-      strokePath(proj, 'rgba(232,214,172,0.5)', 1, [7,7]);
+    state.roads.forEach((road, roadIdx)=>{
+      const proj = projectRoad(road);
+      const kind = (state.roadKinds||[])[roadIdx] || 'main';
+      const width = kind==='dirt' ? 3 : kind==='branch' ? 5 : 7;
+      const base = kind==='dirt' ? 'rgba(139,106,67,0.72)' : kind==='branch' ? 'rgba(123,122,103,0.72)' : 'rgba(145,143,127,0.78)';
+      const center = kind==='dirt' ? 'rgba(196,157,107,0.45)' : 'rgba(218,211,180,0.58)';
+      strokePath(proj, base, width, null);
+      strokePath(proj, center, kind==='dirt' ? 1 : 2, kind==='dirt' ? [4,6] : [10,8]);
     });
   }
 
@@ -7342,7 +7394,7 @@ function drawBoard(){
     ctx.save();
     ctx.translate(mVis.x,mVis.y);
     // per user request: custom mortar icon image (our side only) in place of the old triangle
-    drawUnitIcon(ctx, mortarIcon, 0, 0, scaledIconH(16), !mAlive);
+    drawUnitIcon(ctx, mortarIcon, 0, 0, scaledIconH(22), !mAlive);
     drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='mortar' && state.commandBox.idx===mIdx);
     // shoot-and-scoot: a pulsing red ring while a counter-battery strike is inbound, so the
     // threat reads clearly on the map itself and not just in the mortar's own panel
@@ -7434,7 +7486,7 @@ function drawBoard(){
     ctx.save();
     ctx.translate(scoutVis.x, scoutVis.y);
     // per user request: custom scout icon image (our side only) in place of the cross+circle glyph
-    drawUnitIcon(ctx, scoutIcon, 0, 0, scaledIconH(16), !scoutAlive);
+    drawUnitIcon(ctx, scoutIcon, 0, 0, scaledIconH(22), !scoutAlive);
     drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='scout' && state.commandBox.idx===scIdx);
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
@@ -7456,15 +7508,13 @@ function drawBoard(){
     }
   });
 
-  // tank markers (自軍, left side) ― direct-fire armor, HP-based (no soldiers array), same
-  // marker pattern as mortars but with the vector-drawn drawTankIcon in place of an image icon.
+  // tank markers (自軍, left side) ― the 3D FBX is the sole tank body representation.
   state.tanks.forEach((tank, tIdx)=>{
     const tVisL = smoothVisualPos(tank, tank.x, tank.y);
     const tVis = project(tVisL.x, tVisL.y);
     const tAlive = tank.hp>0;
     ctx.save();
     ctx.translate(tVis.x, tVis.y);
-    drawTankIcon(ctx, 0, 0, scaledIconH(16), !tAlive);
     drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='tank' && state.commandBox.idx===tIdx);
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
@@ -7504,7 +7554,7 @@ function drawBoard(){
     const samAlive = sam.hp>0;
     ctx.save();
     ctx.translate(samVis.x, samVis.y);
-    drawSamIcon(ctx, 0, 0, scaledIconH(16), !samAlive);
+    drawSamIcon(ctx, 0, 0, scaledIconH(22), !samAlive);
     drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='sam' && state.commandBox.idx===samIdx);
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
@@ -7554,7 +7604,7 @@ function drawBoard(){
     const aliveSoldiers = en.soldiers.filter(s=>s.alive);
     ctx.save();
     ctx.translate(enVis.x, enVis.y);
-    drawEngineerIcon(ctx, 0, 0, scaledIconH(16), aliveSoldiers.length===0);
+    drawEngineerIcon(ctx, 0, 0, scaledIconH(22), aliveSoldiers.length===0);
     drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='engineer' && state.commandBox.idx===enIdx);
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '14px "JetBrains Mono"';
@@ -7571,7 +7621,7 @@ function drawBoard(){
       const sqVisL = smoothVisualPos(sq, sq.x, sq.y);
       const sqVis = project(sqVisL.x, sqVisL.y);
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
-      drawUnitIcon(ctx, infantryIcon, sqVis.x, sqVis.y, scaledIconH(16), aliveSoldiers.length===0);
+      drawUnitIcon(ctx, infantryIcon, sqVis.x, sqVis.y, scaledIconH(22), aliveSoldiers.length===0);
       drawSelectionRing(ctx, sqVis.x, sqVis.y, state.commandBox && state.commandBox.kind==='squad' && state.commandBox.idx===sqIdx);
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, sqVis.x+32, sqVis.y, aliveSoldiers.length/sq.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
@@ -7606,7 +7656,7 @@ function drawBoard(){
       const snVis = project(snVisL.x, snVisL.y);
       const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
       // per user request: custom sniper icon image (our side only) in place of the triangle
-      drawUnitIcon(ctx, sniperIcon, snVis.x, snVis.y, scaledIconH(16), aliveSoldiers.length===0);
+      drawUnitIcon(ctx, sniperIcon, snVis.x, snVis.y, scaledIconH(22), aliveSoldiers.length===0);
       drawSelectionRing(ctx, snVis.x, snVis.y, state.commandBox && state.commandBox.kind==='sniper' && state.commandBox.idx===snIdx);
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, snVis.x+20, snVis.y, aliveSoldiers.length/sn.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
@@ -7683,7 +7733,7 @@ function drawBoard(){
         // per user request: custom enemy infantry icon image in place of the plain circle --
         // muted (grayscale) until identified, same treatment as a friendly unit with no survivors.
         const aliveTroops = t.troops.filter(s=>s.alive);
-        drawUnitIcon(ctx, enemyInfantryIcon, e.x, e.y, scaledIconH(16), !t.revealed);
+        drawUnitIcon(ctx, enemyInfantryIcon, e.x, e.y, scaledIconH(22), !t.revealed);
         if(t.revealed) drawAttritionBar(ctx, e.x+14, e.y, t.hp/t.maxHp);
         labelY = e.y+26;
         if(t.revealed){
@@ -8467,7 +8517,7 @@ function febaScreenHitDistance(sx, sy){
 const MAP_INITIAL_AZIMUTH = (window.innerWidth||0) <= 600 ? -Math.PI/2 : 0;
 const MAP_VIEW = {
   cx: CANVAS_W/2, cy: CANVAS_H/2,      // look-at point, in canvas-unit space
-  zoom: 1, azimuth: MAP_INITIAL_AZIMUTH, polar: 0.6, // orbit distance factor / horizontal / tilt angle (rad)
+  zoom: 1, azimuth: MAP_INITIAL_AZIMUTH, polar: 0.82, // lower cinematic angle gives the battlefield a longer horizon and stronger depth
   containerW: 1, containerH: 1,
 };
 const MAP_ZOOM_MIN = 0.35, MAP_ZOOM_MAX = 9; // per user request: allow zooming in further (was 5)
@@ -8504,12 +8554,18 @@ function cancelCameraCinematic(){
 // derived from a loaded mesh's bounding box, since a procedural battlefield has no
 // independent "real size" of its own; PROC_TERRAIN_HEIGHT_SCALE below is scaled by the
 // same factor so vertical relief keeps the exact proportions it was tuned at.
-const PROC_TERRAIN_HEIGHT_SCALE = 90 * METERS_PER_UNIT;
+const PROC_TERRAIN_HEIGHT_SCALE = 110 * METERS_PER_UNIT;
 const WORLD = {
   originX: 0, originZ: 0, scaleX: METERS_PER_UNIT, scaleZ: METERS_PER_UNIT,
   minY: 0, maxY: PROC_TERRAIN_HEIGHT_SCALE*1.3, refY: PROC_TERRAIN_HEIGHT_SCALE*0.65,
 };
 const unitMarkers3d = {};
+let tankModelTemplate3d = null;
+let tankModelLoadStarted = false;
+let heliModelTemplate3d = null;
+let heliModelLoadStarted = false;
+let heliAnimationMixer = null;
+let heliAnimationAction = null;
 let mapFocusTarget = null;
 
 // per user request: the terrain texture is now painted procedurally (a canvas colored by
@@ -8521,7 +8577,7 @@ let mapFocusTarget = null;
 // gamma-corrects the result for display, so a naive 0.5 here would only look like
 // 0.5^(1/2.2) =~ 73% brightness on screen, not 50%.
 const TERRAIN_TEXTURE_BRIGHTNESS = 0.55;
-const PROC_TEXTURE_SIZE_X = 520, PROC_TEXTURE_SIZE_Z = 184; // 2.826:1, matching CANVAS_W:CANVAS_H
+const PROC_TEXTURE_SIZE_X = 1040, PROC_TEXTURE_SIZE_Z = 184; // 5.652:1, matching CANVAS_W:CANVAS_H
 // Base ground colors across the elevation range (low -> high), and the forest/water zone
 // overlay colors -- painted from the exact same descriptor buildProceduralTerrainMesh()
 // displaces its geometry from, so the picture and the mechanics can't disagree.
@@ -8573,6 +8629,19 @@ const PROC_TEXTURE_NOISE_COARSE_CELL = 55, PROC_TEXTURE_NOISE_COARSE_AMOUNT = 22
 const PROC_TEXTURE_NOISE_FINE_CELL = 12, PROC_TEXTURE_NOISE_FINE_AMOUNT = 12;
 function paintTerrainColors(ctx, w, h, gen){
   const img = ctx.createImageData(w, h);
+  const roadPaths = gen.roadPaths || [];
+  const roadKinds = gen.roadKinds || [];
+  const roadDistance = (cx, cy)=>{
+    let best = null;
+    roadPaths.forEach((road, roadIdx)=>{
+      const hit = nearestPointOnRoad(road, cx, cy);
+      if(!hit.point) return;
+      const kind = roadKinds[roadIdx] || 'main';
+      const width = kind==='dirt' ? 7 : kind==='branch' ? 13 : 18;
+      if(!best || hit.dist < best.dist) best = {dist:hit.dist, width, kind};
+    });
+    return best;
+  };
   for(let py=0; py<h; py++){
     const cy = (py/h)*CANVAS_H;
     for(let px=0; px<w; px++){
@@ -8613,6 +8682,21 @@ function paintTerrainColors(ctx, w, h, gen){
       const noise = ((valueNoise2D(cx/PROC_TEXTURE_NOISE_COARSE_CELL, cy/PROC_TEXTURE_NOISE_COARSE_CELL, gen.seed)-0.5)*PROC_TEXTURE_NOISE_COARSE_AMOUNT
                    + (valueNoise2D(cx/PROC_TEXTURE_NOISE_FINE_CELL, cy/PROC_TEXTURE_NOISE_FINE_CELL, gen.seed+1)-0.5)*PROC_TEXTURE_NOISE_FINE_AMOUNT) * noiseMult;
       r = clamp(r+noise, 0, 255); g = clamp(g+noise*0.9, 0, 255); b = clamp(b+noise*0.7, 0, 255);
+      const road = roadDistance(cx, cy);
+      if(road && road.dist < road.width + 5){
+        const edge = clamp((road.dist-road.width)/5, 0, 1);
+        const roadColor = road.kind==='dirt' ? [0x8b,0x6a,0x43] : road.kind==='branch' ? [0x6f,0x6d,0x5d] : [0x7e,0x7d,0x70];
+        const roadBlend = 1-edge;
+        r += (roadColor[0]-r)*roadBlend;
+        g += (roadColor[1]-g)*roadBlend;
+        b += (roadColor[2]-b)*roadBlend;
+        if(road.dist > road.width){
+          const shoulderBlend = 1-clamp((road.dist-road.width)/5, 0, 1);
+          r += (0x9a-r)*shoulderBlend*0.35;
+          g += (0x86-g)*shoulderBlend*0.35;
+          b += (0x5b-b)*shoulderBlend*0.35;
+        }
+      }
       const idx = (py*w+px)*4;
       img.data[idx] = r; img.data[idx+1] = g; img.data[idx+2] = b; img.data[idx+3] = 255;
     }
@@ -8699,7 +8783,7 @@ function initThree(){
   scene3d = new THREE.Scene();
   scene3d.fog = new THREE.Fog(SKY_COLOR, 1, 2); // near/far kept in sync with camera distance -- see updateCameraFromView()
 
-  camera3d = new THREE.PerspectiveCamera(45, 1, 1, 100000);
+  camera3d = new THREE.PerspectiveCamera(42, 1, 1, 100000);
   scene3d.add(camera3d);
 
   // per user request: nudged up slightly (alongside brightening PROC_COLOR_LOW) so low-lying
@@ -8711,7 +8795,63 @@ function initThree(){
   sun.position.set(600, 1200, 400);
   scene3d.add(sun);
 
+  loadTankModel3d();
+  loadHeliModel3d();
   resizeThree();
+}
+
+function loadTankModel3d(){
+  if(tankModelLoadStarted || typeof THREE.FBXLoader !== 'function') return;
+  tankModelLoadStarted = true;
+  const loader = new THREE.FBXLoader();
+  loader.load('./models/tank/tank.fbx', obj=>{
+      const bounds = new THREE.Box3().setFromObject(obj);
+      const size = bounds.getSize(new THREE.Vector3());
+      const center = bounds.getCenter(new THREE.Vector3());
+      obj.position.sub(center);
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      // FBX assets often contain a different authoring-unit scale than OBJ assets.
+      // Normalize the imported bounds first, then apply the gameplay marker scale below.
+      obj.scale.setScalar(1/maxDim);
+      const normalizedBounds = new THREE.Box3().setFromObject(obj);
+      obj.position.y -= normalizedBounds.min.y;
+      tankModelTemplate3d = obj;
+      Object.keys(unitMarkers3d).forEach(key=>{
+        if(key.indexOf('tank')===0) disposeMarker3d(key);
+      });
+      syncUnitMarkers3d();
+      console.info('戦車モデルを読み込みました');
+    }, undefined, error=>console.warn('戦車FBXの読み込みに失敗しました', error));
+}
+
+function loadHeliModel3d(){
+  if(heliModelLoadStarted || typeof THREE.FBXLoader !== 'function') return;
+  heliModelLoadStarted = true;
+  const loader = new THREE.FBXLoader();
+  loader.load('./models/heli/heli.fbx', obj=>{
+      const bounds = new THREE.Box3().setFromObject(obj);
+      const size = bounds.getSize(new THREE.Vector3());
+      const center = bounds.getCenter(new THREE.Vector3());
+      obj.position.sub(center);
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      obj.scale.setScalar(1/maxDim);
+      const normalizedBounds = new THREE.Box3().setFromObject(obj);
+      obj.position.y -= normalizedBounds.min.y;
+      heliModelTemplate3d = obj;
+      if(obj.animations && obj.animations.length > 0){
+        heliAnimationMixer = new THREE.AnimationMixer(obj);
+        heliAnimationAction = heliAnimationMixer.clipAction(obj.animations[0]);
+        heliAnimationAction.play();
+      }
+      Object.keys(unitMarkers3d).forEach(key=>{
+        if(key.indexOf('target')===0){
+          const marker = unitMarkers3d[key];
+          if(marker && marker._heliMarker) disposeMarker3d(key);
+        }
+      });
+      syncUnitMarkers3d();
+      console.info('ヘリモデルを読み込みました');
+    }, undefined, error=>console.warn('ヘリFBXの読み込みに失敗しました', error));
 }
 
 // per user request: (re)builds the terrain -- mesh, contour lines, roads -- from a
@@ -8735,7 +8875,7 @@ function regenerateTerrain(gen){
   scene3d.add(terrainObject3d);
 
   buildContourLines();
-  buildProceduralRoads(gen.roadPaths);
+  buildProceduralRoads(gen.roadPaths, gen.roadKinds);
   buildTerrainProps(gen);
   threeReady = true;
   cameraNeedsInitialFit = true;
@@ -8905,22 +9045,40 @@ function generateProceduralTerrain(seed, archetypeKey){
     });
   }
 
-  let roadPath;
+  const roadY1 = CANVAS_H*0.3;
+  const roadY2 = CANVAS_H*0.7;
+  const roadX = [CANVAS_W*0.27, CANVAS_W*0.5, CANVAS_W*0.73];
+  const mainRoad1 = [
+    {x:20, y:roadY1+rngRange(rng,-8,8)},
+    {x:CANVAS_W*0.25, y:roadY1+rngRange(rng,-18,18)},
+    {x:CANVAS_W*0.5, y:roadY1+rngRange(rng,-20,20)},
+    {x:CANVAS_W*0.75, y:roadY1+rngRange(rng,-18,18)},
+    {x:CANVAS_W-20, y:roadY1+rngRange(rng,-8,8)},
+  ];
+  const mainRoad2 = [
+    {x:20, y:roadY2+rngRange(rng,-8,8)},
+    {x:CANVAS_W*0.25, y:roadY2+rngRange(rng,-18,18)},
+    {x:CANVAS_W*0.5, y:roadY2+rngRange(rng,-20,20)},
+    {x:CANVAS_W*0.75, y:roadY2+rngRange(rng,-18,18)},
+    {x:CANVAS_W-20, y:roadY2+rngRange(rng,-8,8)},
+  ];
   if(river){
     const fordX = riverXAt(river, river.fordY);
-    roadPath = [
-      {x: CANVAS_W-40, y: river.fordY + rngRange(rng,-15,15)},
-      {x: fordX, y: river.fordY},
-      {x: 20, y: river.fordY + rngRange(rng,-15,15)},
-    ];
-  } else {
-    const midY = rngRange(rng, CANVAS_H*0.3, CANVAS_H*0.7);
-    roadPath = [
-      {x: CANVAS_W-40, y: midY},
-      {x: CANVAS_W*0.5, y: midY+rngRange(rng,-40,40)},
-      {x: 20, y: midY},
-    ];
+    mainRoad1[2] = {x:fordX, y:river.fordY};
+    mainRoad2[2] = {x:fordX, y:river.fordY};
   }
+  const branchRoads = roadX.map((x, i)=>[
+    {x, y:mainRoad1[i+1].y},
+    {x:x+rngRange(rng,-18,18), y:CANVAS_H*0.5+rngRange(rng,-16,16)},
+    {x, y:mainRoad2[i+1].y},
+  ]);
+  const dirtRoads = [
+    [{x:20, y:CANVAS_H*0.9}, {x:CANVAS_W*0.18, y:CANVAS_H*0.78}, {x:roadX[0], y:mainRoad2[1].y}],
+    [{x:CANVAS_W-20, y:CANVAS_H*0.1}, {x:CANVAS_W*0.82, y:CANVAS_H*0.22}, {x:roadX[2], y:mainRoad1[3].y}],
+    [{x:CANVAS_W*0.5, y:CANVAS_H-20}, {x:CANVAS_W*0.54, y:CANVAS_H*0.82}, {x:roadX[1], y:mainRoad2[2].y}],
+  ];
+  const roadPaths = [mainRoad1, mainRoad2, ...branchRoads, ...dirtRoads];
+  const roadKinds = ['main', 'main', 'branch', 'branch', 'branch', 'dirt', 'dirt', 'dirt'];
 
   // per user request (idea 1): tree/rock placements are part of the descriptor (drawn from
   // the same rng, after everything else) so they're just as deterministic/reproducible from
@@ -8946,7 +9104,7 @@ function generateProceduralTerrain(seed, archetypeKey){
     rocks.push({ x:rx, y:ry, scale: rngRange(rng,0.7,1.5), rotX: rng()*Math.PI, rotY: rng()*Math.PI, rotZ: rng()*Math.PI });
   }
 
-  return { seed, archetype: key, label: arch.label, hills, forestPatches, river, roadPaths: [roadPath], trees, rocks };
+  return { seed, archetype: key, label: arch.label, hills, forestPatches, river, roadPaths, roadKinds, trees, rocks };
 }
 
 const TERRAIN_TYPE_OPEN = 0, TERRAIN_TYPE_FOREST = 1, TERRAIN_TYPE_WATER = 2;
@@ -8986,10 +9144,13 @@ const TERRAIN_TYPE_SPEED_MULT = { [TERRAIN_TYPE_FOREST]: 0.7, [TERRAIN_TYPE_WATE
 // real mesh it was authored against. Kept as its own function (rather than inlining) so
 // the rest of the pipeline (state.roads, buildRoadGraph, A* vehicle pathfinding, the
 // on-road speed bonus) is untouched.
-function buildProceduralRoads(roadPaths){
+function buildProceduralRoads(roadPaths, roadKinds){
   REAL_ROADS_CANVAS.length = 0;
   (roadPaths||[]).forEach(poly=> REAL_ROADS_CANVAS.push(poly));
-  if(state) state.roads = REAL_ROADS_CANVAS;
+  if(state){
+    state.roads = REAL_ROADS_CANVAS;
+    state.roadKinds = roadKinds || [];
+  }
   buildRoadGraph();
 }
 
@@ -9690,7 +9851,7 @@ function setupMapControls(){
 
 function makeMarkerMesh3d(shape, colorHex){
   const group = new THREE.Group();
-  const s = Math.max(0.6, (WORLD.scaleX+WORLD.scaleZ)/2*10);
+  const s = Math.max(0.6, (WORLD.scaleX+WORLD.scaleZ)/2*7.5);
   const mat = color=>new THREE.MeshStandardMaterial({color, roughness:0.7, metalness:0.05});
   const add = (geometry, material, y=0, z=0)=>{
     const mesh = new THREE.Mesh(geometry, material);
@@ -9710,17 +9871,32 @@ function makeMarkerMesh3d(shape, colorHex){
     barrel.position.set(0, height, length/2);
     group.add(barrel);
   };
+  const addTrack = (x)=>{
+    add(new THREE.BoxGeometry(s*0.28, s*0.25, s*1.72), mat(0x202a2b), s*0.18, 0).position.x = x;
+  };
   if(shape==='tank'){
-    add(new THREE.BoxGeometry(s*1.4, s*0.42, s*1.9), mat(colorHex), s*0.25);
-    add(new THREE.BoxGeometry(s*0.72, s*0.28, s*0.72), mat(0x42576b), s*0.6);
-    addBarrel(0x2a3238, s*1.15, s*0.68);
-    addFlag(colorHex);
+    if(tankModelTemplate3d){
+      const model = tankModelTemplate3d.clone(true);
+      model.scale.setScalar(s*0.0025);
+      model.rotation.y = Math.PI;
+      group.add(model);
+    }
+  } else if(shape==='heli'){
+    if(heliModelTemplate3d){
+      const model = heliModelTemplate3d.clone(true);
+      model.scale.setScalar(s*0.008);
+      model.rotation.y = Math.PI;
+      group.add(model);
+      group._heliMarker = true;
+    }
   } else if(shape==='mortar'){
     add(new THREE.CylinderGeometry(s*0.5, s*0.58, s*0.24, 8), mat(colorHex), s*0.12);
     const tube = add(new THREE.CylinderGeometry(s*0.12, s*0.16, s*0.95, 8), mat(0x3d4649), s*0.65);
     tube.rotation.z = -Math.PI*0.28;
     addFlag(colorHex);
   } else if(shape==='sam'){
+    addTrack(-s*0.58);
+    addTrack(s*0.58);
     add(new THREE.BoxGeometry(s*1.2, s*0.28, s*1.2), mat(colorHex), s*0.16);
     add(new THREE.CylinderGeometry(s*0.18, s*0.24, s*0.65, 8), mat(0x39454d), s*0.55);
     addBarrel(0x9aafbd, s*0.75, s*0.7);
@@ -9733,7 +9909,12 @@ function makeMarkerMesh3d(shape, colorHex){
     positions.slice(0,count).forEach(([x,z])=>{
       const soldier = add(new THREE.CylinderGeometry(s*0.13, s*0.15, s*0.42, 8), mat(colorHex), s*0.3, z*s*0.8);
       soldier.position.x = x*s*0.8;
-      add(new THREE.SphereGeometry(s*0.14, 8, 6), mat(0xd1b28a), s*0.58, z*s*0.8).position.x = x*s*0.8;
+      const head = add(new THREE.SphereGeometry(s*0.14, 8, 6), mat(0xd1b28a), s*0.58, z*s*0.8);
+      head.position.x = x*s*0.8;
+      const rifle = add(new THREE.CylinderGeometry(s*0.025, s*0.025, s*0.55, 5), mat(0x242a2b), s*0.34, z*s*0.8);
+      rifle.rotation.x = Math.PI/2;
+      rifle.rotation.z = -0.22;
+      rifle.position.x = x*s*0.8 + s*0.18;
     });
     addFlag(shape==='sniper' ? 0xc5c0a5 : colorHex);
   } else if(shape==='engineer'){
@@ -9764,6 +9945,19 @@ function getMarker3d(key, shape, colorHex){
     unitMarkers3d[key] = m;
   }
   return m;
+}
+function updateTankHeading3d(marker, unit, visualX, visualY){
+  const prevX = unit._tankMarkerX;
+  const prevY = unit._tankMarkerY;
+  unit._tankMarkerX = visualX;
+  unit._tankMarkerY = visualY;
+  if(prevX===undefined || prevY===undefined) return;
+  const dx = visualX-prevX;
+  const dz = visualY-prevY;
+  if(Math.hypot(dx,dz) < 0.01) return;
+  const travelHeading = Math.atan2(dx, dz);
+  // The imported OBJ's nose points toward local -Z; the procedural fallback points +Z.
+  marker.rotation.y = travelHeading + (tankModelTemplate3d ? Math.PI : 0);
 }
 function hideMarker3d(key){
   const m = unitMarkers3d[key];
@@ -9812,6 +10006,7 @@ function syncUnitMarkers3d(){
   const friendlyUnit = (key, unit, shape, alive)=>{
     const p = smoothVisualPos(unit, unit.x, unit.y);
     place(key, p.x, p.y, shape, alive ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
+    if(shape==='tank') updateTankHeading3d(unitMarkers3d[key], unit, p.x, p.y);
   };
   state.mortars.forEach((m,i)=>friendlyUnit('mortar'+i, m, 'mortar', m.hp>0));
   state.tanks.forEach((tk,i)=>friendlyUnit('tank'+i, tk, 'tank', tk.hp>0));
@@ -9833,7 +10028,7 @@ function syncUnitMarkers3d(){
     if(!isTargetDetected(t)){ place(key, 0, 0, 'sphere', 0, false); return; }
     const eLogical = estPos(t);
     const e = smoothVisualPos(t, eLogical.x, eLogical.y);
-    const shape = t.type==='hq' ? 'hq' : t.type==='vehicle' ? 'tank' : t.type==='artillery' ? 'cylinder' : t.type==='drone' ? 'diamond' : t.type==='heli' ? 'cone' : 'sphere';
+    const shape = t.type==='hq' ? 'hq' : t.type==='vehicle' ? 'tank' : t.type==='artillery' ? 'cylinder' : t.type==='drone' ? 'diamond' : t.type==='heli' ? 'heli' : 'sphere';
     place(key, e.x, e.y, shape, t.revealed ? (TARGET_TYPE_COLOR[t.type]||0xc1453b) : 0x8f9678, true);
   });
 
@@ -9849,6 +10044,10 @@ function renderThreeFrame(){
   if(!threeReady || !renderer3d) return;
   updateMapFocusEase();
   syncUnitMarkers3d();
+  if(heliAnimationMixer){
+    const delta = 1/60;
+    heliAnimationMixer.update(delta);
+  }
   renderer3d.render(scene3d, camera3d);
 }
 
