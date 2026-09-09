@@ -9070,7 +9070,10 @@ function initThree(){
   sunLight = new THREE.DirectionalLight(0xfff4e0, 1.15);
   sunLight.position.set(SUN_OFFSET.x, SUN_OFFSET.y, SUN_OFFSET.z);
   sunLight.castShadow = true;
-  sunLight.shadow.mapSize.set(2048, 2048);
+  // per user request: 2048 was too costly on top of ~200 shadow-casting draw calls: dropped
+  // to 1024 alongside cutting most of those casters down to just terrain+tank+heli (see the
+  // `add`/`addBarrel` helpers in makeMarkerMesh3d below) for a real perf win.
+  sunLight.shadow.mapSize.set(1024, 1024);
   sunLight.shadow.camera.left = -SHADOW_FRUSTUM_HALF;
   sunLight.shadow.camera.right = SHADOW_FRUSTUM_HALF;
   sunLight.shadow.camera.top = SHADOW_FRUSTUM_HALF;
@@ -10063,7 +10066,11 @@ function makeMarkerMesh3d(shape, colorHex){
   const add = (geometry, material, y=0, z=0)=>{
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(0, y, z);
-    mesh.castShadow = true;
+    // per user request: casting shadows from every one of these small primitive-shape
+    // markers (mortars, squads, snipers, etc. -- ~200 individual draw calls in the shadow
+    // pass) was too costly, especially on mobile GPUs. They still RECEIVE shadows (falling
+    // under a tank/tree/hill's shadow still darkens them -- that's a cheap shader flag, not
+    // an extra draw call) -- only the real FBX models (tank/heli) and terrain still cast.
     mesh.receiveShadow = true;
     group.add(mesh);
     return mesh;
@@ -10078,7 +10085,6 @@ function makeMarkerMesh3d(shape, colorHex){
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(s*0.08, s*0.1, length, 8), mat(color));
     barrel.rotation.x = Math.PI/2;
     barrel.position.set(0, height, length/2);
-    barrel.castShadow = true;
     barrel.receiveShadow = true;
     group.add(barrel);
   };
