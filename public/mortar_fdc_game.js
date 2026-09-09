@@ -10277,29 +10277,48 @@ function makeMarkerMesh3d(shape, colorHex, formationOffsets){
     // body/head so the "peg doll" reads as a person instead of a lollipop. All still receiveShadow
     // only (no cast) for the same per-figure-count reason as every other marker here.
     const legMat = mat(0x3b342a);
+    // Legs/arms hang from a pivot Group positioned at the hip/shoulder (rather than being
+    // positioned directly, centered on themselves) so a walk cycle can later just rotate the
+    // pivot -- see updateSoldierWalkCycle() -- instead of the limb swinging around its own
+    // middle. _walkPhase gives each soldier a slightly different cadence so a whole squad
+    // doesn't animate in lockstep.
     const figures = offsets.map(o=>{
       const x = (o.dx/maxR)*clusterR, z = (o.dy/maxR)*clusterR;
       const fig = new THREE.Group();
-      const legH = s*0.22*FIGURE_SCALE, bodyH = s*0.34*FIGURE_SCALE;
-      const bodyY = legH + bodyH*0.5;
+      const legH = s*0.22*FIGURE_SCALE, bodyH = s*0.34*FIGURE_SCALE, armH = s*0.26*FIGURE_SCALE;
+      const hipY = legH, bodyY = legH + bodyH*0.5, shoulderY = bodyY + bodyH*0.5;
+      const legPivots = [], armPivots = [];
       [-1,1].forEach(side=>{
+        const legPivot = new THREE.Group();
+        legPivot.position.set(x + side*s*0.05*FIGURE_SCALE, hipY, z);
         const leg = new THREE.Mesh(new THREE.CylinderGeometry(s*0.045*FIGURE_SCALE, s*0.05*FIGURE_SCALE, legH, 5), legMat);
-        leg.position.set(x + side*s*0.05*FIGURE_SCALE, legH*0.5, z);
+        leg.position.set(0, -legH*0.5, 0);
         leg.receiveShadow = true;
-        fig.add(leg);
-        const arm = new THREE.Mesh(new THREE.CylinderGeometry(s*0.04*FIGURE_SCALE, s*0.045*FIGURE_SCALE, s*0.26*FIGURE_SCALE, 5), mat(colorHex));
-        arm.position.set(x + side*s*0.16*FIGURE_SCALE, bodyY, z);
+        legPivot.add(leg);
+        fig.add(legPivot);
+        legPivots.push(legPivot);
+
+        const armPivot = new THREE.Group();
+        armPivot.position.set(x + side*s*0.16*FIGURE_SCALE, shoulderY, z);
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(s*0.04*FIGURE_SCALE, s*0.045*FIGURE_SCALE, armH, 5), mat(colorHex));
+        arm.position.set(0, -armH*0.5, 0);
         arm.receiveShadow = true;
-        fig.add(arm);
+        armPivot.add(arm);
+        fig.add(armPivot);
+        armPivots.push(armPivot);
       });
       const body = new THREE.Mesh(new THREE.CylinderGeometry(s*0.1*FIGURE_SCALE, s*0.12*FIGURE_SCALE, bodyH, 6), mat(colorHex));
       body.position.set(x, bodyY, z);
       body.receiveShadow = true;
       fig.add(body);
       const head = new THREE.Mesh(new THREE.SphereGeometry(s*0.11*FIGURE_SCALE, 6, 5), mat(0xd1b28a));
-      head.position.set(x, bodyY + bodyH*0.5 + s*0.05*FIGURE_SCALE, z);
+      head.position.set(x, shoulderY + s*0.05*FIGURE_SCALE, z);
       head.receiveShadow = true;
       fig.add(head);
+      fig._legPivots = legPivots;
+      fig._armPivots = armPivots;
+      fig._walkPhase = Math.random()*Math.PI*2;
+      fig._walkAmp = 0;
       group.add(fig);
       return fig;
     });
@@ -10353,6 +10372,35 @@ function getMarker3d(key, shape, colorHex, formationOffsets){
 function updateSoldierFigures3d(marker, aliveFlags){
   if(!marker || !marker._soldierFigures) return;
   marker._soldierFigures.forEach((fig,i)=>{ fig.visible = !!(aliveFlags && aliveFlags[i]); });
+}
+// per user request: a walking motion instead of a rigid "peg doll" while a squad/infantry
+// group is actually advancing -- no bones, just rotating each leg/arm's hip/shoulder pivot
+// (see makeMarkerMesh3d's shape==='infantry' branch) with a sine wave, opposite legs/arms in
+// antiphase like a real gait. walkAmp eases toward 0/1 instead of snapping so starting/
+// stopping doesn't pop mid-stride. Each figure keeps its own phase (set once at creation) so a
+// whole squad doesn't animate in lockstep.
+const WALK_CYCLE_SPEED = 6.5; // swing cycles' angular rate, radians of phase per second
+const WALK_SWING_MAX = 0.55; // radians, peak hip/shoulder swing angle
+const WALK_AMP_EASE = 6; // per-second ease rate toward the moving/stopped target amplitude
+function updateSoldierWalkCycle(marker, moving, dtSeconds){
+  if(!marker || !marker._soldierFigures) return;
+  marker._soldierFigures.forEach(fig=>{
+    if(!fig.visible || !fig._legPivots) return;
+    const targetAmp = moving ? 1 : 0;
+    fig._walkAmp += (targetAmp-fig._walkAmp) * Math.min(1, dtSeconds*WALK_AMP_EASE);
+    if(fig._walkAmp < 0.01){
+      fig._walkAmp = 0;
+      fig._legPivots[0].rotation.x = 0; fig._legPivots[1].rotation.x = 0;
+      fig._armPivots[0].rotation.x = 0; fig._armPivots[1].rotation.x = 0;
+      return;
+    }
+    fig._walkPhase += dtSeconds*WALK_CYCLE_SPEED;
+    const swing = Math.sin(fig._walkPhase) * WALK_SWING_MAX * fig._walkAmp;
+    fig._legPivots[0].rotation.x = swing;
+    fig._legPivots[1].rotation.x = -swing;
+    fig._armPivots[0].rotation.x = -swing;
+    fig._armPivots[1].rotation.x = swing;
+  });
 }
 function updateTankHeading3d(marker, unit, visualX, visualY){
   const prevX = unit._tankMarkerX;
@@ -10409,8 +10457,28 @@ const FRIENDLY_MARK_COLOR_3D = 0x6f9bbf;
 // crossed. Give it a real flight-altitude clearance instead, scaled off the same
 // constant that drives the terrain's own height range so it stays proportional.
 const HELI_FLIGHT_ALTITUDE = PROC_TERRAIN_HEIGHT_SCALE * 0.35;
+// Per-frame delta time for the walk-cycle animation (updateSoldierWalkCycle), plus a cheap
+// "is this entity's on-screen position actually changing" check driving whether it plays. Both
+// are entity-agnostic (work the same for a friendly squad object or an enemy target) so a
+// single implementation covers both syncUnitMarkers3d() call sites below.
+let lastWalkAnimAt = null;
+function walkDtSeconds(){
+  const now = performance.now();
+  if(lastWalkAnimAt===null){ lastWalkAnimAt = now; return 0; }
+  // capped so a long stall (tab backgrounded, a slow frame) can't jerk the swing forward
+  const dt = Math.min(0.25, (now-lastWalkAnimAt)/1000);
+  lastWalkAnimAt = now;
+  return dt;
+}
+function isVisuallyMoving(entity, x, y){
+  const prevX = entity._walkPrevX, prevY = entity._walkPrevY;
+  entity._walkPrevX = x; entity._walkPrevY = y;
+  if(prevX===undefined) return false;
+  return Math.hypot(x-prevX, y-prevY) > 0.05;
+}
 function syncUnitMarkers3d(){
   if(!threeReady || !state) return;
+  const walkDt = walkDtSeconds();
   const seen = {};
   const place = (key, cx, cy, shape, colorHex, visible, formationOffsets)=>{
     seen[key] = true;
@@ -10436,7 +10504,10 @@ function syncUnitMarkers3d(){
     place(key, p.x, p.y, shape, alive ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
     if(shape==='tank') updateTankHeading3d(unitMarkers3d[key], unit, p.x, p.y);
     if(shape==='heli') updateHeliHeading3d(unitMarkers3d[key], unit, p.x, p.y);
-    if(shape==='infantry') updateSoldierFigures3d(unitMarkers3d[key], unit.soldiers.map(s=>s.alive));
+    if(shape==='infantry'){
+      updateSoldierFigures3d(unitMarkers3d[key], unit.soldiers.map(s=>s.alive));
+      updateSoldierWalkCycle(unitMarkers3d[key], isVisuallyMoving(unit, p.x, p.y), walkDt);
+    }
   };
   state.mortars.forEach((m,i)=>friendlyUnit('mortar'+i, m, 'mortar', m.hp>0));
   state.tanks.forEach((tk,i)=>friendlyUnit('tank'+i, tk, 'tank', tk.hp>0));
@@ -10462,7 +10533,10 @@ function syncUnitMarkers3d(){
     const shape = t.type==='hq' ? 'hq' : t.type==='vehicle' ? 'tank' : t.type==='artillery' ? 'cylinder' : t.type==='drone' ? 'diamond' : t.type==='heli' ? 'heli' : t.type==='infantry' ? 'infantry' : 'sphere';
     place(key, e.x, e.y, shape, t.revealed ? (TARGET_TYPE_COLOR[t.type]||0xc1453b) : 0x8f9678, true, t.formationOffsets);
     if(shape==='heli') updateHeliHeading3d(unitMarkers3d[key], t, e.x, e.y);
-    if(shape==='infantry' && t.troops) updateSoldierFigures3d(unitMarkers3d[key], t.troops.map(s=>s.alive));
+    if(shape==='infantry' && t.troops){
+      updateSoldierFigures3d(unitMarkers3d[key], t.troops.map(s=>s.alive));
+      updateSoldierWalkCycle(unitMarkers3d[key], isVisuallyMoving(t, e.x, e.y), walkDt);
+    }
   });
 
   Object.keys(unitMarkers3d).forEach(key=>{
