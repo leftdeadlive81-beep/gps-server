@@ -211,19 +211,6 @@ const DECOY_LURE_MULT_DAY = 0.6;
 const DECOY_LURE_MULT_NIGHT = 0.3;
 const DECOY_LONGPRESS_MS = 550;
 const DECOY_LONGPRESS_MOVE_TOLERANCE_PX = 10;
-// per user request: long-press a friendly order-bearing unit for a compact icon-only quick
-// order popup, instead of always needing the full command box or the multi-step スマート操作
-// wizard for a simple stance change. A plain short tap still opens the full command box as
-// before -- this is a faster path alongside it, not a replacement.
-const UNIT_LONGPRESS_MS = 480;
-const UNIT_LONGPRESS_MOVE_TOLERANCE_PX = 10;
-const QUICK_ORDER_KINDS = {
-  squad:    {orders:['advance','hold','assault','retreat'], setter:setSquadOrder},
-  tank:     {orders:['advance','hold','retreat'],           setter:setTankOrder},
-  sam:      {orders:['advance','hold','retreat'],           setter:setSamOrder},
-  sniper:   {orders:['advance','hold','retreat'],           setter:setSniperOrder},
-  engineer: {orders:['advance','hold','retreat'],           setter:setEngineerOrder},
-};
 // per user request: 工兵が構築する防壁(壁) -- 敵味方問わず地上ユニットの移動と直接照準の
 // 銃撃/突撃を遮り(terrainAwareStep/hasLineOfSight/各交戦ロジックに組み込む)、それ自体もHPを
 // 持つ障害物。迫撃砲/敵砲兵のような曲射弾は上を越えて着弾する(壁は防がない)。
@@ -4061,7 +4048,6 @@ function openSmartOrder(){
   state.commandBox = null;
   state.enemyCommandBox = null;
   state.decoyCommandBox = null;
-  closeQuickOrder();
   smartWizard = {step:1, unitType:null, unitScope:null, actionKey:null};
   renderSmartOrder();
   document.getElementById('smart-order-drawer').classList.add('open');
@@ -5625,7 +5611,6 @@ document.addEventListener('visibilitychange', ()=>{
 
 function commitDecision(){
   if(!state || state.stageResolved || state.animating || state.snipeMortarStrikesPending>0 || state.placementPending || state.decoyPlacementPending) return;
-  closeQuickOrder();
 
   // A mortar whose queued shot can't be afforded only cancels THAT mortar's
   // order (reverts to standby) -- it must never block the whole decision
@@ -6033,10 +6018,6 @@ function selectNextTarget(){
 function handleCanvasClick(evt){
   if(!state || state.stageResolved || state.animating || state.snipeMortarStrikesPending>0) return;
   if(mapDragMoved) return;
-  // A genuine new tap elsewhere always dismisses a stale quick-order popup from an earlier
-  // long-press (the click that opened it never reaches here -- it's the one mapDragMoved just
-  // suppressed above).
-  closeQuickOrder();
   const cv = document.getElementById('board');
   const rect = cv.getBoundingClientRect();
   const pxPixel = evt.clientX-rect.left, pyPixel = evt.clientY-rect.top;
@@ -9755,82 +9736,6 @@ function decoyLongPressEnd(){
   clearTimeout(decoyLongPressTimer);
 }
 
-// per user request: long-press quick order popup (see QUICK_ORDER_KINDS above). Shares the
-// same screen-space hit-testing as normal unit selection (collectClickCandidates) so what you
-// can long-press exactly matches what you can tap, at any camera angle.
-function nearestQuickOrderUnitAt(sx, sy){
-  // per user request: a unit on 大休止 takes no orders at all, so it isn't offered here either.
-  const candidates = collectClickCandidates(sx, sy).filter(c=>{
-    if(c.type!=='friendly' || !QUICK_ORDER_KINDS[c.payload.kind]) return false;
-    const unit = restUnitRef(c.payload.kind, c.payload.idx);
-    return !unit || !unit.resting;
-  });
-  if(!candidates.length) return null;
-  candidates.sort((a,b)=>a.dist-b.dist);
-  return candidates[0].payload; // {kind, idx}
-}
-let quickOrderTarget = null;
-let unitLongPressTimer = null;
-let unitLongPressX = 0, unitLongPressY = 0, unitLongPressMoved = false;
-function unitLongPressStart(clientX, clientY){
-  clearTimeout(unitLongPressTimer);
-  if(!state || state.stageResolved || state.animating || state.placementPending || state.decoyPlacementPending
-    || state.orderMode || state.smartOrderMode) return;
-  unitLongPressX = clientX; unitLongPressY = clientY; unitLongPressMoved = false;
-  unitLongPressTimer = setTimeout(()=>{
-    if(unitLongPressMoved) return;
-    const rect = document.getElementById('board').getBoundingClientRect();
-    const px = unitLongPressX-rect.left, py = unitLongPressY-rect.top;
-    const sx = threeReady ? px : px/rect.width*CANVAS_W;
-    const sy = threeReady ? py : py/rect.height*CANVAS_H;
-    const target = nearestQuickOrderUnitAt(sx, sy);
-    if(target) openQuickOrder(target, unitLongPressX, unitLongPressY);
-  }, UNIT_LONGPRESS_MS);
-}
-function unitLongPressMove(clientX, clientY){
-  if(Math.hypot(clientX-unitLongPressX, clientY-unitLongPressY) > UNIT_LONGPRESS_MOVE_TOLERANCE_PX){
-    unitLongPressMoved = true;
-    clearTimeout(unitLongPressTimer);
-  }
-}
-function unitLongPressEnd(){
-  clearTimeout(unitLongPressTimer);
-}
-function openQuickOrder(target, clientX, clientY){
-  quickOrderTarget = target;
-  state.commandBox = null;
-  state.enemyCommandBox = null;
-  state.decoyCommandBox = null;
-  // the mousedown/touchstart that started this long-press will still end in a click/touchend
-  // shortly after -- suppress it (same flag the normal pan-drag path uses) so that click
-  // doesn't also try to open the full command box right under this popup.
-  mapDragMoved = true;
-  renderQuickOrderBox(clientX, clientY);
-  render();
-}
-function closeQuickOrder(){
-  if(!quickOrderTarget) return;
-  quickOrderTarget = null;
-  const box = document.getElementById('quick-order-box');
-  if(box) box.style.display = 'none';
-}
-function quickOrderSet(order){
-  if(!quickOrderTarget) return;
-  const def = QUICK_ORDER_KINDS[quickOrderTarget.kind];
-  if(def) def.setter(quickOrderTarget.idx, order);
-  closeQuickOrder();
-}
-function renderQuickOrderBox(clientX, clientY){
-  const box = document.getElementById('quick-order-box');
-  if(!box || !quickOrderTarget){ if(box) box.style.display='none'; return; }
-  const def = QUICK_ORDER_KINDS[quickOrderTarget.kind];
-  if(!def){ box.style.display='none'; return; }
-  const btns = def.orders.map(o=>
-    `<button class="btn quick-order-icon-btn" onclick="quickOrderSet('${o}')" title="${ORDER_LABEL[o]}">${ORDER_ICON[o]}</button>`
-  ).join('');
-  box.innerHTML = `<div class="quick-order-row">${btns}</div>`;
-  positionCommandBox(box, {x:clientX, y:clientY}, 46*def.orders.length+6*(def.orders.length-1));
-}
 
 function setupMapControls(){
   // Attached to #board (the topmost overlay canvas) since it visually covers
@@ -9864,7 +9769,6 @@ function setupMapControls(){
     lastX = e.clientX; lastY = e.clientY;
     mapFocusTarget = null;
     decoyLongPressStart(e.clientX, e.clientY);
-    unitLongPressStart(e.clientX, e.clientY);
     if(mode==='pan'){
       const rect = el.getBoundingClientRect();
       dragGround = groundPlaneCanvasUnitAt(e.clientX-rect.left, e.clientY-rect.top);
@@ -9872,7 +9776,6 @@ function setupMapControls(){
   });
   window.addEventListener('mousemove', e=>{
     decoyLongPressMove(e.clientX, e.clientY);
-    unitLongPressMove(e.clientX, e.clientY);
     if(!mode) return;
     const dx = e.clientX-lastX, dy = e.clientY-lastY;
     if(Math.abs(dx)>2 || Math.abs(dy)>2) mapDragMoved = true;
@@ -9894,7 +9797,7 @@ function setupMapControls(){
       }
     }
   });
-  window.addEventListener('mouseup', ()=>{ mode = null; dragGround = null; decoyLongPressEnd(); unitLongPressEnd(); });
+  window.addEventListener('mouseup', ()=>{ mode = null; dragGround = null; decoyLongPressEnd(); });
 
   el.addEventListener('wheel', e=>{
     e.preventDefault();
@@ -9940,7 +9843,6 @@ function setupMapControls(){
       touchMode = grabFebaAt(touchLastX, touchLastY) ? 'feba' : 'pan';
       mapDragMoved=false;
       decoyLongPressStart(touchLastX, touchLastY);
-      unitLongPressStart(touchLastX, touchLastY);
       dragGround = groundPlaneCanvasUnitAt(lx, ly);
     } else if(e.touches.length===2){
       // A second finger means this is a pinch/rotate gesture, never a tap, so
@@ -9948,13 +9850,11 @@ function setupMapControls(){
       // honored) to preventDefault here without risking a lost click.
       e.preventDefault();
       // per user request: a long-press timer armed by the FIRST finger (see
-      // unitLongPressStart/decoyLongPressStart above) was never canceled when a second
-      // finger joined to start a pinch -- it could still fire mid-pinch/mid-gesture,
-      // popping up a quick-order box or placing a decoy out of nowhere and hijacking the
-      // gesture the player was actually in the middle of (reported as gestures sometimes
-      // just not working).
+      // decoyLongPressStart above) was never canceled when a second finger joined to start
+      // a pinch -- it could still fire mid-pinch/mid-gesture, placing a decoy out of
+      // nowhere and hijacking the gesture the player was actually in the middle of
+      // (reported as gestures sometimes just not working).
       decoyLongPressEnd();
-      unitLongPressEnd();
       touchMode='pinch'; mapDragMoved=true; dragGround=null;
       const [t0,t1] = e.touches;
       pinchStartDist = Math.hypot(t1.clientX-t0.clientX, t1.clientY-t0.clientY);
@@ -9971,7 +9871,6 @@ function setupMapControls(){
       dragFebaTo(touchLastX, touchLastY);
     } else if(touchMode==='pan' && e.touches.length===1){
       decoyLongPressMove(e.touches[0].clientX, e.touches[0].clientY);
-      unitLongPressMove(e.touches[0].clientX, e.touches[0].clientY);
       const dx = e.touches[0].clientX-touchLastX, dy = e.touches[0].clientY-touchLastY;
       if(Math.abs(dx)>2 || Math.abs(dy)>2) mapDragMoved = true;
       touchLastX = e.touches[0].clientX; touchLastY = e.touches[0].clientY;
@@ -10003,7 +9902,6 @@ function setupMapControls(){
   }, {passive:false});
   el.addEventListener('touchend', e=>{
     decoyLongPressEnd();
-    unitLongPressEnd();
     if(e.touches.length===1){
       // Dropping from two fingers to one: resume panning from the remaining
       // finger's current position instead of snapping/jumping.
