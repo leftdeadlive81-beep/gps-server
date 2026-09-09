@@ -1,8 +1,13 @@
 const GAME_VERSION = '0.2';
-const CANVAS_W = 1300, CANVAS_H = 460;
-const OP_HOME_X = 90, OP_HOME_Y = 230;
+// per user request: the map read as a cramped horizontal strip (was 2600x460, a 5.65:1
+// aspect ratio -- only ~3.5km deep on a 20km-wide map). Widened to a 2.5:1 battlefield
+// (~8km deep) so there's real north-south room to flank instead of everyone being forced
+// into one thin east-west lane. OP_HOME_Y/HQ_Y/FRIENDLY_INF_POS.y/etc. below are expressed
+// relative to CANVAS_H so they stay correctly centered whatever this is set to.
+const CANVAS_W = 2600, CANVAS_H = 1040;
+const OP_HOME_X = 180, OP_HOME_Y = CANVAS_H/2;
 const OP = {x: OP_HOME_X, y: OP_HOME_Y};
-const HQ_X = 30, HQ_Y = 230;
+const HQ_X = 60, HQ_Y = CANVAS_H/2;
 const HQ_MAX_HP = 200;
 // per user request: HQ previously had no player-facing defenses at all (fixed position,
 // fixed exposure, no repair) despite enemy targeting logic actively preferring it (see
@@ -23,7 +28,7 @@ function hitChanceFromExposure(exposure){
 function exposureNormalizedMult(exposure){
   return hitChanceFromExposure(exposure) / hitChanceFromExposure(EXPOSURE_DEFAULT);
 }
-const SCOUT_X = 230;
+const SCOUT_X = 460;
 const SCOUT_UPPER_Y = 55;
 const SCOUT_LOWER_Y = 405;
 const INITIAL_DEPLOY_SPACING_MULT = 1.4; // widens the gap between units of the same type at first-wave deployment
@@ -32,6 +37,13 @@ const SCOUT_HALF_FOV_WIDE = 32.5;
 const PRICE_EQUIP = {armor:1200, optics:1000, wideView:900, extMag:800};
 const REINFORCE_COST_PER_SOLDIER = 220;
 const REINFORCE_MAX_PER_CALL = 2;
+// per user request: 大休止 -- a free (no money, no reserve pool) alternative to paid
+// reinforcement. The unit's own wounded gradually return to duty over REST_DURATION_TURNS
+// turns instead of a fresh recruit filling the slot, but the unit takes no orders, moves
+// nowhere, and does not engage for the whole duration -- it stays exactly where it was and
+// can still be attacked/killed like any other unit sitting still (this is the risk that pays
+// for a free, gradual full recovery instead of a capped, instant, paid one).
+const REST_DURATION_TURNS = 120;
 
 // per user request: a veteran system for retention -- soldiers (squad/scout/sniper, the
 // front-line personnel with individual alive-state) who survive a wave gain XP; every
@@ -66,8 +78,8 @@ const WEATHER_TYPES = {
   night: {label:'夜間', dispersionMult:1.2,  counterMult:0.7,  errMult:1.2,  tint:'rgba(10,15,35,0.28)',    desc:'敵反撃頻度低下、照準精度も低下'},
 };
 const EQUIP_LABEL = {armor:'強化装甲', optics:'精密照準器', wideView:'広角観測機材', extMag:'予備弾倉'};
-const FRIENDLY_INF_POS = {x: 350, y: 230};
-const SNIPER_POS = {x: 290, y: 230};
+const FRIENDLY_INF_POS = {x: 700, y: CANVAS_H/2};
+const SNIPER_POS = {x: 290, y: CANVAS_H/2};
 const STAGE_COUNT = 50;
 const PRICE_HE = 35;
 const PRICE_HEAT = 70;
@@ -104,15 +116,26 @@ const TARGET_TYPES = {
   vehicle:   {label:'装甲車',       hp:95,  radius:18, mark:ENEMY_MARK_COLOR},
   drone:     {label:'ドローン',     hp:12,  radius:20, mark:ENEMY_MARK_COLOR},
   heli:      {label:'戦闘ヘリ',     hp:150, radius:22, mark:ENEMY_MARK_COLOR},
+  // per user request: a fixed, hardened objective placed deep in enemy territory --
+  // destroying it clears the wave immediately regardless of how many other enemies remain
+  // (see checkEnd()), a high-risk/high-reward alternative to grinding out every target. Its
+  // much higher base HP (scaled by the same hpMult every other type gets) and low base
+  // exposure (see buildEnemyHqTarget/ENEMY_HQ_EXPOSURE -- bunkered) make it meaningfully
+  // tougher than any single normal target, on top of not sharing any type's AI behavior
+  // (it never moves, advances, or counter-attacks -- see enemyCounterAttack's explicit skip).
+  hq:        {label:'敵本部',       hp:400, radius:20, mark:ENEMY_MARK_COLOR},
 };
 const DRONE_INTRO_STAGE = 3;
 const CONTOUR_LEVELS = [0.25, 0.5, 0.75, 1.0, 1.25];
 const CONTOUR_CELL = 22;
 const SHELLS = {he:'榴弾(HE)', heat:'対戦車榴弾(HEAT)', smoke:'発煙弾', marker:'マーカー弾', illum:'照明弾'};
 const FUZES  = {impact:'着発信管', proximity:'近接信管', delay:'遅延信管'};
-const COUNTER_CHANCE = {infantry:0.06, artillery:0.19, vehicle:0.05, drone:0.04};
+// per user request: artillery's chance/damage nudged up (0.19->0.22, [28,48]->[30,50]) to
+// partly offset its shortened effective range (was ~7.4km, now a fixed 5km -- see
+// ARTILLERY_FIRE_RANGE_M) so overall threat stays comparable despite covering less of the map.
+const COUNTER_CHANCE = {infantry:0.06, artillery:0.22, vehicle:0.05, drone:0.04};
 // per user request: enemy attack power doubled
-const COUNTER_DAMAGE = {infantry:[8,18], artillery:[28,48], vehicle:[10,18], drone:[4,10]};
+const COUNTER_DAMAGE = {infantry:[8,18], artillery:[30,50], vehicle:[10,18], drone:[4,10]};
 const VEHICLE_ASSAULT_RANGE = 100;
 const VEHICLE_ASSAULT_DAMAGE = [20,36];
 const DRONE_SPEED = 70;
@@ -148,19 +171,38 @@ const NUM_MORTARS = 4;
 // with squad-like orders/direct-fire combat since they fight on the ground like infantry.
 const NUM_TANKS = 2;
 const TANK_MAX_HP = 220;
-const TANK_POS = {x: 320, y: 230};
+const TANK_POS = {x: 320, y: CANVAS_H/2};
 const TANK_EXPOSURE = 65; // armored -- harder to hit than a foot unit at EXPOSURE_DEFAULT (50)
-const TANK_ENGAGE_RANGE = 150;
+// per user request: bumped from 150 (≈1150m) to 325 (2500m) -- a modern tank main gun can
+// realistically hit out to 2-3km, so at the old range tanks had to close most of the way
+// through the enemy artillery's engagement envelope (now 5km, see ARTILLERY_FIRE_RANGE_M)
+// before they could shoot back at all.
+const TANK_ENGAGE_RANGE = 325;
 const TANK_DUEL_DMG_TO_ENEMY = [18, 32];
 const TANK_INCOMING_DMG = [8, 20];
 const TANK_REPAIR_HP_PER_CALL = 30;
 const TANK_REPAIR_COST_PER_HP = 40;
+// per user request: 味方の対空ミサイル部隊 -- 戦車と同じくHPベース(兵員ロスターなし)。ヘリ・
+// ドローンにのみ交戦可能(対地目標には一切攻撃できない ―― resolveSamOrdersのengageTargets参照)、
+// 長射程・高威力な代わりに装甲が薄く脆い牽引式ランチャーという想定。
+const NUM_SAMS = 1;
+const SAM_MAX_HP = 70;
+const SAM_POS = {x: 200, y: CANVAS_H/2 + 120}; // was a fixed 350 at the old CANVAS_H=460 (center 230) -- same +120 real offset south of the line
+const SAM_EXPOSURE = 45; // soft, unarmored launcher vehicle -- easier to hit than infantry
+// per user request: bumped from 420 (≈3230m) to 715 (5500m) -- a real SAM's standoff
+// advantage over ground-based indirect fire is a big part of its identity, so it should
+// reach at least as far as the enemy artillery it's meant to counter (5km, see
+// ARTILLERY_FIRE_RANGE_M).
+const SAM_ENGAGE_RANGE = 715;
+const SAM_DUEL_DMG_TO_ENEMY = [45, 75];
+const SAM_REPAIR_HP_PER_CALL = 20;
+const SAM_REPAIR_COST_PER_HP = 50;
 // per user request: 味方の工兵小隊 -- マップ上を歩兵と同じ要領で移動でき、任意の地点にキャッシュを
 // 消費して防壁(壁)を構築できる。工兵自身は戦闘要員ではないので、他の小隊のような交戦ロジックは
 // 持たない(前進/防御/後退での移動と壁の構築のみ)。
 const NUM_ENGINEERS = 1;
 const ENGINEER_SQUAD_SIZE = 6;
-const ENGINEER_POS = {x: 260, y: 230};
+const ENGINEER_POS = {x: 260, y: CANVAS_H/2};
 const RESERVE_SIZE = 10;
 // per user request: 擬陣地 (decoy positions) -- placed at the start of each wave (auto or
 // manual, player's choice), these lure enemy indirect fire/vehicle assaults away from real
@@ -182,6 +224,17 @@ const WALL_MAX_HP = 140;
 const WALL_BUILD_COST = 900;
 const MAX_WALLS = 6;
 const WALL_AVOID_PENALTY = 10; // dominates terrainAwareStep's progress/slope score so units steer around a wall instead of walking straight into it
+// per user request: 塹壕(線方式) -- 工兵が地図上の2点をクリックして掘る、始点/終点を結ぶ直線状の
+// 陣地。壁と違って射線も移動も遮らない(隠れつつ外を撃てる/撃たれる、どちらも可能)代わりに、
+// その線の近くにいる歩兵系の味方(小隊/狙撃/工兵/斥候)の掩蔽率を底上げする(getUnitExposure
+// 参照)。土木構造物として通常の交戦では破壊されない(壁のような直撃判定を持たない)ので、防壁
+// のようなHPは持たせていない -- 一度掘れば波を跨いで恒久的に残る。
+const TRENCH_BUILD_COST = 500;
+const TRENCH_RADIUS = 20; // distance from the trench LINE within which a unit gets the bonus
+const TRENCH_COVER_BONUS = 25; // same units/sign as terrainCoverBonus/terrainTypeCoverBonus
+const MAX_TRENCHES = 6;
+const TRENCH_LINE_COLOR = 'rgba(139,105,60,0.9)';
+const TRENCH_LINE_WIDTH = 3;
 // per user request: a wave-clear reward can add a whole new squad/scout team at runtime
 // (see addNewSquad/addNewScout), so these can no longer be fixed constants -- they're
 // recomputed from the live roster each time so the roster display/perfectSquad achievement
@@ -340,13 +393,22 @@ const SCOUT_FORMATION_OFFSETS = [
 const SNIPER_FORMATION_OFFSETS = [
   {dx:-14,dy:-8},{dx:0,dy:-12},{dx:14,dy:-8},{dx:-8,dy:9},{dx:8,dy:9},
 ];
-const SCOUT_ADVANCE_LIMIT_X = 1100;
-const SQUAD_RETREAT_LIMIT_X = 150;
-const SQUAD_ADVANCE_LIMIT_X = 620;
-const SQUAD_ASSAULT_LIMIT_X = 1150;
+const SCOUT_ADVANCE_LIMIT_X = 2200;
+const SQUAD_RETREAT_LIMIT_X = 300;
+// per user request: SQUAD_ADVANCE_LIMIT_X's old role (the fixed X the "前進" order advanced
+// to) is now the player-draggable FEBA line (see state.febaX, drawn in drawBoard() and
+// dragged via setupMapControls()). This constant survives only as febaX's initial value and
+// the drag range's bounds.
+const SQUAD_ADVANCE_LIMIT_X = 1240;
+const SQUAD_ASSAULT_LIMIT_X = 2300;
+const FEBA_MIN_X = SQUAD_RETREAT_LIMIT_X;
+const FEBA_MAX_X = SQUAD_ASSAULT_LIMIT_X;
+const FEBA_LINE_COLOR = 'rgba(50,130,255,0.95)';
+const FEBA_LINE_WIDTH = 4;
+const FEBA_GRAB_PX = 16;
 const SQUAD_ENGAGE_RANGE = 100;
 const DETECTION_RANGE = {infantry:100, artillery:50};
-const MAP_WIDTH_KM = 10;
+const MAP_WIDTH_KM = 20;
 const METERS_PER_UNIT = (MAP_WIDTH_KM*1000) / CANVAS_W;
 const CONTACT_RANGE_M = 200;
 const CONTACT_RANGE_UNITS = CONTACT_RANGE_M / METERS_PER_UNIT;
@@ -377,23 +439,49 @@ const MORTAR_MAINLINE_RANGE_M = 6000;
 const MORTAR_MAINLINE_RANGE_UNITS = MORTAR_MAINLINE_RANGE_M / METERS_PER_UNIT;
 const MORTAR_MAINLINE_HALF_FOV = 15; // degrees either side of the set azimuth (30 deg fan)
 const SCOUT_MAX_RANGE_UNITS = 2000 / METERS_PER_UNIT;
-const ROAD_SPEED_KMH = {vehicle:60, infantry:10, sniper:5, mortar:40, artillery:5};
+const SENSOR_RANGE_UNITS = {
+  scout: SCOUT_MAX_RANGE_UNITS,
+  heli: 5000 / METERS_PER_UNIT,
+  tank: 900 / METERS_PER_UNIT,
+  mortar: 300 / METERS_PER_UNIT,
+};
+// per user request: scout used to be a raw hardcoded step length (50 units/turn -- see the
+// old scoutTerrainAwareStep call site), bypassing this shared km/h table entirely and coming
+// out to ~23km/h, more than double dismounted infantry's pace despite both being foot
+// movement. A light recon team on foot is realistically close to (a bit faster than, given
+// lighter loadout, but not multiples of) a regular squad's pace, hence 12 here.
+const ROAD_SPEED_KMH = {vehicle:60, infantry:10, sniper:5, scout:12, mortar:40, artillery:5};
 const OFF_ROAD_SPEED_MULT = 0.7;
 function kmhToUnitsPerTurn(kmh){ return (kmh*1000/60) / METERS_PER_UNIT; }
+// per user request: an in-game mission clock, shown at the top of the screen. Each action-
+// turn already implicitly represents 1 real minute (see kmhToUnitsPerTurn above, which
+// converts unit speeds from km/h on that same assumption), so the displayed clock advances
+// 1 minute per turn too -- driven by state.missionMinutes (a cross-wave counter, unlike
+// state.turns which resets every wave) rather than by wall-clock time.
+const GAME_START_DATETIME = new Date(2033, 4, 7, 8, 0, 0); // 2033-05-07 08:00
+function gameClockNow(){
+  return new Date(GAME_START_DATETIME.getTime() + (state.missionMinutes||0)*60000);
+}
+function formatGameClock(d){
+  const pad = n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 ${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
 const VEHICLE_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.vehicle);
 const INFANTRY_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.infantry);
 const SNIPER_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.sniper);
+const SCOUT_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.scout);
 const MORTAR_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.mortar) * 0.25; // per user request: mortar move speed to 1/4
 const TANK_MOVE_CAP = VEHICLE_MOVE_CAP * 0.6; // faster than infantry/sniper, slower than the enemy vehicle's full road speed
+const SAM_MOVE_CAP = VEHICLE_MOVE_CAP * 0.4; // towed/wheeled launcher -- slower than the tank
 const HELI_MOVE_CAP = VEHICLE_MOVE_CAP * 1.8; // flies -- faster than any ground vehicle, ignores roads
+const FRIENDLY_HELI_MOVE_UNITS = HELI_MOVE_CAP * 0.8;
 const ARTILLERY_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.artillery) * 0.5; // per user request: enemy artillery move speed halved
 const ARTILLERY_STANDOFF_RANGE_M = 300; // artillery repositions closer but holds once within this range of its nearest target
 const ARTILLERY_STANDOFF_RANGE_UNITS = ARTILLERY_STANDOFF_RANGE_M / METERS_PER_UNIT;
-// per user request: 敵の迫撃砲(砲兵)の有効射程を7割に削減 -- それまで enemyCounterAttack は
-// artillery の距離を一切見ておらず(コメント通り "unlimited range" が意図的な仕様だった)、
-// 事実上マップ全域のどこからでも着弾していた。その「これまでの実質射程」= マップ対角線いっぱい
-// を100%とみなし、その7割を新たな上限として導入する。
-const ARTILLERY_FIRE_RANGE_UNITS = Math.round(Math.hypot(CANVAS_W, CANVAS_H) * 0.7);
+// per user request: 敵の迫撃砲(砲兵)の有効射程を実測5kmに設定(以前はマップ対角線の7割
+// ≒7.4kmの間接的な値だった)。
+const ARTILLERY_FIRE_RANGE_M = 5000;
+const ARTILLERY_FIRE_RANGE_UNITS = ARTILLERY_FIRE_RANGE_M / METERS_PER_UNIT;
 const KM_UNIT = 1000 / METERS_PER_UNIT;
 const ENEMY_SPAWN_RANGE_M = 1500;
 const ENEMY_SPAWN_RANGE_UNITS = ENEMY_SPAWN_RANGE_M / METERS_PER_UNIT;
@@ -431,18 +519,39 @@ const ROAD_NODE_SNAP_RADIUS_UNITS = ROAD_NODE_SNAP_RADIUS_M / METERS_PER_UNIT;
 // far worse off than HE just because its kill radius is smaller.
 const MORTAR_DISPERSION_M = 60;
 const MORTAR_DISPERSION_UNITS = MORTAR_DISPERSION_M / METERS_PER_UNIT;
+// per user request: a minimum effective range -- real mortars can't safely/ballistically drop
+// a round this close to their own position (charge/angle-of-fall limits), but nothing stopped
+// the player from designating a fire mission on top of the mortar's own grid square. Enforced
+// at every fire-mission designation entry point (see mortarTooCloseToFire()) by rejecting the
+// designation outright rather than silently relocating it -- the player should see exactly why
+// nothing happened rather than have their click land somewhere they didn't aim it.
+const MORTAR_MIN_RANGE_M = 150;
+const MORTAR_MIN_RANGE_UNITS = MORTAR_MIN_RANGE_M / METERS_PER_UNIT;
+function mortarTooCloseToFire(mortar, x, y){
+  return Math.hypot(x-mortar.x, y-mortar.y) < MORTAR_MIN_RANGE_UNITS;
+}
 // HEAT's kill radius (40m) is much tighter than HE's (100m), so sharing one dispersion value
 // would leave anti-armor fire (~20% hit/shot at sigma=60) far less reliable than HE (~75%).
 // Tightening HEAT's effective dispersion (sigma=60*0.6=36) brings it to ~46%/shot -- still
 // harder to land than HE (fitting for a precision anti-armor round) but no longer a coin
 // flip stacked three times over just to connect once.
 const SHELL_DISPERSION_MULT = {heat:0.6};
-// mortar crews correct fire onto a snapped (identified) target's true position by this
-// fraction, on top of the raw (often much less accurate) spotted estimate -- halves the
-// effective aiming bias specifically for mortar fire, without touching the shared
-// bearingErr/distErr estimate used elsewhere (sniper aiming, the UI uncertainty circle,
-// squad/sniper approach).
-const MORTAR_FIRE_CORRECTION_FRAC = 0.75;
+// per user request: mortar fire used to auto-correct partway (or, with a scout watching,
+// all the way) from the spotted estimate to a snapped target's TRUE position before impact
+// -- so a shot aimed at the displayed estimate would land somewhere else entirely, which
+// read as broken rather than intentional. Removed: impact is now always exactly the aimed
+// coordinate (see launchMortarVolley) plus normal dispersion. Accuracy instead comes purely
+// from the estimate itself being good (see posErr/MAX_ESTIMATE_ERROR_M below) and from
+// walking fire onto target across volleys (see finalizeVolley's posErr reduction).
+// per user request: the raw spotted-estimate error (posErr, in meters) is now a bounded
+// circular offset from the target's TRUE position -- not an independent bearing (angle) +
+// distance error, which on this map's multi-km engagement ranges let a modest-looking
+// angular error compound into a wildly inaccurate real-world position (a few degrees off at
+// long range is still a huge sideways miss). Capping the absolute offset directly guarantees
+// the estimate is never off by more than this, regardless of target range. Shared by every
+// consumer of a target's estimated position -- sniper aiming, the UI uncertainty circle,
+// squad/sniper approach, and mortar fire alike (see estPos/estPosFromMortar).
+const MAX_ESTIMATE_ERROR_M = 100;
 // per user request ("面白くなる要素" -> 対砲兵レーダー/Shoot & Scoot): firing repeatedly from the
 // same position risks the enemy's counter-battery radar triangulating it. Once a mortar has
 // fired more than MORTAR_CB_SHOTS_THRESHOLD volleys without relocating, each further volley
@@ -468,27 +577,24 @@ const MORTAR_CB_STRIKE_DMG = [56, 84]; // per user request: enemy attack power d
 // fraction of whichever interval is active (see visualTweenDurationMs()) so marker motion
 // still finishes just before the next tick, at any speed.
 const GAME_SPEED_INTERVALS = { slow: 2000, normal: 1000, fast: 500 };
-const GAME_SPEED_LABEL = { slow: '低速', normal: '通常', fast: '高速' };
-// Continuous-simulation core: the simulation now advances every SIM_STEP_MS of real time
-// (driven from loop()'s rAF accumulator) instead of jumping once per GAME_SPEED_INTERVALS
-// tick. Each step applies a fractional "turn" amount -- deltaTurns() below -- so every
-// existing per-turn constant (movement caps, suppression/smoke/illum durations, cooldowns,
-// probabilities) keeps its original meaning and doesn't need to be redefined in seconds.
-const SIM_STEP_MS = 100;
-const SIM_STEP_MAX_CATCHUP = 5; // cap steps/frame so a long pause (tab backgrounded) can't burst-replay
-let simAccumMs = 0; // real ms banked toward the next simulationStep(), see loop()
-function deltaTurns(){
-  return SIM_STEP_MS / GAME_SPEED_INTERVALS[(state && state.gameSpeed) || 'normal'];
-}
-// Converts a "chance p per whole turn" constant into the equivalent chance for a single
-// fractional-turn step, so probabilistic per-turn events (counter-attacks, detection rolls,
-// suppression flinches, ...) keep their original per-turn odds even though they're now
-// evaluated every SIM_STEP_MS instead of once per GAME_SPEED_INTERVALS tick.
-function chancePerStep(pPerTurn, turns){
-  return 1 - Math.pow(1-pPerTurn, turns===undefined ? deltaTurns() : turns);
+const GAME_SPEED_LABEL = { slow: '0.5x', normal: '1x', fast: '2x' };
+// per user request: 3-position slider instead of 3 stacked buttons -- index order for the
+// <input type="range"> in renderDecisionPanel().
+const GAME_SPEED_ORDER = ['slow', 'normal', 'fast'];
+function setGameSpeedByIndex(idx){ setGameSpeed(GAME_SPEED_ORDER[idx]); }
+const MORTAR_RELOAD_MS = 650;
+const WEAPON_FIRE_INTERVAL = { squad:3, tank:4, sam:3, sniper:5 };
+const WEAPON_FIRE_OFFSET = { squad:0, tank:1, sam:2, sniper:3 };
+function unitMayFire(kind, index, tick){
+  const interval = WEAPON_FIRE_INTERVAL[kind] || 3;
+  return ((tick + index*2 + WEAPON_FIRE_OFFSET[kind]) % interval) === 0;
 }
 function visualTweenDurationMs(){
-  return Math.round(SIM_STEP_MS*0.96);
+  const ms = GAME_SPEED_INTERVALS[(state && state.gameSpeed) || 'normal'];
+  // Keep the next movement target slightly ahead of the visual marker. This removes the
+  // brief stop at the end of each simulation slice and makes successive orders read as one
+  // continuous movement instead of "advance, pause, advance".
+  return Math.round(ms*1.15);
 }
 function smoothstep01(t){ return t*t*(3-2*t); }
 const SUPPRESSION_TURNS = 3;
@@ -510,6 +616,37 @@ const STANDING_ORDER_LABEL = {
   low_hp_retreat: '損耗50%で後退',
 };
 function unitsToMeters(u){ return Math.round(u*METERS_PER_UNIT); }
+const FRIENDLY_SPACING_RADIUS = 34;
+const FRIENDLY_SPACING_PUSH = 8;
+function maintainFriendlySpacing(){
+  const units = [
+    ...state.squads.map((u,i)=>({u, kind:'squad', idx:i})),
+    ...state.snipers.map((u,i)=>({u, kind:'sniper', idx:i})),
+    ...state.tanks.map((u,i)=>({u, kind:'tank', idx:i})),
+    ...state.sams.map((u,i)=>({u, kind:'sam', idx:i})),
+    ...state.engineers.map((u,i)=>({u, kind:'engineer', idx:i})),
+  ].filter(({u})=>u.hp===undefined ? unitAlive(u) : u.hp>0);
+  for(let i=0;i<units.length;i++){
+    for(let j=i+1;j<units.length;j++){
+      const a = units[i].u, b = units[j].u;
+      const dx = b.x-a.x, dy = b.y-a.y, dist = Math.hypot(dx,dy);
+      if(dist>=FRIENDLY_SPACING_RADIUS) continue;
+      const nx = dist>0 ? dx/dist : 1, ny = dist>0 ? dy/dist : 0;
+      const push = Math.min(FRIENDLY_SPACING_PUSH, (FRIENDLY_SPACING_RADIUS-dist)/2);
+      a.x = clamp(a.x-nx*push, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+      a.y = clamp(a.y-ny*push, 30, CANVAS_H-30);
+      b.x = clamp(b.x+nx*push, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+      b.y = clamp(b.y+ny*push, 30, CANVAS_H-30);
+    }
+  }
+}
+// per user request: a safety net for when the logical position jumps further than any single
+// commit's movement could plausibly cover (e.g. several auto-commit ticks piling up during a
+// main-thread stall before the render loop catches up) -- sliding the marker there over the
+// normal tween window would read as it flying across the map or teleporting. The largest
+// legitimate single-commit move is a fast vehicle over a 2-turn (mortar-fired) commit, well
+// under half of this.
+const ANOMALOUS_JUMP_UNITS = 400;
 function smoothVisualPos(obj, targetX, targetY){
   const now = performance.now();
   if(obj._visX===undefined || obj._visY===undefined){
@@ -522,6 +659,13 @@ function smoothVisualPos(obj, targetX, targetY){
     return {x:obj._visX, y:obj._visY};
   }
   if(obj._tweenToX!==targetX || obj._tweenToY!==targetY){
+    if(Math.hypot(targetX-obj._visX, targetY-obj._visY) > ANOMALOUS_JUMP_UNITS){
+      obj._visX = targetX; obj._visY = targetY;
+      obj._tweenFromX = targetX; obj._tweenFromY = targetY;
+      obj._tweenToX = targetX; obj._tweenToY = targetY;
+      obj._tweenStartAt = now;
+      return {x:obj._visX, y:obj._visY};
+    }
     // The underlying logical position moved since the last tween's target -- start a new
     // tween from wherever the marker visually is *right now* (which may still be mid-tween)
     // so redirecting never pops/snaps.
@@ -590,10 +734,32 @@ function buildEnemyInfantryGroups(stage){
   }
   return groups;
 }
-const FIELD_MARGIN = 130;
-const UNCERTAINTY_CIRCLE_CAP = 120;
-const ORDER_LABEL = {advance:'前進', retreat:'後退', hold:'防御', assault:'突撃', hunt:'追跡攻撃'};
+// per user request: the uncertainty ring is a fixed screen-space indicator (its radius is a
+// raw pixel value, not projected from a real ground distance -- see its drawBoard() call
+// site), scaled from t.posErr (canvas units) by UNCERTAINTY_CIRCLE_SCALE and clamped to this
+// min/max pixel range for legibility. Both were retuned alongside MAX_ESTIMATE_ERROR_M: the
+// old range (20-120px) was sized for the previous, often much larger, unbounded distErr
+// values -- posErr now tops out around 13 units (100m), so the old range would have nearly
+// always bottomed out at its 20px floor regardless of actual accuracy.
+const UNCERTAINTY_CIRCLE_MIN = 16;
+const UNCERTAINTY_CIRCLE_CAP = 70;
+const UNCERTAINTY_CIRCLE_SCALE = 5;
+const ORDER_LABEL = {advance:'前進', retreat:'後退', hold:'防御', assault:'突撃', hunt:'追跡攻撃', resting:'大休止'};
 const MORTAR_ORDER_LABEL = {fire:'射撃', standby:'待機', move:'移動'};
+// per user request: a compact icon per order, used both in each unit's own order buttons
+// (icon+label, so the current/target order is recognizable without reading text) and as the
+// on-map status marker (icon ALONE, replacing the old bracketed Japanese text) -- packed
+// friendly deployment areas were rendering as an unreadable wall of overlapping labels on
+// small screens, and a single glyph per unit is the single biggest lever on that footprint.
+const ORDER_ICON = {advance:'▲', retreat:'▼', hold:'■', assault:'◆', hunt:'◎', resting:'Z'};
+const MORTAR_ORDER_ICON = {fire:'●', standby:'■', move:'✦'};
+function mortarStatusIcon(mortar){
+  if(mortar.reloadingUntil && performance.now() < mortar.reloadingUntil) return '⟳';
+  if(mortar.order==='move') return mortar.pendingDest ? '➤' : '✦';
+  if(mortar.pendingFire) return '●';
+  if(mortar.order==='fire') return '◐';
+  return '■';
+}
 const MORTAR_ZONE_MIN_X = 40, MORTAR_ZONE_MAX_X = 380;
 
 function effectMultiplier(shell, fuze, type){
@@ -621,6 +787,15 @@ function effectMultiplier(shell, fuze, type){
     if(shell==='heat') return 0.5;
     return 0.5;
   }
+  // per user request: a hardened structure rewards bunker-busting loadouts (delay-fused HE
+  // penetrates before detonating; HEAT's shaped charge also works against fortifications)
+  // over the proximity/impact fuzes that are actually best against soft/aerial targets.
+  if(type==='hq'){
+    if(shell==='he' && fuze==='delay') return 2.2;
+    if(shell==='heat') return 1.6;
+    if(shell==='he' && fuze==='impact') return 1.3;
+    return 0.5;
+  }
   return 0.5;
 }
 
@@ -633,6 +808,7 @@ const MORTAR_BEST_LOADOUT = {
   vehicle:   {shell:'heat', fuze:'impact',    count:2},
   artillery: {shell:'he',   fuze:'impact',    count:2},
   drone:     {shell:'he',   fuze:'proximity', count:2},
+  hq:        {shell:'he',   fuze:'delay',     count:3},
 };
 function bestMortarLoadoutFor(type){
   const pick = MORTAR_BEST_LOADOUT[type] || {shell:'he', fuze:'impact', count:2};
@@ -651,11 +827,216 @@ let ripples = [];
 let projectiles = [];
 let flashes = [];
 let enemyTracers = [];
+// per user request (richer graphics/effects): every small-arms exchange (see the
+// enemyTracers.push call sites throughout combat resolution) now also pops a quick, tiny
+// flash at the SHOOTER's own position -- distinct from the existing impact flash pushed
+// when a tracer lands (updateEnemyTracers) -- so firing itself reads as a muzzle flash
+// instead of only the hit. Centralized here so every call site gets it for free.
+// per user request (richer graphics/effects): each weapon family now reads visually
+// distinct instead of every shot in the game sharing one straight orange tracer -- see
+// MUZZLE_STYLE and the enemyTracers.forEach weapon-type branches in drawBoard() for the
+// actual look of each. weaponType defaults to 'rifle' (small arms: squad/sniper/anti-drone
+// point defense/generic enemy infantry) when a call site doesn't specify one.
+const MUZZLE_STYLE = {
+  rifle:   {color:'255,235,180', scale:1,   life:120},
+  cannon:  {color:'255,225,150', scale:2.2, life:170},
+  missile: {color:'255,210,140', scale:1.6, life:150},
+  heli:    {color:'255,190,150', scale:1.4, life:130},
+  drone:   {color:'255,120,90',  scale:1.1, life:110},
+};
+function fireTracer(startX, startY, endX, endY, duration, weaponType){
+  const wt = weaponType || 'rifle';
+  const now = performance.now();
+  enemyTracers.push({startX, startY, endX, endY, born:now, duration, weaponType:wt});
+  const st = MUZZLE_STYLE[wt] || MUZZLE_STYLE.rifle;
+  flashes.push({x:startX, y:startY, born:now, life:st.life, muzzle:true, weaponType:wt});
+  spawn3dMuzzleFlash(startX, startY, wt);
+}
 // per user request: a bigger "destroyed" flourish (explosion+debris, rising wreck smoke,
 // a floating kill banner), shared by both sides -- see spawnDestructionEffect().
 let debrisParticles = [];
 let wreckSmokes = [];
 let killBanners = [];
+// per user request (richer graphics/effects): rain streaks / drifting fog wisps layered over
+// the existing flat weather tint (see WEATHER_TYPES) so weather reads as something happening
+// in the air rather than just a color filter over the map. Regenerated whenever state.weather
+// changes (ensureWeatherParticles(), called from drawBoard()); purely cosmetic, so it lives
+// outside `state` and isn't reset/serialized anywhere else.
+let weatherParticles = [];
+let weatherParticleKind = null;
+// w/h are the board canvas's actual pixel dimensions (cv.width/height in drawBoard -- the
+// container's real CSS pixel size, see resizeThree() -- NOT CANVAS_W/CANVAS_H, which are the
+// logical 1300x460 world-unit space); particles are a pure screen-space overlay like the
+// weather tint rect right above this call, so they need the same pixel space that uses.
+function ensureWeatherParticles(w, h){
+  const kind = state && state.weather;
+  if(kind === weatherParticleKind) return;
+  weatherParticleKind = kind;
+  weatherParticles = [];
+  if(kind === 'rain'){
+    for(let i=0;i<90;i++) weatherParticles.push({x:Math.random()*w, y:Math.random()*h, len:rnd(10,22), speed:rnd(9,15)});
+  } else if(kind === 'fog'){
+    for(let i=0;i<14;i++) weatherParticles.push({x:Math.random()*w, y:Math.random()*h, r:rnd(30,70), speed:rnd(0.15,0.4), alpha:rnd(0.03,0.07)});
+  }
+}
+// per user request (richer graphics/effects): a fast, bright expanding ring layered on top
+// of the flash/debris for a physically forceful "boom" -- kept as its own array/style rather
+// than reusing `ripples` (the slower amber recon-ping animation) so the two don't compete.
+let shockwaves = [];
+// per user request (richer graphics/effects): brief THREE.PointLight bursts placed in the 3D
+// scene at explosion sites (see spawnDestructionEffect) so an impact lights up the terrain
+// mesh itself, not just the 2D canvas overlay. Tracked as an array and cleaned up once per
+// frame (updateImpactLights(), called from loop()) rather than a per-light requestAnimationFrame
+// chain -- spawnDestructionEffect's own comments note a multi-kill burst must stay cheap in
+// aggregate, so this follows the same array+cap pattern as MAX_DEBRIS_PARTICLES.
+let impactLights = [];
+const MAX_IMPACT_LIGHTS = 6;
+let effects3d = [];
+const MAX_EFFECTS_3D = 80;
+function effectWorldPosition(x, y, lift){
+  const pos = canvasUnitToWorldXZ(x, y);
+  return new THREE.Vector3(pos.x, terrainHeightAt(x, y)+(lift||0), pos.z);
+}
+function disposeEffect3d(effect){
+  if(scene3d) scene3d.remove(effect.group);
+  effect.group.traverse(child=>{
+    if(child.geometry) child.geometry.dispose();
+    if(child.material) child.material.dispose();
+  });
+}
+function addEffect3d(group, born, life, update){
+  if(!scene3d) return;
+  scene3d.add(group);
+  effects3d.push({group, born, life, lastUpdate:born, update});
+  while(effects3d.length > MAX_EFFECTS_3D) disposeEffect3d(effects3d.shift());
+}
+function spawn3dMuzzleFlash(x, y, weaponType){
+  if(typeof THREE === 'undefined' || !scene3d) return;
+  const p = effectWorldPosition(x, y, 18);
+  const group = new THREE.Group();
+  const color = weaponType==='drone' ? 0xff7048 : weaponType==='cannon' ? 0xffc15d : 0xffe0a0;
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry((weaponType==='cannon'?16:10), 8, 6),
+    new THREE.MeshBasicMaterial({color, transparent:true})
+  );
+  group.add(core);
+  group.position.copy(p);
+  addEffect3d(group, performance.now(), weaponType==='cannon'?180:110, (e,t)=>{
+    const scale = 1 + t*2.5;
+    e.group.scale.set(scale, scale, scale);
+    core.material.opacity = 1-t;
+  });
+}
+function spawn3dImpactEffect(x, y, kind){
+  if(typeof THREE === 'undefined' || !scene3d) return;
+  const p = effectWorldPosition(x, y, kind==='smoke' ? 8 : 4);
+  const group = new THREE.Group();
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(8, 13, 20),
+    new THREE.MeshBasicMaterial({color:kind==='smoke'?0x8b927d:0xffb45d, transparent:true, side:THREE.DoubleSide})
+  );
+  ring.rotation.x = -Math.PI/2;
+  group.add(ring);
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(kind==='smoke'?18:13, 8, 6),
+    new THREE.MeshBasicMaterial({color:kind==='smoke'?0x7b8274:0xff7b35, transparent:true})
+  );
+  core.position.y = 10;
+  group.add(core);
+  for(let i=0;i<6;i++){
+    const spark = new THREE.Mesh(
+      new THREE.SphereGeometry(3.5, 6, 5),
+      new THREE.MeshBasicMaterial({color:0xffd18a, transparent:true})
+    );
+    spark.userData.v = new THREE.Vector3(rnd(-55,55), rnd(35,95), rnd(-55,55));
+    group.add(spark);
+  }
+  group.position.copy(p);
+  const life = kind==='smoke' ? 1800 : 650;
+  addEffect3d(group, performance.now(), life, (e,t,dt)=>{
+    ring.scale.setScalar(1+t*8);
+    ring.material.opacity = (1-t)*0.8;
+    core.scale.setScalar(1+t*1.5);
+    core.material.opacity = (1-t)*0.8;
+    e.group.children.slice(2).forEach(spark=>{
+      spark.position.addScaledVector(spark.userData.v, dt/1000);
+      spark.userData.v.y -= 130*dt/1000;
+      spark.material.opacity = 1-t;
+    });
+    if(kind==='smoke') e.group.rotation.y += dt*0.0004;
+  });
+  triggerCameraCinematic(x, y, kind==='explosion'?Math.min(MAP_ZOOM_MAX, MAP_VIEW.zoom*1.35):Math.min(MAP_ZOOM_MAX, MAP_VIEW.zoom*1.18), kind==='explosion'?850:500, kind==='explosion'?180:80);
+}
+function spawn3dProjectile(startX, startY, endX, endY, duration){
+  if(typeof THREE === 'undefined' || !scene3d) return;
+  const group = new THREE.Group();
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(5, 8, 6),
+    new THREE.MeshBasicMaterial({color:0xffd38a, transparent:true})
+  );
+  group.add(mesh);
+  const born = performance.now();
+  triggerCameraCinematic(endX, endY, Math.min(MAP_ZOOM_MAX, MAP_VIEW.zoom*1.12), Math.min(900, duration), 0);
+  addEffect3d(group, born, duration, (e,t)=>{
+    const x = startX+(endX-startX)*t;
+    const y = startY+(endY-startY)*t;
+    e.group.position.copy(effectWorldPosition(x, y, 35+Math.sin(t*Math.PI)*100));
+    mesh.material.opacity = 0.95;
+  });
+}
+function update3dEffects(){
+  if(!effects3d.length) return;
+  const now = performance.now();
+  effects3d = effects3d.filter(effect=>{
+    const elapsed = now-effect.born;
+    if(elapsed >= effect.life){ disposeEffect3d(effect); return false; }
+    effect.update(effect, elapsed/effect.life, Math.min(50, now-effect.lastUpdate));
+    effect.lastUpdate = now;
+    return true;
+  });
+}
+function spawnImpactLight(x, y){
+  if(typeof THREE === 'undefined' || !scene3d) return;
+  if(impactLights.length >= MAX_IMPACT_LIGHTS){
+    const oldest = impactLights.shift();
+    scene3d.remove(oldest.light);
+  }
+  const {x:wx, z:wz} = canvasUnitToWorldXZ(x, y);
+  const wy = terrainHeightAt(x, y) + 40; // above ground so it doesn't clip into the terrain mesh
+  const baseIntensity = 6;
+  const light = new THREE.PointLight(0xffb060, baseIntensity, 900, 2);
+  light.position.set(wx, wy, wz);
+  scene3d.add(light);
+  impactLights.push({light, born:performance.now(), life:450, baseIntensity});
+}
+function updateImpactLights(){
+  if(!impactLights.length) return;
+  const now = performance.now();
+  impactLights = impactLights.filter(l=>{
+    const t = (now-l.born)/l.life;
+    if(t>=1){ scene3d && scene3d.remove(l.light); return false; }
+    l.light.intensity = l.baseIntensity*(1-t);
+    return true;
+  });
+}
+
+// per user request (richer graphics/effects): a brief, decaying random jitter applied to the
+// whole board draw (see drawBoard()'s ctx.translate), triggered by nearby explosions so impacts
+// read as physically forceful. Purely a draw-time offset -- never touches state.camera or any
+// projection/hit-testing math, so clicks/selection/screen-space picking stay unaffected.
+let shakeStartedAt = 0, shakeDurationMs = 0, shakeMag = 0;
+function triggerShake(mag, durationMs){
+  if(mag <= shakeMag && performance.now() < shakeStartedAt+shakeDurationMs) return;
+  shakeStartedAt = performance.now();
+  shakeDurationMs = durationMs;
+  shakeMag = mag;
+}
+function currentShakeOffset(){
+  const t = performance.now() - shakeStartedAt;
+  if(t < 0 || t > shakeDurationMs) return {x:0, y:0};
+  const amt = shakeMag * (1 - t/shakeDurationMs);
+  return { x:(Math.random()*2-1)*amt, y:(Math.random()*2-1)*amt };
+}
 
 // per user request: friendly (our side only) infantry squad icon, drawn as a flat
 // screen-space sprite via ctx.drawImage() at the marker's already-projected 2D point --
@@ -685,11 +1066,30 @@ enemyInfantryIcon.src = 'icons/e-infant.png';
 function scaledIconH(baseH){
   return baseH * clamp(Math.sqrt(MAP_VIEW.zoom), 0.6, 2.2);
 }
+function drawUnitBase(ctx, size, dead){
+  ctx.save();
+  ctx.fillStyle = dead ? 'rgba(35,18,18,.88)' : 'rgba(8,18,24,.9)';
+  ctx.strokeStyle = dead ? 'rgba(224,90,79,.9)' : 'rgba(160,205,232,.9)';
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = dead ? 'rgba(224,90,79,.45)' : 'rgba(80,180,255,.4)';
+  ctx.shadowBlur = 8;
+  ctx.beginPath();
+  ctx.ellipse(0, size*.2, size*.72, size*.28, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
 function drawUnitIcon(ctx, img, cx, cy, targetH, dead){
+  ctx.save();
+  ctx.translate(cx, cy);
+  drawUnitBase(ctx, targetH, dead);
+  ctx.restore();
   if(!img.complete || !img.naturalWidth) return;
   const w = targetH * (img.naturalWidth/img.naturalHeight);
   ctx.save();
   if(dead) ctx.filter = 'grayscale(1) brightness(0.5)';
+  ctx.shadowColor = dead ? 'rgba(224,90,79,.4)' : 'rgba(70,170,255,.5)';
+  ctx.shadowBlur = 7;
   ctx.drawImage(img, cx-w/2, cy-targetH/2, w, targetH);
   ctx.restore();
 }
@@ -699,6 +1099,7 @@ function drawTankIcon(ctx, cx, cy, size, dead){
   const w = size*1.6, h = size*0.9;
   ctx.save();
   ctx.translate(cx, cy);
+  drawUnitBase(ctx, size, dead);
   ctx.fillStyle = dead ? '#5c2a25' : FRIENDLY_MARK_COLOR;
   ctx.strokeStyle = dead ? '#3a1b18' : '#3d5a70';
   ctx.lineWidth = 1.5;
@@ -718,11 +1119,40 @@ function drawTankIcon(ctx, cx, cy, size, dead){
   ctx.stroke();
   ctx.restore();
 }
+// per user request: 対空ミサイル部隊 -- 戦車と同様、画像アセットが無いためのベクター描画。
+// 車体(箱)+ 斜め上向きの発射レール + レール先端のミサイル(円)で対空兵器と分かるようにする。
+function drawSamIcon(ctx, cx, cy, size, dead){
+  const w = size*1.5, h = size*0.7;
+  ctx.save();
+  ctx.translate(cx, cy);
+  drawUnitBase(ctx, size, dead);
+  const col = dead ? '#5c2a25' : FRIENDLY_MARK_COLOR;
+  ctx.fillStyle = col;
+  ctx.strokeStyle = dead ? '#3a1b18' : '#3d5a70';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(-w/2, -h*0.4, w, h, 3);
+  else ctx.rect(-w/2, -h*0.4, w, h);
+  ctx.fill();
+  ctx.stroke();
+  const railTipX = w*0.3, railTipY = -size*1.05;
+  ctx.beginPath();
+  ctx.moveTo(-w*0.15, -h*0.3);
+  ctx.lineTo(railTipX, railTipY);
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(railTipX, railTipY, size*0.14, 0, Math.PI*2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
 // per user request: 工兵小隊 -- ヘルメット(半円)+交差した工具(X)のベクター描画アイコン
 // (戦車と同様、画像アセットが無いため)。
 function drawEngineerIcon(ctx, cx, cy, size, dead){
   ctx.save();
   ctx.translate(cx, cy);
+  drawUnitBase(ctx, size, dead);
   const col = dead ? '#5c2a25' : FRIENDLY_MARK_COLOR;
   ctx.fillStyle = col;
   ctx.strokeStyle = dead ? '#3a1b18' : '#3d5a70';
@@ -848,12 +1278,36 @@ function playSfx(name, volume){
 
 const FLIGHT_DURATION = 1400; // per user request: half the previous flight speed (was 700)
 const LAUNCH_INTERVAL = 420;
-// per user request: real world-space apex height (same units as terrain elevation, already
-// reflecting TERRAIN_RELIEF_EXAGGERATION) rather than a fixed screen-pixel offset -- a pixel
-// offset applied after projecting the ground point doesn't grow/shrink with terrain relief
-// along the flight path, so on hilly terrain the "arc" reads as hugging the ground instead of
-// flying above it. Projecting a real elevated point (see projectAtHeight) always clears it.
+// per user request: real world-space apex height (same units terrainHeightAt() returns)
+// rather than a fixed screen-pixel offset -- a pixel offset applied after projecting the
+// ground point doesn't grow/shrink with terrain relief along the flight path, so on hilly
+// terrain the "arc" reads as hugging the ground instead of flying above it. Projecting a
+// real elevated point (see projectAtHeight) always clears it.
 const ARC_HEIGHT = 700; // per user request: higher apex than before (was 350)
+// per user request: the arc's height baseline is a smooth interpolation between the launch
+// and impact points' OWN terrain heights, not the local terrain directly beneath the
+// shell's current XY -- sampling local terrain there made the drawn trajectory hug every
+// bump along the flight path on hilly ground instead of reading as a clean ballistic arc
+// between two fixed elevations. See projectAtWorldY() (the projection this feeds into,
+// which -- unlike projectAtHeight -- takes an explicit world Y instead of terrain-relative).
+function projectileArcWorldY(startX, startY, endX, endY, prog){
+  const h0 = terrainHeightAt(startX, startY), h1 = terrainHeightAt(endX, endY);
+  return h0 + (h1-h0)*prog + Math.sin(prog*Math.PI)*ARC_HEIGHT;
+}
+// per user request: same start/end-height blend as projectileArcWorldY, but without the arc
+// term -- for direct-fire tracers (rifle/cannon/heli/missile/drone, see fireTracer()), which
+// travel in a straight line rather than a lobbed shell. Their in-flight points used to be
+// projected with project()/projectAtHeight, which samples the LOCAL terrain height directly
+// beneath each point -- on hilly ground that made the drawn tracer visually climb up and over
+// any hill between shooter and target instead of flying a straight line through the air, even
+// though hasLineOfSight()/the new squad/tank LOS gating already prevent an actually-blocked
+// shot from happening in the first place. This only needs fixing for the ENDPOINTS' own
+// heights blended smoothly -- the endpoints themselves are correctly at their own local ground
+// height already (that's literally where the shooter/target stand).
+function tracerWorldY(startX, startY, endX, endY, prog){
+  const h0 = terrainHeightAt(startX, startY), h1 = terrainHeightAt(endX, endY);
+  return h0 + (h1-h0)*prog;
+}
 
 function rnd(a,b){ return a + Math.random()*(b-a); }
 function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
@@ -913,7 +1367,7 @@ function addNewScout(){
 function unitAlive(u){ return unitAliveCount(u) > 0; }
 
 function initGame(){
-  simAccumMs = 0;
+  if(autoCommitTimer){ clearInterval(autoCommitTimer); autoCommitTimer = null; }
   document.getElementById('overlay').classList.remove('show');
   document.getElementById('shop-overlay').classList.remove('show');
   state = {
@@ -933,13 +1387,16 @@ function initGame(){
     })),
     squads: [],
     tanks: [],
+    sams: [],
     engineers: [],
     walls: [],
+    trenches: [],
     scouts: Array.from({length:NUM_SCOUTS}, (_,i)=>({
       id:i, x:SCOUT_X, y:SCOUT_UPPER_Y+i*40, watchAngle:90,
       soldiers: makeSoldiers(ROSTER_SCOUT_TEAMS[i]), pendingDest:null, pendingReconTargetId:null,
       exposure: SCOUT_EXPOSURE,
     })),
+    helis: [],
     snipers: [],
     hq: {x:HQ_X, y:HQ_Y, hp:HQ_MAX_HP, maxHp:HQ_MAX_HP, exposure:EXPOSURE_DEFAULT},
     reserve: RESERVE_SIZE,
@@ -947,21 +1404,23 @@ function initGame(){
     orderMode: null,
     smartOrderMode: null,
     weather: 'clear',
-    terrain: [],
-    contours: null,
+    terrainGen: null,
     roads: [],
     smokeClouds: [],
     illumFlares: [],
     mines: [],
     turns: 0,
+    // per user request: in-game mission clock -- unlike turns (reset to 0 every wave, see
+    // startStage()), this counts every action-turn across the WHOLE campaign since
+    // initGame(), so the displayed date/time (see gameClockNow()) advances continuously
+    // instead of jumping backward each time a new wave starts.
+    missionMinutes: 0,
     targets: [],
     selectedId: null,
     commandBox: null,
     enemyCommandBox: null,
     snipeMortarStrikesPending: 0,
     animating: false,
-    inFlightVolleys: 0,
-    simRunning: false,
     stageResolved: false,
     gameSpeed: 'normal',
     deploymentMode: 'auto',
@@ -972,33 +1431,40 @@ function initGame(){
     decoys: [],
     decoyPlacementPending: false,
     decoyCommandBox: null,
-    selectedMap: 'map6',
+    selectedSeedIndex: 0,
+    pendingTerrainGen: null,
+    // per user request: FEBA (主戦闘地域前縁) line -- the player-adjustable X the "前進"
+    // standing order advances to and the "後退" standing order falls back to (see
+    // applySquadMovement/applyEngineerMovement/applyTankMovement/applySniperMovement).
+    // Persists across waves (not reset in startStage()) since it's a player-set control.
+    febaX: SQUAD_ADVANCE_LIMIT_X,
   };
   ripples = []; projectiles = []; flashes = []; enemyTracers = [];
-  debrisParticles = []; wreckSmokes = []; killBanners = [];
+  debrisParticles = []; wreckSmokes = []; killBanners = []; shockwaves = [];
+  impactLights.forEach(l=>scene3d && scene3d.remove(l.light)); impactLights = [];
   document.getElementById('log').innerHTML='';
   log('sys', 'システム', `コンシム v${GAME_VERSION} 起動。マップと配置方法を選択し、作戦を開始せよ。`);
+  rollMapSeedCandidates();
   renderMapSelectOverlay();
   document.getElementById('map-select-overlay').classList.add('show');
-  if(MAPS[state.selectedMap] && MAPS[state.selectedMap].hasData()) loadSelectedTerrain();
 }
 
-// per user request: map selection -- lets the player pick which real-world terrain to
-// deploy on before difficulty selection. Each map's raw GLB/texture/roads base64 lives in
-// its own globally-scoped const (see mapcreate/*.js); MAPS below just points at whichever
-// set is active for a given key so the rest of the 3D-loading code (initThree/
-// applyTerrainTextureOverride/buildRealRoads) doesn't need to know about individual maps.
-// A map's texture is optional (texture() may return null) -- see applyTerrainTextureOverride.
-const MAPS = {
-  map6: {
-    label: '演習場',
-    sub: '新規マップ',
-    hasData: ()=> typeof TERRAIN_GLB_BASE64_MAP6 !== 'undefined',
-    glb: ()=> TERRAIN_GLB_BASE64_MAP6,
-    texture: ()=> (typeof TERRAIN_TEXTURE_BASE64_MAP6!=='undefined' ? TERRAIN_TEXTURE_BASE64_MAP6 : null),
-    roads: ()=> (typeof ROADS_RAW_DATA_MAP6!=='undefined' ? ROADS_RAW_DATA_MAP6 : []),
-  },
-};
+// per user request (idea 1/4): map selection is now a choice among a few freshly-rolled
+// procedural battlefields rather than a fixed real-world map -- since generation is
+// instant, the player can preview and pick a seed instead of always getting whatever
+// loaded. Rerolled each time the title screen shows (initGame()); wave 1 uses whichever
+// candidate the player picked (see startSetup()/pickTerrainForStage()), later waves
+// regenerate fresh each time.
+const MAP_SEED_CANDIDATE_COUNT = 3;
+let mapSeedCandidates = [];
+function rollMapSeedCandidates(){
+  mapSeedCandidates = [];
+  for(let i=0;i<MAP_SEED_CANDIDATE_COUNT;i++){
+    const seed = Math.floor(Math.random()*0xFFFFFFFF);
+    mapSeedCandidates.push(generateProceduralTerrain(seed, pickArchetypeForStage(1, Math.random)));
+  }
+  state.selectedSeedIndex = 0;
+}
 
 // per user request: difficulty selection removed (always 'normal', set directly in
 // initGame()'s state and applied in startSetup()) and map/deployment-mode selection merged
@@ -1022,31 +1488,32 @@ function renderMapSelectOverlay(){
   renderDecoySelectBody();
 }
 
+const MAP_SEED_THUMB_W = 150, MAP_SEED_THUMB_H = 53;
 function renderMapSelectBody(){
   const body = document.getElementById('map-select-body');
-  body.innerHTML = Object.keys(MAPS).map(key=>{
-    const m = MAPS[key];
-    const available = m.hasData();
-    const selected = state.selectedMap===key;
+  body.innerHTML = mapSeedCandidates.map((gen, idx)=>{
+    const selected = state.selectedSeedIndex===idx;
     return `
-      <div class="shop-row ${selected?'selected':''}">
-        <div>
-          <div class="label">${m.label}</div>
-          <div class="sub">${available ? m.sub : 'データ未読み込み'}</div>
+      <div class="shop-row seed-candidate-row ${selected?'selected':''}">
+        <canvas class="seed-thumb" id="seed-thumb-${idx}" width="${MAP_SEED_THUMB_W}" height="${MAP_SEED_THUMB_H}"></canvas>
+        <div style="flex:1;">
+          <div class="label">候補${idx+1}: ${gen.label}</div>
+          <div class="sub">シード #${gen.seed}${gen.river?' ・ 渡河点あり':''}</div>
         </div>
-        <div class="actions"><button class="btn primary" ${available?'':'disabled'} onclick="selectMap('${key}')">${selected?'選択中':'選択'}</button></div>
+        <div class="actions"><button class="btn primary" onclick="selectMapSeed(${idx})">${selected?'選択中':'選択'}</button></div>
       </div>
     `;
   }).join('');
+  mapSeedCandidates.forEach((gen, idx)=>{
+    const canvas = document.getElementById('seed-thumb-'+idx);
+    if(canvas) paintTerrainColors(canvas.getContext('2d'), MAP_SEED_THUMB_W, MAP_SEED_THUMB_H, gen);
+  });
 }
 
-function selectMap(key){
-  const m = MAPS[key];
-  if(!m || !m.hasData()) return;
-  const changed = state.selectedMap!==key;
-  state.selectedMap = key;
+function selectMapSeed(idx){
+  if(!mapSeedCandidates[idx]) return;
+  state.selectedSeedIndex = idx;
   renderMapSelectBody();
-  if(changed) loadSelectedTerrain();
 }
 
 function renderDeploymentSelectBody(){
@@ -1096,16 +1563,32 @@ function selectDecoyMode(key){
 }
 
 function startSetup(){
-  const m = MAPS[state.selectedMap];
-  if(!m || !m.hasData()) return;
+  const gen = mapSeedCandidates[state.selectedSeedIndex];
+  if(!gen) return;
+  state.pendingTerrainGen = gen;
   const d = DIFFICULTIES[state.difficulty];
   state.money = d.startMoney;
   state.ammo = {he:d.startHe, heat:d.startHeat};
   state.fuzeUnlocked = {impact:true, proximity:true, delay:true};
   document.getElementById('map-select-overlay').classList.remove('show');
-  log('sys','システム', `マップ「${m.label}」・${DEPLOYMENT_MODES[state.deploymentMode].label}・擬陣地${DECOY_MODES[state.decoyPlacementMode].label}で作戦開始。全弾種・信管を装備済み。`);
+  log('sys','システム', `戦場「${gen.label}」・${DEPLOYMENT_MODES[state.deploymentMode].label}・擬陣地${DECOY_MODES[state.decoyPlacementMode].label}で作戦開始。全弾種・信管を装備済み。`);
   startBgm();
   deployStage();
+}
+
+// per user request (idea 1): the map genuinely changes wave to wave instead of being the
+// same fixed layout every time. Wave 1 honors whatever seed the player picked on the setup
+// screen (state.pendingTerrainGen, see startSetup()); every later wave rolls a fresh one,
+// with pickArchetypeForStage() (idea 2/6) biasing which archetype toward the harsher end of
+// the pool as the run progresses, so terrain itself contributes to the difficulty curve.
+function pickTerrainForStage(stage){
+  if(stage===1 && state.pendingTerrainGen){
+    const gen = state.pendingTerrainGen;
+    state.pendingTerrainGen = null;
+    return gen;
+  }
+  const seed = Math.floor(Math.random()*0xFFFFFFFF);
+  return generateProceduralTerrain(seed, pickArchetypeForStage(stage, Math.random));
 }
 
 function pickTypesForCount(count, stage){
@@ -1139,7 +1622,7 @@ function generateSpots(n){
 // vehicle/artillery/drone counts, this doesn't scale with stage) -- built separately from the
 // main spots.map() pool below and given its own fixed 'HELI' id plus the extra AI-state
 // fields resolveHeliAssault() needs (heliPhase/heliCooldown/heliBurstLeft/heliAnchor).
-function buildHeliTarget(hpMult, bearingErrBase, distErrBase){
+function buildHeliTarget(hpMult, posErrBase){
   const spot = generateSpots(1)[0];
   const def = TARGET_TYPES.heli;
   const hp = Math.round(def.hp*hpMult);
@@ -1152,12 +1635,40 @@ function buildHeliTarget(hpMult, bearingErrBase, distErrBase){
     trueBearing, trueDistance,
     hp, maxHp:hp,
     destroyed:false, revealed:false, reconCount:0,
-    bearingErr:bearingErrBase, distErr:distErrBase,
+    posErr:posErrBase,
     bOffset: rnd(-1,1), dOffset: rnd(-1,1),
     impacts:[], troops:null, formationOffsets:null, formationName:null, speedMult:1,
     suppressed:0,
     exposure: HELI_EXPOSURE,
     heliPhase:'approach', heliCooldown:0, heliBurstLeft:HELI_ATTACK_BURST, heliAnchor:null,
+  };
+}
+
+// per user request: the enemy HQ is a fixed structure, not a spawned unit -- placed at a
+// random point along the map's far right edge (deeper than the normal spot pool's
+// ENEMY_SPAWN_MIN_X..ENEMY_SPAWN_MAX_X box) rather than drawn from generateSpots(), and
+// built separately from the main targets.map() pass since it doesn't fit that pass's
+// infantry-troops-or-generic-unit shape. Always present, every wave (see startStage()).
+const ENEMY_HQ_EXPOSURE = 15; // bunkered -- much harder to hit than EXPOSURE_DEFAULT(50)
+function buildEnemyHqTarget(hpMult, posErrBase){
+  const def = TARGET_TYPES.hq;
+  const x = rnd(CANVAS_W-70, CANVAS_W-30);
+  const y = rnd(60, CANVAS_H-60);
+  const hp = Math.round(def.hp*hpMult);
+  const dx = x-OP.x, dy = y-OP.y;
+  const trueBearing = (Math.atan2(dx,-dy)*180/Math.PI+360)%360;
+  const trueDistance = Math.sqrt(dx*dx+dy*dy);
+  return {
+    id:'HQ', type:'hq', def,
+    trueX:x, trueY:y,
+    trueBearing, trueDistance,
+    hp, maxHp:hp,
+    destroyed:false, revealed:false, reconCount:0,
+    posErr:posErrBase,
+    bOffset: rnd(-1,1), dOffset: rnd(-1,1),
+    impacts:[], troops:null, formationOffsets:null, formationName:null, speedMult:1,
+    suppressed:0,
+    exposure: ENEMY_HQ_EXPOSURE,
   };
 }
 
@@ -1176,13 +1687,13 @@ function deployBoxSize(){
 
 function startStage(){
   const stage = state.stage;
+  clickCycleState = null;
   pickWaveBgm();
-  state.terrain = generateTerrain();
-  state.contours = computeContours();
-  state.roads = REAL_ROADS_CANVAS;
+  regenerateTerrain(pickTerrainForStage(stage));
   state.smokeClouds = [];
   state.illumFlares = [];
   state.mines = [];
+  state.lastStandAnnounced = false;
   // per user request: no more flat "3 units per wave" cap -- infantry now spawns as
   // several formation groups (buildEnemyInfantryGroups) totalling ~50 soldiers, generated
   // independently from the small mixed pool of artillery/vehicle/drone below.
@@ -1196,11 +1707,11 @@ function startStage(){
   state.weather = stage===1 ? 'clear' : choice(Object.keys(WEATHER_TYPES));
   const weather = WEATHER_TYPES[state.weather];
   const opticsMult = (state.equipment.optics ? 0.8 : 1) * weather.errMult;
-  // per user request: halved again (bearing 30->15 base, +1->+0.5/stage; distance 120->60
-  // base, +4->+2/stage) -- the estimated enemy position was still reading as too far from
-  // the true position for indirect fire to feel accurate.
-  const bearingErrBase = (15 + (stage-1)*0.5) * opticsMult;
-  const distErrBase = (60 + (stage-1)*2) * opticsMult;
+  // per user request: a bounded circular position estimate (see MAX_ESTIMATE_ERROR_M) that
+  // grows with stage (spotting gets harder against a more dispersed/careful enemy) but is
+  // always clamped to the same real-world cap regardless of stage/optics/weather, so the
+  // estimate is never off by more than that no matter how bad conditions get.
+  const posErrBase = clamp((40 + (stage-1)*1.5) * opticsMult, 15, MAX_ESTIMATE_ERROR_M) / METERS_PER_UNIT;
   const totalCount = infantryGroups.length + otherCount;
   const spots = generateSpots(totalCount);
   const otherTypes = pickTypesForCount(otherCount, stage);
@@ -1233,7 +1744,7 @@ function startStage(){
       destroyed:false,
       revealed:false,
       reconCount:0,
-      bearingErr:bearingErrBase, distErr:distErrBase,
+      posErr:posErrBase,
       bOffset: rnd(-1,1), dOffset: rnd(-1,1),
       impacts:[],
       // per-soldier state for this infantry group -- named "troops" (not "soldiers") to stay
@@ -1252,7 +1763,10 @@ function startStage(){
     };
   });
 
-  targets.push(buildHeliTarget(hpMult, bearingErrBase, distErrBase));
+  targets.push(buildHeliTarget(hpMult, posErrBase));
+  // per user request: an alternate win condition -- see checkEnd()/computeReward() -- always
+  // present, every wave, placed deep in enemy territory rather than drawn from the spots pool.
+  targets.push(buildEnemyHqTarget(hpMult, posErrBase));
 
   // Tear down every leftover 3D marker from whatever the previous state.targets held
   // (normally already empty via resolveEnemyTurn's pruning, but retryStage() can jump
@@ -1283,6 +1797,7 @@ function startStage(){
   if(state.snipers) state.snipers = state.snipers.filter(sn=>unitAlive(sn));
   if(state.mortars) state.mortars = state.mortars.filter(m=>m.hp>0);
   if(state.tanks) state.tanks = state.tanks.filter(tk=>tk.hp>0);
+  if(state.sams) state.sams = state.sams.filter(sam=>sam.hp>0);
   if(state.engineers) state.engineers = state.engineers.filter(e=>unitAlive(e));
   // per user request: 防壁(壁)は迫撃砲/戦車と同じく、決心のたびにリセットされる擬陣地とは違い、
   // 波を跨いで恒久的に残る(現実の陣地構築なので、破壊されない限り消えない)。
@@ -1313,6 +1828,10 @@ function startStage(){
         exposure: SCOUT_EXPOSURE,
       };
     });
+    if(!state.helis || state.helis.length===0){
+      state.helis = [{id:0, x:deployX(OP_HOME_X+180), y:deployYMid- deployBoxH*0.35,
+        hp:120, maxHp:120, exposure:EXPOSURE_DEFAULT, orbitAngle:0, observationBonus:0}];
+    }
     state.mortars = Array.from({length:NUM_MORTARS}, (_,i)=>({
       id:i, x:deployX(OP_HOME_X), y:clamp(deployYMid+(i-(NUM_MORTARS-1)/2)*40*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax), hp:100, maxHp:100,
       order:'standby', pendingFire:null, pendingDest:null,
@@ -1357,6 +1876,16 @@ function startStage(){
       hp: TANK_MAX_HP, maxHp: TANK_MAX_HP,
       exposure: TANK_EXPOSURE,
     }));
+    state.sams = Array.from({length:NUM_SAMS}, (_,i)=>({
+      id: i,
+      order: 'hold',
+      pendingDest: null,
+      huntTargetId: null,
+      x: deployX(SAM_POS.x),
+      y: clamp(deployYMid + (i-(NUM_SAMS-1)/2)*60*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax),
+      hp: SAM_MAX_HP, maxHp: SAM_MAX_HP,
+      exposure: SAM_EXPOSURE,
+    }));
     state.engineers = Array.from({length:NUM_ENGINEERS}, (_,ei)=>({
       id: ei,
       order: 'hold',
@@ -1369,6 +1898,7 @@ function startStage(){
       exposure: EXPOSURE_DEFAULT,
     }));
     state.walls = [];
+    state.trenches = [];
     state.hq = {x:HQ_X, y:HQ_Y, hp:HQ_MAX_HP, maxHp:HQ_MAX_HP, exposure:EXPOSURE_DEFAULT, coverBuilt:false, pendingDest:null};
     state.reserve = RESERVE_SIZE;
     state.reserveRoster = ROSTER_RESERVE_INITIAL.slice();
@@ -1382,27 +1912,32 @@ function startStage(){
       s.pendingDest = null; s.pendingReconTargetId = null;
     });
     state.mortars.forEach(m=>{
-      m.order = 'standby'; m.pendingFire = null; m.pendingDest = null; m.mainlineAngle = null; m.preAlertOrder = null;
+      m.order = 'standby'; m.pendingFire = null; m.pendingDest = null; m.mainlineAngle = null;
     });
     state.squads.forEach(sq=>{
-      sq.order = 'hold'; sq.pendingDest = null; sq.huntTargetId = null; sq.reinforceUsed = false; sq.preAlertOrder = null;
+      // per user request: 大休止中は次のウェーブが始まっても中断されない(orderを'hold'に
+      // 戻してしまうと大休止中の表示が消えてしまうため)。
+      if(sq.resting) return;
+      sq.order = 'hold'; sq.pendingDest = null; sq.huntTargetId = null; sq.reinforceUsed = false;
     });
     state.snipers.forEach(sn=>{
-      sn.order = 'hold'; sn.pendingDest = null; sn.pendingSnipeTargetId = null; sn.aimAngle = null; sn.reinforceUsed = false; sn.preAlertOrder = null;
+      if(sn.resting) return;
+      sn.order = 'hold'; sn.pendingDest = null; sn.pendingSnipeTargetId = null; sn.aimAngle = null; sn.reinforceUsed = false;
     });
     state.tanks.forEach(tk=>{
       tk.order = 'hold'; tk.pendingDest = null; tk.huntTargetId = null;
     });
+    state.sams.forEach(sam=>{
+      sam.order = 'hold'; sam.pendingDest = null; sam.huntTargetId = null;
+    });
     state.engineers.forEach(e=>{
+      if(e.resting) return;
       e.order = 'hold'; e.pendingDest = null; e.reinforceUsed = false;
     });
     state.hq.coverBuilt = false;
     state.hq.pendingDest = null;
   }
-  state.alertLevel = null;
   state.animating = false;
-  state.inFlightVolleys = 0;
-  simAccumMs = 0;
   state.stageResolved = false;
   state.hpDroppedLow = false;
   state.orderMode = null;
@@ -1415,14 +1950,18 @@ function startStage(){
   state.stageStartSnapshot = JSON.parse(JSON.stringify({
     ammo: state.ammo, turns: state.turns, reserve: state.reserve, reserveRoster: state.reserveRoster, hq: state.hq,
     mortars: state.mortars, squads: state.squads, scouts: state.scouts, snipers: state.snipers,
-    tanks: state.tanks, engineers: state.engineers, walls: state.walls,
+    tanks: state.tanks, sams: state.sams, helis: state.helis, engineers: state.engineers, walls: state.walls, trenches: state.trenches,
   }));
   ripples = []; projectiles = []; flashes = []; enemyTracers = [];
-  debrisParticles = []; wreckSmokes = []; killBanners = [];
+  debrisParticles = []; wreckSmokes = []; killBanners = []; shockwaves = [];
+  impactLights.forEach(l=>scene3d && scene3d.remove(l.light)); impactLights = [];
 
   document.getElementById('overlay').classList.remove('show');
-  log('sys','システム', `WAVE ${stage} / ${STAGE_COUNT} ― 目標${totalCount}件を確認。天候: ${weather.label}(${weather.desc})。`);
+  log('sys','システム', `WAVE ${stage} / ${STAGE_COUNT} ― 目標${state.targets.length}件を確認。天候: ${weather.label}(${weather.desc})。`);
   log('sys','警報', '戦闘ヘリ1機を確認。ヒットアンドアウェイ戦術(接近→攻撃→離脱)に警戒せよ。');
+  // per user request (idea 3): flags the HQ's existence without giving away its position --
+  // bearing/distance still need the normal recon flow (revealTarget) like any other target.
+  log('sys','情報部', '偵察情報: 敵展開域の奥深くに指揮系統の中枢と思われる陣地を確認。優先撃破に成功すれば残存兵力を問わずWAVEを制圧できる可能性がある(要偵察)。');
   if(stage===1){
     const co = PERSONNEL_ROSTER[0];
     log('sys','司令部', `戦闘団編成完了、総員${PERSONNEL_ROSTER.length}名。総指揮官: ${co.rank} ${co.name}。`);
@@ -1516,6 +2055,7 @@ function applyDecoyPlacementMode(mode){
     log('sys','工兵', `擬陣地、手動設置モード。地図を長押しして最大${MAX_DECOYS}箇所を指定せよ。`);
   }
   render();
+  if(!state.decoyPlacementPending) startRealtimeLoop();
 }
 function placeDecoyAt(x, y){
   if(!state.decoyPlacementPending || state.decoys.length>=MAX_DECOYS) return;
@@ -1529,6 +2069,7 @@ function finishDecoyPlacement(){
   state.decoyPlacementPending = false;
   log('sys','工兵', `擬陣地の設置完了(${state.decoys.length}箇所)。`);
   render();
+  startRealtimeLoop();
 }
 
 function retryStage(){
@@ -1542,8 +2083,11 @@ function retryStage(){
   state.scouts = snap.scouts;
   state.snipers = snap.snipers;
   state.tanks = snap.tanks;
+  state.sams = snap.sams;
+  state.helis = snap.helis || [];
   state.engineers = snap.engineers;
   state.walls = snap.walls;
+  state.trenches = snap.trenches;
   startStage();
 }
 
@@ -1637,17 +2181,42 @@ function deployStage(){
   startStage();
 }
 
-function estPos(t){
-  const bearing = t.trueBearing + t.bOffset*t.bearingErr;
-  const dist = clamp(t.trueDistance + t.dOffset*t.distErr, 20, 1900);
-  const rad = bearing*Math.PI/180;
-  const x = OP.x + dist*Math.sin(rad);
-  const y = OP.y - dist*Math.cos(rad);
+// per user request: a target's estimated position is its TRUE position plus a bounded
+// circular offset (magnitude <= t.posErr, i.e. never more than MAX_ESTIMATE_ERROR_M -- see
+// its comment) rather than an angle+distance error measured from some observer. That means
+// the estimate itself is a single fixed (x,y) regardless of who's asking -- estPos (from OP)
+// and estPosFromMortar (from a specific mortar) now always agree on it; only the bearing/
+// distance TO that shared estimate differs by observer, which is what each still returns for
+// display. t.bOffset/t.dOffset (each independently random in [-1,1], rolled once when the
+// target is created) are normalized down to the unit circle when their combined magnitude
+// exceeds 1, so the offset is uniform-ish over a disk of radius t.posErr rather than a boxy
+// square that could reach posErr*sqrt(2) in the corners.
+// Clamped only enough to keep the marker fully on-canvas (ESTIMATE_CLAMP_MARGIN), NOT the
+// old, much larger FIELD_MARGIN (130) -- that was sized for the previous error model, whose
+// far larger swings needed reining in from drifting into friendly territory. It clipped
+// harmlessly back then, but with the tight new posErr cap, any true position within
+// FIELD_MARGIN of the map edge (routine -- enemies spawn up to CANVAS_W-25) had its estimate
+// yanked back into the clamp regardless of the small random offset, manufacturing a
+// multi-hundred-meter "error" out of nothing but the clamp itself.
+const ESTIMATE_CLAMP_MARGIN = 20;
+function estimatedTargetPos(t){
+  const mag = Math.hypot(t.bOffset, t.dOffset);
+  const scale = mag>1 ? 1/mag : 1;
+  const tracked = t.lastKnownX!==undefined && !isTargetDetected(t);
+  const originX = tracked ? t.lastKnownX : t.trueX;
+  const originY = tracked ? t.lastKnownY : t.trueY;
+  const staleTurns = tracked ? Math.max(0, (state.turns||0)-(t.lastSeenTurn||0)) : 0;
+  const staleDrift = tracked ? Math.min(MAX_ESTIMATE_ERROR_M/METERS_PER_UNIT, staleTurns*8) : 0;
+  const x = originX + t.bOffset*scale*(t.posErr+staleDrift);
+  const y = originY + t.dOffset*scale*(t.posErr+staleDrift);
   return {
-    x: clamp(x, FIELD_MARGIN, CANVAS_W-FIELD_MARGIN),
-    y: clamp(y, FIELD_MARGIN, CANVAS_H-FIELD_MARGIN),
-    bearing, dist,
+    x: clamp(x, ESTIMATE_CLAMP_MARGIN, CANVAS_W-ESTIMATE_CLAMP_MARGIN),
+    y: clamp(y, ESTIMATE_CLAMP_MARGIN, CANVAS_H-ESTIMATE_CLAMP_MARGIN),
   };
+}
+function estPos(t){
+  const p = estimatedTargetPos(t);
+  return { x:p.x, y:p.y, bearing: bearingBetween(OP.x, OP.y, p.x, p.y), dist: Math.hypot(p.x-OP.x, p.y-OP.y) };
 }
 
 function computeDispersionAt(){
@@ -1655,19 +2224,8 @@ function computeDispersionAt(){
 }
 
 function estPosFromMortar(mortar, t){
-  const dx = t.trueX-mortar.x, dy = t.trueY-mortar.y;
-  const trueBrg = (Math.atan2(dx,-dy)*180/Math.PI+360)%360;
-  const trueDist = Math.sqrt(dx*dx+dy*dy);
-  const bearing = trueBrg + t.bOffset*t.bearingErr;
-  const dist = clamp(trueDist + t.dOffset*t.distErr, 20, 1900);
-  const rad = bearing*Math.PI/180;
-  const x = mortar.x + dist*Math.sin(rad);
-  const y = mortar.y - dist*Math.cos(rad);
-  return {
-    x: clamp(x, FIELD_MARGIN, CANVAS_W-FIELD_MARGIN),
-    y: clamp(y, FIELD_MARGIN, CANVAS_H-FIELD_MARGIN),
-    bearing, dist,
-  };
+  const p = estimatedTargetPos(t);
+  return { x:p.x, y:p.y, bearing: bearingBetween(mortar.x, mortar.y, p.x, p.y), dist: Math.hypot(p.x-mortar.x, p.y-mortar.y) };
 }
 
 function bearingBetween(fromX, fromY, toX, toY){
@@ -1683,24 +2241,8 @@ function bearingToXY(bearingDeg, dist, originX, originY){
   const rad = bearingDeg*Math.PI/180;
   return { x: originX + dist*Math.sin(rad), y: originY - dist*Math.cos(rad) };
 }
-function generateTerrain(){
-  const hillCount = 3 + Math.floor(Math.random()*3);
-  const hills = [];
-  for(let i=0;i<hillCount;i++){
-    hills.push({
-      x: rnd(140, CANVAS_W-100),
-      y: rnd(50, CANVAS_H-50),
-      r: rnd(100,220),
-      h: rnd(0.35,0.75),
-    });
-  }
-  return hills;
-}
-
-// Real-world road network (from OSM, via mapcreate/roads_data.js) replaces the
-// old procedural line-only roads. Converted from raw terrain-local meters to
-// canvas-unit space once, asynchronously, as soon as the 3D terrain finishes
-// loading (see buildRealRoads() in the 3D map section below).
+// Road network in canvas-unit space, generated fresh with each procedural battlefield
+// (see buildProceduralRoads() in the 3D map section below, called from regenerateTerrain()).
 const REAL_ROADS_CANVAS = [];
 // Road-network graph (nodes + adjacency) built once from REAL_ROADS_CANVAS by
 // buildRoadGraph() (see 3D map section) -- used to constrain vehicle movement
@@ -1806,7 +2348,10 @@ function terrainAwareStep(fromX, fromY, targetX, targetY, stepLen, ignoreWalls){
 
   const near = nearestRoadPoint(fromX, fromY);
   const onRoad = near && near.dist < ROAD_PULL_RADIUS;
-  const effStepLen = Math.min(stepLen * (onRoad ? 1 : OFF_ROAD_SPEED_MULT), straightDist);
+  // per user request: forest/water (see terrainTypeAt/generateProceduralTerrain) slow off-road movement
+  // further still -- a road already represents a cleared path, so it's exempt.
+  const terrainTypeMult = onRoad ? 1 : (TERRAIN_TYPE_SPEED_MULT[terrainTypeAt(fromX, fromY)] || 1);
+  const effStepLen = Math.min(stepLen * (onRoad ? 1 : OFF_ROAD_SPEED_MULT) * terrainTypeMult, straightDist);
   if(straightDist <= effStepLen){
     return ignoreWalls ? {x: targetX, y: targetY} : applyWallBlock(fromX, fromY, targetX, targetY);
   }
@@ -1834,6 +2379,17 @@ function terrainAwareStep(fromX, fromY, targetX, targetY, stepLen, ignoreWalls){
   return ignoreWalls ? best : applyWallBlock(fromX, fromY, best.x, best.y);
 }
 
+// per user request: the heli's movement looked jerky because it reused terrainAwareStep,
+// which is built for GROUND units -- road-pull speed boosts, forest/water slowdowns, and a
+// slope-avoidance heading fan all applied to an aircraft with no reason to care about any of
+// them. A heli should just fly straight at its target at a constant speed.
+function airborneStep(fromX, fromY, targetX, targetY, stepLen){
+  const dx = targetX-fromX, dy = targetY-fromY;
+  const dist = Math.hypot(dx,dy) || 1;
+  if(dist <= stepLen) return {x: targetX, y: targetY};
+  return {x: fromX + (dx/dist)*stepLen, y: fromY + (dy/dist)*stepLen};
+}
+
 // terrainAwareStep only lets elevation nudge the HEADING (a small subset of
 // candidate headings score better on flatter ground) -- it never actually
 // slows movement down for climbing/descending, so in practice units barely
@@ -1851,16 +2407,35 @@ function scoutTerrainAwareStep(fromX, fromY, targetX, targetY, stepLen){
   return { x: fromX + (next.x-fromX)*mult, y: fromY + (next.y-fromY)*mult };
 }
 
-function elevationAt(x,y){
-  if(!state || !state.terrain) return 0;
+// Tactical elevation reads directly from the current procedural terrain descriptor
+// (state.terrainGen, built by generateProceduralTerrain() -- see there) instead of a
+// separate mesh/raycast pipeline. The 3D terrain mesh and texture the player sees are
+// built from this exact same descriptor (see buildProceduralTerrainMesh()), so visual
+// and mechanical terrain can't drift apart the way the old GLB-vs-invisible-hills split
+// could. A river carves a shallow valley into the hill-based height field so water
+// visibly and mechanically sits in a low channel rather than floating over high ground.
+// elevationAtFor() takes an explicit descriptor rather than always reading state.terrainGen
+// so the setup screen's seed-preview thumbnails (idea 4) can evaluate candidate maps that
+// aren't the active one yet; elevationAt() is the normal gameplay entry point.
+function elevationAtFor(gen, x, y){
+  if(!gen) return 0;
   let e = 0;
-  for(let i=0;i<state.terrain.length;i++){
-    const hill = state.terrain[i];
+  for(let i=0;i<gen.hills.length;i++){
+    const hill = gen.hills[i];
     const d = Math.hypot(x-hill.x, y-hill.y);
     const t = clamp(1-d/hill.r, 0, 1);
     e += hill.h * t*t*(3-2*t);
   }
-  return e;
+  if(gen.river){
+    const rx = riverXAt(gen.river, y);
+    const dx = Math.abs(x-rx);
+    const t = clamp(1-dx/(gen.river.width*1.5), 0, 1);
+    e -= RIVER_VALLEY_DEPTH * t*t*(3-2*t);
+  }
+  return clamp(e, 0, 1.3);
+}
+function elevationAt(x,y){
+  return elevationAtFor(state && state.terrainGen, x, y);
 }
 function elevationLabel(e){
   if(e < 0.25) return '低地';
@@ -1872,31 +2447,83 @@ function altitudeBonus(attackerX, attackerY, defenderX, defenderY){
   return clamp(1 + diff*0.35, 0.75, 1.4);
 }
 
-function computeContours(){
-  const byLevel = {};
-  CONTOUR_LEVELS.forEach(level=>{
-    const segs = [];
-    for(let gy=0; gy<CANVAS_H; gy+=CONTOUR_CELL){
-      for(let gx=0; gx<CANVAS_W; gx+=CONTOUR_CELL){
-        const x0=gx, x1=Math.min(gx+CONTOUR_CELL,CANVAS_W), y0=gy, y1=Math.min(gy+CONTOUR_CELL,CANVAS_H);
-        const vTL=elevationAt(x0,y0), vTR=elevationAt(x1,y0), vBR=elevationAt(x1,y1), vBL=elevationAt(x0,y1);
-        const pts=[];
-        if((vTL>level)!==(vTR>level)){ const t=(level-vTL)/(vTR-vTL); pts.push({x:x0+t*(x1-x0), y:y0}); }
-        if((vTR>level)!==(vBR>level)){ const t=(level-vTR)/(vBR-vTR); pts.push({x:x1, y:y0+t*(y1-y0)}); }
-        if((vBL>level)!==(vBR>level)){ const t=(level-vBL)/(vBR-vBL); pts.push({x:x0+t*(x1-x0), y:y1}); }
-        if((vTL>level)!==(vBL>level)){ const t=(level-vTL)/(vBL-vTL); pts.push({x:x0, y:y0+t*(y1-y0)}); }
-        if(pts.length===2) segs.push([pts[0],pts[1]]);
-        else if(pts.length===4){ segs.push([pts[0],pts[1]]); segs.push([pts[2],pts[3]]); }
-      }
-    }
-    byLevel[level] = segs;
-  });
-  return byLevel;
+// per user request: 掩蔽率(cover) now factors in the real terrain around a unit, not
+// just a fixed per-unit-type constant. This deliberately ignores who's actually
+// shooting (wiring an attacker position through every getUnitExposure/rollExposureHit
+// call site would be a much bigger change) and instead asks a direction-agnostic
+// question: relative to its immediate surroundings, is this spot tucked into a dip
+// (average nearby ground is higher -- masked from most angles) or sitting on a local
+// high point (average nearby ground is lower -- silhouetted from most angles)? Using
+// the relief relative to the local average (rather than counting how many sampled
+// neighbors are strictly higher) keeps flat/open ground correctly neutral -- nothing
+// nearby reads as meaningfully higher OR lower, so relief comes out near zero instead
+// of always scoring as "exposed" for want of any higher neighbor. This deliberately
+// cuts the other way from altitudeBonus's attacker-vs-defender high-ground damage bonus:
+// the tallest hilltop is the best place to shoot from and the worst place to stand still
+// and get shot at.
+const TERRAIN_COVER_SAMPLE_RADIUS = 40;
+const TERRAIN_COVER_SAMPLE_COUNT = 8;
+const TERRAIN_COVER_RANGE = 20;
+// Relief (in elevationAt's 0..1 scale) relative to the local average that saturates the
+// cover bonus -- a fold/knob this pronounced within one sample radius is already a clear
+// local high or low point, so more relief than this shouldn't swing cover any further.
+const TERRAIN_COVER_RELIEF_SATURATION = 0.15;
+function terrainCoverBonus(x, y){
+  if(!state || !state.terrainGen) return 0;
+  const here = elevationAt(x, y);
+  let sum = 0;
+  for(let i=0;i<TERRAIN_COVER_SAMPLE_COUNT;i++){
+    const ang = (i/TERRAIN_COVER_SAMPLE_COUNT) * Math.PI*2;
+    const nx = x + Math.cos(ang)*TERRAIN_COVER_SAMPLE_RADIUS;
+    const ny = y + Math.sin(ang)*TERRAIN_COVER_SAMPLE_RADIUS;
+    sum += elevationAt(nx, ny);
+  }
+  const relief = (sum/TERRAIN_COVER_SAMPLE_COUNT) - here; // >0 = local dip, <0 = local high point
+  return clamp(relief/TERRAIN_COVER_RELIEF_SATURATION, -1, 1) * (TERRAIN_COVER_RANGE/2);
+}
+
+// per user request: on top of the elevation-based terrainCoverBonus, a discrete terrain
+// type (see terrainTypeAt/generateProceduralTerrain, defined further below with
+// TERRAIN_TYPE_FOREST/WATER)
+// adds its own flat cover swing -- concealment among trees vs. having nowhere to hide
+// while caught out in open water. Returns 0 (no change from current behavior) wherever
+// classification hasn't finished yet or reads open ground. The lookup table itself
+// (TERRAIN_TYPE_COVER_BONUS) is declared next to those constants further down in the
+// file -- this function is only ever called once gameplay is running, long after every
+// top-level const in the file has already initialized, so the textual ordering here
+// doesn't matter the way it would for a top-level object literal evaluated at load time.
+function terrainTypeCoverBonus(x, y){
+  return TERRAIN_TYPE_COVER_BONUS[terrainTypeAt(x, y)] || 0;
+}
+// Combines both cover sources (elevation-based defilade + discrete terrain type) into the
+// one number every getUnitExposure/getTargetExposure branch adds on top of a unit's base
+// exposure -- see each for details.
+function terrainCoverTotal(x, y){
+  return terrainCoverBonus(x, y) + terrainTypeCoverBonus(x, y);
+}
+
+function distanceToSegment(px, py, x1, y1, x2, y2){
+  const dx = x2-x1, dy = y2-y1;
+  const lenSq = dx*dx+dy*dy;
+  if(lenSq < 1e-6) return Math.hypot(px-x1, py-y1);
+  const t = clamp(((px-x1)*dx + (py-y1)*dy) / lenSq, 0, 1);
+  return Math.hypot(px-(x1+dx*t), py-(y1+dy*t));
+}
+// per user request: 塹壕の掩蔽ボーナス -- getUnitExposureの歩兵系の分岐(小隊/狙撃/工兵/斥候)
+// のみから呼ばれる、味方専用の効果(敵はここでは対象外 -- terrainCoverTotalのように
+// getTargetExposureと共有していない)。
+function trenchCoverBonusAt(x, y){
+  if(!state || !state.trenches || !state.trenches.length) return 0;
+  for(const tr of state.trenches){
+    if(distanceToSegment(x, y, tr.x1, tr.y1, tr.x2, tr.y2) <= TRENCH_RADIUS) return TRENCH_COVER_BONUS;
+  }
+  return 0;
 }
 
 function hasLineOfSight(fromX,fromY,toX,toY){
   const EYE_HEIGHT = 0.12;
   const dist = Math.hypot(toX-fromX, toY-fromY);
+  if(terrainTypeAt(toX,toY)===TERRAIN_TYPE_FOREST) return false;
   const steps = Math.max(6, Math.floor(dist/25));
   const fromE = elevationAt(fromX,fromY)+EYE_HEIGHT;
   const toE = elevationAt(toX,toY)+EYE_HEIGHT;
@@ -1908,6 +2535,7 @@ function hasLineOfSight(fromX,fromY,toX,toY){
     const y = fromY+(toY-fromY)*t;
     const sightE = fromE+(toE-fromE)*t;
     if(elevationAt(x,y) > sightE+0.02) return false;
+    if(terrainTypeAt(x,y)===TERRAIN_TYPE_FOREST) return false;
     if(smokeClouds && smokeClouds.some(c=>Math.hypot(x-c.x,y-c.y) <= SMOKE_RADIUS_UNITS)) return false;
     // per user request: 工兵の防壁(壁)も視線を遮る -- 地形/煙と同じ扱いで、壁の向こうは見えない。
     if(walls && walls.some(w=>w.hp>0 && Math.hypot(x-w.x,y-w.y) <= WALL_RADIUS)) return false;
@@ -1929,6 +2557,24 @@ function inScoutConeFor(scout, t){
 function inScoutCone(t){
   if(!state.scouts || state.scouts.length===0) return true;
   return state.scouts.some(s=>inScoutConeFor(s,t));
+}
+function sensorSeesTarget(kind, unit, t){
+  if(!unit || (unit.hp!==undefined ? unit.hp<=0 : !unitAlive(unit))) return false;
+  const range = SENSOR_RANGE_UNITS[kind] || 0;
+  if(Math.hypot(t.trueX-unit.x, t.trueY-unit.y) > range) return false;
+  if(kind==='scout') return inScoutConeFor(unit, t);
+  if(kind==='heli') return hasLineOfSight(unit.x, unit.y, t.trueX, t.trueY);
+  return hasLineOfSight(unit.x, unit.y, t.trueX, t.trueY);
+}
+function bestSensorForTarget(t){
+  const sensors = [];
+  (state.scouts||[]).forEach((u,idx)=>sensors.push({kind:'scout',idx,u}));
+  (state.helis||[]).forEach((u,idx)=>sensors.push({kind:'heli',idx,u}));
+  (state.tanks||[]).forEach((u,idx)=>sensors.push({kind:'tank',idx,u}));
+  (state.mortars||[]).forEach((u,idx)=>sensors.push({kind:'mortar',idx,u}));
+  (state.squads||[]).forEach((u,idx)=>sensors.push({kind:'infantry',idx,u}));
+  (state.snipers||[]).forEach((u,idx)=>sensors.push({kind:'infantry',idx,u}));
+  return sensors.find(sensor=>sensorSeesTarget(sensor.kind, sensor.u, t)) || null;
 }
 function localDetection(t){
   const nearMortar = state.mortars.some(m=>m.hp>0 && Math.hypot(t.trueX-m.x, t.trueY-m.y) <= DETECTION_RANGE.artillery);
@@ -1954,11 +2600,25 @@ function localDetection(t){
     return Math.hypot(t.trueX-s.x, t.trueY-s.y) <= DETECTION_RANGE.infantry;
   });
 }
+// per user request: "last stand" -- once a wave is down to just a few stragglers, they stop
+// trying to sneak/hold position and throw themselves at the HQ instead, fully revealed. Uses
+// the exact same "残り" count the player already sees in the HUD (#stat-left, remainingTargets
+// in updateHud) so the threshold matches what's on screen, not some separate internal number.
+const LAST_STAND_THRESHOLD = 3;
+function lastStandActive(){
+  return !!state && state.targets.filter(t=>!t.destroyed).length <= LAST_STAND_THRESHOLD;
+}
 function isTargetDetected(t){
-  // per user request: 戦闘ヘリは常時見えているものとする -- ドローンと同様、斥候の視界/接触に
-  // 関係なく常に現在位置が追跡される(スポット位置がフェードして推定円になることはない)。
-  if(t.type==='heli') return true;
-  return inScoutCone(t) || localDetection(t);
+  if(t._detectedThisRender!==undefined) return t._detectedThisRender;
+  // per user request: 残存数が僅かになったら(lastStandActive)、全ての敵を無条件で発見済み
+  // 扱いにする -- 死に物狂いで本部へ突撃してくる以上、隠れる余地はないという想定。
+  if(lastStandActive()){
+    t._detectedThisRender = true;
+    return true;
+  }
+  const detected = !!bestSensorForTarget(t) || localDetection(t);
+  t._detectedThisRender = detected;
+  return detected;
 }
 function visibilityBlockReasonFor(scout, t){
   if(!unitAlive(scout)) return 'angle';
@@ -1982,28 +2642,13 @@ function visibilityBlockReason(t){
 }
 function rotateScout(idx, delta){
   const scout = state.scouts[idx];
-  if(!scout) return;
+  if(!scout || scout.resting) return;
   scout.watchAngle = (scout.watchAngle + delta + 360) % 360;
   render();
 }
-function armSquadMoveOrder(idx){
-  state.orderMode = {kind:'squad', idx};
-  state.commandBox = null;
-  render();
-}
-function armTankMoveOrder(idx){
-  state.orderMode = {kind:'tank-move', idx};
-  state.commandBox = null;
-  render();
-}
 // per user request: 指揮所も移動できるように(移動速度は歩兵と同一 -- applyHqMovement で
-// INFANTRY_MOVE_CAP を使う)。HQ は配列ではなく単一オブジェクトなので idx を持たない点だけ
-// tank/squad の同名関数と異なる。
-function armHqMoveOrder(){
-  state.orderMode = {kind:'hq-move'};
-  state.commandBox = null;
-  render();
-}
+// INFANTRY_MOVE_CAP を使う)。squad/tank/sam/hq は地図を直接クリックするだけで移動先を
+// 指定できる(setUnitMoveDest/DIRECT_MOVE_KINDS参照) -- 明示的なarm操作は不要。
 function clearHqDest(){
   state.hq.pendingDest = null;
   state.orderMode = null;
@@ -2015,12 +2660,19 @@ function clearTankDest(idx){
   state.orderMode = null;
   render();
 }
+function clearSamDest(idx){
+  if(!state.sams[idx]) return;
+  state.sams[idx].pendingDest = null;
+  state.orderMode = null;
+  render();
+}
 function setEngineerOrder(idx, order){
-  if(!state.engineers[idx]) return;
+  if(!state.engineers[idx] || state.engineers[idx].resting) return;
   state.engineers[idx].order = order;
   render();
 }
 function armEngineerMoveOrder(idx){
+  if(state.engineers[idx] && state.engineers[idx].resting) return;
   state.orderMode = {kind:'engineer-move', idx};
   state.commandBox = null;
   render();
@@ -2036,7 +2688,7 @@ function clearEngineerDest(idx){
 // MAX_WALLS/建設費 WALL_BUILD_COST/HP WALL_MAX_HP。
 let wallIdCounter = 0;
 function armWallBuildOrder(idx){
-  if(!state.engineers[idx] || !unitAlive(state.engineers[idx])) return;
+  if(!state.engineers[idx] || !unitAlive(state.engineers[idx]) || state.engineers[idx].resting) return;
   state.orderMode = {kind:'wall-build', idx};
   state.commandBox = null;
   render();
@@ -2056,6 +2708,33 @@ function buildWallAt(x, y){
   log('sys','工兵', `工兵小隊、指定地点に防壁を構築(¥${WALL_BUILD_COST}を消費)。`);
   return true;
 }
+// per user request: 塹壕(線方式) -- 壁と同じく工兵自身がその場に居る必要はないが、地図を2回
+// クリックして始点→終点を指定する(1回目の後、state.orderModeを'trench-build-p2'に付け替えて
+// 2回目のクリックを待つ)。射線は遮らない(壁と違ってwallBlockingLineOfFire的な判定は持たない)
+// 代わりに、線の近くにいる歩兵系の味方の掩蔽率を上げる(trenchCoverBonusAt/getUnitExposure)。
+let trenchIdCounter = 0;
+function armTrenchBuildOrder(idx){
+  if(!state.engineers[idx] || !unitAlive(state.engineers[idx]) || state.engineers[idx].resting) return;
+  state.orderMode = {kind:'trench-build-p1', idx};
+  state.commandBox = null;
+  render();
+}
+function buildTrenchAt(x1, y1, x2, y2){
+  if(state.trenches.length >= MAX_TRENCHES){
+    log('sys','システム', `塹壕は最大${MAX_TRENCHES}本まで。`);
+    return false;
+  }
+  if(state.money < TRENCH_BUILD_COST){
+    log('sys','システム', `資金が不足しています(塹壕構築 ¥${TRENCH_BUILD_COST})。`);
+    return false;
+  }
+  state.money -= TRENCH_BUILD_COST;
+  trenchIdCounter += 1;
+  const lengthM = Math.round(Math.hypot(x2-x1, y2-y1) * METERS_PER_UNIT);
+  state.trenches.push({ id: trenchIdCounter, x1, y1, x2, y2 });
+  log('sys','工兵', `工兵小隊、指定区間に塹壕を構築(全長約${lengthM}m・¥${TRENCH_BUILD_COST}を消費)。`);
+  return true;
+}
 function clearSquadDest(idx){
   if(!state.squads[idx]) return;
   state.squads[idx].pendingDest = null;
@@ -2063,12 +2742,14 @@ function clearSquadDest(idx){
   render();
 }
 function armScoutMoveOrder(idx){
+  if(state.scouts[idx] && state.scouts[idx].resting) return;
   state.orderMode = {kind:'scout-move', idx};
   state.commandBox = null;
   unitSpeakOrder('scout', idx);
   render();
 }
 function armScoutReconOrder(idx){
+  if(state.scouts[idx] && state.scouts[idx].resting) return;
   state.orderMode = {kind:'scout-recon', idx};
   state.commandBox = null;
   unitSpeakOrder('scout', idx);
@@ -2092,16 +2773,27 @@ function updateRevealed(){
   if(!state) return;
   const contactFriendlies = [];
   state.scouts.forEach((s,i)=>{ if(unitAlive(s)) contactFriendlies.push({kind:'scout', idx:i, u:s}); });
+  (state.helis||[]).forEach((h,i)=>{ if(h.hp>0) contactFriendlies.push({kind:'heli', idx:i, u:h}); });
   state.mortars.forEach((m,i)=>{ if(m.hp>0) contactFriendlies.push({kind:'mortar', idx:i, u:m}); });
   state.squads.forEach((sq,i)=>{ if(sq.soldiers.some(s=>s.alive)) contactFriendlies.push({kind:'squad', idx:i, u:sq}); });
   state.snipers.forEach((sn,i)=>{ if(sn.soldiers.some(s=>s.alive)) contactFriendlies.push({kind:'sniper', idx:i, u:sn}); });
   state.targets.forEach(t=>{
-    if(t.destroyed || t.revealed) return;
+    if(t.destroyed) return;
+    const sensor = bestSensorForTarget(t);
+    t._detectedThisRender = !!sensor || localDetection(t);
+    if(sensor){
+      t.lastKnownX = t.trueX;
+      t.lastKnownY = t.trueY;
+      t.lastSeenTurn = state.turns;
+      t.lastSeenBy = sensor.kind;
+      t.trackingConfidence = sensor.kind==='heli' ? 0.95 : sensor.kind==='scout' ? 0.85 : 0.65;
+    }
+    if(t.revealed) return;
     let reason = null;
     let detector = null;
-    if(inScoutCone(t)){
-      reason = '視認';
-      detector = contactFriendlies.find(f=>f.kind==='scout');
+    if(sensor){
+      reason = sensor.kind==='heli' ? 'ヘリ観測' : sensor.kind==='tank' ? '戦車観測' : '視認';
+      detector = contactFriendlies.find(f=>f.kind===sensor.kind && f.idx===sensor.idx);
     } else {
       const near = contactFriendlies.find(f=>Math.hypot(f.u.x-t.trueX, f.u.y-t.trueY) <= CONTACT_RANGE_UNITS);
       if(near){ reason = '接触'; detector = near; }
@@ -2119,8 +2811,7 @@ function updateRevealed(){
 }
 function performRecon(t){
   t.reconCount += 1;
-  t.bearingErr *= 0.5;
-  t.distErr *= 0.5;
+  t.posErr *= 0.5;
   const e = estPos(t);
   ripples.push({x:e.x, y:e.y, born:performance.now(), life:900});
   if(t.reconCount===2){
@@ -2134,8 +2825,9 @@ function performRecon(t){
     log('fdc','FDC', `${t.id} の情報精度は限界に達した。これ以上の座標補正は望めない。`);
   }
 }
-function resolveOneScoutDecision(scout, idx, dt){
+function resolveOneScoutDecision(scout, idx){
   if(!unitAlive(scout)) return;
+  if(scout.resting){ tickUnitRest(scout, `斥候${idx+1}班`); return; }
   if(scout.pendingReconTargetId){
     const t = state.targets.find(x=>x.id===scout.pendingReconTargetId);
     scout.pendingReconTargetId = null;
@@ -2145,7 +2837,7 @@ function resolveOneScoutDecision(scout, idx, dt){
       else log('sys','FDC', `${t.id} は斥候${idx+1}から視認できず偵察失敗。`);
     }
   } else if(scout.pendingDest){
-    const next = scoutTerrainAwareStep(scout.x, scout.y, scout.pendingDest.x, scout.pendingDest.y, 50*dt);
+    const next = scoutTerrainAwareStep(scout.x, scout.y, scout.pendingDest.x, scout.pendingDest.y, SCOUT_MOVE_CAP);
     scout.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SCOUT_ADVANCE_LIMIT_X);
     scout.y = clamp(next.y, 20, CANVAS_H-20);
     checkMineTrigger('scout', idx, scout.x, scout.y);
@@ -2155,8 +2847,21 @@ function resolveOneScoutDecision(scout, idx, dt){
     }
   }
 }
-function resolveScoutDecision(dt){
-  state.scouts.forEach((scout,idx)=>resolveOneScoutDecision(scout, idx, dt));
+function resolveScoutDecision(){
+  state.scouts.forEach((scout,idx)=>resolveOneScoutDecision(scout, idx));
+}
+function resolveFriendlyHeliTurn(actionTurns){
+  (state.helis||[]).forEach(heli=>{
+    if(heli.hp<=0) return;
+    for(let i=0;i<actionTurns;i++){
+      heli.orbitAngle = (heli.orbitAngle + 0.22) % (Math.PI*2);
+      const targetX = clamp(900 + Math.cos(heli.orbitAngle)*260, 520, CANVAS_W-260);
+      const targetY = clamp(CANVAS_H/2 + Math.sin(heli.orbitAngle)*150, 40, CANVAS_H-40);
+      const next = airborneStep(heli.x, heli.y, targetX, targetY, FRIENDLY_HELI_MOVE_UNITS);
+      heli.x = next.x;
+      heli.y = next.y;
+    }
+  });
 }
 function allScoutsWiped(){
   return state.scouts.every(s=>!unitAlive(s));
@@ -2196,9 +2901,9 @@ function armMortarTargetOrder(idx){
   state.commandBox = null;
   render();
 }
-function resolveOneMortarDecision(mortar, dt){
+function resolveOneMortarDecision(mortar){
   if(mortar.order!=='move' || !mortar.pendingDest) return;
-  const next = terrainAwareStep(mortar.x, mortar.y, mortar.pendingDest.x, mortar.pendingDest.y, MORTAR_MOVE_CAP*dt);
+  const next = terrainAwareStep(mortar.x, mortar.y, mortar.pendingDest.x, mortar.pendingDest.y, MORTAR_MOVE_CAP);
   mortar.x = clamp(next.x, MORTAR_ZONE_MIN_X, MORTAR_ZONE_MAX_X);
   mortar.y = clamp(next.y, 30, CANVAS_H-30);
   checkMineTrigger('mortar', mortar.id, mortar.x, mortar.y);
@@ -2213,8 +2918,8 @@ function resolveOneMortarDecision(mortar, dt){
     }
   }
 }
-function resolveMortarDecision(dt){
-  state.mortars.forEach(m=>resolveOneMortarDecision(m, dt));
+function resolveMortarDecision(){
+  state.mortars.forEach(m=>resolveOneMortarDecision(m));
 }
 
 let unlockedAchievements = new Set();
@@ -2258,6 +2963,21 @@ function spawnDestructionEffect(x, y, label, color){
   }
   flashes.push({x, y, born, life:800, big:true});
   flashes.push({x, y, born: born+130, life:650, big:true});
+  shockwaves.push({x, y, born, life:520});
+  spawnImpactLight(x, y);
+  spawn3dImpactEffect(x, y, 'explosion');
+  // screen shake, scaled by how close the impact lands to screen center -- full strength near
+  // the middle of the view, fading to none past ~420px so an explosion off in a corner of a
+  // wide-angle view doesn't jolt the whole screen.
+  const sp = project(x, y);
+  if(sp.visible){
+    // project() returns pixels in the actual on-screen container space (MAP_VIEW.containerW/H,
+    // set from the board canvas's real CSS size in resizeThree()) -- NOT CANVAS_W/CANVAS_H,
+    // which are the logical 1300x460 world-unit space -- so the center must use the same space.
+    const distFromCenter = Math.hypot(sp.x-MAP_VIEW.containerW/2, sp.y-MAP_VIEW.containerH/2);
+    const near = clamp(1 - distFromCenter/420, 0, 1);
+    if(near > 0) triggerShake(7*near, 260);
+  }
   for(let i=0;i<14;i++){
     const ang = Math.random()*Math.PI*2;
     const spd = rnd(40, 150);
@@ -2317,6 +3037,80 @@ function closeAllDrawers(){
   document.getElementById('drawer-backdrop').classList.remove('show');
 }
 
+const GEMINI_API_KEY_STORAGE = 'mortar-fdc-gemini-api-key';
+const GEMINI_MODEL = 'gemini-2.5-flash';
+
+function appendGeminiMessage(role, text){
+  const messages = document.getElementById('gemini-messages');
+  if(!messages) return;
+  const message = document.createElement('div');
+  message.className = `gemini-message ${role}`;
+  const label = document.createElement('span');
+  label.className = 'gemini-message-label';
+  label.textContent = role === 'user' ? 'あなた' : role === 'error' ? 'エラー' : 'Gemini';
+  message.append(label, document.createTextNode(text));
+  messages.appendChild(message);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function saveGeminiApiKey(){
+  const input = document.getElementById('gemini-api-key');
+  const key = input ? input.value.trim() : '';
+  if(!key){
+    appendGeminiMessage('error', 'APIキーを入力してください。');
+    return;
+  }
+  localStorage.setItem(GEMINI_API_KEY_STORAGE, key);
+  input.value = '';
+  appendGeminiMessage('model', 'APIキーを保存しました。作戦について質問できます。');
+}
+
+function clearGeminiApiKey(){
+  localStorage.removeItem(GEMINI_API_KEY_STORAGE);
+  const input = document.getElementById('gemini-api-key');
+  if(input) input.value = '';
+  appendGeminiMessage('model', '保存済みのAPIキーを削除しました。');
+}
+
+async function sendGeminiMessage(event){
+  event.preventDefault();
+  const input = document.getElementById('gemini-input');
+  const text = input ? input.value.trim() : '';
+  const apiKey = localStorage.getItem(GEMINI_API_KEY_STORAGE);
+  if(!text) return;
+  if(!apiKey){
+    appendGeminiMessage('error', '先にGoogle AI StudioのAPIキーを保存してください。');
+    return;
+  }
+  input.value = '';
+  appendGeminiMessage('user', text);
+  const prompt = [
+    'あなたは汎用AIアシスタントです。日本語で、質問の意図に沿って簡潔かつ実用的に回答してください。',
+    `ユーザーの質問: ${text}`,
+  ].join('\n');
+  try{
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({contents:[{role:'user', parts:[{text:prompt}]}]}),
+      },
+    );
+    const data = await response.json();
+    if(!response.ok){
+      throw new Error(data.error && data.error.message ? data.error.message : `HTTP ${response.status}`);
+    }
+    const candidates = data.candidates && data.candidates[0];
+    const parts = candidates && candidates.content && candidates.content.parts;
+    const answer = Array.isArray(parts) ? parts.map(part=>part.text || '').join('').trim() : '';
+    if(!answer) throw new Error('Geminiから有効な応答がありませんでした。');
+    appendGeminiMessage('model', answer);
+  }catch(error){
+    appendGeminiMessage('error', `通信に失敗しました: ${error.message}`);
+  }
+}
+
 function toggleMapFullscreen(){
   const el = document.documentElement;
   const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
@@ -2359,6 +3153,13 @@ function closeAchievements(){
   document.getElementById('achievements-overlay').classList.remove('show');
 }
 
+// per user request: fixed the game visibly slowing down over a long play session --
+// this never removed old entries, so every attack/miss/spawn/reveal log line (many per
+// turn, over up to 50 waves) piled up as a permanent DOM node forever, even though only
+// ~120px of them are ever visible (.log scrolls). Late in a run that was thousands of
+// nodes, each new insertBefore/scrollTo paying layout cost across all of them. Capping
+// at LOG_MAX_ENTRIES keeps the visible scrollback generous while bounding DOM size.
+const LOG_MAX_ENTRIES = 300;
 function log(role, who, text){
   const el = document.getElementById('log');
   const cls = role==='op'?'l-op':role==='fdc'?'l-fdc':role==='mortar'?'l-mortar':'l-sys';
@@ -2366,10 +3167,11 @@ function log(role, who, text){
   div.className = cls;
   div.innerHTML = `<b>[${who}]</b> ${text}`;
   el.insertBefore(div, el.firstChild);
+  while(el.childElementCount > LOG_MAX_ENTRIES) el.removeChild(el.lastChild);
   el.scrollTo({top:0, behavior:'smooth'});
 }
 
-function enemyCounterAttack(dt){
+function enemyCounterAttack(actionTurns){
   let anyHit = false;
   const remaining = state.targets.filter(t=>!t.destroyed);
   // Balance note: infantry now arrives as several independent formation groups (see
@@ -2381,14 +3183,22 @@ function enemyCounterAttack(dt){
   // the AGGREGATE attack-attempt rate equivalent to a single infantry unit's, regardless of
   // formation count, so SCOUT_EXPOSURE's intended survivability isn't eaten by this.
   const infantryGroupCount = remaining.filter(t=>t.type==='infantry').length;
-  {
+  for(let i=0;i<actionTurns;i++){
     remaining.forEach(t=>{
       if(t.destroyed) return;
+      // Enemy formations also use staggered fire windows; otherwise the real-time
+      // resolver makes every visible contact shoot on the same simulation slice.
+      const targetIndex = remaining.indexOf(t);
+      if(((state.turns + i + targetIndex) % 3) !== 0) return;
+      // per user request: the enemy HQ is a fixed structure, not a unit with a weapon of its
+      // own -- it never counter-attacks (COUNTER_CHANCE/COUNTER_DAMAGE have no 'hq' entry,
+      // same as 'heli', whose attacks are instead handled entirely by resolveHeliAssault).
+      if(t.type==='hq') return;
       if(allScoutsWiped() && allMortarsWiped()) return;
       const suppressionMult = isSuppressed(t) ? SUPPRESSION_COUNTER_MULT : 1;
       const groupCorrection = t.type==='infantry' ? 1/Math.max(1, infantryGroupCount) : 1;
       const chance = (COUNTER_CHANCE[t.type] + state.stage*0.008) * DIFFICULTIES[state.difficulty].counterMult * WEATHER_TYPES[state.weather].counterMult * suppressionMult * groupCorrection;
-      if(Math.random() < chancePerStep(chance, dt)){
+      if(Math.random() < chance){
         const near = nearestFriendlyAsset(t.trueX, t.trueY, false);
         if(!near) return;
         // per user request: fixed the range asymmetry where enemy infantry could snipe
@@ -2401,8 +3211,10 @@ function enemyCounterAttack(dt){
         if(t.type==='infantry' && near.dist > SQUAD_ENGAGE_RANGE) return;
         if(t.type==='artillery' && near.dist > ARTILLERY_FIRE_RANGE_UNITS) return;
         // per user request: 工兵の防壁は地上の直接照準射撃(歩兵/車両)も遮る -- 曲射弾を
-        // 撃つ砲兵と、上空を飛ぶドローンは対象外(壁は防がない)。
+        // 撃つ砲兵と、上空を飛ぶドローンは対象外(壁は防がない)。丘などの地形も同様に直接照準
+        // 射撃だけを遮る -- 味方のresolveSquadOrders/resolveTankOrdersに揃えた対称な扱い。
         if(t.type==='infantry' || t.type==='vehicle'){
+          if(!hasLineOfSight(t.trueX, t.trueY, near.x, near.y)) return;
           const blockWall = wallBlockingLineOfFire(t.trueX, t.trueY, near.x, near.y);
           if(blockWall){
             const [wlo,whi] = COUNTER_DAMAGE[t.type];
@@ -2429,6 +3241,7 @@ function enemyCounterAttack(dt){
             endX: near.x, endY: near.y,
             born: performance.now(),
             duration: FLIGHT_DURATION,
+            trajectory: 'arc',
             onLand: ()=>{
               if(rollExposureHit(getUnitExposure(near))){
                 damageFriendlyAsset(near, dmg, sourceLabel);
@@ -2438,9 +3251,10 @@ function enemyCounterAttack(dt){
               render();
             }
           });
+          spawn3dProjectile(e.x, e.y, near.x, near.y, FLIGHT_DURATION);
         } else if(rollExposureHit(getUnitExposure(near))){
           damageFriendlyAsset(near, dmg, sourceLabel);
-          enemyTracers.push({startX:e.x, startY:e.y, endX:near.x, endY:near.y, born:performance.now(), duration:320});
+          fireTracer(e.x, e.y, near.x, near.y, 320, t.type==='vehicle' ? 'cannon' : 'rifle');
         } else {
           log('sys','回避', `${sourceLabel}を受けたが、${friendlyFireCandidateLabel(near)}は掩蔽率により被弾を免れた。`);
         }
@@ -2479,10 +3293,10 @@ function applyStandingOrder(unit, prefix, assaultAllowed){
 // per user request: 指揮所の移動 -- 小隊の pendingDest 移動(applySquadMovement)と同じ仕組みだが、
 // HQ には advance/retreat/assault/hunt のような戦闘スタンスは無いので、地図で指定した地点へ
 // 直進するだけの最小構成。移動速度は歩兵と同一(INFANTRY_MOVE_CAP)。
-function applyHqMovement(dt){
+function applyHqMovement(){
   const hq = state.hq;
   if(!hq.pendingDest) return;
-  const next = terrainAwareStep(hq.x, hq.y, hq.pendingDest.x, hq.pendingDest.y, INFANTRY_MOVE_CAP*dt);
+  const next = terrainAwareStep(hq.x, hq.y, hq.pendingDest.x, hq.pendingDest.y, INFANTRY_MOVE_CAP);
   hq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
   hq.y = clamp(next.y, 30, CANVAS_H-30);
   checkMineTrigger('hq', 0, hq.x, hq.y);
@@ -2491,15 +3305,18 @@ function applyHqMovement(dt){
     log('sys','前線', `指揮所、指定地点への移転完了。`);
   }
 }
-function resolveHqMovement(dt){
+function resolveHqMovement(actionTurns){
   if(state.hq.hp<=0 || !state.hq.pendingDest) return false;
-  applyHqMovement(dt);
+  for(let i=0;i<actionTurns;i++){
+    if(!state.hq.pendingDest) break;
+    applyHqMovement();
+  }
   return true;
 }
 
-function applySquadMovement(sq, sqIdx, dt){
+function applySquadMovement(sq, sqIdx){
   if(sq.pendingDest){
-    const next = terrainAwareStep(sq.x, sq.y, sq.pendingDest.x, sq.pendingDest.y, INFANTRY_MOVE_CAP*dt);
+    const next = terrainAwareStep(sq.x, sq.y, sq.pendingDest.x, sq.pendingDest.y, INFANTRY_MOVE_CAP);
     sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
     sq.y = clamp(next.y, 30, CANVAS_H-30);
     checkMineTrigger('squad', sqIdx, sq.x, sq.y);
@@ -2510,12 +3327,12 @@ function applySquadMovement(sq, sqIdx, dt){
     return;
   }
   if(sq.order==='advance'){
-    const next = terrainAwareStep(sq.x, sq.y, SQUAD_ADVANCE_LIMIT_X, sq.y, INFANTRY_MOVE_CAP*dt);
-    sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
+    const next = terrainAwareStep(sq.x, sq.y, state.febaX, sq.y, INFANTRY_MOVE_CAP);
+    sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
     sq.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(sq.order==='retreat'){
-    const next = terrainAwareStep(sq.x, sq.y, FRIENDLY_INF_POS.x, FRIENDLY_INF_POS.y, INFANTRY_MOVE_CAP*dt);
-    sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
+    const next = terrainAwareStep(sq.x, sq.y, state.febaX, sq.y, INFANTRY_MOVE_CAP);
+    sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
     sq.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(sq.order==='assault'){
     const enemyInfantry = state.targets.filter(t=>!t.destroyed && t.type==='infantry');
@@ -2527,13 +3344,13 @@ function applySquadMovement(sq, sqIdx, dt){
         if(d<nd){ nd=d; nearest=e; }
       });
       if(nearest){
-        const next = terrainAwareStep(sq.x, sq.y, nearest.x, nearest.y, INFANTRY_MOVE_CAP*dt);
+        const next = terrainAwareStep(sq.x, sq.y, nearest.x, nearest.y, INFANTRY_MOVE_CAP);
         sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
         sq.y = clamp(next.y, 30, CANVAS_H-30);
       }
     } else {
-      const next = terrainAwareStep(sq.x, sq.y, SQUAD_ADVANCE_LIMIT_X, sq.y, INFANTRY_MOVE_CAP*dt);
-      sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
+      const next = terrainAwareStep(sq.x, sq.y, state.febaX, sq.y, INFANTRY_MOVE_CAP);
+      sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
       sq.y = clamp(next.y, 30, CANVAS_H-30);
     }
   } else if(sq.order==='hunt' && sq.huntTargetId){
@@ -2546,7 +3363,7 @@ function applySquadMovement(sq, sqIdx, dt){
       const e = estPos(target);
       const dist = Math.hypot(e.x-sq.x, e.y-sq.y);
       if(dist > SQUAD_ENGAGE_RANGE*0.8){
-        const next = terrainAwareStep(sq.x, sq.y, e.x, e.y, INFANTRY_MOVE_CAP*dt);
+        const next = terrainAwareStep(sq.x, sq.y, e.x, e.y, INFANTRY_MOVE_CAP);
         sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
         sq.y = clamp(next.y, 30, CANVAS_H-30);
       }
@@ -2558,9 +3375,9 @@ function applySquadMovement(sq, sqIdx, dt){
 
 // per user request: 工兵小隊の移動 -- 小隊(applySquadMovement)の advance/retreat/pendingDest と
 // 同じ仕組みだが、assault/hunt のような交戦系スタンスは持たない(工兵は戦闘要員ではないため)。
-function applyEngineerMovement(en, enIdx, dt){
+function applyEngineerMovement(en, enIdx){
   if(en.pendingDest){
-    const next = terrainAwareStep(en.x, en.y, en.pendingDest.x, en.pendingDest.y, INFANTRY_MOVE_CAP*dt);
+    const next = terrainAwareStep(en.x, en.y, en.pendingDest.x, en.pendingDest.y, INFANTRY_MOVE_CAP);
     en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
     en.y = clamp(next.y, 30, CANVAS_H-30);
     checkMineTrigger('engineer', enIdx, en.x, en.y);
@@ -2571,12 +3388,12 @@ function applyEngineerMovement(en, enIdx, dt){
     return;
   }
   if(en.order==='advance'){
-    const next = terrainAwareStep(en.x, en.y, SQUAD_ADVANCE_LIMIT_X, en.y, INFANTRY_MOVE_CAP*dt);
-    en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
+    const next = terrainAwareStep(en.x, en.y, state.febaX, en.y, INFANTRY_MOVE_CAP);
+    en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
     en.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(en.order==='retreat'){
-    const next = terrainAwareStep(en.x, en.y, FRIENDLY_INF_POS.x, FRIENDLY_INF_POS.y, INFANTRY_MOVE_CAP*dt);
-    en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
+    const next = terrainAwareStep(en.x, en.y, state.febaX, en.y, INFANTRY_MOVE_CAP);
+    en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
     en.y = clamp(next.y, 30, CANVAS_H-30);
   }
   checkMineTrigger('engineer', enIdx, en.x, en.y);
@@ -2584,44 +3401,60 @@ function applyEngineerMovement(en, enIdx, dt){
 function allEngineersWiped(){
   return !state.engineers.length || state.engineers.every(e=>!unitAlive(e));
 }
-function resolveEngineerOrders(dt){
+function resolveEngineerOrders(actionTurns){
   let anyEvent = false;
-  state.engineers.forEach((en, enIdx)=>{
-    const aliveSoldiers = en.soldiers.filter(s=>s.alive);
-    if(aliveSoldiers.length===0) return;
-    applyStandingOrder(en, '工兵小隊', false);
-    const beforeX = en.x, beforeY = en.y;
-    applyEngineerMovement(en, enIdx, dt);
-    if(en.x!==beforeX || en.y!==beforeY) anyEvent = true;
-  });
+  for(let i=0;i<actionTurns;i++){
+    state.engineers.forEach((en, enIdx)=>{
+      const aliveSoldiers = en.soldiers.filter(s=>s.alive);
+      if(aliveSoldiers.length===0) return;
+      if(en.resting){ tickUnitRest(en, '工兵小隊'); return; }
+      applyStandingOrder(en, '工兵小隊', false);
+      const beforeX = en.x, beforeY = en.y;
+      applyEngineerMovement(en, enIdx);
+      if(en.x!==beforeX || en.y!==beforeY) anyEvent = true;
+    });
+  }
   return anyEvent;
 }
 
-function resolveSquadOrders(dt){
+function resolveSquadOrders(actionTurns){
   let anyEvent = false;
-  {
+  for(let i=0;i<actionTurns;i++){
     state.squads.forEach((sq, sqIdx)=>{
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
       if(aliveSoldiers.length===0) return;
+      if(!unitMayFire('squad', sqIdx, state.turns+i+1)) return;
+      if(sq.resting){ tickUnitRest(sq, `第${sqIdx+1}小隊`); return; }
       applyStandingOrder(sq, `第${sqIdx+1}小隊`, true);
-      applySquadMovement(sq, sqIdx, dt);
+      applySquadMovement(sq, sqIdx);
 
-      let engageTargets = state.targets.filter(t=>!t.destroyed && t.type==='infantry');
+      // per user request: 砲兵は無装甲の砲側員なので、歩兵と同じ通常の交戦対象に含める
+      // (以前は歩兵タイプのみが対象で、真横にいる砲兵さえ無視して撃たなかった)。
+      let engageTargets = state.targets.filter(t=>!t.destroyed && (t.type==='infantry' || t.type==='artillery'));
       if(sq.order==='hunt' && sq.huntTargetId){
-        const huntTarget = state.targets.find(t=>t.id===sq.huntTargetId && !t.destroyed);
+        // per user request: small arms can't effectively engage aircraft -- anti-air is the
+        // SAM's job now (see resolveSamOrders).
+        const huntTarget = state.targets.find(t=>t.id===sq.huntTargetId && !t.destroyed && t.type!=='heli' && t.type!=='drone');
         if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
       }
       if(engageTargets.length===0) return;
+      if(!unitMayFire('squad', sqIdx, state.turns+i)) return;
       let dmgMult=1, casualtyMult=1;
       if(sq.order==='assault' || sq.order==='hunt'){ dmgMult=1.6; casualtyMult=1.5; }
       else if(sq.order==='hold'){ dmgMult=0.9; casualtyMult=0.6; }
       else if(sq.order==='retreat'){ dmgMult=0.5; casualtyMult=0.7; }
 
+      let firedThisTick = false;
       engageTargets.forEach(t=>{
+        if(firedThisTick) return;
         if(t.destroyed) return;
         const e = estPos(t);
         const dist = Math.hypot(e.x-sq.x, e.y-sq.y);
         if(dist > SQUAD_ENGAGE_RANGE) return;
+        // per user request: 丘などの地形に完全に遮蔽された目標とは交戦できない -- 狙撃兵は
+        // 既にhasLineOfSightでこれを判定しているが、歩兵小隊にはこのチェックが漏れていて、
+        // 丘の向こうの敵も普通に撃ち抜けてしまっていた。
+        if(!hasLineOfSight(sq.x, sq.y, t.trueX, t.trueY)) return;
         // per user request: 工兵の防壁(壁)は直接照準の銃撃も遮る -- 射線上に壁があれば、
         // 目標の代わりに壁が被弾する。
         const blockWall = wallBlockingLineOfFire(sq.x, sq.y, t.trueX, t.trueY);
@@ -2639,17 +3472,15 @@ function resolveSquadOrders(dt){
         const strengthFrac = curAlive.length/sq.soldiers.length;
         const squadAltMult = altitudeBonus(sq.x, sq.y, t.trueX, t.trueY);
         const suppressionDmgMult = suppressed ? SUPPRESSION_DUEL_DMG_BONUS : 1;
-        const enemyExposureMult = exposureNormalizedMult(t.exposure);
+        const enemyExposureMult = exposureNormalizedMult(getTargetExposure(t));
         const vetDmgMult = 1 + unitAvgVetLevel(sq.soldiers)*VET_DMG_BONUS_PER_LEVEL;
-        // not rounded to an integer here (unlike one-shot hit damage elsewhere) -- this fires
-        // every SIM_STEP_MS while engaged, so rounding each tiny dt-scaled increment would bias
-        // total DPS; the target's hp already tolerates fractional values (see applyDamageToTarget).
-        const dmgToEnemy = rnd(INFANTRY_DUEL_DMG_TO_ENEMY[0], INFANTRY_DUEL_DMG_TO_ENEMY[1]) * strengthFrac * dmgMult * squadAltMult * suppressionDmgMult * enemyExposureMult * vetDmgMult * dt;
+        const dmgToEnemy = Math.round(rnd(INFANTRY_DUEL_DMG_TO_ENEMY[0], INFANTRY_DUEL_DMG_TO_ENEMY[1]) * strengthFrac * dmgMult * squadAltMult * suppressionDmgMult * enemyExposureMult * vetDmgMult);
         applyDamageToTarget(t, dmgToEnemy);
         anyEvent = true;
+        firedThisTick = true;
         // per user request: show a shooting animation for the squad's own outgoing fire too,
-        // not just the enemy's return fire on a casualty (see the enemyTracers.push below)
-        enemyTracers.push({startX:sq.x, startY:sq.y, endX:e.x, endY:e.y, born:performance.now(), duration:220});
+        // not just the enemy's return fire on a casualty (see fireTracer() below)
+        fireTracer(sq.x, sq.y, e.x, e.y, 220, 'rifle');
         if(t.hp<=0 && !t.destroyed){
           t.destroyed = true; t.hp = 0;
           log('op','斥候', `${t.id} 第${sqIdx+1}小隊との交戦で撃破を確認。`);
@@ -2658,11 +3489,11 @@ function resolveSquadOrders(dt){
         const enemyAltMult = altitudeBonus(t.trueX, t.trueY, sq.x, sq.y);
         const suppressionCasualtyMult = suppressed ? SUPPRESSION_CASUALTY_MULT : 1;
         const casualtyChance = (0.08 + state.stage*0.008) * casualtyMult * enemyAltMult * suppressionCasualtyMult * exposureNormalizedMult(getUnitExposure({kind:'squad', idx:sqIdx}));
-        if(Math.random() < chancePerStep(casualtyChance, dt)){
+        if(Math.random() < casualtyChance){
           const victim = choice(curAlive);
           victim.alive = false;
           log('sys','前線', `第${sqIdx+1}小隊、${t.id}との交戦で<b>${victim.rank} ${victim.name}</b> 戦死。残存 ${sq.soldiers.filter(s=>s.alive).length}/${sq.soldiers.length}名。`);
-          enemyTracers.push({startX:e.x, startY:e.y, endX:sq.x, endY:sq.y, born:performance.now(), duration:280});
+          fireTracer(e.x, e.y, sq.x, sq.y, 280, 'rifle');
           unitSpeakInjury('squad', sqIdx);
         }
       });
@@ -2678,9 +3509,9 @@ function resolveSquadOrders(dt){
 // per user request: 2 friendly tanks. Movement mirrors applySquadMovement (advance/retreat/
 // hunt), but combat is HP-based like a mortar taking damage rather than squad's per-soldier
 // casualty rolls, since tanks don't carry a tracked soldiers roster.
-function applyTankMovement(tank, idx, dt){
+function applyTankMovement(tank, idx){
   if(tank.pendingDest){
-    const next = terrainAwareStep(tank.x, tank.y, tank.pendingDest.x, tank.pendingDest.y, TANK_MOVE_CAP*dt);
+    const next = terrainAwareStep(tank.x, tank.y, tank.pendingDest.x, tank.pendingDest.y, TANK_MOVE_CAP);
     tank.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
     tank.y = clamp(next.y, 30, CANVAS_H-30);
     checkMineTrigger('tank', idx, tank.x, tank.y);
@@ -2691,12 +3522,12 @@ function applyTankMovement(tank, idx, dt){
     return;
   }
   if(tank.order==='advance'){
-    const next = terrainAwareStep(tank.x, tank.y, SQUAD_ADVANCE_LIMIT_X, tank.y, TANK_MOVE_CAP*dt);
-    tank.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
+    const next = terrainAwareStep(tank.x, tank.y, state.febaX, tank.y, TANK_MOVE_CAP);
+    tank.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
     tank.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(tank.order==='retreat'){
-    const next = terrainAwareStep(tank.x, tank.y, TANK_POS.x, TANK_POS.y, TANK_MOVE_CAP*dt);
-    tank.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
+    const next = terrainAwareStep(tank.x, tank.y, state.febaX, tank.y, TANK_MOVE_CAP);
+    tank.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
     tank.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(tank.order==='hunt' && tank.huntTargetId){
     const target = state.targets.find(t=>t.id===tank.huntTargetId);
@@ -2708,7 +3539,7 @@ function applyTankMovement(tank, idx, dt){
       const e = estPos(target);
       const dist = Math.hypot(e.x-tank.x, e.y-tank.y);
       if(dist > TANK_ENGAGE_RANGE*0.8){
-        const next = terrainAwareStep(tank.x, tank.y, e.x, e.y, TANK_MOVE_CAP*dt);
+        const next = terrainAwareStep(tank.x, tank.y, e.x, e.y, TANK_MOVE_CAP);
         tank.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
         tank.y = clamp(next.y, 30, CANVAS_H-30);
       }
@@ -2721,29 +3552,132 @@ function allTanksWiped(){
   return !state.tanks.length || state.tanks.every(tk=>tk.hp<=0);
 }
 
-function resolveTankOrders(dt){
-  let anyEvent = false;
-  {
-    state.tanks.forEach((tank, idx)=>{
-      if(tank.hp<=0) return;
-      applyTankMovement(tank, idx, dt);
+// per user request: 対空ミサイル部隊 -- 移動は戦車と同じ枠組み(pendingDest/advance/retreat/
+// hunt、FEBA線を前進/後退の目標にする)を流用。
+function applySamMovement(sam, idx){
+  if(sam.pendingDest){
+    const next = terrainAwareStep(sam.x, sam.y, sam.pendingDest.x, sam.pendingDest.y, SAM_MOVE_CAP);
+    sam.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+    sam.y = clamp(next.y, 30, CANVAS_H-30);
+    checkMineTrigger('sam', idx, sam.x, sam.y);
+    if(Math.hypot(sam.x-sam.pendingDest.x, sam.y-sam.pendingDest.y) < 12){
+      sam.pendingDest = null;
+      log('sys','前線', `対空${idx+1}、指定地点に到着。`);
+    }
+    return;
+  }
+  if(sam.order==='advance'){
+    const next = terrainAwareStep(sam.x, sam.y, state.febaX, sam.y, SAM_MOVE_CAP);
+    sam.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
+    sam.y = clamp(next.y, 30, CANVAS_H-30);
+  } else if(sam.order==='retreat'){
+    const next = terrainAwareStep(sam.x, sam.y, state.febaX, sam.y, SAM_MOVE_CAP);
+    sam.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
+    sam.y = clamp(next.y, 30, CANVAS_H-30);
+  } else if(sam.order==='hunt' && sam.huntTargetId){
+    const target = state.targets.find(t=>t.id===sam.huntTargetId);
+    if(!target || target.destroyed){
+      sam.huntTargetId = null;
+      sam.order = 'hold';
+      log('sys','前線', `対空${idx+1}、攻撃目標を喪失(撃破/消失)。待機に移行。`);
+    } else {
+      const e = estPos(target);
+      const dist = Math.hypot(e.x-sam.x, e.y-sam.y);
+      if(dist > SAM_ENGAGE_RANGE*0.8){
+        const next = terrainAwareStep(sam.x, sam.y, e.x, e.y, SAM_MOVE_CAP);
+        sam.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+        sam.y = clamp(next.y, 30, CANVAS_H-30);
+      }
+    }
+  }
+  checkMineTrigger('sam', idx, sam.x, sam.y);
+}
 
-      let engageTargets = state.targets.filter(t=>!t.destroyed && (t.type==='infantry' || t.type==='vehicle'));
-      if(tank.order==='hunt' && tank.huntTargetId){
-        const huntTarget = state.targets.find(t=>t.id===tank.huntTargetId && !t.destroyed);
+function allSamsWiped(){
+  return !state.sams.length || state.sams.every(sam=>sam.hp<=0);
+}
+
+// per user request: 対地目標(歩兵・車両・砲兵)には一切交戦できない(engageTargetsがheli/drone
+// のみ) ―― 陸上部隊には無力な代わりに、対空目標には高威力。戦車のような被弾デュエルは持たない
+// (迫撃砲と同様、被害はcheckFriendlyFireAt経由の対砲兵射撃やヘリ自身のAIからのみ発生する)。
+function resolveSamOrders(actionTurns){
+  let anyEvent = false;
+  for(let i=0;i<actionTurns;i++){
+    state.sams.forEach((sam, idx)=>{
+      if(sam.hp<=0) return;
+      applySamMovement(sam, idx);
+
+      let engageTargets = state.targets.filter(t=>!t.destroyed && (t.type==='heli' || t.type==='drone'));
+      if(sam.order==='hunt' && sam.huntTargetId){
+        const huntTarget = state.targets.find(t=>t.id===sam.huntTargetId && !t.destroyed && (t.type==='heli' || t.type==='drone'));
         if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
       }
       if(engageTargets.length===0) return;
+      if(!unitMayFire('sam', idx, state.turns+i)) return;
+      let dmgMult=1;
+      if(sam.order==='hunt'){ dmgMult=1.5; }
+      else if(sam.order==='hold'){ dmgMult=0.9; }
+      else if(sam.order==='retreat'){ dmgMult=0.5; }
+
+      let firedThisTick = false;
+      engageTargets.forEach(t=>{
+        if(firedThisTick) return;
+        if(t.destroyed) return;
+        const e = estPos(t);
+        const dist = Math.hypot(e.x-sam.x, e.y-sam.y);
+        if(dist > SAM_ENGAGE_RANGE) return;
+        if(revealTarget(t)){
+          log('op','斥候', `対空${idx+1}が${t.id}と交戦、<b>${t.def.label}</b>と識別。`);
+        }
+        const samAltMult = altitudeBonus(sam.x, sam.y, t.trueX, t.trueY);
+        const enemyExposureMult = exposureNormalizedMult(getTargetExposure(t));
+        const dmgToEnemy = Math.round(rnd(SAM_DUEL_DMG_TO_ENEMY[0], SAM_DUEL_DMG_TO_ENEMY[1]) * dmgMult * samAltMult * enemyExposureMult);
+        applyDamageToTarget(t, dmgToEnemy);
+        anyEvent = true;
+        firedThisTick = true;
+        fireTracer(sam.x, sam.y, e.x, e.y, 220, 'missile');
+        if(t.hp<=0 && !t.destroyed){
+          t.destroyed = true; t.hp = 0;
+          log('op','斥候', `${t.id} 対空${idx+1}との交戦で撃破を確認。`);
+          onTargetDestroyed(t);
+        }
+      });
+    });
+  }
+  return anyEvent;
+}
+
+function resolveTankOrders(actionTurns){
+  let anyEvent = false;
+  for(let i=0;i<actionTurns;i++){
+    state.tanks.forEach((tank, idx)=>{
+      if(tank.hp<=0) return;
+      applyTankMovement(tank, idx);
+
+      let engageTargets = state.targets.filter(t=>!t.destroyed && (t.type==='infantry' || t.type==='vehicle'));
+      if(tank.order==='hunt' && tank.huntTargetId){
+        // per user request: direct-fire tank guns can't effectively engage aircraft -- anti-air
+        // is the SAM's job now (see resolveSamOrders).
+        const huntTarget = state.targets.find(t=>t.id===tank.huntTargetId && !t.destroyed && t.type!=='heli' && t.type!=='drone');
+        if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
+      }
+      if(engageTargets.length===0) return;
+      if(!unitMayFire('tank', idx, state.turns+i)) return;
       let dmgMult=1, incomingMult=1;
       if(tank.order==='hunt'){ dmgMult=1.5; incomingMult=1.3; }
       else if(tank.order==='hold'){ dmgMult=0.9; incomingMult=0.7; }
       else if(tank.order==='retreat'){ dmgMult=0.5; incomingMult=0.6; }
 
+      let firedThisTick = false;
       engageTargets.forEach(t=>{
+        if(firedThisTick) return;
         if(t.destroyed || tank.hp<=0) return;
         const e = estPos(t);
         const dist = Math.hypot(e.x-tank.x, e.y-tank.y);
         if(dist > TANK_ENGAGE_RANGE) return;
+        // per user request: 丘に完全に遮蔽された目標とは交戦できない(狙撃兵と同じ扱い -- 詳細は
+        // resolveSquadOrdersの同様のhasLineOfSightチェックのコメントを参照)。
+        if(!hasLineOfSight(tank.x, tank.y, t.trueX, t.trueY)) return;
         const blockWall = wallBlockingLineOfFire(tank.x, tank.y, t.trueX, t.trueY);
         if(blockWall){
           anyEvent = true;
@@ -2756,12 +3690,12 @@ function resolveTankOrders(dt){
         const suppressed = isSuppressed(t);
         const tankAltMult = altitudeBonus(tank.x, tank.y, t.trueX, t.trueY);
         const suppressionDmgMult = suppressed ? SUPPRESSION_DUEL_DMG_BONUS : 1;
-        const enemyExposureMult = exposureNormalizedMult(t.exposure);
-        // not rounded -- applied every SIM_STEP_MS while engaged, see resolveSquadOrders' dmgToEnemy for why.
-        const dmgToEnemy = rnd(TANK_DUEL_DMG_TO_ENEMY[0], TANK_DUEL_DMG_TO_ENEMY[1]) * dmgMult * tankAltMult * suppressionDmgMult * enemyExposureMult * dt;
+        const enemyExposureMult = exposureNormalizedMult(getTargetExposure(t));
+        const dmgToEnemy = Math.round(rnd(TANK_DUEL_DMG_TO_ENEMY[0], TANK_DUEL_DMG_TO_ENEMY[1]) * dmgMult * tankAltMult * suppressionDmgMult * enemyExposureMult);
         applyDamageToTarget(t, dmgToEnemy);
         anyEvent = true;
-        enemyTracers.push({startX:tank.x, startY:tank.y, endX:e.x, endY:e.y, born:performance.now(), duration:220});
+        firedThisTick = true;
+        fireTracer(tank.x, tank.y, e.x, e.y, 220, 'cannon');
         if(t.hp<=0 && !t.destroyed){
           t.destroyed = true; t.hp = 0;
           log('op','斥候', `${t.id} 戦車${idx+1}との交戦で撃破を確認。`);
@@ -2770,12 +3704,12 @@ function resolveTankOrders(dt){
         const enemyAltMult = altitudeBonus(t.trueX, t.trueY, tank.x, tank.y);
         const suppressionCasualtyMult = suppressed ? SUPPRESSION_CASUALTY_MULT : 1;
         const hitChance = (0.10 + state.stage*0.006) * incomingMult * enemyAltMult * suppressionCasualtyMult * exposureNormalizedMult(getUnitExposure({kind:'tank', idx}));
-        if(Math.random() < chancePerStep(hitChance, dt)){
+        if(Math.random() < hitChance){
           const dmg = Math.round(rnd(TANK_INCOMING_DMG[0], TANK_INCOMING_DMG[1]));
           const wasAlive = tank.hp>0;
           tank.hp = Math.max(0, tank.hp-dmg);
           log('sys','前線', `戦車${idx+1}、${t.id}との交戦で被弾(-${dmg}HP、残り${tank.hp}/${tank.maxHp})。`);
-          enemyTracers.push({startX:e.x, startY:e.y, endX:tank.x, endY:tank.y, born:performance.now(), duration:280});
+          fireTracer(e.x, e.y, tank.x, tank.y, 280, t.type==='vehicle' ? 'cannon' : 'rifle');
           if(wasAlive && tank.hp<=0){
             log('sys','前線', `戦車${idx+1}、撃破される。`);
             spawnDestructionEffect(tank.x, tank.y, `戦車${idx+1} 撃破!`, FRIENDLY_MARK_COLOR);
@@ -2787,9 +3721,9 @@ function resolveTankOrders(dt){
   return anyEvent;
 }
 
-function applySniperMovement(sn, dt){
+function applySniperMovement(sn){
   if(sn.pendingDest){
-    const next = terrainAwareStep(sn.x, sn.y, sn.pendingDest.x, sn.pendingDest.y, SNIPER_MOVE_CAP*dt);
+    const next = terrainAwareStep(sn.x, sn.y, sn.pendingDest.x, sn.pendingDest.y, SNIPER_MOVE_CAP);
     sn.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
     sn.y = clamp(next.y, 30, CANVAS_H-30);
     checkMineTrigger('sniper', sn.id, sn.x, sn.y);
@@ -2800,12 +3734,12 @@ function applySniperMovement(sn, dt){
     return;
   }
   if(sn.order==='advance'){
-    const next = terrainAwareStep(sn.x, sn.y, SQUAD_ADVANCE_LIMIT_X, sn.y, SNIPER_MOVE_CAP*dt);
-    sn.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
+    const next = terrainAwareStep(sn.x, sn.y, state.febaX, sn.y, SNIPER_MOVE_CAP);
+    sn.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
     sn.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(sn.order==='retreat'){
-    const next = terrainAwareStep(sn.x, sn.y, SNIPER_POS.x, SNIPER_POS.y, SNIPER_MOVE_CAP*dt);
-    sn.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
+    const next = terrainAwareStep(sn.x, sn.y, state.febaX, sn.y, SNIPER_MOVE_CAP);
+    sn.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
     sn.y = clamp(next.y, 30, CANVAS_H-30);
   }
   checkMineTrigger('sniper', sn.id, sn.x, sn.y);
@@ -2817,7 +3751,7 @@ function sniperEngageTarget(sn, t){
   if(revealTarget(t)){
     log('op','斥候', `狙撃${sn.id+1}班が${t.id}を捕捉、<b>${t.def.label}</b>と識別。`);
   }
-  if(!rollExposureHit(t.exposure)){
+  if(!rollExposureHit(getTargetExposure(t))){
     log('mortar','狙撃', `狙撃${sn.id+1}班、${t.id}へ発砲するも掩蔽率により外す。`);
     return;
   }
@@ -2836,7 +3770,7 @@ function sniperEngageTarget(sn, t){
   log('mortar','狙撃', isExecute
     ? `狙撃${sn.id+1}班、${t.id}へ<b>止めの一撃</b>。撃破を確認。`
     : `狙撃${sn.id+1}班、${t.id}に精密射撃(効果 ${dmg})。`);
-  enemyTracers.push({startX:sn.x, startY:sn.y, endX:t.trueX, endY:t.trueY, born:performance.now(), duration:180});
+  fireTracer(sn.x, sn.y, t.trueX, t.trueY, 180, 'rifle');
   if(t.hp<=0 && !t.destroyed){
     t.destroyed = true; t.hp = 0;
     log('fdc','FDC', `${t.id} 狙撃により<b>撃破を確認</b>。`);
@@ -2854,6 +3788,9 @@ function findTargetOnSniperLine(sn){
   let best=null, bestProj=Infinity;
   state.targets.forEach(t=>{
     if(t.destroyed) return;
+    // per user request: small arms can't effectively engage aircraft -- anti-air is the SAM's
+    // job now (see resolveSamOrders).
+    if(t.type==='heli' || t.type==='drone') return;
     const vx = t.trueX-sn.x, vy = t.trueY-sn.y;
     const proj = vx*dirX + vy*dirY;
     if(proj<0 || proj>SNIPER_AIM_RANGE_UNITS) return;
@@ -2878,6 +3815,7 @@ function findAutoSniperTarget(sn){
   let best=null, bd=Infinity;
   state.targets.forEach(t=>{
     if(t.destroyed) return;
+    if(t.type==='heli' || t.type==='drone') return;
     if(!isTargetDetected(t)) return;
     const dist = Math.hypot(t.trueX-sn.x, t.trueY-sn.y);
     if(dist > SNIPER_RANGE_UNITS) return;
@@ -2920,29 +3858,25 @@ function callInMortarHeatStrike(target, sn){
   });
 }
 
-function resolveSniperOrders(dt){
+function resolveSniperOrders(actionTurns){
   let anyEvent = false;
-  {
+  for(let i=0;i<actionTurns;i++){
     state.snipers.forEach(sn=>{
       const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
       if(aliveSoldiers.length===0) return;
+      if(sn.resting){ tickUnitRest(sn, `狙撃${sn.id+1}班`); return; }
       applyStandingOrder(sn, `狙撃${sn.id+1}班`, false);
-      applySniperMovement(sn, dt);
-
-      // Firing (unlike movement) is an inherently discrete once-per-turn shot, not a
-      // continuously-accruing quantity, so it keeps its original turn cadence via an explicit
-      // cooldown instead of being scaled by dt directly (same treatment as the heli's burst-fire).
-      if((sn._engageCooldownTurns||0) > 0){ sn._engageCooldownTurns -= dt; return; }
-      let engagedThisStep = false;
+      applySniperMovement(sn);
+      if(!unitMayFire('sniper', sn.id, state.turns+i)) return;
 
       if(sn.pendingSnipeTargetId){
         const t = state.targets.find(x=>x.id===sn.pendingSnipeTargetId);
-        if(!t || t.destroyed){
+        if(!t || t.destroyed || t.type==='heli' || t.type==='drone'){
           sn.pendingSnipeTargetId = null;
         } else if(isTargetDetected(t)){
           const dist = Math.hypot(t.trueX-sn.x, t.trueY-sn.y);
           if(dist <= SNIPER_RANGE_UNITS && hasLineOfSight(sn.x, sn.y, t.trueX, t.trueY)){
-            anyEvent = true; engagedThisStep = true;
+            anyEvent = true;
             sniperEngageTarget(sn, t);
           }
         }
@@ -2951,13 +3885,13 @@ function resolveSniperOrders(dt){
       const lineTarget = findTargetOnSniperLine(sn);
       if(lineTarget){
         if(lineTarget.wall){
-          anyEvent = true; engagedThisStep = true;
+          anyEvent = true;
           damageWall(lineTarget.wall, Math.round(rnd(SNIPER_DMG[0], SNIPER_DMG[1])), `狙撃${sn.id+1}班の射撃`);
         } else if(lineTarget.type==='vehicle'){
-          anyEvent = true; engagedThisStep = true;
+          anyEvent = true;
           callInMortarHeatStrike(lineTarget, sn);
         } else if(hasLineOfSight(sn.x, sn.y, lineTarget.trueX, lineTarget.trueY)){
-          anyEvent = true; engagedThisStep = true;
+          anyEvent = true;
           sniperEngageTarget(sn, lineTarget);
         }
       }
@@ -2968,19 +3902,18 @@ function resolveSniperOrders(dt){
       if(!sn.pendingSnipeTargetId && !hasAimLine){
         const auto = findAutoSniperTarget(sn);
         if(auto){
-          anyEvent = true; engagedThisStep = true;
+          anyEvent = true;
           if(auto.type==='vehicle') callInMortarHeatStrike(auto, sn);
           else sniperEngageTarget(sn, auto);
         }
       }
-      if(engagedThisStep) sn._engageCooldownTurns = 1;
     });
   }
   return anyEvent;
 }
 
 function setSquadOrder(idx, order){
-  if(!state.squads[idx]) return;
+  if(!state.squads[idx] || state.squads[idx].resting) return;
   state.squads[idx].order = order;
   unitSpeakOrder('squad', idx);
   render();
@@ -2991,9 +3924,14 @@ function setTankOrder(idx, order){
   state.tanks[idx].order = order;
   render();
 }
+function setSamOrder(idx, order){
+  if(!state.sams[idx]) return;
+  state.sams[idx].order = order;
+  render();
+}
 
 function setSniperOrder(idx, order){
-  if(!state.snipers[idx]) return;
+  if(!state.snipers[idx] || state.snipers[idx].resting) return;
   state.snipers[idx].order = order;
   unitSpeakOrder('sniper', idx);
   render();
@@ -3021,10 +3959,13 @@ let smartWizard = {step:1, unitType:null, unitScope:null, actionKey:null};
 
 const SMART_UNIT_TYPES = {
   mortar: {label:'迫撃砲', list:()=>state.mortars, isAlive:m=>m.hp>0, nameOf:i=>`迫撃砲${i+1}`},
-  scout:  {label:'斥候',   list:()=>state.scouts,  isAlive:s=>unitAliveCount(s)>0, nameOf:i=>`斥候${i+1}`},
-  squad:  {label:'小隊',   list:()=>state.squads,  isAlive:sq=>sq.soldiers.some(s=>s.alive), nameOf:i=>`第${i+1}小隊`},
-  sniper: {label:'狙撃',   list:()=>state.snipers, isAlive:sn=>sn.soldiers.some(s=>s.alive), nameOf:i=>`狙撃${i+1}班`},
+  // per user request: 大休止中のユニットはスマート操作の選択リストにも出さない(命令を一切
+  // 受け付けないため)。
+  scout:  {label:'斥候',   list:()=>state.scouts,  isAlive:s=>unitAliveCount(s)>0 && !s.resting, nameOf:i=>`斥候${i+1}`},
+  squad:  {label:'小隊',   list:()=>state.squads,  isAlive:sq=>sq.soldiers.some(s=>s.alive) && !sq.resting, nameOf:i=>`第${i+1}小隊`},
+  sniper: {label:'狙撃',   list:()=>state.snipers, isAlive:sn=>sn.soldiers.some(s=>s.alive) && !sn.resting, nameOf:i=>`狙撃${i+1}班`},
   tank:   {label:'戦車',   list:()=>state.tanks,   isAlive:tk=>tk.hp>0, nameOf:i=>`戦車${i+1}`},
+  sam:    {label:'対空',   list:()=>state.sams,    isAlive:sam=>sam.hp>0, nameOf:i=>`対空${i+1}`},
 };
 
 // kind: 'instant' (no further input, just a confirm step) / 'target' (pick from known
@@ -3064,6 +4005,13 @@ const SMART_ACTIONS = {
     {key:'move', label:'移動(精密指定)', kind:'map'},
     {key:'hunt_target', label:'攻撃目標指定', kind:'target'},
   ],
+  sam: [
+    {key:'advance', label:'前進', kind:'instant'},
+    {key:'hold', label:'防御', kind:'instant'},
+    {key:'retreat', label:'後退', kind:'instant'},
+    {key:'move', label:'移動(精密指定)', kind:'map'},
+    {key:'hunt_target', label:'攻撃目標指定', kind:'target'},
+  ],
 };
 
 // Shared by both the wizard's own apply step and handleCanvasClick's smartOrderMode
@@ -3078,10 +4026,17 @@ function resolveSmartUnitIdxs(unitType, unitScope){
 }
 
 function openSmartOrder(){
+  // per user request: fixes a bug where a unit/enemy/decoy command box left open from a
+  // previous map tap stayed stacked on top of this drawer through every step, blocking its
+  // content -- close any open command box first so the wizard is never obscured.
+  state.commandBox = null;
+  state.enemyCommandBox = null;
+  state.decoyCommandBox = null;
   smartWizard = {step:1, unitType:null, unitScope:null, actionKey:null};
   renderSmartOrder();
   document.getElementById('smart-order-drawer').classList.add('open');
   document.getElementById('drawer-backdrop').classList.add('show');
+  render();
 }
 function closeSmartOrder(){
   document.getElementById('smart-order-drawer').classList.remove('open');
@@ -3197,9 +4152,13 @@ function applySmartOrder(targetId){
       if(actionKey==='standby') setMortarOrder(idx, 'standby');
       else if(actionKey==='fire_target' && target){
         const e = estPosFromMortar(m, target);
-        m.pendingFire = {x:e.x, y:e.y, snappedId:target.id};
-        applyBestMortarLoadout(m, target);
-        m.order = 'fire';
+        if(mortarTooCloseToFire(m, e.x, e.y)){
+          log('sys','システム', `迫撃砲${idx+1}、${target.id}は近すぎます(最低射程${MORTAR_MIN_RANGE_M}m)。攻撃指示を却下。`);
+        } else {
+          m.pendingFire = {x:e.x, y:e.y, snappedId:target.id};
+          applyBestMortarLoadout(m, target);
+          m.order = 'fire';
+        }
       }
     } else if(unitType==='scout'){
       const s = state.scouts[idx];
@@ -3210,7 +4169,7 @@ function applySmartOrder(targetId){
     } else if(unitType==='squad'){
       const sq = state.squads[idx];
       if(['advance','hold','assault','retreat'].includes(actionKey)) setSquadOrder(idx, actionKey);
-      else if(actionKey==='hunt_target' && target){
+      else if(actionKey==='hunt_target' && target && target.type!=='heli' && target.type!=='drone'){
         sq.order = 'hunt';
         sq.huntTargetId = target.id;
         sq.pendingDest = null;
@@ -3226,16 +4185,24 @@ function applySmartOrder(targetId){
     } else if(unitType==='sniper'){
       const sn = state.snipers[idx];
       if(['advance','hold','retreat'].includes(actionKey)) setSniperOrder(idx, actionKey);
-      else if(actionKey==='snipe_target' && target){
+      else if(actionKey==='snipe_target' && target && target.type!=='heli' && target.type!=='drone'){
         sn.pendingSnipeTargetId = target.id;
       }
     } else if(unitType==='tank'){
       const tk = state.tanks[idx];
       if(['advance','hold','retreat'].includes(actionKey)) setTankOrder(idx, actionKey);
-      else if(actionKey==='hunt_target' && target){
+      else if(actionKey==='hunt_target' && target && target.type!=='heli' && target.type!=='drone'){
         tk.order = 'hunt';
         tk.huntTargetId = target.id;
         tk.pendingDest = null;
+      }
+    } else if(unitType==='sam'){
+      const sam = state.sams[idx];
+      if(['advance','hold','retreat'].includes(actionKey)) setSamOrder(idx, actionKey);
+      else if(actionKey==='hunt_target' && target && (target.type==='heli' || target.type==='drone')){
+        sam.order = 'hunt';
+        sam.huntTargetId = target.id;
+        sam.pendingDest = null;
       }
     }
   });
@@ -3290,7 +4257,13 @@ function renderSmartOrder(){
   if(step===4){
     const actionDef = SMART_ACTIONS[smartWizard.unitType].find(a=>a.key===smartWizard.actionKey);
     if(actionDef.kind==='target'){
-      const knownTargets = state.targets.filter(t=>!t.destroyed && isTargetDetected(t));
+      // per user request: SAM can only be assigned air targets (heli/drone); squad/tank/
+      // sniper direct-fire weapons can no longer be assigned air targets at all -- anti-air is
+      // the SAM's job now.
+      const typeGate = smartWizard.unitType==='sam' ? (t=>t.type==='heli'||t.type==='drone')
+        : ['squad','tank','sniper'].includes(smartWizard.unitType) ? (t=>t.type!=='heli'&&t.type!=='drone')
+        : ()=>true;
+      const knownTargets = state.targets.filter(t=>!t.destroyed && isTargetDetected(t) && typeGate(t));
       body.innerHTML = backBtn + `
         <div class="meta" style="margin-bottom:8px;">どの目標ですか?</div>
         ${knownTargets.length ? knownTargets.map(t=>`<div class="shop-row"><div>
@@ -3312,7 +4285,7 @@ function renderSmartOrder(){
 }
 
 function armSniperMoveOrder(idx){
-  if(!state.snipers[idx]) return;
+  if(!state.snipers[idx] || state.snipers[idx].resting) return;
   state.orderMode = {kind:'sniper-move', idx};
   state.commandBox = null;
   render();
@@ -3324,7 +4297,7 @@ function clearSniperDest(idx){
   render();
 }
 function armSniperTargetOrder(idx){
-  if(!state.snipers[idx]) return;
+  if(!state.snipers[idx] || state.snipers[idx].resting) return;
   state.orderMode = {kind:'sniper-target', idx};
   state.commandBox = null;
   render();
@@ -3336,7 +4309,7 @@ function clearSniperTarget(idx){
 }
 function armSniperAimOrder(idx){
   const sn = state.snipers[idx];
-  if(!sn) return;
+  if(!sn || sn.resting) return;
   state.orderMode = {kind:'sniper-aim', idx};
   state.commandBox = null;
   unitSpeakOrder('sniper', idx);
@@ -3373,7 +4346,7 @@ function reinforceUnitLabel(kind, idx){
 function requestReinforcement(kind, idx){
   if(!state || state.stageResolved) return;
   const unit = kind==='squad' ? state.squads[idx] : kind==='scout' ? state.scouts[idx] : state.snipers[idx];
-  if(!unit || unit.reinforceUsed) return;
+  if(!unit || unit.reinforceUsed || unit.resting) return;
   const deadCount = unit.soldiers.filter(s=>!s.alive).length;
   if(deadCount===0) return;
   const restoreCount = Math.min(REINFORCE_MAX_PER_CALL, deadCount, state.reserve);
@@ -3397,10 +4370,68 @@ function requestReinforcement(kind, idx){
   });
   unit.reinforceUsed = true;
   log('op','斥候', `${reinforceUnitLabel(kind,idx)}に予備兵力${revived}名(${arrivedNames.join('、')})が到着。¥${cost}を消費(残り予備 ${state.reserve}名)。`);
-  // per continuous-sim conversion: no longer forces an extra resolveEnemyTurn(1) here -- the
-  // enemy already advances continuously via loop()'s accumulator, so this would double-apply.
+  resolveEnemyTurn(1);
   checkEnd();
   render();
+}
+
+// per user request: 大休止 -- see REST_DURATION_TURNS above. Shared across every soldier-
+// roster unit type (squad/scout/sniper/engineer); scouts have no 'order' field the way the
+// others do, hence the `'order' in unit` guards throughout.
+function restUnitRef(kind, idx){
+  if(kind==='squad') return state.squads[idx];
+  if(kind==='scout') return state.scouts[idx];
+  if(kind==='sniper') return state.snipers[idx];
+  if(kind==='engineer') return state.engineers[idx];
+  return null;
+}
+function restUnitLabel(kind, idx){
+  if(kind==='squad') return `第${idx+1}小隊`;
+  if(kind==='scout') return `斥候${idx+1}班`;
+  if(kind==='sniper') return `狙撃${idx+1}班`;
+  if(kind==='engineer') return `工兵小隊`;
+  return '';
+}
+function startRest(kind, idx){
+  if(!state || state.stageResolved) return;
+  const unit = restUnitRef(kind, idx);
+  if(!unit || unitAliveCount(unit)<=0 || unit.resting) return;
+  const deadCount = unit.soldiers.length - unitAliveCount(unit);
+  if(deadCount<=0){ log('sys','システム','欠員がないため大休止の必要がありません。'); return; }
+  unit.resting = true;
+  unit.restTurnsLeft = REST_DURATION_TURNS;
+  unit.restDeficitStart = deadCount;
+  unit.restRevived = 0;
+  unit.pendingDest = null;
+  if('order' in unit) unit.order = 'resting';
+  if('huntTargetId' in unit) unit.huntTargetId = null;
+  if('pendingSnipeTargetId' in unit) unit.pendingSnipeTargetId = null;
+  if('pendingReconTargetId' in unit) unit.pendingReconTargetId = null;
+  if('aimAngle' in unit) unit.aimAngle = null;
+  log('sys','前線', `${restUnitLabel(kind,idx)}、大休止を開始。以後${REST_DURATION_TURNS}ターンは一切の命令を受け付けない代わりに、欠員(${deadCount}名)が徐々に戦列へ復帰する。`);
+  render();
+}
+// Ticks one unit's rest by exactly one action-turn -- called from inside each type's own
+// resolve*Orders per-turn loop so it advances at the same actionTurns granularity (2 ticks on
+// a mortar-fired commit, same as every other per-turn effect) instead of once per commitDecision
+// regardless of how many turns that commit actually spent.
+function tickUnitRest(unit, label){
+  if(!unit.resting) return;
+  unit.restTurnsLeft -= 1;
+  const elapsed = REST_DURATION_TURNS - unit.restTurnsLeft;
+  const shouldBeRevived = Math.floor(unit.restDeficitStart * elapsed / REST_DURATION_TURNS);
+  while(unit.restRevived < shouldBeRevived){
+    const victim = unit.soldiers.find(s=>!s.alive);
+    if(!victim) break;
+    victim.alive = true;
+    unit.restRevived += 1;
+  }
+  if(unit.restTurnsLeft<=0){
+    unit.resting = false;
+    unit.restTurnsLeft = 0;
+    if('order' in unit) unit.order = 'hold';
+    log('sys','前線', `${label}、大休止終了。戦列に復帰。`);
+  }
 }
 
 // per user request: a once-per-WAVE defensive action for HQ (matching the once-per-wave
@@ -3413,6 +4444,7 @@ function buildHqCover(){
   state.hq.coverBuilt = true;
   state.turns += 1;
   log('sys','工兵', `指揮所、掩体構築完了。掩蔽率 ${state.hq.exposure}に向上(このWAVE中の再実施は不可)。`);
+  resolveEnemyTurn(1);
   checkEnd();
   render();
 }
@@ -3429,6 +4461,7 @@ function repairHq(){
   state.hq.hp = Math.min(state.hq.maxHp, state.hq.hp+restoreHp);
   state.turns += 1;
   log('sys','工兵', `指揮所、応急修復完了(+${restoreHp}HP)。¥${cost}を消費(現在HP ${state.hq.hp}/${state.hq.maxHp})。`);
+  resolveEnemyTurn(1);
   checkEnd();
   render();
 }
@@ -3440,19 +4473,14 @@ function hqBoxHtml(){
   const repairCost = Math.round(HQ_REPAIR_COST_PER_HP*repairAmount);
   const canRepair = hq.hp<hq.maxHp && state.money>=repairCost;
   const canCover = !hq.coverBuilt && hq.exposure<HQ_COVER_EXPOSURE_CAP;
-  const arming = state.orderMode && state.orderMode.kind==='hq-move';
-  const destStatus = arming ? '地図をクリックして移転先を指定…' : (hq.pendingDest ? '移転先: 設定済み' : '移転先: 未設定');
   return `
     <div class="meta">HP: ${hq.hp} / ${hq.maxHp}</div>
     <div class="hpbar big" style="margin-bottom:8px;"><div style="width:${Math.max(0,hq.hp/hq.maxHp*100)}%"></div></div>
-    ${exposureMetaHtml(hq.exposure)}
+    ${exposureMetaHtml(getUnitExposure({kind:'hq'}))}
     <button class="btn" ${canCover?'':'disabled'} onclick="buildHqCover()" style="margin:8px 0 4px;">掩体構築(掩蔽率+${HQ_COVER_EXPOSURE_BONUS}${hq.coverBuilt?' ・ このWAVEは実施済み':hq.exposure>=HQ_COVER_EXPOSURE_CAP?' ・ 上限到達':''})</button>
     <button class="btn" ${canRepair?'':'disabled'} onclick="repairHq()">応急修復(+${repairAmount}HP ・ ¥${repairCost})${hq.hp>=hq.maxHp?' ・ HP満タン':''}</button>
-    <div class="row-2" style="margin:8px 0 4px;">
-      <button class="btn ${arming?'active squad-order-btn':''}" onclick="armHqMoveOrder()">移転先を指定</button>
-      <button class="btn" ${!hq.pendingDest?'disabled':''} onclick="clearHqDest()">解除</button>
-    </div>
-    <div class="meta">${destStatus}(移動速度: 歩兵と同一)</div>
+    <div class="meta" style="margin:8px 0 4px;">${hq.pendingDest ? '移転先: 設定済み(地図クリックで変更)' : '地図をクリックすると移転先を指定できます'}(移動速度: 歩兵と同一)</div>
+    ${hq.pendingDest ? `<button class="btn" onclick="clearHqDest()">移転先を解除</button>` : ''}
   `;
 }
 
@@ -3466,7 +4494,9 @@ function hqBoxHtml(){
 const FRIENDLY_KIND_LIST = [
   { kind:'scout',    list:()=>state.scouts,    alive:u=>unitAlive(u),                label:i=>`斥候${i+1}` },
   { kind:'mortar',   list:()=>state.mortars,   alive:u=>u.hp>0,                       label:i=>`迫撃砲${i+1}` },
+  { kind:'heli',     list:()=>state.helis||[], alive:u=>u.hp>0,                      label:i=>`ヘリ${i+1}` },
   { kind:'tank',     list:()=>state.tanks,     alive:u=>u.hp>0,                       label:i=>`戦車${i+1}` },
+  { kind:'sam',      list:()=>state.sams,      alive:u=>u.hp>0,                       label:i=>`対空${i+1}` },
   { kind:'squad',    list:()=>state.squads,    alive:u=>u.soldiers.some(s=>s.alive),  label:i=>`第${i+1}小隊` },
   { kind:'sniper',   list:()=>state.snipers,   alive:u=>u.soldiers.some(s=>s.alive),  label:i=>`狙撃${i+1}班` },
   { kind:'engineer', list:()=>state.engineers, alive:u=>u.soldiers.some(s=>s.alive),  label:()=>'工兵小隊' },
@@ -3493,31 +4523,53 @@ function checkFriendlyFireAt(ix, iy, killRadius){
 
 // veteran soldiers are harder to hit (folded in here as a bonus on top of the unit's base
 // exposure, so it flows through every existing damage-avoidance path -- enemyCounterAttack,
-// resolveVehicleAssault, mortar friendly fire, the squad/infantry duel -- for free)
+// resolveVehicleAssault, mortar friendly fire, the squad/infantry duel -- for free). Terrain
+// cover (terrainCoverTotal: elevation defilade + discrete terrain type) is folded in the
+// same way, on top of both.
 function getUnitExposure(candidate){
-  if(candidate.kind==='hq') return state.hq.exposure;
-  if(candidate.kind==='mortar') return state.mortars[candidate.idx].exposure;
-  if(candidate.kind==='tank') return state.tanks[candidate.idx].exposure;
+  if(candidate.kind==='hq') return state.hq.exposure + terrainCoverTotal(state.hq.x, state.hq.y);
+  if(candidate.kind==='mortar'){
+    const m = state.mortars[candidate.idx];
+    return m.exposure + terrainCoverTotal(m.x, m.y);
+  }
+  if(candidate.kind==='heli'){
+    const h = state.helis[candidate.idx];
+    return h.exposure + terrainCoverTotal(h.x, h.y);
+  }
+  if(candidate.kind==='tank'){
+    const tk = state.tanks[candidate.idx];
+    return tk.exposure + terrainCoverTotal(tk.x, tk.y);
+  }
+  if(candidate.kind==='sam'){
+    const sam = state.sams[candidate.idx];
+    return sam.exposure + terrainCoverTotal(sam.x, sam.y);
+  }
   if(candidate.kind==='scout'){
     const u = state.scouts[candidate.idx];
-    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL;
+    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y) + trenchCoverBonusAt(u.x, u.y);
   }
   if(candidate.kind==='squad'){
     const u = state.squads[candidate.idx];
-    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL;
+    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y) + trenchCoverBonusAt(u.x, u.y);
   }
   if(candidate.kind==='sniper'){
     const u = state.snipers[candidate.idx];
-    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL;
+    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y) + trenchCoverBonusAt(u.x, u.y);
   }
   if(candidate.kind==='engineer'){
     const u = state.engineers[candidate.idx];
-    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL;
+    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y) + trenchCoverBonusAt(u.x, u.y);
   }
   return EXPOSURE_DEFAULT;
 }
 function rollExposureHit(exposure){
   return Math.random() < hitChanceFromExposure(exposure);
+}
+// Mirrors getUnitExposure() for enemy targets -- same terrain-cover treatment, evaluated
+// against the target's true position (trueX/trueY) rather than wherever it's currently
+// estimated to be, since cover depends on where the target actually is standing.
+function getTargetExposure(t){
+  return t.exposure + terrainCoverTotal(t.trueX, t.trueY);
 }
 
 function nearestFriendlyAsset(x, y, includeSquads){
@@ -3529,6 +4581,9 @@ function nearestFriendlyAsset(x, y, includeSquads){
   state.mortars.forEach((m,idx)=>{
     if(m.hp>0) candidates.push({kind:'mortar', idx, x:m.x, y:m.y});
   });
+  (state.helis||[]).forEach((h,idx)=>{
+    if(h.hp>0) candidates.push({kind:'heli', idx, x:h.x, y:h.y});
+  });
   if(includeSquads){
     state.squads.forEach((sq,idx)=>{
       if(sq.soldiers.some(s=>s.alive)) candidates.push({kind:'squad', idx, x:sq.x, y:sq.y});
@@ -3538,6 +4593,9 @@ function nearestFriendlyAsset(x, y, includeSquads){
     });
     state.tanks.forEach((tk,idx)=>{
       if(tk.hp>0) candidates.push({kind:'tank', idx, x:tk.x, y:tk.y});
+    });
+    state.sams.forEach((sam,idx)=>{
+      if(sam.hp>0) candidates.push({kind:'sam', idx, x:sam.x, y:sam.y});
     });
     state.engineers.forEach((en,idx)=>{
       if(en.soldiers.some(s=>s.alive)) candidates.push({kind:'engineer', idx, x:en.x, y:en.y});
@@ -3652,6 +4710,13 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
     log('sys','被弾', `${sourceLabel}が迫撃砲${target.idx+1}を攻撃。被害 ${dmg}。`);
     if(mortar.hp>0) unitSpeak('mortar', target.idx, 'warning');
     else if(wasAlive) spawnDestructionEffect(mortar.x, mortar.y, `迫撃砲${target.idx+1} 戦闘不能!`, FRIENDLY_MARK_COLOR);
+  } else if(target.kind==='heli'){
+    const heli = state.helis && state.helis[target.idx];
+    if(!heli) return;
+    const wasAlive = heli.hp>0;
+    heli.hp = Math.max(0, heli.hp-dmg);
+    log('sys','被弾', `${sourceLabel}がヘリ${target.idx+1}を攻撃。被害 ${dmg}。`);
+    if(wasAlive && heli.hp<=0) spawnDestructionEffect(heli.x, heli.y, `ヘリ${target.idx+1} 撃墜!`, FRIENDLY_MARK_COLOR);
   } else if(target.kind==='tank'){
     const tank = state.tanks[target.idx];
     if(!tank) return;
@@ -3660,6 +4725,14 @@ function damageFriendlyAsset(target, dmg, sourceLabel){
     if(tank.hp <= tank.maxHp*0.2) state.hpDroppedLow = true;
     log('sys','被弾', `${sourceLabel}が戦車${target.idx+1}を攻撃。被害 ${dmg}。`);
     if(wasAlive && tank.hp<=0) spawnDestructionEffect(tank.x, tank.y, `戦車${target.idx+1} 撃破!`, FRIENDLY_MARK_COLOR);
+  } else if(target.kind==='sam'){
+    const sam = state.sams[target.idx];
+    if(!sam) return;
+    const wasAlive = sam.hp>0;
+    sam.hp = Math.max(0, sam.hp-dmg);
+    if(sam.hp <= sam.maxHp*0.2) state.hpDroppedLow = true;
+    log('sys','被弾', `${sourceLabel}が対空${target.idx+1}を攻撃。被害 ${dmg}。`);
+    if(wasAlive && sam.hp<=0) spawnDestructionEffect(sam.x, sam.y, `対空${target.idx+1} 撃破!`, FRIENDLY_MARK_COLOR);
   } else if(target.kind==='engineer'){
     const en = state.engineers[target.idx];
     if(!en) return;
@@ -3698,7 +4771,7 @@ function spawnInfantryDrone(source){
     trueX, trueY, trueBearing, trueDistance,
     hp, maxHp:hp,
     destroyed:false, revealed:false, reconCount:0,
-    bearingErr: source.bearingErr, distErr: source.distErr,
+    posErr: source.posErr,
     bOffset: rnd(-1,1), dOffset: rnd(-1,1),
     impacts:[],
     troops: null,
@@ -3738,12 +4811,10 @@ function mergeAdjustedGoal(t, defaultGoal){
 // Enemy-laid road mines. Roads are visually hidden but their geometry
 // (state.roads) is still tracked purely as a "judgment" data source (see the
 // terrainAwareStep comment) -- mines are placed along that same geometry.
-function maybePlaceMine(dt){
+function maybePlaceMine(){
   if(!state.roads || state.roads.length===0) return;
   if(state.mines.length >= MINE_MAX_ACTIVE) return;
-  // per continuous-sim conversion: previously fired once per commitDecision() regardless of
-  // actionTurns (an inconsistency vs every other per-turn check) -- now consistently scaled.
-  if(Math.random() > chancePerStep(MINE_PLACEMENT_CHANCE, dt)) return;
+  if(Math.random() > MINE_PLACEMENT_CHANCE) return;
   const candidateRoads = state.roads.filter(r=>r.length>1);
   if(!candidateRoads.length) return;
   const road = choice(candidateRoads);
@@ -3766,16 +4837,16 @@ function checkMineTrigger(kind, idx, x, y){
 // regroup tendency), but holds once within ARTILLERY_STANDOFF_RANGE_UNITS
 // rather than closing to melee, since it keeps attacking indirectly via
 // enemyCounterAttack regardless of distance.
-function advanceEnemyArtillery(dt){
+function advanceEnemyArtillery(actionTurns){
   const artillery = state.targets.filter(t=>!t.destroyed && t.type==='artillery');
   if(artillery.length===0) return false;
   let moved = false;
-  {
+  for(let i=0;i<actionTurns;i++){
     artillery.forEach(t=>{
       if(t.destroyed) return;
       const near = nearestFriendlyAsset(t.trueX, t.trueY, true);
       if(!near || near.dist <= ARTILLERY_STANDOFF_RANGE_UNITS) return;
-      const step = ARTILLERY_MOVE_CAP * dt * (isSuppressed(t) ? SUPPRESSION_MOVE_MULT : 1);
+      const step = ARTILLERY_MOVE_CAP * (isSuppressed(t) ? SUPPRESSION_MOVE_MULT : 1);
       const moveGoal = mergeAdjustedGoal(t, near);
       const next = terrainAwareStep(t.trueX, t.trueY, moveGoal.x, moveGoal.y, step);
       t.trueX = next.x; t.trueY = clamp(next.y, 30, CANVAS_H-30);
@@ -3788,21 +4859,21 @@ function advanceEnemyArtillery(dt){
   return moved;
 }
 
-function resolveVehicleAssault(dt){
+function resolveVehicleAssault(actionTurns){
   const vehicles = state.targets.filter(t=>!t.destroyed && t.type==='vehicle');
   if(vehicles.length===0) return false;
   let anyEvent = false;
-  {
+  // per user request: "last stand" -- once few enough enemies remain, vehicles ignore
+  // whatever's nearest and drive straight at the HQ instead, faster than their normal advance.
+  const lastStand = lastStandActive();
+  for(let i=0;i<actionTurns;i++){
     vehicles.forEach(t=>{
       if(t.destroyed) return;
-      const near = nearestFriendlyAsset(t.trueX, t.trueY, true);
+      const near = (lastStand && state.hq.hp>0)
+        ? {kind:'hq', idx:0, x:state.hq.x, y:state.hq.y, dist:Math.hypot(t.trueX-state.hq.x, t.trueY-state.hq.y)}
+        : nearestFriendlyAsset(t.trueX, t.trueY, true);
       if(!near) return;
-      if(near.dist <= VEHICLE_ASSAULT_RANGE){
-        // Assault attacks (unlike the road-march movement below) are a discrete once-per-turn
-        // event, so they keep their original turn cadence via an explicit cooldown instead of
-        // firing every SIM_STEP_MS (same treatment as the sniper's engagement cooldown).
-        if((t._assaultCooldownTurns||0) > 0){ t._assaultCooldownTurns -= dt; return; }
-        t._assaultCooldownTurns = 1;
+      if(near.dist <= VEHICLE_ASSAULT_RANGE && hasLineOfSight(t.trueX, t.trueY, near.x, near.y)){
         anyEvent = true;
         const blockWall = wallBlockingLineOfFire(t.trueX, t.trueY, near.x, near.y);
         if(blockWall){
@@ -3817,13 +4888,13 @@ function resolveVehicleAssault(dt){
           const altMult = altitudeBonus(t.trueX, t.trueY, near.x, near.y);
           const dmg = Math.round(rnd(VEHICLE_ASSAULT_DAMAGE[0], VEHICLE_ASSAULT_DAMAGE[1]) * altMult);
           damageFriendlyAsset(near, dmg, `${t.id}(装甲車)の突撃`);
-          enemyTracers.push({startX:e.x, startY:e.y, endX:near.x, endY:near.y, born:performance.now(), duration:260});
+          fireTracer(e.x, e.y, near.x, near.y, 260, 'cannon');
         } else {
           log('sys','回避', `${t.id}(装甲車)の突撃を受けたが、${friendlyFireCandidateLabel(near)}は掩蔽率により被弾を免れた。`);
         }
         if(near.kind==='squad'){
           const aliveSoldiers = state.squads[near.idx].soldiers.filter(s=>s.alive);
-          if(aliveSoldiers.length>0 && Math.random()<0.5 && rollExposureHit(t.exposure)){
+          if(aliveSoldiers.length>0 && Math.random()<0.5 && rollExposureHit(getTargetExposure(t))){
             const antiTankMult = altitudeBonus(near.x, near.y, t.trueX, t.trueY);
             const antiTankDmg = Math.round(rnd(2,6) * antiTankMult);
             t.hp -= antiTankDmg;
@@ -3835,9 +4906,11 @@ function resolveVehicleAssault(dt){
           }
         }
       } else {
-        const suppressionMoveMult = isSuppressed(t) ? SUPPRESSION_MOVE_MULT : 1;
-        const step = Math.min((45 + state.stage*2.6) * DIFFICULTIES[state.difficulty].advanceMult, VEHICLE_MOVE_CAP) * dt * suppressionMoveMult;
-        const moveGoal = mergeAdjustedGoal(t, near);
+        const suppressionMoveMult = (isSuppressed(t) && !lastStand) ? SUPPRESSION_MOVE_MULT : 1;
+        const step = Math.min((45 + state.stage*2.6) * DIFFICULTIES[state.difficulty].advanceMult, VEHICLE_MOVE_CAP) * suppressionMoveMult * (lastStand ? 1.6 : 1);
+        // per user request: no falling back to regroup with a wounded ally during the last
+        // stand -- straight at the HQ, full speed, regardless of own condition.
+        const moveGoal = lastStand ? {x:near.x, y:near.y} : mergeAdjustedGoal(t, near);
         let next = null;
         // Vehicles are road-bound: route along the real road network via A*
         // rather than cutting cross-country. Only the final short hop from
@@ -3877,11 +4950,11 @@ function resolveVehicleAssault(dt){
 // the requested behavior (and why 'heli' is deliberately absent from COUNTER_CHANCE/
 // COUNTER_DAMAGE -- that generic ranged-harassment roll would otherwise let it keep hitting
 // targets from anywhere at any time, defeating the withdraw phase).
-function resolveHeliAssault(dt){
+function resolveHeliAssault(actionTurns){
   const helis = state.targets.filter(t=>!t.destroyed && t.type==='heli');
   if(helis.length===0) return false;
   let anyEvent = false;
-  {
+  for(let i=0;i<actionTurns;i++){
     helis.forEach(h=>{
       if(h.destroyed) return;
       const recomputeBearing = ()=>{
@@ -3890,14 +4963,14 @@ function resolveHeliAssault(dt){
         h.trueDistance = Math.sqrt(dx*dx+dy*dy);
       };
       if(h.heliCooldown>0){
-        h.heliCooldown -= dt;
+        h.heliCooldown -= 1;
         return;
       }
       if(h.heliPhase==='withdraw'){
         const dx = h.trueX-h.heliAnchor.x, dy = h.trueY-h.heliAnchor.y;
         const dist = Math.hypot(dx,dy) || 1;
         const fleeX = h.trueX + (dx/dist)*500, fleeY = h.trueY + (dy/dist)*500;
-        const next = terrainAwareStep(h.trueX, h.trueY, fleeX, fleeY, HELI_MOVE_CAP*dt, true);
+        const next = airborneStep(h.trueX, h.trueY, fleeX, fleeY, HELI_MOVE_CAP);
         h.trueX = next.x; h.trueY = clamp(next.y, 30, CANVAS_H-30);
         recomputeBearing();
         anyEvent = true;
@@ -3913,18 +4986,14 @@ function resolveHeliAssault(dt){
       if(!near) return;
       if(near.dist > HELI_ENGAGE_RANGE){
         h.heliPhase = 'approach';
-        const next = terrainAwareStep(h.trueX, h.trueY, near.x, near.y, HELI_MOVE_CAP*dt, true);
+        const next = airborneStep(h.trueX, h.trueY, near.x, near.y, HELI_MOVE_CAP);
         h.trueX = next.x; h.trueY = clamp(next.y, 30, CANVAS_H-30);
         recomputeBearing();
         anyEvent = true;
         return;
       }
-      // in range -- attack. Each shot in the burst is a discrete once-per-turn event (like the
-      // sniper's engagement), so it keeps its original cadence via an explicit cooldown rather
-      // than firing every SIM_STEP_MS.
+      // in range -- attack
       h.heliPhase = 'attack';
-      if((h._attackCooldownTurns||0) > 0){ h._attackCooldownTurns -= dt; return; }
-      h._attackCooldownTurns = 1;
       anyEvent = true;
       const e = estPos(h);
       if(revealTarget(h)){
@@ -3934,7 +5003,7 @@ function resolveHeliAssault(dt){
         const altMult = altitudeBonus(h.trueX, h.trueY, near.x, near.y);
         const dmg = Math.round(rnd(HELI_ATTACK_DAMAGE[0], HELI_ATTACK_DAMAGE[1]) * altMult);
         damageFriendlyAsset(near, dmg, `${h.id}(戦闘ヘリ)の攻撃`);
-        enemyTracers.push({startX:e.x, startY:e.y, endX:near.x, endY:near.y, born:performance.now(), duration:260});
+        fireTracer(e.x, e.y, near.x, near.y, 260, 'heli');
       } else {
         log('sys','回避', `${h.id}(戦闘ヘリ)の攻撃を受けたが、${friendlyFireCandidateLabel(near)}は掩蔽率により被弾を免れた。`);
       }
@@ -3953,29 +5022,23 @@ function resolveHeliAssault(dt){
 // resolveDroneSwarm each action tick so a squad gets a shot at a drone closing
 // in on it while it's still outside DRONE_DETONATE_RANGE, not just after the
 // fact -- independent of the squad's current order/standing order (always on).
-function resolveSquadAntiDrone(dt){
+function resolveSquadAntiDrone(actionTurns){
   let anyEvent = false;
-  {
+  for(let i=0;i<actionTurns;i++){
     state.squads.forEach((sq, sqIdx)=>{
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
       if(aliveSoldiers.length===0) return;
-      // Point-defense fire is a discrete once-per-turn volley (like the sniper's engagement),
-      // so it keeps its original cadence via an explicit cooldown instead of firing every
-      // SIM_STEP_MS -- the hit-chance roll below is therefore left unscaled, since this block
-      // already only runs once per ~1 turn of real time.
-      if((sq._antiDroneCooldownTurns||0) > 0){ sq._antiDroneCooldownTurns -= dt; return; }
-      let engaged = false;
       state.targets.forEach(t=>{
         if(t.destroyed || t.type!=='drone') return;
         if(Math.hypot(t.trueX-sq.x, t.trueY-sq.y) > SQUAD_ANTI_DRONE_RANGE_UNITS) return;
-        anyEvent = true; engaged = true;
+        anyEvent = true;
         if(revealTarget(t)){
           log('op','斥候', `${t.id} を至近距離で捕捉、<b>${t.def.label}</b>と識別。`);
         }
         if(Math.random() < SQUAD_ANTI_DRONE_HIT_CHANCE){
           const dmg = Math.round(rnd(SQUAD_ANTI_DRONE_DMG[0], SQUAD_ANTI_DRONE_DMG[1]));
           t.hp -= dmg;
-          enemyTracers.push({startX:sq.x, startY:sq.y, endX:t.trueX, endY:t.trueY, born:performance.now(), duration:150});
+          fireTracer(sq.x, sq.y, t.trueX, t.trueY, 150, 'rifle');
           if(t.hp<=0 && !t.destroyed){
             t.destroyed = true; t.hp = 0;
             log('op','前線', `第${sqIdx+1}小隊が${t.id}を対空射撃で<b>撃墜</b>。`);
@@ -3987,17 +5050,58 @@ function resolveSquadAntiDrone(dt){
           log('sys','対空', `第${sqIdx+1}小隊が${t.id}へ対空射撃するも外す。`);
         }
       });
-      if(engaged) sq._antiDroneCooldownTurns = 1;
     });
   }
   return anyEvent;
 }
 
-function resolveDroneSwarm(dt){
+// per user request: small arms are nearly useless against armor, but real infantry standing
+// right next to an enemy vehicle wouldn't just do nothing -- they'd shoot back somehow. Mirrors
+// the existing REACTIVE anti-tank counter-fire (see resolveVehicleAssault's near.kind==='squad'
+// branch: 50% chance, exposure-gated, 2-6 damage) but lets the squad initiate it too, at the
+// same point-blank range (VEHICLE_ASSAULT_RANGE) the enemy vehicle itself would use to assault --
+// independent of the squad's current order/standing order (always on), same as
+// resolveSquadAntiDrone above.
+function resolveSquadAntiVehicle(actionTurns){
+  let anyEvent = false;
+  for(let i=0;i<actionTurns;i++){
+    state.squads.forEach((sq, sqIdx)=>{
+      const curAlive = sq.soldiers.filter(s=>s.alive);
+      if(curAlive.length===0) return;
+      if(!unitMayFire('squad', sqIdx, state.turns+i+2)) return;
+      state.targets.forEach(t=>{
+        if(t.destroyed || t.type!=='vehicle') return;
+        if(Math.hypot(t.trueX-sq.x, t.trueY-sq.y) > VEHICLE_ASSAULT_RANGE) return;
+        if(!hasLineOfSight(sq.x, sq.y, t.trueX, t.trueY)) return;
+        if(wallBlockingLineOfFire(sq.x, sq.y, t.trueX, t.trueY)) return;
+        anyEvent = true;
+        if(revealTarget(t)){
+          log('op','斥候', `${t.id} を至近距離で捕捉、<b>${t.def.label}</b>と識別。`);
+        }
+        if(Math.random() < 0.5 && rollExposureHit(getTargetExposure(t))){
+          const antiTankMult = altitudeBonus(sq.x, sq.y, t.trueX, t.trueY);
+          const antiTankDmg = Math.round(rnd(2,6) * antiTankMult);
+          t.hp -= antiTankDmg;
+          fireTracer(sq.x, sq.y, t.trueX, t.trueY, 220, 'rifle');
+          if(t.hp<=0 && !t.destroyed){
+            t.destroyed = true; t.hp = 0;
+            log('op','前線', `第${sqIdx+1}小隊が${t.id}を対戦車射撃で<b>撃破</b>。`);
+            onTargetDestroyed(t);
+          } else {
+            log('op','前線', `第${sqIdx+1}小隊が至近距離の${t.id}へ対戦車射撃(効果 ${antiTankDmg})。`);
+          }
+        }
+      });
+    });
+  }
+  return anyEvent;
+}
+
+function resolveDroneSwarm(actionTurns){
   const drones = state.targets.filter(t=>!t.destroyed && t.type==='drone');
   if(drones.length===0) return false;
   let anyEvent = false;
-  {
+  for(let i=0;i<actionTurns;i++){
     drones.forEach(t=>{
       if(t.destroyed) return;
       const near = nearestFriendlyAsset(t.trueX, t.trueY, true);
@@ -4011,7 +5115,7 @@ function resolveDroneSwarm(dt){
         if(rollExposureHit(getUnitExposure(near))){
           const dmg = Math.round(rnd(DRONE_DETONATE_DAMAGE[0], DRONE_DETONATE_DAMAGE[1]));
           damageFriendlyAsset(near, dmg, `${t.id}(ドローン)の自爆`);
-          enemyTracers.push({startX:e.x, startY:e.y, endX:near.x, endY:near.y, born:performance.now(), duration:180});
+          fireTracer(e.x, e.y, near.x, near.y, 180, 'drone');
         } else {
           log('sys','回避', `${t.id}(ドローン)が自爆したが、${friendlyFireCandidateLabel(near)}は掩蔽率により被弾を免れた。`);
         }
@@ -4023,7 +5127,7 @@ function resolveDroneSwarm(dt){
       } else {
         const dx = near.x-t.trueX, dy = near.y-t.trueY;
         const dist = Math.hypot(dx,dy) || 1;
-        const step = Math.min(DRONE_SPEED*dt*DIFFICULTIES[state.difficulty].advanceMult, dist);
+        const step = Math.min(DRONE_SPEED*DIFFICULTIES[state.difficulty].advanceMult, dist);
         t.trueX += dx/dist*step;
         t.trueY = clamp(t.trueY + dy/dist*step, 20, CANVAS_H-20);
         const bx = t.trueX-OP.x, by = t.trueY-OP.y;
@@ -4035,30 +5139,53 @@ function resolveDroneSwarm(dt){
   return anyEvent;
 }
 
-function advanceEnemyInfantry(dt){
+function resolveEnemyEvasion(actionTurns){
+  let moved = false;
+  state.targets.filter(t=>!t.destroyed && t.revealed && (t.type==='infantry' || t.type==='vehicle')).forEach(t=>{
+    if(Math.random() > 0.35) return;
+    const near = nearestFriendlyAsset(t.trueX, t.trueY, false);
+    if(!near || near.dist>900/METERS_PER_UNIT) return;
+    const dx = t.trueX-near.x, dy = t.trueY-near.y;
+    const dist = Math.hypot(dx,dy)||1;
+    const goal = {x:clamp(t.trueX+dx/dist*180, 40, CANVAS_W-30), y:clamp(t.trueY+dy/dist*100, 30, CANVAS_H-30)};
+    const next = terrainAwareStep(t.trueX, t.trueY, goal.x, goal.y, t.type==='vehicle' ? TANK_MOVE_CAP : INFANTRY_MOVE_CAP);
+    t.trueX = next.x; t.trueY = next.y;
+    t._alertState = 'withdraw';
+    moved = true;
+  });
+  if(moved) log('sys','敵AI','発見された敵部隊が散開・退避を開始。');
+  return moved;
+}
+
+function advanceEnemyInfantry(actionTurns){
   const enemyInfantry = state.targets.filter(t=>!t.destroyed && t.type==='infantry');
   if(enemyInfantry.length===0) return false;
   const aliveSquads = state.squads.filter(sq=>sq.soldiers.some(s=>s.alive));
   const squadsAlive = aliveSquads.length>0;
-  const goal = squadsAlive ? FRIENDLY_INF_POS : state.hq;
-  const minX = squadsAlive ? FRIENDLY_INF_POS.x+20 : state.hq.x+20;
+  // per user request: "last stand" -- once few enough enemies remain (lastStandActive), they
+  // stop trying to reach/hold the normal front line and instead beeline straight for the HQ,
+  // faster, without stopping to fight squad contact or flinching under suppression.
+  const lastStand = lastStandActive();
+  const targetHq = lastStand || !squadsAlive;
+  const goal = targetHq ? state.hq : FRIENDLY_INF_POS;
+  const minX = targetHq ? state.hq.x+20 : FRIENDLY_INF_POS.x+20;
   let moved = false;
-  {
+  for(let i=0;i<actionTurns;i++){
     enemyInfantry.forEach(t=>{
       if(t.destroyed) return;
       if(state.stage >= DRONE_INTRO_STAGE && performance.now()-(state.stageStartAt||0) >= 3000){
         if(t._droneCooldown === undefined) t._droneCooldown = Math.floor(rnd(2, INFANTRY_DRONE_COOLDOWN_TICKS));
         if(t._droneCooldown > 0){
-          t._droneCooldown -= dt;
+          t._droneCooldown -= 1;
         // per-group chance is divided by the live group count (see the matching
         // correction in enemyCounterAttack) so splitting infantry into more formation
         // groups doesn't also multiply total drone-swarm launch volume per tick
-        } else if(Math.random() < chancePerStep(INFANTRY_DRONE_LAUNCH_CHANCE/Math.max(1, enemyInfantry.length), dt)){
+        } else if(Math.random() < INFANTRY_DRONE_LAUNCH_CHANCE/Math.max(1, enemyInfantry.length)){
           spawnInfantryDroneSwarm(t);
           t._droneCooldown = INFANTRY_DRONE_COOLDOWN_TICKS;
         }
       }
-      const inContact = aliveSquads.some(sq=>Math.hypot(t.trueX-sq.x, t.trueY-sq.y) <= SQUAD_ENGAGE_RANGE);
+      const inContact = !lastStand && aliveSquads.some(sq=>Math.hypot(t.trueX-sq.x, t.trueY-sq.y) <= SQUAD_ENGAGE_RANGE);
       if(inContact){
         if(!t._contactLogged){
           t._contactLogged = true;
@@ -4066,14 +5193,10 @@ function advanceEnemyInfantry(dt){
         }
         return;
       }
-      if(!squadsAlive && state.hq.hp>0){
+      if(targetHq && state.hq.hp>0){
         const hqDist = Math.hypot(t.trueX-state.hq.x, t.trueY-state.hq.y);
         if(hqDist <= SQUAD_ENGAGE_RANGE){
-          // Melee attempts on the HQ are a discrete once-per-turn event (like the sniper's
-          // engagement), so they keep their original cadence via an explicit cooldown.
-          if((t._hqMeleeCooldownTurns||0) > 0){ t._hqMeleeCooldownTurns -= dt; return; }
-          t._hqMeleeCooldownTurns = 1;
-          if(rollExposureHit(state.hq.exposure)){
+          if(rollExposureHit(getUnitExposure({kind:'hq'}))){
             const dmg = Math.round(rnd(6,16) * DIFFICULTIES[state.difficulty].counterMult); // per user request: enemy attack power doubled
             state.hq.hp = Math.max(0, state.hq.hp-dmg);
             if(state.hq.hp <= state.hq.maxHp*0.3) state.hpDroppedLow = true;
@@ -4086,8 +5209,21 @@ function advanceEnemyInfantry(dt){
         }
       }
       const suppressed = isSuppressed(t);
-      const step = INFANTRY_MOVE_CAP * dt * (t.speedMult||1) * (suppressed ? SUPPRESSION_MOVE_MULT : 1);
+      const step = INFANTRY_MOVE_CAP * (t.speedMult||1) * (suppressed && !lastStand ? SUPPRESSION_MOVE_MULT : 1) * (lastStand ? 1.6 : 1);
       if(t.trueX > minX){
+        if(lastStand){
+          // per user request: no flanking spread or suppression-flinch during the last
+          // stand -- a straight line at the HQ, ignoring being pinned down (already
+          // desperate, nothing left to lose).
+          const next = terrainAwareStep(t.trueX, t.trueY, goal.x, goal.y, step);
+          t.trueX = Math.max(minX, next.x);
+          t.trueY = clamp(next.y, 30, CANVAS_H-30);
+          const dx = t.trueX-OP.x, dy = t.trueY-OP.y;
+          t.trueBearing = (Math.atan2(dx,-dy)*180/Math.PI+360)%360;
+          t.trueDistance = Math.sqrt(dx*dx+dy*dy);
+          moved = true;
+          return;
+        }
         // per user request: flanking -- each group keeps a persistent lateral offset from
         // the main approach point so groups spread out and press from multiple angles
         // instead of all funneling onto the exact same spot.
@@ -4097,10 +5233,15 @@ function advanceEnemyInfantry(dt){
         // per user request: suppression retreat -- pinned down under fire, a suppressed
         // group has a chance to flinch back away from its goal this tick instead of
         // advancing (on top of the existing move-speed penalty).
-        const retreating = suppressed && Math.random() < chancePerStep(SUPPRESSION_RETREAT_CHANCE, dt);
+        const retreating = suppressed && Math.random() < SUPPRESSION_RETREAT_CHANCE;
         const aimX = retreating ? t.trueX + (t.trueX-moveGoal.x) : moveGoal.x;
         const aimY = retreating ? t.trueY + (t.trueY-moveGoal.y) : moveGoal.y;
-        const next = terrainAwareStep(t.trueX, t.trueY, aimX, aimY, step);
+        const roadNear = nearestRoadPoint(t.trueX, t.trueY);
+        const roadPath = roadNear && roadNear.dist < ROAD_PULL_RADIUS*1.5
+          ? findRoadPath(t.trueX, t.trueY, aimX, aimY) : null;
+        const next = roadPath
+          ? advanceAlongPath(t.trueX, t.trueY, roadPath, step)
+          : terrainAwareStep(t.trueX, t.trueY, aimX, aimY, step);
         t.trueX = Math.max(minX, next.x);
         t.trueY = clamp(next.y, 30, CANVAS_H-30);
         const dx = t.trueX-OP.x, dy = t.trueY-OP.y;
@@ -4117,13 +5258,13 @@ function advanceEnemyInfantry(dt){
 // counter-battery radar triangulating it (see the MORTAR_CB_* constants). Once flagged, the
 // player has a couple of turns to actually complete a relocation (resolveOneMortarDecision
 // clears cbWarnTurns on arrival) before a guaranteed, heavy strike lands on that position.
-function resolveMortarCounterBattery(dt){
+function resolveMortarCounterBattery(actionTurns){
   let anyEvent = false;
-  {
+  for(let i=0;i<actionTurns;i++){
     state.mortars.forEach(mortar=>{
       if(mortar.hp<=0) return;
       if(mortar.cbWarnTurns!==null && mortar.cbWarnTurns!==undefined){
-        mortar.cbWarnTurns -= dt;
+        mortar.cbWarnTurns -= 1;
         if(mortar.cbWarnTurns<=0){
           mortar.cbWarnTurns = null;
           mortar.shotsSinceMove = 0;
@@ -4134,6 +5275,7 @@ function resolveMortarCounterBattery(dt){
             endX: mortar.x, endY: mortar.y,
             born: performance.now(),
             duration: FLIGHT_DURATION,
+            trajectory: 'arc',
             onLand: ()=>{
               const dmg = Math.round(rnd(MORTAR_CB_STRIKE_DMG[0], MORTAR_CB_STRIKE_DMG[1]) * DIFFICULTIES[state.difficulty].counterMult);
               damageFriendlyAsset({kind:'mortar', idx:mortar.id}, dmg, '敵対砲兵レーダーによる制圧射撃');
@@ -4145,7 +5287,7 @@ function resolveMortarCounterBattery(dt){
       }
       if(mortar.shotsSinceMove > MORTAR_CB_SHOTS_THRESHOLD){
         const chance = MORTAR_CB_DETECT_BASE + state.stage*0.01;
-        if(Math.random() < chancePerStep(chance, dt)){
+        if(Math.random() < chance){
           mortar.cbWarnTurns = MORTAR_CB_WARN_TURNS;
           anyEvent = true;
           log('sys','警告', `迫撃砲${mortar.id+1}、同一陣地からの連続射撃を敵対砲兵レーダーに捕捉された可能性!${MORTAR_CB_WARN_TURNS}ターン以内に陣地転換せよ。`);
@@ -4157,41 +5299,60 @@ function resolveMortarCounterBattery(dt){
   return anyEvent;
 }
 
-function resolveEnemyTurn(dt){
-  // per continuous-sim conversion: the "━━━ 敵が行動 ━━━" / "目立った動きなし" turn-marker log
-  // lines are gone -- resolveEnemyTurn now runs every SIM_STEP_MS (see loop()'s accumulator),
-  // so printing either one every step would flood the log instead of marking a discrete turn.
-  maybePlaceMine(dt);
-  resolveHqMovement(dt);
-  advanceEnemyInfantry(dt);
-  advanceEnemyArtillery(dt);
-  resolveVehicleAssault(dt);
-  const heliEvent = resolveHeliAssault(dt);
-  const antiDroned = resolveSquadAntiDrone(dt);
-  resolveDroneSwarm(dt);
-  enemyCounterAttack(dt);
-  resolveMortarCounterBattery(dt);
+function resolveEnemyTurn(actionTurns){
+  maybePlaceMine();
+  // per user request: "last stand" -- reveal every remaining enemy the instant the wave drops
+  // to LAST_STAND_THRESHOLD or fewer (see isTargetDetected/lastStandActive), and announce it
+  // once per wave rather than spamming the log every tick it stays true.
+  if(lastStandActive()){
+    if(!state.lastStandAnnounced){
+      state.lastStandAnnounced = true;
+      log('sys','警報', '敵残存わずか。全戦力が本部へ死に物狂いの突撃を開始した模様!');
+    }
+    state.targets.forEach(t=>{ if(!t.destroyed) revealTarget(t); });
+  }
+  resolveHqMovement(actionTurns);
+  const advanced = advanceEnemyInfantry(actionTurns);
+  const repositioned = advanceEnemyArtillery(actionTurns);
+  const assaulted = resolveVehicleAssault(actionTurns);
+  const heliEvent = resolveHeliAssault(actionTurns);
+  const evaded = resolveEnemyEvasion(actionTurns);
+  const antiDroned = resolveSquadAntiDrone(actionTurns);
+  const antiVehicled = resolveSquadAntiVehicle(actionTurns);
+  const swarmed = resolveDroneSwarm(actionTurns);
+  const hit = enemyCounterAttack(actionTurns);
+  const cbEvent = resolveMortarCounterBattery(actionTurns);
   let infEvent = false;
   if(!allSquadsWiped()){
-    infEvent = resolveSquadOrders(dt);
+    infEvent = resolveSquadOrders(actionTurns);
   }
   let sniperEvent = false;
   if(!allSnipersWiped()){
-    sniperEvent = resolveSniperOrders(dt);
+    sniperEvent = resolveSniperOrders(actionTurns);
   }
   let tankEvent = false;
   if(!allTanksWiped()){
-    tankEvent = resolveTankOrders(dt);
+    tankEvent = resolveTankOrders(actionTurns);
+  }
+  let samEvent = false;
+  if(!allSamsWiped()){
+    samEvent = resolveSamOrders(actionTurns);
   }
   if(!allEngineersWiped()){
-    resolveEngineerOrders(dt);
+    resolveEngineerOrders(actionTurns);
+  }
+  // Keep independently commanded formations from collapsing into one marker while
+  // they advance toward the same FEBA or contact point in real time.
+  maintainFriendlySpacing();
+  if(!hit && !infEvent && !sniperEvent && !tankEvent && !samEvent && !advanced && !assaulted && !heliEvent && !evaded && !swarmed && !cbEvent && !antiDroned && !antiVehicled){
+    log('sys','敵ターン', '目立った動きなし。');
   }
   // per user request: 交戦時のサウンド -- looping battlefield-combat ambience plays while
   // squads/snipers are actively engaging this turn, and pauses again once nothing is
   // actively engaging.
-  if(infEvent || sniperEvent || tankEvent || antiDroned || heliEvent) playCombatAmbience(); else stopCombatAmbience();
+  if(infEvent || sniperEvent || tankEvent || samEvent || antiDroned || heliEvent) playCombatAmbience(); else stopCombatAmbience();
   state.targets.forEach(t=>{
-    if(t.suppressed>0) t.suppressed = Math.max(0, t.suppressed-dt);
+    if(t.suppressed>0) t.suppressed = Math.max(0, t.suppressed-actionTurns);
   });
   // per user request: destroyed targets were never actually removed from state.targets
   // (only flagged), so a long wave with heavy drone-swarm spawning could grow this array
@@ -4207,28 +5368,17 @@ function resolveEnemyTurn(dt){
   }
 }
 
-// per user request: a scout currently holding eyes-on the target (inScoutConeFor, not the
-// isTargetDetected-style inScoutCone which treats "no scouts left" as "everything visible" --
-// that fallback would perversely make every shot perfectly precise once all scouts are dead)
-// gives the mortar a full, error-free correction instead of the usual partial one. Gives
-// scouts a clear, high-value job: babysit the one target you need a guaranteed kill on.
-function scoutHasEyesOn(t){
-  return state.scouts.some(s=>inScoutConeFor(s,t));
-}
 function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVolleyDone){
   // shoot-and-scoot: every volley fired counts against the same-position streak (see
   // resolveMortarCounterBattery); resolveOneMortarDecision resets this back to 0 once the
   // mortar actually completes a relocation.
   mortar.shotsSinceMove = (mortar.shotsSinceMove||0) + 1;
-  // per user request: fire aimed at an identified target is corrected part of the way from
-  // the raw (error-prone) spotted estimate toward the target's true position -- see
-  // MORTAR_FIRE_CORRECTION_FRAC. A manually-clicked bare coordinate (no snappedTarget) has no
-  // true position to correct toward, so it's unaffected. A scout actively watching the target
-  // right now (see scoutHasEyesOn) instead gets the full 100% correction.
-  const scoutGuided = !!(snappedTarget && scoutHasEyesOn(snappedTarget));
-  const correctionFrac = scoutGuided ? 1 : MORTAR_FIRE_CORRECTION_FRAC;
-  const aimX = snappedTarget ? aim.x + (snappedTarget.trueX-aim.x)*correctionFrac : aim.x;
-  const aimY = snappedTarget ? aim.y + (snappedTarget.trueY-aim.y)*correctionFrac : aim.y;
+  // per user request: impact is always exactly the aimed coordinate (plus normal dispersion)
+  // -- no more silent correction toward a snapped target's true position. Accuracy against an
+  // identified target comes entirely from how good the aim point (the current estimate,
+  // see estPos/posErr) already is, and from walking fire onto target across volleys (see
+  // finalizeVolley's posErr reduction), not from the game quietly fixing a bad aim for you.
+  const aimX = aim.x, aimY = aim.y;
   const dispersion = computeDispersionAt() * WEATHER_TYPES[state.weather].dispersionMult * (SHELL_DISPERSION_MULT[shell]||1);
   const base = 25;
 
@@ -4237,15 +5387,18 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
   const aimLabel = snappedTarget ? snappedTarget.id : `座標(方位${Math.round(brg)}°/距離${unitsToMeters(dist)}m)`;
   log('fdc','FDC', `迫撃砲${mortar.id+1}: ${aimLabel} へ射撃要求。${SHELLS[shell]}・${FUZES[fuze]}・${count}発。`);
   log('mortar','迫撃砲班', `迫撃砲${mortar.id+1} 了解。${count}発装填、撃て!`);
-  if(scoutGuided) log('op','斥候', `${snappedTarget.id} を観測中、着弾修正データを送る。`);
 
   let pending = count;
   let hitAny = false;
   const volleyImpacts = [];
+  const reloadStart = performance.now();
+  mortar.reloadingUntil = reloadStart + MORTAR_RELOAD_MS + Math.max(0, count-1)*LAUNCH_INTERVAL;
+  render();
 
   for(let i=0;i<count;i++){
     setTimeout(()=>{
       playSfx('mortarFire', 0.14);
+      mortar.reloadingUntil = performance.now() + MORTAR_RELOAD_MS;
       const ix = aimX + gauss()*dispersion;
       const iy = aimY + gauss()*dispersion;
       projectiles.push({
@@ -4253,15 +5406,18 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
         endX: ix, endY: iy,
         born: performance.now(),
         duration: FLIGHT_DURATION,
+        trajectory: 'arc',
         onLand: ()=>{
           volleyImpacts.push({x:ix,y:iy});
           if(shell==='illum' || shell==='smoke' || shell==='marker'){
             hitAny = true;
             if(shell==='illum'){
               state.illumFlares.push({x:ix, y:iy, born:performance.now(), turnsLeft:ILLUM_DURATION_TURNS});
+              spawn3dImpactEffect(ix, iy, 'explosion');
               log('mortar','観測', `弾着${i+1}: 照明弾、上空で破裂。光弾が降下しながら半径${Math.round(ILLUM_RADIUS_M)}mを照射(${ILLUM_DURATION_TURNS}ターン持続)。`);
             } else if(shell==='smoke'){
-              state.smokeClouds.push({x:ix, y:iy, turnsLeft:SMOKE_DURATION_TURNS});
+              state.smokeClouds.push({x:ix, y:iy, turnsLeft:SMOKE_DURATION_TURNS, born:performance.now()});
+              spawn3dImpactEffect(ix, iy, 'smoke');
               log('mortar','観測', `弾着${i+1}: 発煙弾展開。半径${Math.round(SMOKE_RADIUS_M)}mを遮蔽(${SMOKE_DURATION_TURNS}ターン持続)。`);
             } else {
               let revealedCount = 0;
@@ -4275,6 +5431,7 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
             }
             pending -= 1;
             if(pending <= 0){
+              mortar.reloadingUntil = 0;
               finalizeVolley(snappedTarget, hitAny, volleyImpacts);
               onVolleyDone();
             }
@@ -4309,6 +5466,7 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
             log('mortar','観測', `弾着${i+1}: <b>空中炸裂</b>。近接信管がドローン${dronesInBurst.length}機を同時に捕捉、一掃した。`);
             pending -= 1;
             if(pending <= 0){
+              mortar.reloadingUntil = 0;
               finalizeVolley(snappedTarget, hitAny, volleyImpacts);
               onVolleyDone();
             }
@@ -4360,58 +5518,92 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
           }
           pending -= 1;
           if(pending <= 0){
+            mortar.reloadingUntil = 0;
             finalizeVolley(snappedTarget, hitAny, volleyImpacts);
             onVolleyDone();
           }
           render();
         }
       });
+      spawn3dProjectile(mortar.x, mortar.y-16, ix, iy, FLIGHT_DURATION);
     }, i*LAUNCH_INTERVAL);
   }
 }
 
-// per user request: an "自動" toggle button that starts/stops the continuous simulation loop
-// (see SIM_STEP_MS/deltaTurns/setGameSpeed) -- simulationStep() already no-ops safely whenever
-// it isn't valid to advance (stage resolved, placement pending, etc.), so loop()'s accumulator
-// can just keep calling it blindly while state.simRunning is true, without its own state checks.
-function isAutoCommitRunning(){ return !!(state && state.simRunning); }
+// Real-time simulation loop. The resolver still uses one-second simulation slices so existing
+// movement, ballistic timing, and damage rules remain stable, but no 決心 input is required.
+let autoCommitTimer = null;
+function isAutoCommitRunning(){ return autoCommitTimer!==null; }
+function autoCommitTick(){
+  commitDecision();
+}
+function startRealtimeLoop(){
+  if(!state || state.stageResolved || state.placementPending || state.decoyPlacementPending || autoCommitTimer) return;
+  autoCommitTimer = setInterval(autoCommitTick, GAME_SPEED_INTERVALS[state.gameSpeed]);
+  log('sys','システム', `リアルタイム戦闘開始(${GAME_SPEED_LABEL[state.gameSpeed]})。命令は即時反映されます。`);
+  autoCommitTick();
+  render();
+}
 function toggleAutoCommit(){
-  if(!state) return;
-  state.simRunning = !state.simRunning;
-  if(state.simRunning){
-    simAccumMs = 0;
-    log('sys','システム', `状況開始(${GAME_SPEED_LABEL[state.gameSpeed]}で連続進行)。`);
+  if(autoCommitTimer){
+    clearInterval(autoCommitTimer);
+    autoCommitTimer = null;
+    log('sys','システム', 'リアルタイム戦闘を一時停止。');
   } else {
-    log('sys','システム', '状況を停止。');
+    startRealtimeLoop();
   }
   render();
 }
-// per user request: 低速/通常/高速 の進行速度切り替え -- deltaTurns()がstate.gameSpeedを毎ステップ
-// 参照するだけなので、状況中でも即座に反映される(タイマーの再作成は不要)。
+// per user request: 低速/通常/高速 の進行速度切り替え -- 状況中に変更した場合は、その場で
+// 現在のタイマーを新しい間隔で再スタートする(次の状況開始まで待たせない)。
 function setGameSpeed(speed){
   if(!state || !GAME_SPEED_INTERVALS[speed] || state.gameSpeed===speed) return;
   state.gameSpeed = speed;
-  log('sys','システム', `進行速度を${GAME_SPEED_LABEL[speed]}に変更。`);
+  if(autoCommitTimer){
+    clearInterval(autoCommitTimer);
+    autoCommitTimer = setInterval(autoCommitTick, GAME_SPEED_INTERVALS[speed]);
+  }
+  log('sys','システム', `リアルタイム速度を${GAME_SPEED_LABEL[speed]}に変更。`);
   render();
 }
+// per user request: pause auto-commit while the tab is hidden (backgrounded/minimized).
+// setInterval keeps firing commitDecision() in a hidden tab (browsers only throttle
+// background timers, they don't stop them), while the requestAnimationFrame-driven render
+// loop that drives smoothVisualPos() is fully paused by the browser -- so several turns'
+// worth of movement pile up invisibly and then have to be crammed into a single fixed-length
+// tween the moment the tab is shown again, reading as units flying across the map or
+// teleporting. Resuming on visibility restores the same interval so play isn't otherwise
+// affected.
+let autoCommitPausedByVisibility = false;
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden){
+    if(autoCommitTimer){
+      clearInterval(autoCommitTimer);
+      autoCommitTimer = null;
+      autoCommitPausedByVisibility = true;
+    }
+  } else if(autoCommitPausedByVisibility){
+    autoCommitPausedByVisibility = false;
+    startRealtimeLoop();
+  }
+});
 
-// Replaces the old commitDecision(): instead of resolving one whole discrete turn per press,
-// this runs every SIM_STEP_MS (driven by loop()'s accumulator, see below) and advances the
-// simulation by a fractional "turn" (deltaTurns()) each time, so movement/combat/suppression/
-// smoke-illum decay all flow continuously instead of jumping. Mortar fire is no longer gated
-// behind a discrete decision cycle either -- a queued pendingFire launches on the very next
-// step (effectively instant) rather than waiting up to a whole GAME_SPEED_INTERVALS tick.
-function simulationStep(){
-  if(!state || state.stageResolved || state.snipeMortarStrikesPending>0 || state.placementPending || state.decoyPlacementPending) return;
-  const dt = deltaTurns();
+function commitDecision(){
+  if(!state || state.stageResolved || state.animating || state.snipeMortarStrikesPending>0 || state.placementPending || state.decoyPlacementPending) return;
 
-  // A mortar whose queued shot can't be afforded only cancels THAT mortar's order (reverts to
-  // standby) -- it must never block the whole step, or the entire game (including the enemy's
-  // advancement) softlocks permanently once ammo runs low.
+  // A mortar whose queued shot can't be afforded only cancels THAT mortar's
+  // order (reverts to standby) -- it must never block the whole decision
+  // cycle, or the entire game (including the enemy's turn) softlocks
+  // permanently once ammo runs low, since every future 決心 press would hit
+  // the same shortfall and return before anything else ever resolves.
   let heBudget = state.ammo.he, heatBudget = state.ammo.heat;
   const firingMortars = [];
+  const queuedMortars = state.mortars.filter(m=>m.hp>0 && m.pendingFire);
+  const selectedMortarId = queuedMortars.length
+    ? queuedMortars[Math.floor(state.turns/2) % queuedMortars.length].id
+    : null;
   state.mortars.forEach(m=>{
-    if(m.hp<=0 || !m.pendingFire) return;
+    if(m.hp<=0 || !m.pendingFire || m.id!==selectedMortarId) return;
     if(m.fireShell==='he' || m.fireShell==='heat'){
       const budget = m.fireShell==='he' ? heBudget : heatBudget;
       if(m.fireCount > budget){
@@ -4426,28 +5618,30 @@ function simulationStep(){
     firingMortars.push(m);
   });
   const ammoNeeded = {he: state.ammo.he-heBudget, heat: state.ammo.heat-heatBudget};
+
+  const turnCost = firingMortars.length>0 ? 2 : 1;
+
+  state.turns += turnCost;
+  state.missionMinutes += turnCost;
   state.ammo.he -= ammoNeeded.he;
   state.ammo.heat -= ammoNeeded.heat;
 
-  state.turns += dt;
-
-  state.smokeClouds.forEach(c=>{ c.turnsLeft -= dt; });
+  state.smokeClouds.forEach(c=>{ c.turnsLeft -= 1; });
   state.smokeClouds = state.smokeClouds.filter(c=>c.turnsLeft>0);
-  state.illumFlares.forEach(f=>{ f.turnsLeft -= dt; });
+  state.illumFlares.forEach(f=>{ f.turnsLeft -= 1; });
   state.illumFlares = state.illumFlares.filter(f=>f.turnsLeft>0);
 
-  // per continuous-sim conversion: previously fired once per commitDecision() unconditionally
-  // -- now a rate-converted roll (probability dt per step) so radio chatter keeps roughly its
-  // original frequency instead of firing every SIM_STEP_MS.
-  if(Math.random() < dt) speakCoordination();
-  resolveScoutDecision(dt);
-  resolveMortarDecision(dt);
-  resolveEnemyTurn(dt);
+  speakCoordination();
+  resolveScoutDecision();
+  resolveFriendlyHeliTurn(turnCost);
+  resolveMortarDecision();
+  resolveEnemyTurn(turnCost);
 
   if(allMortarsWiped() || allSquadsWiped()){
     checkEnd(); render(); return;
   }
 
+  const volleys = [];
   firingMortars.forEach(m=>{
     const aim = m.pendingFire;
     m.pendingFire = null;
@@ -4457,18 +5651,25 @@ function simulationStep(){
       log('fdc','FDC', `${snappedTarget.id} は既に撃破済み。迫撃砲${m.id+1}の射撃指示を中止。`);
       return;
     }
-    // Mortars now fire independently and can overlap in flight (rather than all launching
-    // together off one shared commit), so in-flight state is a counter, not a single boolean.
-    state.inFlightVolleys += 1;
-    state.animating = true;
-    launchMortarVolley(m, m.fireShell, m.fireFuze, m.fireCount, aim, snappedTarget, ()=>{
-      state.inFlightVolleys -= 1;
-      if(state.inFlightVolleys<=0) state.animating = false;
-      checkEnd();
-      render();
-    });
+    volleys.push({mortar:m, shell:m.fireShell, fuze:m.fireFuze, count:m.fireCount, aim, snappedTarget});
   });
 
+  if(volleys.length>0){
+    state.animating = true;
+    let remaining = volleys.length;
+    volleys.forEach(v=>{
+      launchMortarVolley(v.mortar, v.shell, v.fuze, v.count, v.aim, v.snappedTarget, ()=>{
+        remaining -= 1;
+        if(remaining<=0){
+          state.animating = false;
+          checkEnd();
+          render();
+        }
+      });
+    });
+  } else {
+    checkEnd();
+  }
   render();
 }
 
@@ -4483,9 +5684,12 @@ function finalizeVolley(snappedTarget, hitAny, volleyImpacts){
     const dx = snappedTarget.trueX-avgX, dy = snappedTarget.trueY-avgY;
     const ewDir = dx>=0?'東':'西', nsDir = dy<0?'北':'南';
     const ewAmt = unitsToMeters(Math.abs(dx)), nsAmt = unitsToMeters(Math.abs(dy));
-    log('op','斥候', `弾着観測。目標は着弾点より${ewDir}${ewAmt}m、${nsDir}${nsAmt}m。修正要求、次弾に反映せよ。`);
-    snappedTarget.bearingErr *= 0.75;
-    snappedTarget.distErr *= 0.75;
+    const observer = bestSensorForTarget(snappedTarget);
+    const observerLabel = observer && observer.kind==='heli' ? 'ヘリ' : '斥候';
+    const quality = observer && observer.kind==='heli' ? 0.55 : 0.35;
+    log('op', observerLabel, `弾着観測。目標は着弾点より${ewDir}${ewAmt}m、${nsDir}${nsAmt}m。${observerLabel}観測補正を次弾に反映。`);
+    snappedTarget.posErr *= 1-quality;
+    snappedTarget.trackingConfidence = Math.min(1, (snappedTarget.trackingConfidence||0.4)+quality*0.25);
   }
 }
 
@@ -4495,6 +5699,7 @@ function updateProjectiles(){
     const prog = (now-p.born)/p.duration;
     if(prog >= 1){
       flashes.push({x:p.endX, y:p.endY, born:now, life:400});
+      spawn3dImpactEffect(p.endX, p.endY, 'impact');
       p.onLand();
       return false;
     }
@@ -4509,6 +5714,7 @@ function updateEnemyTracers(){
     const prog = (now-tr.born)/tr.duration;
     if(prog >= 1){
       flashes.push({x:tr.endX, y:tr.endY, born:now, life:350});
+      spawn3dImpactEffect(tr.endX, tr.endY, 'impact');
       return false;
     }
     return true;
@@ -4535,8 +5741,16 @@ function checkEnd(){
   }
 
   const remaining = state.targets.filter(t=>!t.destroyed);
-  if(remaining.length===0){
+  // per user request (idea 4): destroying the enemy HQ clears the wave immediately,
+  // regardless of how many other enemies are still alive -- an alternate, high-risk/
+  // high-reward win condition alongside the usual "every target destroyed".
+  const enemyHqTarget = state.targets.find(t=>t.type==='hq');
+  const enemyHqDown = enemyHqTarget && enemyHqTarget.destroyed;
+  if(remaining.length===0 || enemyHqDown){
     state.stageResolved = true;
+    if(enemyHqDown && remaining.length>0){
+      log('sys','司令部', '敵指揮系統の中枢を撃破。残存する敵部隊は指揮を失い、WAVEの制圧を確認。');
+    }
     triggerWaveClearSequence();
     return;
   }
@@ -4628,8 +5842,15 @@ function computeReward(){
   const sniperBonus = Math.round(sniperFrac*100);
   const hqFrac = state.hq.hp/state.hq.maxHp;
   const hqBonus = Math.round(hqFrac*200);
-  const total = Math.round((base+turnsBonus+ammoBonus+hpBonus+infBonus+scoutBonus+sniperBonus+hqBonus) * DIFFICULTIES[state.difficulty].rewardMult);
-  return {base,turnsBonus,ammoBonus,hpBonus,infBonus,scoutBonus,sniperBonus,hqBonus,total};
+  // per user request (idea 5): destroying the enemy HQ (see checkEnd()) is a flat bonus on
+  // top of everything else, so rushing it isn't a worse payout than grinding out every
+  // target -- it's the reward for identifying and hitting a small, well-defended objective
+  // fast, even if that means less time to also clear (and less loot-relevant survival from)
+  // the rest of the wave.
+  const enemyHqTarget = state.targets.find(t=>t.type==='hq');
+  const enemyHqBonus = (enemyHqTarget && enemyHqTarget.destroyed) ? 250 : 0;
+  const total = Math.round((base+turnsBonus+ammoBonus+hpBonus+infBonus+scoutBonus+sniperBonus+hqBonus+enemyHqBonus) * DIFFICULTIES[state.difficulty].rewardMult);
+  return {base,turnsBonus,ammoBonus,hpBonus,infBonus,scoutBonus,sniperBonus,hqBonus,enemyHqBonus,total};
 }
 
 function applyWaveResupply(){
@@ -4711,7 +5932,7 @@ function showStageClear(reward, resupply){
   setOverlayAccent('', 'After-Action Report');
   document.getElementById('overlay-title').textContent = 'WAVE CLEAR';
   document.getElementById('overlay-text').textContent =
-    `WAVE ${state.stage} 撃退成功。報酬 ¥${reward.total.toLocaleString()}(基本¥${reward.base}+速攻¥${reward.turnsBonus}+残弾¥${reward.ammoBonus}+指揮所無傷¥${reward.hqBonus}+砲兵無傷¥${reward.hpBonus}+歩兵無傷¥${reward.infBonus}+斥候無傷¥${reward.scoutBonus}+狙撃無傷¥${reward.sniperBonus}) ／ 所持金 ¥${state.money.toLocaleString()} ／ 補給: 戦果${Math.round(resupply.perf*100)}%によりHE+${resupply.ammoHe}・HEAT+${resupply.ammoHeat}・予備兵力+${resupply.personnel}名`;
+    `WAVE ${state.stage} 撃退成功。報酬 ¥${reward.total.toLocaleString()}(基本¥${reward.base}+速攻¥${reward.turnsBonus}+残弾¥${reward.ammoBonus}+指揮所無傷¥${reward.hqBonus}+砲兵無傷¥${reward.hpBonus}+歩兵無傷¥${reward.infBonus}+斥候無傷¥${reward.scoutBonus}+狙撃無傷¥${reward.sniperBonus}+敵本部撃破¥${reward.enemyHqBonus}) ／ 所持金 ¥${state.money.toLocaleString()} ／ 補給: 戦果${Math.round(resupply.perf*100)}%によりHE+${resupply.ammoHe}・HEAT+${resupply.ammoHeat}・予備兵力+${resupply.personnel}名`;
   document.getElementById('overlay-buttons').innerHTML =
     `<button class="btn primary" onclick="proceedToShop()">次のWAVEへ</button>`;
   ov.classList.add('show');
@@ -4773,6 +5994,171 @@ function selectNextTarget(){
   if(!live.some(t=>t.id===state.selectedId)) state.selectedId = live[0].id;
 }
 
+// per user request: giving orders to several units used to mean re-opening each one's
+// command box and re-clicking the same order button over and over. setUnitMoveDest()
+// centralizes the exact per-kind move-destination logic (previously duplicated inline in
+// the orderMode dispatch below) so it can also be called directly -- from a plain map click
+// while a single unit's box is open (no more "移動先を指定" arm step first, for the kinds
+// where a click can only ever mean "move," see DIRECT_MOVE_KINDS below) and from bulk-move
+// in multi-select mode. `silent` skips the per-unit log line for bulk calls, which print
+// their own single aggregate line instead.
+function setUnitMoveDest(kind, idx, px, py, silent){
+  if(kind==='squad'){
+    const sq = state.squads[idx];
+    if(!sq || sq.resting) return false;
+    sq.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+    if(!silent) log('sys','前線', `第${idx+1}小隊に移動目標を指示。`);
+    return true;
+  }
+  if(kind==='tank'){
+    const tank = state.tanks[idx];
+    if(!tank || tank.hp<=0) return false;
+    tank.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+    if(!silent) log('sys','前線', `戦車${idx+1}に移動目標を指示。`);
+    return true;
+  }
+  if(kind==='sam'){
+    const sam = state.sams[idx];
+    if(!sam || sam.hp<=0) return false;
+    sam.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+    if(!silent) log('sys','前線', `対空${idx+1}に移動目標を指示。`);
+    return true;
+  }
+  if(kind==='hq'){
+    if(state.hq.hp<=0) return false;
+    state.hq.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+    if(!silent) log('sys','前線', `指揮所に移転先を指示。`);
+    return true;
+  }
+  if(kind==='engineer'){
+    const en = state.engineers[idx];
+    if(!en || !unitAlive(en) || en.resting) return false;
+    en.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+    if(!silent) log('sys','前線', `工兵小隊に移動目標を指示。`);
+    return true;
+  }
+  if(kind==='sniper'){
+    const sn = state.snipers[idx];
+    if(!sn || !sn.soldiers.some(s=>s.alive) || sn.resting) return false;
+    sn.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+    if(!silent) log('sys','前線', `狙撃${idx+1}班に移動目標を指示。`);
+    return true;
+  }
+  if(kind==='scout'){
+    const scout = state.scouts[idx];
+    if(!scout || !unitAlive(scout) || scout.resting) return false;
+    scout.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SCOUT_ADVANCE_LIMIT_X), y: clamp(py, 20, CANVAS_H-20) };
+    scout.pendingReconTargetId = null;
+    if(!silent) log('op','斥候', `斥候${idx+1}、移動目標を了解。`);
+    return true;
+  }
+  if(kind==='mortar'){
+    const mortar = state.mortars[idx];
+    if(!mortar || mortar.hp<=0) return false;
+    mortar.pendingDest = { x: clamp(px, MORTAR_ZONE_MIN_X, MORTAR_ZONE_MAX_X), y: clamp(py, 30, CANVAS_H-30) };
+    if(!silent) log('mortar','迫撃砲班', `迫撃砲${idx+1}、陣地転換先を了解。`);
+    return true;
+  }
+  return false;
+}
+// per user request: plain map-click-to-move for the unit kinds where a click can only ever
+// mean "move here" (mortar/sniper/scout/engineer each have other click-based actions --
+// fire, aim, recon, wall/trench -- that still need their own explicit arm button first, to
+// stay unambiguous).
+const DIRECT_MOVE_KINDS = ['squad','tank','sam','hq'];
+
+// per user request: select several squads/tanks/SAMs/snipers/engineers at once (tap to
+// toggle each into the selection while multi-select mode is on) and issue one order --
+// including a single map click to move all of them -- instead of re-opening and re-ordering
+// each unit's own command box individually.
+const MULTI_SELECT_KINDS = ['squad','tank','sam','sniper','engineer'];
+let multiSelectMode = false;
+let multiSelected = [];
+function toggleMultiSelectMode(){
+  multiSelectMode = !multiSelectMode;
+  const btn = document.getElementById('multiSelectBtn');
+  if(btn) btn.classList.toggle('active', multiSelectMode);
+  if(multiSelectMode){
+    state.commandBox = null;
+    state.enemyCommandBox = null;
+    state.decoyCommandBox = null;
+    state.orderMode = null;
+    state.smartOrderMode = null;
+  } else {
+    multiSelected = [];
+  }
+  render();
+}
+function isMultiSelected(kind, idx){
+  return multiSelectMode && multiSelected.some(e=>e.kind===kind && e.idx===idx);
+}
+function pruneMultiSelected(){
+  multiSelected = multiSelected.filter(({kind, idx})=>{
+    if(kind==='squad') return state.squads[idx] && state.squads[idx].soldiers.some(s=>s.alive);
+    if(kind==='tank') return state.tanks[idx] && state.tanks[idx].hp>0;
+    if(kind==='sam') return state.sams[idx] && state.sams[idx].hp>0;
+    if(kind==='sniper') return state.snipers[idx] && state.snipers[idx].soldiers.some(s=>s.alive);
+    if(kind==='engineer') return state.engineers[idx] && unitAlive(state.engineers[idx]);
+    return false;
+  });
+}
+function multiSelectCommonOrders(){
+  if(!multiSelected.length) return ['advance','hold','retreat'];
+  const allSquads = multiSelected.every(e=>e.kind==='squad');
+  return allSquads ? ['advance','hold','assault','retreat'] : ['advance','hold','retreat'];
+}
+const MULTI_SELECT_ORDER_SETTER = {
+  squad: (idx, order)=>{ if(state.squads[idx] && !state.squads[idx].resting) state.squads[idx].order = order; },
+  tank: (idx, order)=>{ if(state.tanks[idx]) state.tanks[idx].order = order; },
+  sam: (idx, order)=>{ if(state.sams[idx]) state.sams[idx].order = order; },
+  sniper: (idx, order)=>{ if(state.snipers[idx] && !state.snipers[idx].resting) state.snipers[idx].order = order; },
+  engineer: (idx, order)=>{ if(state.engineers[idx] && !state.engineers[idx].resting) state.engineers[idx].order = order; },
+};
+function multiSelectSetOrder(order){
+  if(!multiSelected.length) return;
+  let count = 0;
+  multiSelected.forEach(({kind, idx})=>{
+    const setter = MULTI_SELECT_ORDER_SETTER[kind];
+    if(setter){ setter(idx, order); count++; }
+  });
+  if(count>0) log('sys','司令部', `選択中の${count}隊に「${ORDER_LABEL[order]}」を指示。`);
+  render();
+}
+function handleMultiSelectClick(sx, sy, px, py){
+  const hit = resolveClickHit(sx, sy);
+  if(hit && hit.type==='friendly' && MULTI_SELECT_KINDS.includes(hit.payload.kind)){
+    const {kind, idx} = hit.payload;
+    const i = multiSelected.findIndex(e=>e.kind===kind && e.idx===idx);
+    if(i>=0) multiSelected.splice(i,1);
+    else multiSelected.push({kind, idx});
+    return;
+  }
+  if(!hit && multiSelected.length){
+    let moved = 0;
+    multiSelected.forEach(({kind, idx})=>{ if(setUnitMoveDest(kind, idx, px, py, true)) moved++; });
+    if(moved>0) log('sys','司令部', `選択中の${moved}隊に移動目標を指示。`);
+  }
+}
+function renderMultiSelectBox(){
+  const box = document.getElementById('multi-select-box');
+  if(!box) return;
+  if(!multiSelectMode){ box.style.display = 'none'; return; }
+  pruneMultiSelected();
+  const orders = multiSelectCommonOrders();
+  const btns = orders.map(o=>
+    `<button class="btn squad-order-btn" ${multiSelected.length?'':'disabled'} onclick="multiSelectSetOrder('${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
+  ).join('');
+  box.style.display = 'block';
+  box.innerHTML = `
+    <div class="cb-head">
+      <span class="cb-title">複数選択(${multiSelected.length}隊)</span>
+      <button class="cb-close" onclick="toggleMultiSelectMode()">×</button>
+    </div>
+    <div class="meta" style="margin-bottom:6px;">${multiSelected.length ? '地図をクリックで選択中の全隊に移動先を指示。ユニットを再タップで選択解除。' : '小隊/戦車/対空/狙撃/工兵をタップして選択してください。'}</div>
+    <div class="squad-orders" style="grid-template-columns:repeat(${orders.length},1fr);margin-bottom:4px;">${btns}</div>
+  `;
+}
+
 function handleCanvasClick(evt){
   if(!state || state.stageResolved || state.animating || state.snipeMortarStrikesPending>0) return;
   if(mapDragMoved) return;
@@ -4788,6 +6174,15 @@ function handleCanvasClick(evt){
     px = pxPixel/rect.width*CANVAS_W;
     py = pyPixel/rect.height*CANVAS_H;
   }
+  // per user request: selecting an existing unit/target used to raycast the click onto the
+  // terrain mesh and compare GROUND (x,y) distances -- exact when the camera looks straight
+  // down, but under a tilted camera a tiny mismatch between the analytic terrainHeightAt()
+  // used to place icons and the actual (triangulated) mesh surface the raycaster hits gets
+  // magnified into a large screen-space offset, so you had to tap noticeably above a unit to
+  // hit it. sx/sy is the click in the SAME space icons are drawn in (project()'s output), so
+  // hit-testing against it is exactly WYSIWYG regardless of camera angle.
+  const sx = threeReady ? pxPixel : px;
+  const sy = threeReady ? pyPixel : py;
 
   if(state.placementPending){
     handlePlacementClick(px, py);
@@ -4801,27 +6196,17 @@ function handleCanvasClick(evt){
     const mode = state.smartOrderMode;
     state.smartOrderMode = null;
     const idxs = resolveSmartUnitIdxs(mode.unitType, mode.unitScope);
-    idxs.forEach(idx=>{
-      if(mode.unitType==='mortar'){
-        const m = state.mortars[idx];
-        m.order = 'move'; m.pendingFire = null;
-        m.pendingDest = { x: clamp(px, MORTAR_ZONE_MIN_X, MORTAR_ZONE_MAX_X), y: clamp(py, 30, CANVAS_H-30) };
-      } else if(mode.unitType==='scout'){
-        const s = state.scouts[idx];
-        s.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SCOUT_ADVANCE_LIMIT_X), y: clamp(py, 20, CANVAS_H-20) };
-        s.pendingReconTargetId = null;
-      } else if(mode.unitType==='squad'){
-        const sq = state.squads[idx];
-        sq.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
-      } else if(mode.unitType==='sniper'){
-        const sn = state.snipers[idx];
-        sn.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
-      } else if(mode.unitType==='tank'){
-        const tk = state.tanks[idx];
-        tk.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
-      }
-    });
+    if(mode.unitType==='mortar'){
+      idxs.forEach(idx=>{ const m = state.mortars[idx]; m.order = 'move'; m.pendingFire = null; });
+    }
+    idxs.forEach(idx=>setUnitMoveDest(mode.unitType, idx, px, py, true));
     log('sys','司令部', `スマート操作: ${SMART_UNIT_TYPES[mode.unitType].label} ${idxs.length}隊に移動目標を指示。`);
+    render();
+    return;
+  }
+
+  if(multiSelectMode){
+    handleMultiSelectClick(sx, sy, px, py);
     render();
     return;
   }
@@ -4830,61 +6215,31 @@ function handleCanvasClick(evt){
     const mode = state.orderMode;
     state.orderMode = null;
     if(mode.kind==='squad'){
-      const sq = state.squads[mode.idx];
-      if(sq){
-        sq.pendingDest = {
-          x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X),
-          y: clamp(py, 30, CANVAS_H-30),
-        };
-        log('sys','前線', `第${mode.idx+1}小隊に移動目標を指示。`);
-      }
+      setUnitMoveDest('squad', mode.idx, px, py);
     } else if(mode.kind==='tank-move'){
-      const tank = state.tanks[mode.idx];
-      if(tank){
-        tank.pendingDest = {
-          x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X),
-          y: clamp(py, 30, CANVAS_H-30),
-        };
-        log('sys','前線', `戦車${mode.idx+1}に移動目標を指示。`);
-      }
+      setUnitMoveDest('tank', mode.idx, px, py);
+    } else if(mode.kind==='sam-move'){
+      setUnitMoveDest('sam', mode.idx, px, py);
     } else if(mode.kind==='hq-move'){
-      state.hq.pendingDest = {
-        x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X),
-        y: clamp(py, 30, CANVAS_H-30),
-      };
-      log('sys','前線', `指揮所に移転先を指示。`);
+      setUnitMoveDest('hq', mode.idx, px, py);
     } else if(mode.kind==='engineer-move'){
-      const en = state.engineers[mode.idx];
-      if(en){
-        en.pendingDest = {
-          x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X),
-          y: clamp(py, 30, CANVAS_H-30),
-        };
-        log('sys','前線', `工兵小隊に移動目標を指示。`);
-      }
+      setUnitMoveDest('engineer', mode.idx, px, py);
     } else if(mode.kind==='wall-build'){
       buildWallAt(clamp(px, 10, CANVAS_W-10), clamp(py, 20, CANVAS_H-20));
+    } else if(mode.kind==='trench-build-p1'){
+      // per user request: 塹壕は2点指定 -- 1回目のクリックで始点を記録し、orderModeを次の
+      // ステップに付け替えて2回目のクリック(終点)を待つ。
+      state.orderMode = { kind:'trench-build-p2', idx:mode.idx,
+        x1: clamp(px, 10, CANVAS_W-10), y1: clamp(py, 20, CANVAS_H-20) };
+      log('sys','工兵', `塹壕: 始点を指定。終点を地図でクリックしてください。`);
+    } else if(mode.kind==='trench-build-p2'){
+      buildTrenchAt(mode.x1, mode.y1, clamp(px, 10, CANVAS_W-10), clamp(py, 20, CANVAS_H-20));
     } else if(mode.kind==='scout-move'){
-      const scout = state.scouts[mode.idx];
-      if(scout){
-        scout.pendingDest = {
-          x: clamp(px, SQUAD_RETREAT_LIMIT_X, SCOUT_ADVANCE_LIMIT_X),
-          y: clamp(py, 20, CANVAS_H-20),
-        };
-        scout.pendingReconTargetId = null;
-        log('op','斥候', `斥候${mode.idx+1}、移動目標を了解。`);
-      }
+      setUnitMoveDest('scout', mode.idx, px, py);
     } else if(mode.kind==='scout-recon'){
       const scout = state.scouts[mode.idx];
-      let best=null, bestD=Infinity;
-      state.targets.forEach(t=>{
-        if(t.destroyed || !isTargetDetected(t)) return;
-        const vx = t._visX!==undefined ? t._visX : estPos(t).x;
-        const vy = t._visY!==undefined ? t._visY : estPos(t).y;
-        const d = Math.hypot(vx-px, vy-py);
-        if(d<bestD){ bestD=d; best=t; }
-      });
-      if(scout && best && bestD<=42){
+      const best = nearestVisibleTargetForScreen(sx, sy, 42);
+      if(scout && best){
         scout.pendingReconTargetId = best.id;
         scout.pendingDest = null;
         log('op','斥候', `斥候${mode.idx+1}、${best.id} を偵察目標に指示。`);
@@ -4894,38 +6249,20 @@ function handleCanvasClick(evt){
     } else if(mode.kind==='mortar-target'){
       const mortar = state.mortars[mode.idx];
       if(mortar){
-        setPendingFireAt(px, py, mortar);
-        log('fdc','FDC', `迫撃砲${mode.idx+1}、攻撃地点を了解。`);
+        if(setPendingFireAt(px, py, sx, sy, mortar)){
+          log('fdc','FDC', `迫撃砲${mode.idx+1}、攻撃地点を了解。`);
+        } else {
+          log('sys','システム', `迫撃砲${mode.idx+1}、目標が近すぎます(最低射程${MORTAR_MIN_RANGE_M}m)。攻撃地点を再指定してください。`);
+        }
       }
     } else if(mode.kind==='mortar-move'){
-      const mortar = state.mortars[mode.idx];
-      if(mortar){
-        mortar.pendingDest = {
-          x: clamp(px, MORTAR_ZONE_MIN_X, MORTAR_ZONE_MAX_X),
-          y: clamp(py, 30, CANVAS_H-30),
-        };
-        log('mortar','迫撃砲班', `迫撃砲${mode.idx+1}、陣地転換先を了解。`);
-      }
+      setUnitMoveDest('mortar', mode.idx, px, py);
     } else if(mode.kind==='sniper-move'){
-      const sn = state.snipers[mode.idx];
-      if(sn){
-        sn.pendingDest = {
-          x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X),
-          y: clamp(py, 30, CANVAS_H-30),
-        };
-        log('sys','前線', `狙撃${mode.idx+1}班に移動目標を指示。`);
-      }
+      setUnitMoveDest('sniper', mode.idx, px, py);
     } else if(mode.kind==='sniper-target'){
       const sn = state.snipers[mode.idx];
-      let best=null, bestD=Infinity;
-      state.targets.forEach(t=>{
-        if(t.destroyed || !isTargetDetected(t)) return;
-        const vx = t._visX!==undefined ? t._visX : estPos(t).x;
-        const vy = t._visY!==undefined ? t._visY : estPos(t).y;
-        const d = Math.hypot(vx-px, vy-py);
-        if(d<bestD){ bestD=d; best=t; }
-      });
-      if(sn && best && bestD<=42){
+      const best = nearestVisibleTargetForScreen(sx, sy, 42);
+      if(sn && best){
         sn.pendingSnipeTargetId = best.id;
         log('mortar','狙撃', `狙撃${mode.idx+1}班、${best.id} を狙撃目標に指示。`);
       } else {
@@ -4948,58 +6285,58 @@ function handleCanvasClick(evt){
     return;
   }
 
-  let decoyHit = -1, decoyBestD = Infinity;
-  state.decoys.forEach((d,idx)=>{
-    if(d.destroyed) return;
-    const dist = Math.hypot(d.x-px, d.y-py);
-    if(dist<=20 && dist<decoyBestD){ decoyBestD=dist; decoyHit=idx; }
-  });
-  if(decoyHit>=0){
-    state.decoyCommandBox = decoyHit;
-    state.commandBox = null;
-    state.enemyCommandBox = null;
-    render();
-    return;
+  const hit = resolveClickHit(sx, sy);
+  // per user request: while a squad/tank/SAM/HQ's command box is open, a plain click on
+  // empty ground now moves it there directly instead of requiring "移動先を指定" first --
+  // these are the only kinds where a click can unambiguously only ever mean "move" (mortar/
+  // sniper/scout/engineer each have other click-based actions that still need their own
+  // explicit arm button to stay unambiguous, see DIRECT_MOVE_KINDS above).
+  if(!hit && state.commandBox && DIRECT_MOVE_KINDS.includes(state.commandBox.kind)){
+    if(setUnitMoveDest(state.commandBox.kind, state.commandBox.idx, px, py)){
+      state.commandBox = null;
+      render();
+      return;
+    }
   }
-  state.decoyCommandBox = null;
-
-  const enemyHit = findEnemyTargetAt(px, py);
-  if(enemyHit){
-    state.enemyCommandBox = enemyHit.id;
-    state.commandBox = null;
-    render();
-    return;
-  }
-  state.enemyCommandBox = null;
-
-  const unitHit = findFriendlyUnitAt(px, py);
-  if(unitHit){
-    state.commandBox = unitHit;
-  } else {
-    state.commandBox = null;
-  }
+  state.decoyCommandBox = (hit && hit.type==='decoy') ? hit.payload : null;
+  state.enemyCommandBox = (hit && hit.type==='enemy') ? hit.payload.id : null;
+  state.commandBox = (hit && hit.type==='friendly') ? hit.payload : null;
   render();
 }
 
-function setPendingFireAt(px, py, mortar){
+// per user request: shared "which detected target is under this screen point" lookup, used
+// by every tap-to-target flow (fire mission snap, sniper target, scout recon) so they all get
+// the same screen-space (camera-angle-independent) hit-testing fix in one place.
+function nearestVisibleTargetForScreen(sx, sy, maxPx){
   let best=null, bestD=Infinity;
   state.targets.forEach(t=>{
     if(t.destroyed || !isTargetDetected(t)) return;
     const vx = t._visX!==undefined ? t._visX : estPos(t).x;
     const vy = t._visY!==undefined ? t._visY : estPos(t).y;
-    const d = Math.hypot(vx-px, vy-py);
+    const p = project(vx, vy);
+    const d = Math.hypot(p.x-sx, p.y-sy);
     if(d<bestD){ bestD=d; best=t; }
   });
-  if(best && bestD<=42){
-    state.selectedId = best.id;
+  return (best && bestD<=maxPx) ? best : null;
+}
+
+// Returns true if a fire mission was actually designated, false if rejected (too close --
+// see MORTAR_MIN_RANGE_UNITS/mortarTooCloseToFire) so the caller can log the right message.
+function setPendingFireAt(px, py, sx, sy, mortar){
+  const best = nearestVisibleTargetForScreen(sx, sy, 42);
+  if(best){
     const e = estPosFromMortar(mortar, best);
+    if(mortarTooCloseToFire(mortar, e.x, e.y)) return false;
+    state.selectedId = best.id;
     mortar.pendingFire = {x:e.x, y:e.y, snappedId:best.id};
     applyBestMortarLoadout(mortar, best);
   } else {
+    if(mortarTooCloseToFire(mortar, px, py)) return false;
     state.selectedId = null;
     mortar.pendingFire = {x:px, y:py, snappedId:null};
   }
   mortar.order = 'fire';
+  return true;
 }
 
 function canvasToScreen(cx, cy){
@@ -5012,32 +6349,61 @@ function canvasToScreen(cx, cy){
   return { x: rect.left + cx/CANVAS_W*rect.width, y: rect.top + cy/CANVAS_H*rect.height };
 }
 
-function findEnemyTargetAt(px, py){
-  let best=null, bestD=Infinity;
+// per user request: selecting units used to hard-prioritize enemy targets (42px hit radius)
+// over friendly units (22px) regardless of which was actually closer to the click, so an
+// enemy near a friendly unit made the friendly unselectable. All candidates (decoy/enemy/
+// friendly) within their own hit radius are now collected together and the one nearest to
+// the click wins. Repeating a click on the same overlapping cluster cycles through the
+// candidates (nearest to farthest, then wraps) instead of re-picking the same nearest one.
+let clickCycleState = null;
+
+function collectClickCandidates(sx, sy){
+  const candidates = [];
+  state.decoys.forEach((d,idx)=>{
+    if(d.destroyed) return;
+    const p = project(d.x, d.y);
+    const dist = Math.hypot(p.x-sx, p.y-sy);
+    if(dist<=20) candidates.push({ type:'decoy', payload:idx, dist, sig:`decoy:${idx}` });
+  });
   state.targets.forEach(t=>{
     if(t.destroyed || !isTargetDetected(t)) return;
     const vx = t._visX!==undefined ? t._visX : estPos(t).x;
     const vy = t._visY!==undefined ? t._visY : estPos(t).y;
-    const d = Math.hypot(vx-px, vy-py);
-    if(d<bestD){ bestD=d; best=t; }
+    const p = project(vx, vy);
+    const dist = Math.hypot(p.x-sx, p.y-sy);
+    if(dist<=42) candidates.push({ type:'enemy', payload:t, dist, sig:`enemy:${t.id}` });
   });
-  return (best && bestD<=42) ? best : null;
-}
-
-function findFriendlyUnitAt(px, py){
-  const HIT_R = 22;
-  if(state.hq.hp>0 && Math.hypot(state.hq.x-px, state.hq.y-py) <= HIT_R) return {kind:'hq'};
-  for(const {kind, list, alive} of FRIENDLY_KIND_LIST){
-    const arr = list();
-    for(let i=0;i<arr.length;i++){
-      const u = arr[i];
-      if(!alive(u)) continue;
+  if(state.hq.hp>0){
+    const hqx = state.hq._visX!==undefined ? state.hq._visX : state.hq.x;
+    const hqy = state.hq._visY!==undefined ? state.hq._visY : state.hq.y;
+    const p = project(hqx, hqy);
+    const dist = Math.hypot(p.x-sx, p.y-sy);
+    if(dist<=22) candidates.push({ type:'friendly', payload:{kind:'hq'}, dist, sig:'friendly:hq' });
+  }
+  FRIENDLY_KIND_LIST.forEach(({kind, list, alive})=>{
+    list().forEach((u,idx)=>{
+      if(!alive(u)) return;
       const ux = u._visX!==undefined ? u._visX : u.x;
       const uy = u._visY!==undefined ? u._visY : u.y;
-      if(Math.hypot(ux-px, uy-py) <= HIT_R) return {kind, idx:i};
-    }
+      const p = project(ux, uy);
+      const dist = Math.hypot(p.x-sx, p.y-sy);
+      if(dist<=22) candidates.push({ type:'friendly', payload:{kind, idx}, dist, sig:`friendly:${kind}:${idx}` });
+    });
+  });
+  return candidates;
+}
+
+function resolveClickHit(sx, sy){
+  const candidates = collectClickCandidates(sx, sy);
+  if(candidates.length===0){ clickCycleState = null; return null; }
+  const sigSet = candidates.map(c=>c.sig).sort().join('|');
+  if(clickCycleState && clickCycleState.sigSet===sigSet){
+    clickCycleState.idx = (clickCycleState.idx+1) % clickCycleState.order.length;
+    return clickCycleState.order[clickCycleState.idx];
   }
-  return null;
+  const order = candidates.slice().sort((a,b)=>a.dist-b.dist);
+  clickCycleState = { sigSet, order, idx:0 };
+  return order[0];
 }
 
 function closeCommandBox(){
@@ -5056,10 +6422,10 @@ function closeEnemyCommandBox(){
 // within range.
 function assignSquadHunt(idx){
   const sq = state.squads[idx];
-  if(!sq || !sq.soldiers.some(s=>s.alive)) return;
+  if(!sq || !sq.soldiers.some(s=>s.alive) || sq.resting) return;
   const targetId = state.enemyCommandBox;
   const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
-  if(!target) return;
+  if(!target || target.type==='heli' || target.type==='drone') return;
   if(sq.order==='hunt' && sq.huntTargetId===target.id){
     clearSquadHunt(idx);
     log('sys','前線', `第${idx+1}小隊、${target.id}への攻撃指示を解除。`);
@@ -5084,7 +6450,7 @@ function assignTankHunt(idx){
   if(!tank || tank.hp<=0) return;
   const targetId = state.enemyCommandBox;
   const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
-  if(!target) return;
+  if(!target || target.type==='heli' || target.type==='drone') return;
   if(tank.order==='hunt' && tank.huntTargetId===target.id){
     clearTankHunt(idx);
     log('sys','前線', `戦車${idx+1}、${target.id}への攻撃指示を解除。`);
@@ -5113,6 +6479,47 @@ function repairTank(idx){
   tank.hp = Math.min(tank.maxHp, tank.hp+restoreHp);
   state.turns += 1;
   log('sys','工兵', `戦車${idx+1}、応急修復完了(+${restoreHp}HP)。¥${cost}を消費(現在HP ${tank.hp}/${tank.maxHp})。`);
+  resolveEnemyTurn(1);
+  checkEnd();
+  render();
+}
+// per user request: 対空ミサイル部隊 -- 戦車のhunt/repairと同じ枠組みだが、割り当て可能なのは
+// ヘリ・ドローンのみ(対地目標は選べない)。
+function assignSamHunt(idx){
+  const sam = state.sams[idx];
+  if(!sam || sam.hp<=0) return;
+  const targetId = state.enemyCommandBox;
+  const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
+  if(!target || (target.type!=='heli' && target.type!=='drone')) return;
+  if(sam.order==='hunt' && sam.huntTargetId===target.id){
+    clearSamHunt(idx);
+    log('sys','前線', `対空${idx+1}、${target.id}への攻撃指示を解除。`);
+    return;
+  }
+  sam.order = 'hunt';
+  sam.huntTargetId = target.id;
+  sam.pendingDest = null;
+  log('sys','前線', `対空${idx+1}、${target.id} を攻撃目標に指示。`);
+  render();
+}
+function clearSamHunt(idx){
+  const sam = state.sams[idx];
+  if(!sam) return;
+  sam.huntTargetId = null;
+  if(sam.order==='hunt') sam.order = 'hold';
+  render();
+}
+function repairSam(idx){
+  const sam = state.sams[idx];
+  if(!state || state.stageResolved || !sam || sam.hp<=0 || sam.hp>=sam.maxHp) return;
+  const restoreHp = Math.min(SAM_REPAIR_HP_PER_CALL, sam.maxHp-sam.hp);
+  const cost = Math.round(SAM_REPAIR_COST_PER_HP*restoreHp);
+  if(state.money < cost){ log('sys','システム','資金が不足しています。'); return; }
+  state.money -= cost;
+  sam.hp = Math.min(sam.maxHp, sam.hp+restoreHp);
+  state.turns += 1;
+  log('sys','工兵', `対空${idx+1}、応急修復完了(+${restoreHp}HP)。¥${cost}を消費(現在HP ${sam.hp}/${sam.maxHp})。`);
+  resolveEnemyTurn(1);
   checkEnd();
   render();
 }
@@ -5134,6 +6541,11 @@ function assignMortarFire(idx){
     return;
   }
   const e = estPosFromMortar(mortar, target);
+  if(mortarTooCloseToFire(mortar, e.x, e.y)){
+    log('sys','システム', `迫撃砲${idx+1}、${target.id}は近すぎます(最低射程${MORTAR_MIN_RANGE_M}m)。攻撃指示を却下。`);
+    render();
+    return;
+  }
   mortar.pendingFire = {x:e.x, y:e.y, snappedId:target.id};
   applyBestMortarLoadout(mortar, target);
   mortar.order = 'fire';
@@ -5170,7 +6582,7 @@ function mortarBoxHtml(idx){
   const armingMove = state.orderMode && state.orderMode.kind==='mortar-move' && state.orderMode.idx===idx;
 
   const stanceBtns = ['fire','standby','move'].map(o=>
-    `<button class="btn squad-order-btn ${order===o?'active':''}" ${dead?'disabled':''} onclick="setMortarOrder(${idx},'${o}')">${MORTAR_ORDER_LABEL[o]}</button>`
+    `<button class="btn squad-order-btn ${order===o?'active':''}" ${dead?'disabled':''} onclick="setMortarOrder(${idx},'${o}')">${MORTAR_ORDER_ICON[o]} ${MORTAR_ORDER_LABEL[o]}</button>`
   ).join('');
 
   let bodyHtml = '';
@@ -5181,7 +6593,7 @@ function mortarBoxHtml(idx){
     if(armingMove) moveStatus = '地図をクリックして移動先指定…';
     else if(mortar.pendingDest) moveStatus = '移動先: 設定済み(陣地転換予定)';
     bodyHtml = `
-      <div class="meta">標高: ${elevationLabel(elevationAt(mortar.x,mortar.y))}</div>
+      <div class="meta">標高: ${elevationLabel(elevationAt(mortar.x,mortar.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(mortar.x,mortar.y))}</div>
       <button class="btn ${armingMove?'active squad-order-btn':''}" onclick="setMortarOrder(${idx},'move')" style="margin:6px 0;">移動先を指定</button>
       <div class="meta">${moveStatus}</div>
     `;
@@ -5201,7 +6613,7 @@ function mortarBoxHtml(idx){
       infoHtml = `
         <div class="sel-target-info">
           <div class="row1"><span class="id">${snapped.id}</span> ${typeHtml} ${precisionDots(snapped.reconCount)}</div>
-          <div class="meta">本砲基準 方位約${Math.round(e.bearing)}° / 距離約${unitsToMeters(e.dist)}m / 誤差±${unitsToMeters(snapped.distErr)}m</div>
+          <div class="meta">本砲基準 方位約${Math.round(e.bearing)}° / 距離約${unitsToMeters(e.dist)}m / 誤差±${unitsToMeters(snapped.posErr)}m</div>
           <div class="hpbar"><div style="width:${Math.max(0,snapped.hp/snapped.maxHp*100)}%"></div></div>
         </div>
       `;
@@ -5251,7 +6663,7 @@ function mortarBoxHtml(idx){
   `;
 
   const cbWarnHtml = (!dead && mortar.cbWarnTurns!==null && mortar.cbWarnTurns!==undefined)
-    ? `<div class="meta" style="color:var(--red);margin-bottom:6px;">⚠ 対砲兵射撃警戒中 ― あと${Math.ceil(mortar.cbWarnTurns)}ターンで着弾。直ちに陣地転換せよ</div>`
+    ? `<div class="meta" style="color:var(--red);margin-bottom:6px;">⚠ 対砲兵射撃警戒中 ― あと${mortar.cbWarnTurns}ターンで着弾。直ちに陣地転換せよ</div>`
     : (!dead && mortar.shotsSinceMove>MORTAR_CB_SHOTS_THRESHOLD
         ? `<div class="meta" style="margin-bottom:6px;">同一陣地からの連続射撃 ${mortar.shotsSinceMove}回 ― 対砲兵レーダーに捕捉される危険あり</div>`
         : '');
@@ -5261,7 +6673,7 @@ function mortarBoxHtml(idx){
     ${cbWarnHtml}
     ${bodyHtml}
     ${!dead ? mortarMainlineHtml(idx, mortar) : ''}
-    ${exposureMetaHtml(mortar.exposure)}
+    ${exposureMetaHtml(getUnitExposure({kind:'mortar', idx}))}
     ${crewHtml}
   `;
 }
@@ -5291,7 +6703,10 @@ function updateFireConfigCancel(idx){
 
 function exposureMetaHtml(exposure){
   const pct = Math.round(hitChanceFromExposure(exposure)*100);
-  return `<div class="meta">掩蔽率: ${exposure} (被弾率目安 ${pct}%)</div>`;
+  // terrainCoverTotal (elevation defilade + terrain type) adds a non-integer bonus on top
+  // of what used to always be a whole-number constant -- round for display only, the raw
+  // float is still what hitChanceFromExposure above and every combat roll actually use.
+  return `<div class="meta">掩蔽率: ${Math.round(exposure)} (被弾率目安 ${pct}%)</div>`;
 }
 
 function soldierRosterHtml(soldiers){
@@ -5303,14 +6718,26 @@ function soldierRosterHtml(soldiers){
   return `<div class="roster-list">${rows}</div>`;
 }
 
+// per user request: 大休止 -- shared by squad/scout/sniper/engineer boxes, same as
+// reinforceButtonHtml below. While resting, shows progress instead of an action button;
+// otherwise offers the button whenever the unit has at least one casualty to recover from.
+function restButtonHtml(kind, idx, unit){
+  if(unit.resting){
+    return `<div class="meta" style="margin-bottom:8px;color:var(--amber);">大休止中 ― 残り${unit.restTurnsLeft}ターン(回復 ${unit.restRevived}/${unit.restDeficitStart}名)。命令は一切受け付けません。</div>`;
+  }
+  const deadCount = unit.soldiers.length - unitAliveCount(unit);
+  if(deadCount<=0) return '';
+  return `<button class="btn" style="margin-bottom:8px;" onclick="startRest('${kind}',${idx})">大休止を命じる(${REST_DURATION_TURNS}ターン・欠員${deadCount}名が徐々に回復)</button>`;
+}
 function reinforceButtonHtml(kind, idx, unit){
   const alive = unitAliveCount(unit);
   const deadCount = unit.soldiers.length-alive;
   if(deadCount<=0) return '';
   const restoreCount = Math.min(REINFORCE_MAX_PER_CALL, deadCount, state.reserve);
   const reinforceCost = REINFORCE_COST_PER_SOLDIER*Math.max(restoreCount,1);
-  const reinforceDisabled = unit.reinforceUsed || restoreCount<=0 || state.money<reinforceCost;
-  const reinforceLabel = unit.reinforceUsed ? '予備兵力要請済み'
+  const reinforceDisabled = unit.reinforceUsed || unit.resting || restoreCount<=0 || state.money<reinforceCost;
+  const reinforceLabel = unit.resting ? '大休止中は要請不可'
+    : unit.reinforceUsed ? '予備兵力要請済み'
     : restoreCount<=0 ? '予備兵力なし'
     : `予備兵力要請 (${restoreCount}名 ¥${reinforceCost})`;
   return `<button class="btn" ${reinforceDisabled?'disabled':''} onclick="requestReinforcement('${kind}',${idx})">${reinforceLabel}</button>`;
@@ -5319,7 +6746,7 @@ function reinforceButtonHtml(kind, idx, unit){
 function scoutBoxHtml(idx){
   const scout = state.scouts[idx];
   const alive = unitAliveCount(scout);
-  const dead = alive<=0;
+  const dead = alive<=0 || scout.resting;
   const armingMove = state.orderMode && state.orderMode.kind==='scout-move' && state.orderMode.idx===idx;
   const armingRecon = state.orderMode && state.orderMode.kind==='scout-recon' && state.orderMode.idx===idx;
   let orderStatus = '行動: 未設定(観測のみ)';
@@ -5328,10 +6755,11 @@ function scoutBoxHtml(idx){
   else if(scout.pendingDest) orderStatus = '行動: 移動先へ前進予定';
   else if(scout.pendingReconTargetId) orderStatus = `行動: ${scout.pendingReconTargetId} を偵察予定`;
   return `
-    <div class="meta">${dead?'戦闘不能':alive+'/'+scout.soldiers.length+'名'} ・ 標高: ${elevationLabel(elevationAt(scout.x,scout.y))}</div>
+    <div class="meta">${alive<=0?'戦闘不能':alive+'/'+scout.soldiers.length+'名'} ・ 標高: ${elevationLabel(elevationAt(scout.x,scout.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(scout.x,scout.y))}</div>
     ${exposureMetaHtml(getUnitExposure({kind:'scout', idx}))}
     <div class="meta">観測方向: ${Math.round(scout.watchAngle)}° (視野約${Math.round(scoutHalfFov()*2)}°)</div>
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/scout.soldiers.length*100)}%"></div></div>
+    ${restButtonHtml('scout', idx, scout)}
     <div class="row-2" style="margin-bottom:6px;">
       <button class="btn ${armingMove?'active squad-order-btn':''}" ${dead?'disabled':''} onclick="armScoutMoveOrder(${idx})">移動先を指定</button>
       <button class="btn ${armingRecon?'active squad-order-btn':''}" ${dead?'disabled':''} onclick="armScoutReconOrder(${idx})">偵察目標を指定</button>
@@ -5364,25 +6792,21 @@ function standingOrderSelectHtml(kind, idx, unit, allowAssault){
 function squadBoxHtml(idx){
   const sq = state.squads[idx];
   const alive = sq.soldiers.filter(s=>s.alive).length;
-  const wiped = alive===0;
+  const wiped = alive===0 || sq.resting;
   const btns = ['advance','hold','assault','retreat'].map(o=>
-    `<button class="btn squad-order-btn ${sq.order===o?'active':''}" ${wiped?'disabled':''} onclick="setSquadOrder(${idx},'${o}')">${ORDER_LABEL[o]}</button>`
+    `<button class="btn squad-order-btn ${sq.order===o?'active':''}" ${wiped?'disabled':''} onclick="setSquadOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
-  const arming = state.orderMode && state.orderMode.kind==='squad' && state.orderMode.idx===idx;
-  const destStatus = arming ? '地図をクリックして移動先指定…' : (sq.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
   const huntTarget = sq.huntTargetId ? state.targets.find(t=>t.id===sq.huntTargetId) : null;
   const huntStatus = (huntTarget && !huntTarget.destroyed)
     ? `攻撃目標: ${huntTarget.id} (${huntTarget.revealed?huntTarget.def.label:'識別不能'})`
     : null;
   return `
-    <div class="meta">${alive} / ${sq.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sq.x,sq.y))}</div>
+    <div class="meta">${alive} / ${sq.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sq.x,sq.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(sq.x,sq.y))}</div>
     ${exposureMetaHtml(getUnitExposure({kind:'squad', idx}))}
+    ${restButtonHtml('squad', idx, sq)}
     <div class="squad-orders" style="margin:6px 0;">${btns}</div>
-    <div class="row-2" style="margin-bottom:6px;">
-      <button class="btn ${arming?'active squad-order-btn':''}" ${wiped?'disabled':''} onclick="armSquadMoveOrder(${idx})">移動先を指定</button>
-      <button class="btn" ${wiped||!sq.pendingDest?'disabled':''} onclick="clearSquadDest(${idx})">解除</button>
-    </div>
-    <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
+    <div class="meta" style="margin-bottom:6px;">${wiped ? '移動先: 指定不可' : (sq.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます')}</div>
+    ${sq.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearSquadDest(${idx})">移動先を解除</button>` : ''}
     ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearSquadHunt(${idx})">攻撃目標を解除</button>` : ''}
     ${standingOrderSelectHtml('squad', idx, sq, true)}
     ${soldierRosterHtml(sq.soldiers)}
@@ -5394,10 +6818,8 @@ function tankBoxHtml(idx){
   const tank = state.tanks[idx];
   const dead = tank.hp<=0;
   const btns = ['advance','hold','retreat'].map(o=>
-    `<button class="btn squad-order-btn ${tank.order===o?'active':''}" ${dead?'disabled':''} onclick="setTankOrder(${idx},'${o}')">${ORDER_LABEL[o]}</button>`
+    `<button class="btn squad-order-btn ${tank.order===o?'active':''}" ${dead?'disabled':''} onclick="setTankOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
-  const arming = state.orderMode && state.orderMode.kind==='tank-move' && state.orderMode.idx===idx;
-  const destStatus = arming ? '地図をクリックして移動先指定…' : (tank.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
   const huntTarget = tank.huntTargetId ? state.targets.find(t=>t.id===tank.huntTargetId) : null;
   const huntStatus = (huntTarget && !huntTarget.destroyed)
     ? `攻撃目標: ${huntTarget.id} (${huntTarget.revealed?huntTarget.def.label:'識別不能'})`
@@ -5411,13 +6833,39 @@ function tankBoxHtml(idx){
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,tank.hp/tank.maxHp*100)}%"></div></div>
     ${exposureMetaHtml(getUnitExposure({kind:'tank', idx}))}
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
-    <div class="row-2" style="margin-bottom:6px;">
-      <button class="btn ${arming?'active squad-order-btn':''}" onclick="armTankMoveOrder(${idx})">移動先を指定</button>
-      <button class="btn" ${!tank.pendingDest?'disabled':''} onclick="clearTankDest(${idx})">解除</button>
-    </div>
-    <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
+    <div class="meta" style="margin-bottom:6px;">${tank.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
+    ${tank.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearTankDest(${idx})">移動先を解除</button>` : ''}
     ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearTankHunt(${idx})">攻撃目標を解除</button>` : ''}
     <button class="btn" ${canRepair?'':'disabled'} onclick="repairTank(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${tank.hp>=tank.maxHp?' ・ HP満タン':''}</button>
+  `;
+}
+
+// per user request: 対空ミサイル部隊 -- 戦車のcommand box構成をそのまま流用。攻撃目標は
+// ヘリ・ドローンのみ(renderEnemyCommandBoxのsamBtnsで既に絞り込み済み)。
+function samBoxHtml(idx){
+  const sam = state.sams[idx];
+  const dead = sam.hp<=0;
+  const btns = ['advance','hold','retreat'].map(o=>
+    `<button class="btn squad-order-btn ${sam.order===o?'active':''}" ${dead?'disabled':''} onclick="setSamOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
+  ).join('');
+  const huntTarget = sam.huntTargetId ? state.targets.find(t=>t.id===sam.huntTargetId) : null;
+  const huntStatus = (huntTarget && !huntTarget.destroyed)
+    ? `攻撃目標: ${huntTarget.id} (${huntTarget.revealed?huntTarget.def.label:'識別不能'})`
+    : null;
+  if(dead) return `<div class="empty-hint" style="padding:4px 0;color:var(--red);">撃破</div>`;
+  const repairAmount = Math.min(SAM_REPAIR_HP_PER_CALL, sam.maxHp-sam.hp);
+  const repairCost = Math.round(SAM_REPAIR_COST_PER_HP*repairAmount);
+  const canRepair = sam.hp<sam.maxHp && state.money>=repairCost;
+  return `
+    <div class="meta">HP: ${sam.hp} / ${sam.maxHp}</div>
+    <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,sam.hp/sam.maxHp*100)}%"></div></div>
+    ${exposureMetaHtml(getUnitExposure({kind:'sam', idx}))}
+    <div class="meta" style="margin-bottom:6px;color:var(--muted);">対空目標(ヘリ・ドローン)専任 ― 対地目標には交戦不可</div>
+    <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
+    <div class="meta" style="margin-bottom:6px;">${sam.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
+    ${sam.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearSamDest(${idx})">移動先を解除</button>` : ''}
+    ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearSamHunt(${idx})">攻撃目標を解除</button>` : ''}
+    <button class="btn" ${canRepair?'':'disabled'} onclick="repairSam(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${sam.hp>=sam.maxHp?' ・ HP満タン':''}</button>
   `;
 }
 
@@ -5429,30 +6877,43 @@ function engineerBoxHtml(idx){
   const alive = unitAliveCount(en);
   const dead = alive<=0;
   if(dead) return `<div class="empty-hint" style="padding:4px 0;color:var(--red);">全滅</div>`;
+  const resting = en.resting;
   const btns = ['advance','hold','retreat'].map(o=>
-    `<button class="btn squad-order-btn ${en.order===o?'active':''}" onclick="setEngineerOrder(${idx},'${o}')">${ORDER_LABEL[o]}</button>`
+    `<button class="btn squad-order-btn ${en.order===o?'active':''}" ${resting?'disabled':''} onclick="setEngineerOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
   const armingMove = state.orderMode && state.orderMode.kind==='engineer-move' && state.orderMode.idx===idx;
   const armingWall = state.orderMode && state.orderMode.kind==='wall-build' && state.orderMode.idx===idx;
+  const armingTrench = state.orderMode && (state.orderMode.kind==='trench-build-p1' || state.orderMode.kind==='trench-build-p2') && state.orderMode.idx===idx;
   const destStatus = armingMove ? '地図をクリックして移動先指定…' : (en.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
   const wallCapReached = state.walls.length >= MAX_WALLS;
   const wallMoneyShort = state.money < WALL_BUILD_COST;
+  const trenchCapReached = state.trenches.length >= MAX_TRENCHES;
+  const trenchMoneyShort = state.money < TRENCH_BUILD_COST;
   const wallStatus = armingWall ? '地図をクリックして防壁の建設地点を指定…'
     : wallCapReached ? `防壁は上限(${MAX_WALLS}基)に達しています`
     : wallMoneyShort ? `資金不足(建設費 ¥${WALL_BUILD_COST})`
     : `現在の防壁: ${state.walls.length}/${MAX_WALLS}基`;
+  const trenchStatus = state.orderMode && state.orderMode.kind==='trench-build-p2' && state.orderMode.idx===idx
+    ? '地図をクリックして塹壕の終点を指定…'
+    : armingTrench ? '地図をクリックして塹壕の始点を指定…'
+    : trenchCapReached ? `塹壕は上限(${MAX_TRENCHES}本)に達しています`
+    : trenchMoneyShort ? `資金不足(建設費 ¥${TRENCH_BUILD_COST})`
+    : `現在の塹壕: ${state.trenches.length}/${MAX_TRENCHES}本`;
   return `
     <div class="meta">${alive}/${en.soldiers.length}名</div>
     ${exposureMetaHtml(getUnitExposure({kind:'engineer', idx}))}
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/en.soldiers.length*100)}%"></div></div>
+    ${restButtonHtml('engineer', idx, en)}
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
     <div class="row-2" style="margin-bottom:6px;">
-      <button class="btn ${armingMove?'active squad-order-btn':''}" onclick="armEngineerMoveOrder(${idx})">移動先を指定</button>
+      <button class="btn ${armingMove?'active squad-order-btn':''}" ${resting?'disabled':''} onclick="armEngineerMoveOrder(${idx})">移動先を指定</button>
       <button class="btn" ${!en.pendingDest?'disabled':''} onclick="clearEngineerDest(${idx})">解除</button>
     </div>
     <div class="meta" style="margin-bottom:8px;">${destStatus}</div>
-    <button class="btn ${armingWall?'active squad-order-btn':''}" ${wallCapReached||wallMoneyShort?'disabled':''} style="width:100%;margin-bottom:4px;" onclick="armWallBuildOrder(${idx})">防壁を構築(¥${WALL_BUILD_COST}・地図で地点指定)</button>
+    <button class="btn ${armingWall?'active squad-order-btn':''}" ${resting||wallCapReached||wallMoneyShort?'disabled':''} style="width:100%;margin-bottom:4px;" onclick="armWallBuildOrder(${idx})">防壁を構築(¥${WALL_BUILD_COST}・地図で地点指定)</button>
     <div class="meta" style="margin-bottom:8px;">${wallStatus}</div>
+    <button class="btn ${armingTrench?'active squad-order-btn':''}" ${resting||trenchCapReached||trenchMoneyShort?'disabled':''} style="width:100%;margin-bottom:4px;" onclick="armTrenchBuildOrder(${idx})">塹壕を構築(¥${TRENCH_BUILD_COST}・地図で始点→終点指定)</button>
+    <div class="meta" style="margin-bottom:8px;">${trenchStatus}</div>
     ${soldierRosterHtml(en.soldiers)}
   `;
 }
@@ -5460,9 +6921,9 @@ function engineerBoxHtml(idx){
 function sniperBoxHtml(idx){
   const sn = state.snipers[idx];
   const alive = sn.soldiers.filter(s=>s.alive).length;
-  const wiped = alive===0;
+  const wiped = alive===0 || sn.resting;
   const btns = ['advance','hold','retreat'].map(o=>
-    `<button class="btn squad-order-btn ${sn.order===o?'active':''}" ${wiped?'disabled':''} onclick="setSniperOrder(${idx},'${o}')">${ORDER_LABEL[o]}</button>`
+    `<button class="btn squad-order-btn ${sn.order===o?'active':''}" ${wiped?'disabled':''} onclick="setSniperOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
   const arming = state.orderMode && state.orderMode.kind==='sniper-move' && state.orderMode.idx===idx;
   const armingTarget = state.orderMode && state.orderMode.kind==='sniper-target' && state.orderMode.idx===idx;
@@ -5478,8 +6939,9 @@ function sniperBoxHtml(idx){
   else if(sn.aimAngle!==null && sn.aimAngle!==undefined) aimStatus = `射撃方向: ${Math.round(sn.aimAngle)}° (射程${SNIPER_AIM_RANGE_M}m、自動交戦)`;
   else aimStatus = '射撃方向: 未設定';
   return `
-    <div class="meta">${alive} / ${sn.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sn.x,sn.y))} ・ 有効射程約${SNIPER_RANGE_M}m</div>
+    <div class="meta">${alive} / ${sn.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sn.x,sn.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(sn.x,sn.y))} ・ 有効射程約${SNIPER_RANGE_M}m</div>
     ${exposureMetaHtml(getUnitExposure({kind:'sniper', idx}))}
+    ${restButtonHtml('sniper', idx, sn)}
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
     <div class="row-2" style="margin-bottom:6px;">
       <button class="btn ${arming?'active squad-order-btn':''}" ${wiped?'disabled':''} onclick="armSniperMoveOrder(${idx})">移動先を指定</button>
@@ -5532,6 +6994,12 @@ function renderCommandBox(){
     title = `戦車${state.commandBox.idx+1}`;
     bodyHtml = tankBoxHtml(state.commandBox.idx);
     pos = canvasToScreen(tank._visX!==undefined?tank._visX:tank.x, tank._visY!==undefined?tank._visY:tank.y);
+  } else if(kind==='sam'){
+    const sam = state.sams[state.commandBox.idx];
+    if(!sam || sam.hp<=0){ box.style.display='none'; return; }
+    title = `対空${state.commandBox.idx+1}`;
+    bodyHtml = samBoxHtml(state.commandBox.idx);
+    pos = canvasToScreen(sam._visX!==undefined?sam._visX:sam.x, sam._visY!==undefined?sam._visY:sam.y);
   } else if(kind==='sniper'){
     const sn = state.snipers[state.commandBox.idx];
     if(!sn){ box.style.display='none'; return; }
@@ -5593,28 +7061,37 @@ function renderEnemyCommandBox(){
     const active = m.order==='fire' && m.pendingFire && m.pendingFire.snappedId===t.id;
     return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignMortarFire(${idx})">迫撃砲${idx+1}に攻撃させる${active?'(照準中)':''}</button>`;
   }).filter(Boolean).join('');
+  // per user request: 対地の直接照準兵器(小隊/戦車/狙撃)はもはや対空目標(ヘリ・ドローン)を
+  // 直接狙い撃てない -- 対空はSAM専任(下のsamBtns)。
+  const isAirTarget = t.type==='heli' || t.type==='drone';
   // per user request: snipers are no longer assignable from here -- they already
   // auto-engage anything crossing their own aim line (see resolveSniperOrders),
   // and are aimed via the "狙撃目標を指定"/"射撃方向を指定" buttons in their own unit box.
-  const squadBtns = state.squads.map((sq,idx)=>{
+  const squadBtns = isAirTarget ? '' : state.squads.map((sq,idx)=>{
     if(!sq.soldiers.some(s=>s.alive)) return '';
     const active = sq.order==='hunt' && sq.huntTargetId===t.id;
     return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignSquadHunt(${idx})">第${idx+1}小隊に攻撃させる${active?'(攻撃中)':''}</button>`;
   }).filter(Boolean).join('');
-  const tankBtns = state.tanks.map((tank,idx)=>{
+  const tankBtns = isAirTarget ? '' : state.tanks.map((tank,idx)=>{
     if(tank.hp<=0) return '';
     const active = tank.order==='hunt' && tank.huntTargetId===t.id;
     return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignTankHunt(${idx})">戦車${idx+1}に攻撃させる${active?'(攻撃中)':''}</button>`;
   }).filter(Boolean).join('');
-  const allBtns = mortarBtns + tankBtns + squadBtns;
-  // per user request: make the fire-correction mechanic visible before the player commits a
-  // volley -- without a scout holding eyes-on, mortar fire only closes MORTAR_FIRE_CORRECTION_FRAC
-  // of the observation error, so show how much miss margin (in meters) is still expected.
-  const guided = scoutHasEyesOn(t);
-  const residualErrM = Math.round(unitsToMeters(t.distErr) * (1-MORTAR_FIRE_CORRECTION_FRAC));
-  const precisionHtml = guided
-    ? `<div class="meta" style="margin-bottom:8px;color:var(--green-id);">斥候が観測中 ― 迫撃砲は精密射撃(誤差なし)</div>`
-    : `<div class="meta" style="margin-bottom:8px;color:var(--amber);">未観測 ― 迫撃砲は着弾誤差約${residualErrM}m(斥候をこの目標に向けると誤差なしに)</div>`;
+  const samBtns = !isAirTarget ? '' : state.sams.map((sam,idx)=>{
+    if(sam.hp<=0) return '';
+    const active = sam.order==='hunt' && sam.huntTargetId===t.id;
+    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignSamHunt(${idx})">対空${idx+1}に攻撃させる${active?'(攻撃中)':''}</button>`;
+  }).filter(Boolean).join('');
+  const allBtns = mortarBtns + tankBtns + samBtns + squadBtns;
+  // per user request: fire always lands exactly where aimed (plus dispersion) -- no hidden
+  // correction toward the true position -- so this just shows how far off the current
+  // estimate (what you'd actually be aiming at) might still be. Falls with 偵察 (see
+  // performRecon) and with each volley fired at this target (see finalizeVolley).
+  const staleTurns = t.lastSeenTurn===undefined ? null : Math.max(0, state.turns-t.lastSeenTurn);
+  const contactHtml = t.lastKnownX===undefined
+    ? '最終確認位置: 未取得'
+    : `最終確認: ${staleTurns===0?'現在接触':`${staleTurns}ターン前`} / ${t.lastSeenBy==='heli'?'ヘリ':t.lastSeenBy==='scout'?'斥候':'地上部隊'} / 信頼度 ${Math.round((t.trackingConfidence||0.4)*100)}%`;
+  const precisionHtml = `<div class="meta" style="margin-bottom:8px;color:var(--amber);">${contactHtml}<br>見積り誤差: 最大約${Math.round(unitsToMeters(t.posErr))}m(偵察・弾着観測で縮小)</div>`;
   box.innerHTML = `
     <div class="cb-head">
       <span class="cb-title">${t.id} ― ${t.revealed?t.def.label:'識別不能'}</span>
@@ -5630,11 +7107,12 @@ function renderEnemyCommandBox(){
 }
 
 function renderStats(){
+  document.querySelector('#stat-datetime .value').textContent = formatGameClock(gameClockNow());
   document.querySelector('#stat-stage .value').textContent = state.stage+' / '+STAGE_COUNT;
   document.querySelector('#stat-difficulty .value').textContent = DIFFICULTIES[state.difficulty].label;
   document.querySelector('#stat-weather .value').textContent = WEATHER_TYPES[state.weather].label;
   document.querySelector('#stat-achievements .value').textContent = unlockedAchievements.size+' / '+Object.keys(ACHIEVEMENTS).length;
-  document.querySelector('#stat-turns .value').textContent = Math.floor(state.turns);
+  document.querySelector('#stat-turns .value').textContent = `${state.missionMinutes}分`;
   document.querySelector('#stat-money .value').textContent = '¥'+state.money.toLocaleString();
   const remainingTargets = state.targets.filter(t=>!t.destroyed).length;
   document.getElementById('stat-left').textContent = remainingTargets + ' / ' + state.targetsSpawnedTotal;
@@ -5648,8 +7126,10 @@ function renderStats(){
   document.getElementById('board-note').textContent = state.placementPending
     ? '手動配置モード ― 地図上の指定範囲内をクリックして、表示中のユニットの初期位置を指定してください'
     : '自軍は左側、敵軍は右側遠方に展開。ドラッグでパン・ホイールでズーム。目標をクリックして選択';
+  const clockNow = gameClockNow();
+  const clockTimeOnly = `${String(clockNow.getHours()).padStart(2,'0')}${String(clockNow.getMinutes()).padStart(2,'0')}`;
   document.getElementById('statbar-mini').textContent =
-    `WAVE ${state.stage}/${STAGE_COUNT} ・ 経過ターン${Math.floor(state.turns)} ・ ¥${state.money.toLocaleString()} ・ 兵力${aliveTotal}/${totalRosterCapacity()}`;
+    `${clockTimeOnly} ・ WAVE ${state.stage}/${STAGE_COUNT} ・ 経過${state.missionMinutes}分 ・ ¥${state.money.toLocaleString()} ・ 兵力${aliveTotal}/${totalRosterCapacity()}`;
 
   const revealed = state.targets.filter(t=>t.revealed && !t.destroyed);
   const byType = {};
@@ -5686,6 +7166,12 @@ function renderStats(){
   });
   state.tanks.forEach((tk,i)=>{
     rows.push(forceRow(`戦${i+1}`, tk.hp/tk.maxHp, tk.hp>0?Math.round(tk.hp/tk.maxHp*100)+'%':'撃破', 'var(--blue-id)', 'tank', i));
+  });
+  state.sams.forEach((sam,i)=>{
+    rows.push(forceRow(`対空${i+1}`, sam.hp/sam.maxHp, sam.hp>0?Math.round(sam.hp/sam.maxHp*100)+'%':'撃破', 'var(--blue-id)', 'sam', i));
+  });
+  (state.helis||[]).forEach((heli,i)=>{
+    rows.push(forceRow(`ヘリ${i+1}`, heli.hp/heli.maxHp, heli.hp>0?Math.round(heli.hp/heli.maxHp*100)+'%':'撃墜', 'var(--blue-id)'));
   });
   state.scouts.forEach((s,i)=>{
     const alive = unitAliveCount(s);
@@ -5763,56 +7249,18 @@ function renderDecisionPanel(){
   holders.forEach(h=>{ h.innerHTML = `
     <div class="decision-box">
       ${summary ? `<div class="decision-summary">${summary}</div>` : ''}
-      <button class="btn primary decision-btn" ${disabled?'disabled':''} onclick="toggleAutoCommit()">${isAutoCommitRunning()?'状況中':'状況開始'}</button>
-      <div class="alert-row-label">進行速度</div>
-      <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin-bottom:6px;">
-        ${['slow','normal','fast'].map(spd=>
-          `<button class="btn squad-order-btn ${state.gameSpeed===spd?'active':''}" onclick="setGameSpeed('${spd}')">${GAME_SPEED_LABEL[spd]}</button>`
-        ).join('')}
-      </div>
-      <div class="alert-row-label">警報レベル</div>
-      <div class="alert-row">
-        <button class="btn alert-btn-red" ${disabled?'disabled':''} onclick="setAlertLevel('red')">赤警報</button>
-        <button class="btn alert-btn-yellow" ${disabled?'disabled':''} onclick="setAlertLevel('yellow')">黄警報</button>
-        <button class="btn alert-btn-white" ${disabled?'disabled':''} onclick="setAlertLevel('white')">白警報</button>
+      <div class="decision-controls-row">
+        <div class="speed-slider-row">
+          <input type="range" class="speed-slider" min="0" max="2" step="1"
+            value="${GAME_SPEED_ORDER.indexOf(state.gameSpeed)}"
+            oninput="setGameSpeedByIndex(this.value)" title="進行速度">
+          <span class="speed-slider-label">${GAME_SPEED_LABEL[state.gameSpeed]}</span>
+        </div>
+        <button class="btn primary decision-btn" ${state.stageResolved?'disabled':''} onclick="toggleAutoCommit()">${isAutoCommitRunning()?'戦闘中':'戦闘開始'}</button>
       </div>
     </div>
   `; });
 }
-
-// per user request: 赤警報 puts every combat unit (小隊/狙撃班/迫撃砲) on a defensive
-// stance; 黄警報 puts only infantry (小隊) on a defensive stance; 白警報 releases
-// everyone back to whatever order they had right before the alert was raised. Each
-// unit's pre-alert order is stashed in .preAlertOrder the first time it's put on alert,
-// and only restored (and cleared) when that unit is actually released -- so escalating
-// 黄警報 -> 赤警報 doesn't clobber the order infantry had before 黄警報 was raised, and
-// de-escalating 赤警報 -> 黄警報 correctly releases snipers/mortars while leaving
-// infantry on hold.
-function applyAlertToUnit(unit, wantHold, holdOrder){
-  if(wantHold){
-    if(unit.preAlertOrder===undefined || unit.preAlertOrder===null) unit.preAlertOrder = unit.order;
-    unit.order = holdOrder;
-  } else if(unit.preAlertOrder!==undefined && unit.preAlertOrder!==null){
-    unit.order = unit.preAlertOrder;
-    unit.preAlertOrder = null;
-  }
-}
-function setAlertLevel(level){
-  if(!state || state.stageResolved || state.animating) return;
-  const wantInfantryHold = level==='red' || level==='yellow';
-  const wantWideHold = level==='red';
-  state.squads.forEach(sq=>applyAlertToUnit(sq, wantInfantryHold, 'hold'));
-  state.snipers.forEach(sn=>applyAlertToUnit(sn, wantWideHold, 'hold'));
-  state.mortars.forEach(m=>{
-    applyAlertToUnit(m, wantWideHold, 'standby');
-    if(wantWideHold) m.pendingFire = null;
-  });
-  state.alertLevel = level;
-  const label = level==='red' ? '赤警報 ― 全部隊、防御態勢' : level==='yellow' ? '黄警報 ― 歩兵、防御態勢' : '白警報 ― 平常態勢に復帰';
-  log('sys','司令部', `━━━ ${label} ━━━`);
-  render();
-}
-
 
 // Stable (cached, not re-randomized every frame) offset within
 // ESTIMATE_MARKER_RADIUS_UNITS of a target's true position, used for the
@@ -5888,12 +7336,25 @@ function drawMinimap(){
   ctx.clearRect(0,0,w,h);
   const sx = wx => (wx/CANVAS_W)*w;
   const sy = wy => (wy/CANVAS_H)*h;
+  (state.roads||[]).forEach((road, roadIdx)=>{
+    const kind = (state.roadKinds||[])[roadIdx] || 'main';
+    ctx.beginPath();
+    road.forEach((p, i)=>{
+      if(i===0) ctx.moveTo(sx(p.x), sy(p.y));
+      else ctx.lineTo(sx(p.x), sy(p.y));
+    });
+    ctx.strokeStyle = kind==='dirt' ? 'rgba(150,110,70,0.8)' : kind==='branch' ? 'rgba(145,145,120,0.85)' : 'rgba(185,181,155,0.9)';
+    ctx.lineWidth = kind==='dirt' ? 1 : 1.5;
+    ctx.stroke();
+  });
 
   const friendlyPts = [];
   if(state.hq && state.hq.hp>0) friendlyPts.push([state.hq.x, state.hq.y]);
   state.mortars.forEach(m=>{ if(m.hp>0) friendlyPts.push([m.x, m.y]); });
   state.tanks.forEach(tk=>{ if(tk.hp>0) friendlyPts.push([tk.x, tk.y]); });
+  state.sams.forEach(sam=>{ if(sam.hp>0) friendlyPts.push([sam.x, sam.y]); });
   state.scouts.forEach(s=>{ if(unitAlive(s)) friendlyPts.push([s.x, s.y]); });
+  (state.helis||[]).forEach(h=>{ if(h.hp>0) friendlyPts.push([h.x, h.y]); });
   state.squads.forEach(sq=>{ if(sq.soldiers.some(s=>s.alive)) friendlyPts.push([sq.x, sq.y]); });
   state.snipers.forEach(sn=>{ if(sn.soldiers.some(s=>s.alive)) friendlyPts.push([sn.x, sn.y]); });
   ctx.fillStyle = FRIENDLY_MARK_COLOR;
@@ -5953,14 +7414,31 @@ function drawBoard(){
   const cv = document.getElementById('board');
   const ctx = cv.getContext('2d');
   ctx.clearRect(0,0,cv.width,cv.height);
+  // screen shake (see triggerShake(), fired by spawnDestructionEffect) -- a plain draw-time
+  // offset around the whole board, restored at the very end of this function.
+  ctx.save();
+  const shakeOff = currentShakeOffset();
+  ctx.translate(shakeOff.x, shakeOff.y);
   const nowWander = performance.now();
 
-  // roads: graphics intentionally suppressed (movement no longer road-follows;
-  // only the road judgment in nearestRoadPoint/state.roads remains, used for
-  // the on-road speed bonus). Points that fall behind/outside the camera view
-  // are skipped rather than connected-through, so distant road segments never
-  // draw a stray line straight across the screen.
-  if(false && state.roads){
+  // Roads are drawn over the 3D terrain as a crisp tactical-map overlay. The
+  // terrain texture carries the broad road surface; this pass adds lane/edge
+  // definition without making distant segments connect through the camera.
+  if(state.roads){
+    const projectRoad = road=>{
+      const points = [];
+      for(let i=0;i<road.length-1;i++){
+        const a = road[i], b = road[i+1];
+        const steps = Math.max(1, Math.ceil(Math.hypot(b.x-a.x, b.y-a.y)/18));
+        for(let j=0;j<steps;j++){
+          const t = j/steps;
+          points.push(project(a.x+(b.x-a.x)*t, a.y+(b.y-a.y)*t));
+        }
+      }
+      const last = road[road.length-1];
+      if(last) points.push(project(last.x,last.y));
+      return points;
+    };
     const strokePath = (proj, color, width, dash)=>{
       ctx.beginPath();
       ctx.strokeStyle = color;
@@ -5977,12 +7455,35 @@ function drawBoard(){
       ctx.stroke();
       if(dash) ctx.setLineDash([]);
     };
-    state.roads.forEach(road=>{
-      const proj = road.map(p=>project(p.x,p.y));
-      strokePath(proj, 'rgba(196,168,110,0.55)', 5, null);
-      strokePath(proj, 'rgba(232,214,172,0.5)', 1, [7,7]);
+    state.roads.forEach((road, roadIdx)=>{
+      const proj = projectRoad(road);
+      const kind = (state.roadKinds||[])[roadIdx] || 'main';
+      const width = kind==='dirt' ? 3 : kind==='branch' ? 5 : 7;
+      const base = kind==='dirt' ? 'rgba(139,106,67,0.72)' : kind==='branch' ? 'rgba(123,122,103,0.72)' : 'rgba(145,143,127,0.78)';
+      const center = kind==='dirt' ? 'rgba(196,157,107,0.45)' : 'rgba(218,211,180,0.58)';
+      strokePath(proj, base, width, null);
+      strokePath(proj, center, kind==='dirt' ? 1 : 2, kind==='dirt' ? [4,6] : [10,8]);
     });
   }
+
+  // per user request: a terrain-conforming 100m/1km coordinate grid (see
+  // buildGridLineSegments()), drawn the same way as the contour lines below but as its own
+  // base layer underneath them -- minor (100m) lines very faint so they read as a map's grid
+  // squares rather than clutter, major (1km) lines a touch more visible.
+  const strokeGridBucket = (segs, color, width)=>{
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    segs.forEach(seg=>{
+      const p0 = project(seg.x1, seg.y1), p1 = project(seg.x2, seg.y2);
+      if(!p0.visible || !p1.visible) return;
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+    });
+    ctx.stroke();
+  };
+  strokeGridBucket(GRID_LINES.minor, 'rgba(220,225,235,0.12)', 1);
+  strokeGridBucket(GRID_LINES.major, 'rgba(220,225,235,0.28)', 1);
 
   // per user request: topographic-map-style contour lines (see buildContourLines()),
   // drawn the same way roads were above -- reprojected each frame, segments whose
@@ -6000,7 +7501,13 @@ function drawBoard(){
     ctx.stroke();
   }
 
-  // HQ marker (指揮所) ― per user request: now movable (see armHqMoveOrder/applyHqMovement),
+  // per user request: FEBA (主戦闘地域前縁) line -- the player-draggable X that the
+  // "前進"/"後退" standing orders advance to/fall back to (see febaLineSegments(),
+  // febaScreenHitDistance(), and the drag handling in setupMapControls()). Drawn thick and
+  // blue so it reads clearly against the terrain/units.
+  strokeGridBucket(febaLineSegments(state.febaX), FEBA_LINE_COLOR, FEBA_LINE_WIDTH);
+
+  // HQ marker (指揮所) ― per user request: now movable (see setUnitMoveDest/applyHqMovement),
   // so it uses smoothVisualPos like every other mobile unit instead of a bare project(hq.x,hq.y).
   {
     const hq = state.hq;
@@ -6089,10 +7596,35 @@ function drawBoard(){
     const mVisL = smoothVisualPos(mortar, mortar.x, mortar.y);
     const mVis = project(mVisL.x, mVisL.y);
     const mAlive = mortar.hp>0;
+    // per user request: minimum effective range dead zone (see MORTAR_MIN_RANGE_UNITS) drawn
+    // as a true world-space circle -- same ground-plane-projection + anisotropy correction as
+    // the scout observation cone below, NOT a fixed screen-space arc (see that block's comment
+    // for why a screen-space arc would misrepresent an actual world-space distance under a
+    // tilted camera).
+    if(mAlive){
+      const aniso = (WORLD.scaleZ>0.0001) ? (WORLD.scaleX/WORLD.scaleZ) : 1;
+      const steps = 24;
+      ctx.beginPath();
+      for(let i=0;i<=steps;i++){
+        const rad = (i/steps)*Math.PI*2;
+        const pL = {
+          x: mVisL.x + MORTAR_MIN_RANGE_UNITS*Math.sin(rad),
+          y: mVisL.y - MORTAR_MIN_RANGE_UNITS*aniso*Math.cos(rad),
+        };
+        const p = project(pL.x, pL.y);
+        if(i===0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+      }
+      ctx.closePath();
+      ctx.strokeStyle = 'rgba(217,80,60,0.45)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3,3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
     ctx.save();
     ctx.translate(mVis.x,mVis.y);
     // per user request: custom mortar icon image (our side only) in place of the old triangle
-    drawUnitIcon(ctx, mortarIcon, 0, 0, scaledIconH(16), !mAlive);
+    drawUnitIcon(ctx, mortarIcon, 0, 0, scaledIconH(22), !mAlive);
     drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='mortar' && state.commandBox.idx===mIdx);
     // shoot-and-scoot: a pulsing red ring while a counter-battery strike is inbound, so the
     // threat reads clearly on the map itself and not just in the mortar's own panel
@@ -6106,19 +7638,18 @@ function drawBoard(){
       ctx.stroke();
       ctx.setLineDash([]);
     }
+    if(mAlive && mortar.reloadingUntil && performance.now() < mortar.reloadingUntil){
+      const reloadLeft = clamp((mortar.reloadingUntil-performance.now())/MORTAR_RELOAD_MS, 0, 1);
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(232,210,58,0.9)';
+      ctx.lineWidth = 2;
+      ctx.arc(0, 0, 16, -Math.PI/2, -Math.PI/2 + Math.PI*2*(1-reloadLeft));
+      ctx.stroke();
+    }
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign='center';
-    ctx.fillText(mAlive?`迫撃砲${mortar.id+1}`:`迫撃砲${mortar.id+1}(戦闘不能)`, 0, 44);
-    if(mAlive){
-      let mOrderLabel = '[待機]';
-      if(mortar.order==='move') mOrderLabel = mortar.pendingDest ? '[移動中]' : '[移動待ち]';
-      else if(mortar.pendingFire) mOrderLabel = '[射撃準備]';
-      else if(mortar.order==='fire') mOrderLabel = '[攻撃地点待ち]';
-      ctx.fillStyle = LABEL_TEXT_COLOR;
-      ctx.font = 'bold 13px "JetBrains Mono"';
-      ctx.fillText(mOrderLabel, 0, 62);
-    }
+    ctx.fillText(mAlive?`迫撃砲${mortar.id+1} ${mortarStatusIcon(mortar)}`:`迫撃砲${mortar.id+1}(戦闘不能)`, 0, 44);
     ctx.restore();
 
     if(mAlive){
@@ -6150,13 +7681,12 @@ function drawBoard(){
   state.scouts.forEach(scout=>{
     const scoutVisL = smoothVisualPos(scout, scout.x, scout.y);
     const scoutVis = project(scoutVisL.x, scoutVisL.y);
-    if(unitAlive(scout)){
+    if(unitAlive(scout) && scoutVis.visible){
       const coneLen = SCOUT_MAX_RANGE_UNITS;
       const halfFov = scoutHalfFov();
       const steps = 24;
       const aniso = (WORLD.scaleZ>0.0001) ? (WORLD.scaleX/WORLD.scaleZ) : 1;
-      ctx.beginPath();
-      ctx.moveTo(scoutVis.x, scoutVis.y);
+      const boundary = [];
       for(let i=0;i<=steps;i++){
         const ang = scout.watchAngle - halfFov + (halfFov*2)*(i/steps);
         const rad = ang*Math.PI/180;
@@ -6165,8 +7695,14 @@ function drawBoard(){
           y: scoutVisL.y - coneLen*aniso*Math.cos(rad),
         };
         const p = project(pL.x, pL.y);
-        ctx.lineTo(p.x, p.y);
+        if(!p.visible || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
+        boundary.push(p);
       }
+      ctx.beginPath();
+      ctx.moveTo(scoutVis.x, scoutVis.y);
+      boundary.forEach(p=>{
+        ctx.lineTo(p.x, p.y);
+      });
       ctx.closePath();
       ctx.fillStyle = 'rgba(111,155,191,0.14)';
       ctx.fill();
@@ -6177,6 +7713,23 @@ function drawBoard(){
   });
 
   // scout markers (自軍, left side) ― 斥候, vulnerable to enemy attack
+  (state.helis||[]).forEach((heli, heliIdx)=>{
+    const p = project(heli.x, heli.y);
+    if(heli.hp<=0) return;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.fillStyle = FRIENDLY_MARK_COLOR;
+    ctx.strokeStyle = '#d9a441';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0,-12); ctx.lineTo(16,0); ctx.lineTo(0,12); ctx.lineTo(-16,0); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = LABEL_TEXT_COLOR;
+    ctx.font = '15px "JetBrains Mono"';
+    ctx.textAlign = 'center';
+    ctx.fillText(`ヘリ${heliIdx+1} [観測]`, 0, -20);
+    ctx.restore();
+  });
   state.scouts.forEach((scout, scIdx)=>{
     const scoutVisL = smoothVisualPos(scout, scout.x, scout.y);
     const scoutVis = project(scoutVisL.x, scoutVisL.y);
@@ -6185,7 +7738,7 @@ function drawBoard(){
     ctx.save();
     ctx.translate(scoutVis.x, scoutVis.y);
     // per user request: custom scout icon image (our side only) in place of the cross+circle glyph
-    drawUnitIcon(ctx, scoutIcon, 0, 0, scaledIconH(16), !scoutAlive);
+    drawUnitIcon(ctx, scoutIcon, 0, 0, scaledIconH(22), !scoutAlive);
     drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='scout' && state.commandBox.idx===scIdx);
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
@@ -6193,7 +7746,8 @@ function drawBoard(){
     ctx.fillText(scoutAlive?`斥候${scout.id+1} ${aliveCount}/${scout.soldiers.length}`:`斥候${scout.id+1}(戦闘不能)`, 0, -20);
     if(scoutAlive){
       let scoutOrderLabel = '[観測]';
-      if(scout.pendingReconTargetId) scoutOrderLabel = '[偵察]';
+      if(scout.resting) scoutOrderLabel = '[大休止]';
+      else if(scout.pendingReconTargetId) scoutOrderLabel = '[偵察]';
       else if(scout.pendingDest) scoutOrderLabel = '[移動]';
       ctx.fillStyle = LABEL_TEXT_COLOR;
       ctx.font = 'bold 13px "JetBrains Mono"';
@@ -6206,26 +7760,22 @@ function drawBoard(){
     }
   });
 
-  // tank markers (自軍, left side) ― direct-fire armor, HP-based (no soldiers array), same
-  // marker pattern as mortars but with the vector-drawn drawTankIcon in place of an image icon.
+  // tank markers (自軍, left side) ― the 3D FBX is the sole tank body representation.
   state.tanks.forEach((tank, tIdx)=>{
     const tVisL = smoothVisualPos(tank, tank.x, tank.y);
     const tVis = project(tVisL.x, tVisL.y);
     const tAlive = tank.hp>0;
     ctx.save();
     ctx.translate(tVis.x, tVis.y);
-    drawTankIcon(ctx, 0, 0, scaledIconH(16), !tAlive);
-    drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='tank' && state.commandBox.idx===tIdx);
+    drawSelectionRing(ctx, 0, 0, (state.commandBox && state.commandBox.kind==='tank' && state.commandBox.idx===tIdx) || isMultiSelected('tank', tIdx));
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign='center';
-    ctx.fillText(tAlive?`戦車${tank.id+1}`:`戦車${tank.id+1}(撃破)`, 0, 44);
-    if(tAlive){
-      const tOrderLabel = tank.pendingDest ? `${ORDER_LABEL[tank.order]}→移動` : ORDER_LABEL[tank.order];
-      ctx.fillStyle = LABEL_TEXT_COLOR;
-      ctx.font = 'bold 13px "JetBrains Mono"';
-      ctx.fillText(`[${tOrderLabel}]`, 0, 62);
-    }
+    // per user request: order status shown as a single icon glyph (see ORDER_ICON) instead of
+    // bracketed Japanese text, and merged onto the name's own line -- packed friendly deployment
+    // areas were an unreadable wall of overlapping two-line labels on small screens.
+    const tOrderIcon = ORDER_ICON[tank.order] + (tank.pendingDest ? '→' : '');
+    ctx.fillText(tAlive?`戦車${tank.id+1} ${tOrderIcon}`:`戦車${tank.id+1}(撃破)`, 0, 44);
     ctx.restore();
 
     if(tAlive){
@@ -6248,12 +7798,55 @@ function drawBoard(){
     }
   });
 
+  // per user request: 対空ミサイル部隊マーカー -- 戦車と同じ描画パターン(drawSamIconのベクター
+  // アイコン)。攻撃線はヘリ/ドローンのみに引かれる(戦車の攻撃目標線と同様の見た目)。
+  state.sams.forEach((sam, samIdx)=>{
+    const samVisL = smoothVisualPos(sam, sam.x, sam.y);
+    const samVis = project(samVisL.x, samVisL.y);
+    const samAlive = sam.hp>0;
+    ctx.save();
+    ctx.translate(samVis.x, samVis.y);
+    drawSamIcon(ctx, 0, 0, scaledIconH(22), !samAlive);
+    drawSelectionRing(ctx, 0, 0, (state.commandBox && state.commandBox.kind==='sam' && state.commandBox.idx===samIdx) || isMultiSelected('sam', samIdx));
+    ctx.fillStyle = LABEL_TEXT_COLOR;
+    ctx.font = '15px "JetBrains Mono"';
+    ctx.textAlign='center';
+    const samOrderIcon = ORDER_ICON[sam.order] + (sam.pendingDest ? '→' : '');
+    ctx.fillText(samAlive?`対空${sam.id+1} ${samOrderIcon}`:`対空${sam.id+1}(撃破)`, 0, 44);
+    ctx.restore();
+
+    if(samAlive){
+      drawAttritionBar(ctx, samVis.x+18, samVis.y-2, sam.hp/sam.maxHp);
+      if(sam.order==='hunt' && sam.huntTargetId){
+        const t = state.targets.find(x=>x.id===sam.huntTargetId);
+        if(t && !t.destroyed && isTargetDetected(t)){
+          const eL = estPos(t);
+          const e = project(eL.x, eL.y);
+          ctx.beginPath();
+          ctx.setLineDash([3,3]);
+          ctx.strokeStyle = 'rgba(193,69,59,0.35)';
+          ctx.lineWidth = 1;
+          ctx.moveTo(samVis.x, samVis.y);
+          ctx.lineTo(e.x, e.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+    }
+  });
+
   // 防壁(壁) ― 工兵が構築する障害物。敵味方どちらのユニットからも見える固定物なので
   // 検知/未検知の区別はない。
   state.walls.forEach(w=>{
     const wVis = project(w.x, w.y);
     drawWallShape(ctx, wVis.x, wVis.y, w.hp<=0);
     if(w.hp>0) drawAttritionBar(ctx, wVis.x+20, wVis.y, w.hp/w.maxHp);
+  });
+
+  // per user request: 塹壕(線方式) -- 壁と違い射線を遮らないので身代わり被弾やHPバーはない。
+  // 地形に沿う短いコードで描画(FEBA線/グリッド線と同じ技法)。
+  state.trenches.forEach(tr=>{
+    strokeGridBucket(choppedLineSegments(tr.x1, tr.y1, tr.x2, tr.y2), TRENCH_LINE_COLOR, TRENCH_LINE_WIDTH);
   });
 
   // 工兵小隊 (自軍) ― HP制ではなく小隊と同じ soldiers ロスター制、戦闘はせず移動+壁構築のみ
@@ -6263,17 +7856,13 @@ function drawBoard(){
     const aliveSoldiers = en.soldiers.filter(s=>s.alive);
     ctx.save();
     ctx.translate(enVis.x, enVis.y);
-    drawEngineerIcon(ctx, 0, 0, scaledIconH(16), aliveSoldiers.length===0);
-    drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='engineer' && state.commandBox.idx===enIdx);
+    drawEngineerIcon(ctx, 0, 0, scaledIconH(22), aliveSoldiers.length===0);
+    drawSelectionRing(ctx, 0, 0, (state.commandBox && state.commandBox.kind==='engineer' && state.commandBox.idx===enIdx) || isMultiSelected('engineer', enIdx));
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '14px "JetBrains Mono"';
     ctx.textAlign='center';
-    ctx.fillText(`工兵 ${aliveSoldiers.length}/${en.soldiers.length}`, 0, 28);
-    if(aliveSoldiers.length>0){
-      const enOrderLabel = en.pendingDest ? `${ORDER_LABEL[en.order]}→移動` : ORDER_LABEL[en.order];
-      ctx.font = 'bold 13px "JetBrains Mono"';
-      ctx.fillText(`[${enOrderLabel}]`, 0, 44);
-    }
+    const enOrderIcon = aliveSoldiers.length>0 ? ` ${ORDER_ICON[en.order]}${en.pendingDest?'→':''}` : '';
+    ctx.fillText(`工兵 ${aliveSoldiers.length}/${en.soldiers.length}${enOrderIcon}`, 0, 28);
     ctx.restore();
     if(aliveSoldiers.length>0) drawAttritionBar(ctx, enVis.x+18, enVis.y, aliveSoldiers.length/en.soldiers.length);
   });
@@ -6284,14 +7873,18 @@ function drawBoard(){
       const sqVisL = smoothVisualPos(sq, sq.x, sq.y);
       const sqVis = project(sqVisL.x, sqVisL.y);
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
-      drawUnitIcon(ctx, infantryIcon, sqVis.x, sqVis.y, scaledIconH(16), aliveSoldiers.length===0);
-      drawSelectionRing(ctx, sqVis.x, sqVis.y, state.commandBox && state.commandBox.kind==='squad' && state.commandBox.idx===sqIdx);
+      // per user request: now a cluster of individual 3D figures (one per living soldier --
+      // see makeMarkerMesh3d's 'infantry' branch) instead of one flat icon, matching how
+      // tank/heli already rely on their own 3D model instead of a 2D sprite. Still falls
+      // back to the flat icon when 3D isn't available at all.
+      if(!threeReady) drawUnitIcon(ctx, infantryIcon, sqVis.x, sqVis.y, scaledIconH(22), aliveSoldiers.length===0);
+      drawSelectionRing(ctx, sqVis.x, sqVis.y, (state.commandBox && state.commandBox.kind==='squad' && state.commandBox.idx===sqIdx) || isMultiSelected('squad', sqIdx));
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, sqVis.x+32, sqVis.y, aliveSoldiers.length/sq.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
       ctx.textAlign='center';
-      const sqOrderLabel = sq.pendingDest ? `${ORDER_LABEL[sq.order]}→移動` : ORDER_LABEL[sq.order];
-      ctx.fillText(`第${sqIdx+1}小隊 ${aliveSoldiers.length}/${sq.soldiers.length} [${sqOrderLabel}]`, sqVis.x, sqVis.y+28);
+      const sqOrderIcon = ORDER_ICON[sq.order] + (sq.pendingDest ? '→' : '');
+      ctx.fillText(`第${sqIdx+1}小隊 ${aliveSoldiers.length}/${sq.soldiers.length} ${sqOrderIcon}`, sqVis.x, sqVis.y+28);
 
       if(aliveSoldiers.length>0){
         state.targets.filter(t=>!t.destroyed && t.type==='infantry' && isTargetDetected(t)).forEach(t=>{
@@ -6319,14 +7912,14 @@ function drawBoard(){
       const snVis = project(snVisL.x, snVisL.y);
       const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
       // per user request: custom sniper icon image (our side only) in place of the triangle
-      drawUnitIcon(ctx, sniperIcon, snVis.x, snVis.y, scaledIconH(16), aliveSoldiers.length===0);
-      drawSelectionRing(ctx, snVis.x, snVis.y, state.commandBox && state.commandBox.kind==='sniper' && state.commandBox.idx===snIdx);
+      drawUnitIcon(ctx, sniperIcon, snVis.x, snVis.y, scaledIconH(22), aliveSoldiers.length===0);
+      drawSelectionRing(ctx, snVis.x, snVis.y, (state.commandBox && state.commandBox.kind==='sniper' && state.commandBox.idx===snIdx) || isMultiSelected('sniper', snIdx));
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, snVis.x+20, snVis.y, aliveSoldiers.length/sn.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
       ctx.textAlign='center';
-      const snOrderLabel = sn.pendingDest ? `${ORDER_LABEL[sn.order]}→移動` : ORDER_LABEL[sn.order];
-      ctx.fillText(`狙撃${snIdx+1}班 ${aliveSoldiers.length}/${sn.soldiers.length} [${snOrderLabel}]`, snVis.x, snVis.y+27);
+      const snOrderIcon = ORDER_ICON[sn.order] + (sn.pendingDest ? '→' : '');
+      ctx.fillText(`狙撃${snIdx+1}班 ${aliveSoldiers.length}/${sn.soldiers.length} ${snOrderIcon}`, snVis.x, snVis.y+27);
 
       if(aliveSoldiers.length>0 && sn.pendingSnipeTargetId){
         const t = state.targets.find(x=>x.id===sn.pendingSnipeTargetId);
@@ -6384,7 +7977,7 @@ function drawBoard(){
       ctx.setLineDash([5,4]);
       ctx.strokeStyle = selected ? 'rgba(217,164,65,0.9)' : 'rgba(217,164,65,0.35)';
       ctx.lineWidth = 1.5;
-      ctx.arc(e.x, e.y, clamp(t.distErr, 20, UNCERTAINTY_CIRCLE_CAP), 0, Math.PI*2);
+      ctx.arc(e.x, e.y, clamp(t.posErr*UNCERTAINTY_CIRCLE_SCALE, UNCERTAINTY_CIRCLE_MIN, UNCERTAINTY_CIRCLE_CAP), 0, Math.PI*2);
       ctx.stroke();
       ctx.setLineDash([]);
 
@@ -6396,7 +7989,10 @@ function drawBoard(){
         // per user request: custom enemy infantry icon image in place of the plain circle --
         // muted (grayscale) until identified, same treatment as a friendly unit with no survivors.
         const aliveTroops = t.troops.filter(s=>s.alive);
-        drawUnitIcon(ctx, enemyInfantryIcon, e.x, e.y, scaledIconH(16), !t.revealed);
+        // per user request: now a cluster of individual 3D figures in its real tactical
+        // formation (see makeMarkerMesh3d's 'infantry' branch) instead of one flat icon --
+        // still falls back to the flat icon when 3D isn't available at all.
+        if(!threeReady) drawUnitIcon(ctx, enemyInfantryIcon, e.x, e.y, scaledIconH(22), !t.revealed);
         if(t.revealed) drawAttritionBar(ctx, e.x+14, e.y, t.hp/t.maxHp);
         labelY = e.y+26;
         if(t.revealed){
@@ -6446,6 +8042,24 @@ function drawBoard(){
         if(t.revealed){
           ctx.fillStyle = LABEL_TEXT_COLOR;
           ctx.font = '14px "JetBrains Mono"';
+          ctx.textAlign='center';
+          ctx.fillText(t.def.label, e.x, labelY);
+        }
+      } else if(t.type==='hq'){
+        // per user request (idea 1/4): reads as a fortified structure, not a mobile unit --
+        // a bordered square (matching the 3D minimap's box shape) instead of the plain circle
+        // used for artillery/vehicle, so it's immediately recognizable as the wave's
+        // alternate win condition.
+        const hqColor = t.revealed ? t.def.mark : '#8f9678';
+        ctx.fillStyle = hqColor;
+        ctx.fillRect(e.x-8, e.y-8, 16, 16);
+        ctx.strokeStyle = LABEL_TEXT_COLOR;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(e.x-8, e.y-8, 16, 16);
+        labelY = e.y+26;
+        if(t.revealed){
+          ctx.fillStyle = LABEL_TEXT_COLOR;
+          ctx.font = 'bold 14px "JetBrains Mono"';
           ctx.textAlign='center';
           ctx.fillText(t.def.label, e.x, labelY);
         }
@@ -6528,15 +8142,20 @@ function drawBoard(){
     });
   }
 
-  // flying projectiles ― arced trajectory. The arc's height is a real world-space offset
-  // above the terrain at each sampled point (projectAtHeight), not a flat screen-pixel nudge
-  // -- see ARC_HEIGHT's comment for why that matters on hilly terrain.
+  // flying projectiles ― arced trajectory. per user request: the arc's height baseline is a
+  // smooth interpolation between the launch and impact points' OWN terrain heights (see
+  // projectileArcWorldY()), not the local terrain directly beneath the shell's current XY --
+  // sampling local terrain there made the drawn trajectory hug every bump along the flight
+  // path on hilly ground instead of reading as a clean ballistic arc between two elevations.
   const nowP = performance.now();
   projectiles.forEach(p=>{
     const prog = clamp((nowP-p.born)/p.duration, 0, 1);
     const gx = p.startX + (p.endX-p.startX)*prog;
     const gy = p.startY + (p.endY-p.startY)*prog;
-    const gp = projectAtHeight(gx, gy, Math.sin(prog*Math.PI)*ARC_HEIGHT);
+    const isArc = p.trajectory === 'arc';
+    const gp = isArc
+      ? projectAtWorldY(gx, gy, projectileArcWorldY(p.startX, p.startY, p.endX, p.endY, prog))
+      : project(gx, gy);
     const x = gp.x, y = gp.y;
     const startG = project(p.startX, p.startY);
     const endG = project(p.endX, p.endY);
@@ -6544,19 +8163,21 @@ function drawBoard(){
     // per user request: full parabolic arc curve for the whole flight (敵味方問わず --
     // this projectiles[] array is shared by friendly mortar volleys and enemy indirect
     // fire/counter-battery alike), shown in addition to the existing moving-dot + trail.
-    ctx.beginPath();
-    const arcSteps = 20;
-    for(let k=0;k<=arcSteps;k++){
-      const tt = k/arcSteps;
-      const agx = p.startX + (p.endX-p.startX)*tt;
-      const agy = p.startY + (p.endY-p.startY)*tt;
-      const agp = projectAtHeight(agx, agy, Math.sin(tt*Math.PI)*ARC_HEIGHT);
-      const ax = agp.x, ay = agp.y;
-      if(k===0) ctx.moveTo(ax,ay); else ctx.lineTo(ax,ay);
+    if(isArc){
+      ctx.beginPath();
+      const arcSteps = 20;
+      for(let k=0;k<=arcSteps;k++){
+        const tt = k/arcSteps;
+        const agx = p.startX + (p.endX-p.startX)*tt;
+        const agy = p.startY + (p.endY-p.startY)*tt;
+        const agp = projectAtWorldY(agx, agy, projectileArcWorldY(p.startX, p.startY, p.endX, p.endY, tt));
+        const ax = agp.x, ay = agp.y;
+        if(k===0) ctx.moveTo(ax,ay); else ctx.lineTo(ax,ay);
+      }
+      ctx.strokeStyle = 'rgba(217,164,65,0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
     }
-    ctx.strokeStyle = 'rgba(217,164,65,0.4)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
 
     // faint dashed ground track + aim point ring
     ctx.beginPath();
@@ -6576,7 +8197,9 @@ function drawBoard(){
       const tp = clamp(prog-k*0.04,0,1);
       const tgx = p.startX + (p.endX-p.startX)*tp;
       const tgy = p.startY + (p.endY-p.startY)*tp;
-      const tgp = projectAtHeight(tgx, tgy, Math.sin(tp*Math.PI)*ARC_HEIGHT);
+      const tgp = isArc
+        ? projectAtWorldY(tgx, tgy, projectileArcWorldY(p.startX, p.startY, p.endX, p.endY, tp))
+        : project(tgx, tgy);
       const tx = tgp.x, ty = tgp.y;
       ctx.beginPath();
       ctx.fillStyle = `rgba(217,164,65,${0.35-k*0.1})`;
@@ -6591,34 +8214,83 @@ function drawBoard(){
     ctx.fill();
   });
 
-  // enemy tracers ― incoming fire (counter-attack on FDC / infantry duel casualties)
+  // enemy tracers ― incoming/outgoing direct fire (counter-attack on FDC / infantry duel
+  // casualties / all outgoing friendly fire, see fireTracer()). Rendering branches on
+  // tr.weaponType so each weapon family reads distinctly instead of one shared straight
+  // orange tracer for every shot in the game (per user request).
   enemyTracers.forEach(tr=>{
     const prog = clamp((nowP-tr.born)/tr.duration, 0, 1);
+    const wt = tr.weaponType || 'rifle';
+
+    if(wt === 'missile'){
+      // guided SAM missile: a wobbling smoke trail (not an instant straight line) so it
+      // reads as something flying rather than a hitscan shot, with a bright flame at the tip.
+      const dx = tr.endX-tr.startX, dy = tr.endY-tr.startY;
+      const len = Math.hypot(dx,dy) || 1;
+      const nx = -dy/len, ny = dx/len;
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(215,215,210,0.55)';
+      ctx.lineWidth = 2.2;
+      const SEGS = 10;
+      for(let s=0;s<=SEGS;s++){
+        const sp = Math.min(prog, s/SEGS);
+        const lx = tr.startX+dx*sp, ly = tr.startY+dy*sp;
+        const wob = Math.sin(sp*Math.PI*3 + tr.born*0.01) * 6 * Math.sin(sp*Math.PI);
+        const wp = projectAtWorldY(lx+nx*wob, ly+ny*wob, tracerWorldY(tr.startX,tr.startY,tr.endX,tr.endY,sp));
+        if(s===0) ctx.moveTo(wp.x, wp.y); else ctx.lineTo(wp.x, wp.y);
+      }
+      ctx.stroke();
+      const tip = projectAtWorldY(tr.startX+dx*prog, tr.startY+dy*prog, tracerWorldY(tr.startX,tr.startY,tr.endX,tr.endY,prog));
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(255,170,80,0.95)';
+      ctx.arc(tip.x, tip.y, 3.4, 0, Math.PI*2);
+      ctx.fill();
+      return;
+    }
+
+    if(wt === 'drone'){
+      // suicide drone dive: an accelerating red point punching straight at the target,
+      // not a tracer line -- reads as a body/warhead closing in, not a shot being fired.
+      const ease = prog*prog;
+      const dp = projectAtWorldY(tr.startX+(tr.endX-tr.startX)*ease, tr.startY+(tr.endY-tr.startY)*ease, tracerWorldY(tr.startX,tr.startY,tr.endX,tr.endY,ease));
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(255,90,70,0.9)';
+      ctx.arc(dp.x, dp.y, 3+prog*2, 0, Math.PI*2);
+      ctx.fill();
+      return;
+    }
+
+    // rifle (small arms: squad/sniper/anti-drone point defense/generic enemy infantry),
+    // cannon (tank/vehicle direct-fire guns), and heli (attack helicopter gun/rocket runs)
+    // all share this trailing-tracer-with-shell shape, differing only in color/thickness.
+    const style = wt==='cannon' ? {trail:'255,235,200,0.4', core:'255,235,205,0.95', shell:'#fff6dd', width:4,   shellR:4.2}
+                : wt==='heli'   ? {trail:'255,110,90,0.35',  core:'255,120,95,0.95',  shell:'#ffcabe', width:2.4, shellR:3}
+                :                 {trail:'255,120,80,0.3',   core:'255,140,80,0.9',   shell:'#ffcf9e', width:2,   shellR:2.8};
     const gx = tr.startX + (tr.endX-tr.startX)*prog;
     const gy = tr.startY + (tr.endY-tr.startY)*prog;
-    const gp = project(gx, gy);
+    const gp = projectAtWorldY(gx, gy, tracerWorldY(tr.startX,tr.startY,tr.endX,tr.endY,prog));
     const x = gp.x, y = gp.y;
     const trailProg = Math.max(0, prog-0.25);
     const tgx = tr.startX + (tr.endX-tr.startX)*trailProg;
     const tgy = tr.startY + (tr.endY-tr.startY)*trailProg;
-    const tgp = project(tgx, tgy);
+    const tgp = projectAtWorldY(tgx, tgy, tracerWorldY(tr.startX,tr.startY,tr.endX,tr.endY,trailProg));
     const startG = project(tr.startX, tr.startY);
     const endG = project(tr.endX, tr.endY);
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(255,120,80,0.3)';
+    ctx.strokeStyle = `rgba(${style.trail})`;
     ctx.lineWidth = 1;
     ctx.moveTo(startG.x, startG.y);
     ctx.lineTo(endG.x, endG.y);
     ctx.stroke();
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(255,140,80,0.9)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = `rgba(${style.core})`;
+    ctx.lineWidth = style.width;
     ctx.moveTo(tgp.x, tgp.y);
     ctx.lineTo(x, y);
     ctx.stroke();
     ctx.beginPath();
-    ctx.fillStyle = '#ffcf9e';
-    ctx.arc(x, y, 2.8, 0, Math.PI*2);
+    ctx.fillStyle = style.shell;
+    ctx.arc(x, y, style.shellR, 0, Math.PI*2);
     ctx.fill();
   });
 
@@ -6629,6 +8301,17 @@ function drawBoard(){
   flashes.forEach(f=>{
     const p = (nowP-f.born)/f.life;
     const fp = project(f.x, f.y);
+    // muzzle flashes (see fireTracer()) are a tiny, near-instant bright core at the shooter's
+    // own position -- no ring, no big/small scaling -- kept visually distinct from the
+    // ring+core impact/explosion language below.
+    if(f.muzzle){
+      const mst = MUZZLE_STYLE[f.weaponType] || MUZZLE_STYLE.rifle;
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(${mst.color},${Math.max(0,1-p)})`;
+      ctx.arc(fp.x, fp.y, Math.max(0, 4.5*mst.scale*(1-p)), 0, Math.PI*2);
+      ctx.fill();
+      return;
+    }
     const scale = f.big ? 3.4 : 1;
     ctx.beginPath();
     ctx.strokeStyle = f.big ? `rgba(255,235,205,${1-p})` : `rgba(255,140,60,${1-p})`;
@@ -6644,6 +8327,20 @@ function drawBoard(){
     ctx.fillStyle = f.big ? `rgba(255,240,210,${(1-p)*0.9})` : `rgba(255,200,120,${(1-p)*0.8})`;
     ctx.arc(fp.x, fp.y, Math.max(0,(f.big?22:6)-p*(f.big?22:6)), 0, Math.PI*2);
     ctx.fill();
+  });
+
+  // explosion shockwaves ― a fast, bright expanding ring layered on top of the flash/debris
+  // for a physically forceful "boom" (see spawnDestructionEffect). Kept separate from
+  // `ripples` (the slower amber recon-ping animation below) so the two don't compete visually.
+  shockwaves = shockwaves.filter(s => nowP-s.born < s.life);
+  shockwaves.forEach(s=>{
+    const p = (nowP-s.born)/s.life;
+    const sp2 = project(s.x, s.y);
+    ctx.beginPath();
+    ctx.strokeStyle = `rgba(255,255,240,${(1-p)*0.85})`;
+    ctx.lineWidth = 4*(1-p*0.6);
+    ctx.arc(sp2.x, sp2.y, 10+p*95, 0, Math.PI*2);
+    ctx.stroke();
   });
 
   // debris particles ― fragments flung outward from a destruction, falling with gravity
@@ -6719,20 +8416,27 @@ function drawBoard(){
     ctx.stroke();
   });
 
-  // smoke clouds (発煙弾) ― billowing, semi-transparent blobs that fade as they age
+  // smoke clouds (発煙弾) ― billowing, semi-transparent blobs that fade as they age. The
+  // billow/drift/wobble below runs on real elapsed time (c.born) rather than c.turnsLeft
+  // (which only ticks once per game turn) so the cloud keeps moving continuously between
+  // turns instead of sitting frozen as a static image.
   (state.smokeClouds||[]).forEach(c=>{
     const cp = project(c.x, c.y);
     if(!cp.visible) return;
     const age = 1 - clamp(c.turnsLeft/SMOKE_DURATION_TURNS, 0, 1);
     const alpha = 0.5 - age*0.2;
+    const t = (performance.now() - (c.born||0)) / 1000;
+    const grow = 1 + t*0.06;
+    const rise = t*3;
     const puffs = [
       {dx:0, dy:0, r:26}, {dx:-14, dy:6, r:18}, {dx:14, dy:5, r:19},
       {dx:-6, dy:-12, r:16}, {dx:9, dy:-10, r:15},
     ];
-    puffs.forEach(pf=>{
+    puffs.forEach((pf,i)=>{
+      const wob = Math.sin(t*0.7 + i*1.7) * 4;
       ctx.beginPath();
       ctx.fillStyle = `rgba(210,210,205,${alpha})`;
-      ctx.arc(cp.x+pf.dx, cp.y+pf.dy, pf.r, 0, Math.PI*2);
+      ctx.arc(cp.x+pf.dx*grow+wob, cp.y+pf.dy*grow-rise, pf.r*grow, 0, Math.PI*2);
       ctx.fill();
     });
   });
@@ -6792,6 +8496,30 @@ function drawBoard(){
     ctx.fillRect(0,0,cv.width,cv.height);
   }
 
+  // weather particles (rain streaks / drifting fog wisps) ― see ensureWeatherParticles()
+  ensureWeatherParticles(cv.width, cv.height);
+  if(state.weather === 'rain'){
+    ctx.strokeStyle = 'rgba(200,215,230,0.35)';
+    ctx.lineWidth = 1;
+    weatherParticles.forEach(p=>{
+      p.y += p.speed; p.x -= p.speed*0.25;
+      if(p.y > cv.height){ p.y = -p.len; p.x = Math.random()*cv.width; }
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x - p.len*0.25, p.y + p.len);
+      ctx.stroke();
+    });
+  } else if(state.weather === 'fog'){
+    weatherParticles.forEach(p=>{
+      p.x += p.speed;
+      if(p.x - p.r > cv.width) p.x = -p.r;
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(210,215,205,${p.alpha})`;
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      ctx.fill();
+    });
+  }
+
   // manual placement highlight ― pulses around the unit awaiting a click-placed position
   if(state.placementPending){
     const item = state.placementQueue[state.placementIndex];
@@ -6814,6 +8542,7 @@ function drawBoard(){
   }
 
   drawCallouts(ctx);
+  ctx.restore();
 }
 
 // ===================== Voice callouts (speech bubbles) =====================
@@ -6957,12 +8686,90 @@ let threeReady = false;
 // forcing this fit on every call (as a previous version did) fights the user's
 // own zoom, since zooming in necessarily pushes the map's corners off-screen.
 let cameraNeedsInitialFit = true;
-let scene3d, camera3d, renderer3d, terrainObject3d;
-const HEIGHT_GRID = { cols:0, rows:0, values:null, minX:0, minZ:0, stepX:1, stepZ:1 };
-// per user request: topographic-map-style contour lines, generated from the same real
-// elevation data as HEIGHT_GRID (see buildContourLines()). Canvas-unit line segments,
-// re-projected and drawn each frame in drawBoard() like the (now-suppressed) road overlay.
+let scene3d, camera3d, renderer3d, terrainObject3d, sunLight;
+// per user request: camera-to-lookAt distance from the most recent updateCameraFromView() call,
+// used only as updateFogDistance()'s fallback when every sampled ray points above the horizon.
+let lastCameraDist = 0;
+// per user request (idea 1): tree/rock props scattered across the terrain (see
+// buildTerrainProps()) so forest patches read as actual forest and hillsides aren't bare.
+let treeTrunkMesh3d = null, treeFoliageMesh3d = null, rockMesh3d = null;
+// Topographic-map-style contour lines, traced directly from elevationAt() (the same
+// function every gameplay formula uses) via a simplified marching-squares pass over the
+// canvas -- see buildContourLines(). Canvas-unit line segments, re-projected and drawn
+// each frame in drawBoard() like the road overlay.
 const CONTOUR_LINES_CANVAS = [];
+
+// per user request: a terrain-conforming coordinate grid -- 100m minor lines with every
+// 10th (1km) line promoted to "major" -- matching how a real military map's grid squares
+// work. Unlike CONTOUR_LINES_CANVAS, grid position is purely a function of canvas-unit
+// space (a fixed lattice, independent of any specific terrain), so it's built exactly once
+// here rather than rebuilt per wave in regenerateTerrain() -- only the PROJECTED height of
+// each point (sampled by project() via terrainHeightAt at draw time) depends on the current
+// terrain, and that already happens fresh every frame regardless. Each line is chopped into
+// short segments (the same cell size buildContourLines' marching-squares grid uses) so it
+// draws as a sequence of short chords hugging the terrain's actual elevation profile end to
+// end, rather than one long straight 3D line that ignores whatever hill sits along it.
+const GRID_MINOR_SPACING_UNITS = 100/METERS_PER_UNIT;
+const GRID_MAJOR_EVERY = 10; // 10 x 100m minor lines = 1 x 1km major line
+const GRID_LINE_SEGMENT = CONTOUR_CELL;
+function buildGridLineSegments(){
+  const minor = [], major = [];
+  const addSegments = (bucket, fixedIsX, fixedVal, lenMax)=>{
+    for(let t=0; t<lenMax; t+=GRID_LINE_SEGMENT){
+      const t2 = Math.min(t+GRID_LINE_SEGMENT, lenMax);
+      if(fixedIsX) bucket.push({x1:fixedVal, y1:t, x2:fixedVal, y2:t2});
+      else bucket.push({x1:t, y1:fixedVal, x2:t2, y2:fixedVal});
+    }
+  };
+  let idx = 0;
+  for(let x=0; x<=CANVAS_W+0.001; x+=GRID_MINOR_SPACING_UNITS){
+    addSegments((idx % GRID_MAJOR_EVERY === 0) ? major : minor, true, x, CANVAS_H);
+    idx++;
+  }
+  idx = 0;
+  for(let y=0; y<=CANVAS_H+0.001; y+=GRID_MINOR_SPACING_UNITS){
+    addSegments((idx % GRID_MAJOR_EVERY === 0) ? major : minor, false, y, CANVAS_W);
+    idx++;
+  }
+  return {minor, major};
+}
+const GRID_LINES = buildGridLineSegments();
+
+// per user request: FEBA (主戦闘地域前縁) line -- rebuilt fresh each frame (unlike the static
+// GRID_LINES) since state.febaX can change live while dragging, using the same short-chord
+// terrain-hugging technique so it reads correctly against the 3D terrain at any camera angle.
+function febaLineSegments(x){
+  const segs = [];
+  for(let y=0; y<CANVAS_H; y+=GRID_LINE_SEGMENT){
+    segs.push({x1:x, y1:y, x2:x, y2:Math.min(y+GRID_LINE_SEGMENT, CANVAS_H)});
+  }
+  return segs;
+}
+// per user request: 塹壕(線方式) -- 任意方向の直線を、同じ短いコード分割方式(terrain-hugging)
+// で描画するための汎用版。
+function choppedLineSegments(x1, y1, x2, y2){
+  const totalLen = Math.hypot(x2-x1, y2-y1);
+  const steps = Math.max(1, Math.ceil(totalLen/GRID_LINE_SEGMENT));
+  const segs = [];
+  for(let i=0;i<steps;i++){
+    const t0 = i/steps, t1 = (i+1)/steps;
+    segs.push({x1:x1+(x2-x1)*t0, y1:y1+(y2-y1)*t0, x2:x1+(x2-x1)*t1, y2:y1+(y2-y1)*t1});
+  }
+  return segs;
+}
+// Screen-space distance from a click/drag point to the FEBA line -- same nearest-sample-point
+// technique as nearestVisibleTargetForScreen, so grabbing the line to drag it is exactly
+// WYSIWYG (matches what's drawn) regardless of camera angle, consistent with unit selection.
+function febaScreenHitDistance(sx, sy){
+  let best = Infinity;
+  for(let y=0; y<=CANVAS_H; y+=GRID_LINE_SEGMENT){
+    const p = project(state.febaX, y);
+    if(!p.visible) continue;
+    const d = Math.hypot(p.x-sx, p.y-sy);
+    if(d<best) best = d;
+  }
+  return best;
+}
 // On phones, start the camera rotated -90 deg so the friendly<->enemy axis
 // (canvas X: friendly at low X, enemy at high X) reads bottom-to-top on
 // screen (friendly near/bottom, enemy far/top) instead of the desktop's
@@ -6972,11 +8779,29 @@ const CONTOUR_LINES_CANVAS = [];
 const MAP_INITIAL_AZIMUTH = (window.innerWidth||0) <= 600 ? -Math.PI/2 : 0;
 const MAP_VIEW = {
   cx: CANVAS_W/2, cy: CANVAS_H/2,      // look-at point, in canvas-unit space
-  zoom: 1, azimuth: MAP_INITIAL_AZIMUTH, polar: 0.6, // orbit distance factor / horizontal / tilt angle (rad)
+  zoom: 1, azimuth: MAP_INITIAL_AZIMUTH, polar: 0.82, // lower cinematic angle gives the battlefield a longer horizon and stronger depth
   containerW: 1, containerH: 1,
 };
 const MAP_ZOOM_MIN = 0.35, MAP_ZOOM_MAX = 9; // per user request: allow zooming in further (was 5)
 const MAP_POLAR_MIN = 0.12, MAP_POLAR_MAX = 1.45;
+let cameraCinematic = null;
+function triggerCameraCinematic(x, y, zoom, duration, holdMs){
+  if(!camera3d || !MAP_VIEW.containerW) return;
+  const now = performance.now();
+  const current = cameraCinematic && cameraCinematic.returnView
+    ? cameraCinematic.returnView
+    : {cx:MAP_VIEW.cx, cy:MAP_VIEW.cy, zoom:MAP_VIEW.zoom};
+  cameraCinematic = {
+    returnView: current,
+    target:{x, y, zoom:clamp(zoom, MAP_ZOOM_MIN, MAP_ZOOM_MAX)},
+    started:now,
+    duration:Math.max(250, duration||700),
+    holdUntil:now+Math.max(0, holdMs||0),
+  };
+}
+function cancelCameraCinematic(){
+  cameraCinematic = null;
+}
 // scaleX/scaleZ are independent (not a single uniform unitsPerCanvasUnit) so that
 // canvas-unit space (0..CANVAS_W, 0..CANVAS_H) always covers the FULL loaded terrain
 // mesh in both directions, whatever its real-world aspect ratio happens to be. A single
@@ -6986,262 +8811,677 @@ const MAP_POLAR_MIN = 0.12, MAP_POLAR_MAX = 1.45;
 // rendered (so it looked like part of the map) but was outside canvas-unit space, so no
 // order could ever move a unit into it. That read as units hitting an invisible wall well
 // short of the map's visible top/bottom edge.
-const WORLD = { originX: 0, originZ: 0, scaleX: 1, scaleZ: 1, minY: 0, maxY: 0, refY: 0 };
+// scaleX/scaleZ are fixed at METERS_PER_UNIT (the same real-world scale every other
+// gameplay distance in the file already assumes -- see METERS_PER_UNIT) rather than
+// derived from a loaded mesh's bounding box, since a procedural battlefield has no
+// independent "real size" of its own; PROC_TERRAIN_HEIGHT_SCALE below is scaled by the
+// same factor so vertical relief keeps the exact proportions it was tuned at.
+const PROC_TERRAIN_HEIGHT_SCALE = 110 * METERS_PER_UNIT;
+const WORLD = {
+  originX: 0, originZ: 0, scaleX: METERS_PER_UNIT, scaleZ: METERS_PER_UNIT,
+  minY: 0, maxY: PROC_TERRAIN_HEIGHT_SCALE*1.3, refY: PROC_TERRAIN_HEIGHT_SCALE*0.65,
+};
 const unitMarkers3d = {};
+let tankModelTemplate3d = null;
+let tankModelLoadStarted = false;
+let heliModelTemplate3d = null;
+let heliModelLoadStarted = false;
+let heliAnimationMixer = null;
+let heliAnimationAction = null;
 let mapFocusTarget = null;
 
-// per user request: topographic-map style. When a map ships real texture data (now GSI's
-// 淡色地図/"pale" tiles rather than the old aerial photo -- see mapcreate/gsi_terrain_to_obj.py),
-// that texture is applied directly; brown contour lines (CONTOUR_LINES_CANVAS, drawn in
-// drawBoard()) are layered over it either way, matching how a real topo map combines a
-// muted base map with contour lines. Maps that ship no texture data fall back to a flat
-// pale parchment color so contours still read clearly against something texture-like.
-const TERRAIN_FLAT_COLOR = 0xf2ead2;
-// per user request: darkens the terrain texture uniformly without editing the image files.
-// MeshStandardMaterial multiplies its texture by material.color per-pixel in LINEAR color
-// space, but the renderer's sRGB output encoding then gamma-corrects the result for
-// display -- so a naive 0.5 here only looks like 0.5^(1/2.2) =~ 73% brightness on screen,
-// not 50%. This value is chosen so the DISPLAYED brightness comes out to the requested
-// fraction: linear = displayed_fraction ^ 2.2 (0.22 =~ a true 50%-as-bright appearance).
-const TERRAIN_TEXTURE_BRIGHTNESS = 0.2;
-// per user request: exaggerates vertical relief (hills/mountains read twice as tall/steep).
-// Applied via a wrapping group's Y scale -- see loadSelectedTerrain().
-const TERRAIN_RELIEF_EXAGGERATION = 2;
-function applyTerrainTextureOverride(root, textureBase64){
-  if(!textureBase64){
-    root.traverse(o=>{
-      if(o.isMesh && o.material){
-        const mats = Array.isArray(o.material) ? o.material : [o.material];
-        mats.forEach(m=>{ m.map = null; m.color = new THREE.Color(TERRAIN_FLAT_COLOR); m.needsUpdate = true; });
-      }
+// per user request: the terrain texture is now painted procedurally (a canvas colored by
+// elevation + forest/water zones, straight from the same descriptor the mesh geometry and
+// every gameplay formula use) instead of loaded from an aerial photo -- see
+// buildProceduralTexture(). TERRAIN_TEXTURE_BRIGHTNESS is chosen so the DISPLAYED
+// brightness matches the intended fraction: MeshStandardMaterial multiplies its texture by
+// material.color in LINEAR color space, but the renderer's sRGB output encoding then
+// gamma-corrects the result for display, so a naive 0.5 here would only look like
+// 0.5^(1/2.2) =~ 73% brightness on screen, not 50%.
+const TERRAIN_TEXTURE_BRIGHTNESS = 0.55;
+const PROC_TEXTURE_SIZE_X = 1040, PROC_TEXTURE_SIZE_Z = 416; // 2.5:1, matching CANVAS_W:CANVAS_H
+// Base ground colors across the elevation range (low -> high), and the forest/water zone
+// overlay colors -- painted from the exact same descriptor buildProceduralTerrainMesh()
+// displaces its geometry from, so the picture and the mechanics can't disagree.
+// per user request: PROC_COLOR_LOW brightened -- low-lying ground was reading as near-black.
+const PROC_COLOR_LOW = [0x4a,0x52,0x36], PROC_COLOR_HIGH = [0x9a,0x8f,0x66];
+const PROC_COLOR_FOREST = [0x23,0x38,0x1e], PROC_COLOR_WATER = [0x2c,0x4a,0x5e];
+// per user request: the forest tint alone read as a flat, "cheap" green -- these paint
+// mottled tree-canopy clumps (dark/light blotches at PROC_CANOPY_CELL scale) plus sparse
+// bare-earth clearings, on top of the flat PROC_COLOR_FOREST tint below.
+const PROC_CANOPY_CELL = 22, PROC_CANOPY_DARK = [0x16,0x24,0x12], PROC_CANOPY_LIGHT = [0x36,0x52,0x2c];
+const PROC_CLEARING_CELL = 24, PROC_CLEARING_EDGE0 = 0.82, PROC_CLEARING_EDGE1 = 0.9, PROC_CLEARING_COLOR = [0xb3,0x8a,0x66];
+// per user request: open (non-forest, non-water) ground read as flat/monochrome, especially
+// over low-relief terrain where the elevation gradient above has little to work with -- the
+// existing PROC_TEXTURE_NOISE_* grain further below is too fine/low-amplitude to read as real
+// variation. Same technique as the forest canopy mottling above, scaled for open plains: a
+// coarse two-tone blend for broad patchy variation, plus occasional larger dry/bare-earth
+// patches, both deterministic from the seed.
+// Amplitude picked to land in the same ballpark as the forest canopy's full dark/light color
+// swing (~30-45 per channel) rather than the much subtler PROC_TEXTURE_NOISE_* grain -- at the
+// scene's fairly dim, untone-mapped lighting (see initThree()'s Ambient/DirectionalLight),
+// anything weaker visually flattened out to almost nothing once actually lit and rendered.
+const PROC_OPEN_MOTTLE_CELL = 40, PROC_OPEN_MOTTLE_AMOUNT = 40;
+const PROC_DRY_PATCH_CELL = 60, PROC_DRY_PATCH_EDGE0 = 0.58, PROC_DRY_PATCH_EDGE1 = 0.72, PROC_DRY_PATCH_COLOR = [0x8c,0x7a,0x4c];
+// Shared by the 3D terrain's texture and the setup screen's seed-preview thumbnails
+// (renderMapSelectBody) so both always show exactly the elevation/forest/water picture
+// elevationAtFor/terrainTypeAtFor actually compute for the given descriptor.
+// per user request (idea 2): breaks up the flat elevation-gradient look with a mottled
+// ground texture -- a coarse octave for patchy variation (dry/muddy patches) and a fine
+// octave for grain, both deterministic from the map's seed so the setup screen's thumbnail
+// (painted by this same function) always matches the in-game texture exactly.
+function hash2(x, y, seed){
+  let h = Math.imul(x|0, 374761393) ^ Math.imul(y|0, 668265263) ^ Math.imul(seed|0, 2246822519);
+  h = Math.imul(h ^ (h>>>15), 2246822519);
+  h ^= h >>> 13;
+  h = Math.imul(h, 3266489917);
+  h ^= h >>> 16;
+  return (h>>>0) / 4294967296;
+}
+function valueNoise2D(x, y, seed){
+  const x0 = Math.floor(x), y0 = Math.floor(y);
+  const tx = smoothstep01(x-x0), ty = smoothstep01(y-y0);
+  const n00 = hash2(x0,   y0,   seed), n10 = hash2(x0+1, y0,   seed);
+  const n01 = hash2(x0,   y0+1, seed), n11 = hash2(x0+1, y0+1, seed);
+  const a = n00 + (n10-n00)*tx;
+  const b = n01 + (n11-n01)*tx;
+  return a + (b-a)*ty; // 0..1
+}
+const PROC_TEXTURE_NOISE_COARSE_CELL = 55, PROC_TEXTURE_NOISE_COARSE_AMOUNT = 22;
+const PROC_TEXTURE_NOISE_FINE_CELL = 12, PROC_TEXTURE_NOISE_FINE_AMOUNT = 12;
+function paintTerrainColors(ctx, w, h, gen){
+  const img = ctx.createImageData(w, h);
+  const roadPaths = gen.roadPaths || [];
+  const roadKinds = gen.roadKinds || [];
+  const roadDistance = (cx, cy)=>{
+    let best = null;
+    roadPaths.forEach((road, roadIdx)=>{
+      const hit = nearestPointOnRoad(road, cx, cy);
+      if(!hit.point) return;
+      const kind = roadKinds[roadIdx] || 'main';
+      const width = kind==='dirt' ? 7 : kind==='branch' ? 13 : 18;
+      if(!best || hit.dist < best.dist) best = {dist:hit.dist, width, kind};
     });
-    return;
+    return best;
+  };
+  for(let py=0; py<h; py++){
+    const cy = (py/h)*CANVAS_H;
+    for(let px=0; px<w; px++){
+      const cx = (px/w)*CANVAS_W;
+      const e = clamp(elevationAtFor(gen, cx, cy), 0, 1);
+      const type = terrainTypeAtFor(gen, cx, cy);
+      let r,g,b,noiseMult;
+      if(type===TERRAIN_TYPE_WATER){ [r,g,b] = PROC_COLOR_WATER; noiseMult = 0.35; }
+      else if(type===TERRAIN_TYPE_FOREST){
+        const canopyN = valueNoise2D(cx/PROC_CANOPY_CELL, cy/PROC_CANOPY_CELL, gen.seed+7);
+        r = PROC_CANOPY_DARK[0] + (PROC_CANOPY_LIGHT[0]-PROC_CANOPY_DARK[0])*canopyN;
+        g = PROC_CANOPY_DARK[1] + (PROC_CANOPY_LIGHT[1]-PROC_CANOPY_DARK[1])*canopyN;
+        b = PROC_CANOPY_DARK[2] + (PROC_CANOPY_LIGHT[2]-PROC_CANOPY_DARK[2])*canopyN;
+        const clearingN = valueNoise2D(cx/PROC_CLEARING_CELL, cy/PROC_CLEARING_CELL, gen.seed+13);
+        const clearingT = smoothstep01(clamp((clearingN-PROC_CLEARING_EDGE0)/(PROC_CLEARING_EDGE1-PROC_CLEARING_EDGE0), 0, 1));
+        if(clearingT > 0){
+          r += (PROC_CLEARING_COLOR[0]-r)*clearingT;
+          g += (PROC_CLEARING_COLOR[1]-g)*clearingT;
+          b += (PROC_CLEARING_COLOR[2]-b)*clearingT;
+        }
+        noiseMult = 0.6;
+      }
+      else {
+        r = PROC_COLOR_LOW[0] + (PROC_COLOR_HIGH[0]-PROC_COLOR_LOW[0])*e;
+        g = PROC_COLOR_LOW[1] + (PROC_COLOR_HIGH[1]-PROC_COLOR_LOW[1])*e;
+        b = PROC_COLOR_LOW[2] + (PROC_COLOR_HIGH[2]-PROC_COLOR_LOW[2])*e;
+        const mottleN = (valueNoise2D(cx/PROC_OPEN_MOTTLE_CELL, cy/PROC_OPEN_MOTTLE_CELL, gen.seed+19) - 0.5) * PROC_OPEN_MOTTLE_AMOUNT;
+        r += mottleN; g += mottleN*0.85; b += mottleN*0.55;
+        const dryN = valueNoise2D(cx/PROC_DRY_PATCH_CELL, cy/PROC_DRY_PATCH_CELL, gen.seed+23);
+        const dryT = smoothstep01(clamp((dryN-PROC_DRY_PATCH_EDGE0)/(PROC_DRY_PATCH_EDGE1-PROC_DRY_PATCH_EDGE0), 0, 1));
+        if(dryT > 0){
+          r += (PROC_DRY_PATCH_COLOR[0]-r)*dryT;
+          g += (PROC_DRY_PATCH_COLOR[1]-g)*dryT;
+          b += (PROC_DRY_PATCH_COLOR[2]-b)*dryT;
+        }
+        noiseMult = 1;
+      }
+      const noise = ((valueNoise2D(cx/PROC_TEXTURE_NOISE_COARSE_CELL, cy/PROC_TEXTURE_NOISE_COARSE_CELL, gen.seed)-0.5)*PROC_TEXTURE_NOISE_COARSE_AMOUNT
+                   + (valueNoise2D(cx/PROC_TEXTURE_NOISE_FINE_CELL, cy/PROC_TEXTURE_NOISE_FINE_CELL, gen.seed+1)-0.5)*PROC_TEXTURE_NOISE_FINE_AMOUNT) * noiseMult;
+      r = clamp(r+noise, 0, 255); g = clamp(g+noise*0.9, 0, 255); b = clamp(b+noise*0.7, 0, 255);
+      const road = roadDistance(cx, cy);
+      if(road && road.dist < road.width + 5){
+        const edge = clamp((road.dist-road.width)/5, 0, 1);
+        const roadColor = road.kind==='dirt' ? [0x8b,0x6a,0x43] : road.kind==='branch' ? [0x6f,0x6d,0x5d] : [0x7e,0x7d,0x70];
+        const roadBlend = 1-edge;
+        r += (roadColor[0]-r)*roadBlend;
+        g += (roadColor[1]-g)*roadBlend;
+        b += (roadColor[2]-b)*roadBlend;
+        if(road.dist > road.width){
+          const shoulderBlend = 1-clamp((road.dist-road.width)/5, 0, 1);
+          r += (0x9a-r)*shoulderBlend*0.35;
+          g += (0x86-g)*shoulderBlend*0.35;
+          b += (0x5b-b)*shoulderBlend*0.35;
+        }
+      }
+      const idx = (py*w+px)*4;
+      img.data[idx] = r; img.data[idx+1] = g; img.data[idx+2] = b; img.data[idx+3] = 255;
+    }
   }
-  const dataUrl = 'data:image/jpeg;base64,'+textureBase64;
-  const loader = new THREE.TextureLoader();
-  loader.load(dataUrl, tex=>{
-    tex.flipY = false;
-    if('encoding' in tex) tex.encoding = THREE.sRGBEncoding;
-    if('colorSpace' in tex) tex.colorSpace = THREE.SRGBColorSpace;
-    tex.needsUpdate = true;
-    root.traverse(o=>{
-      if(o.isMesh && o.material){
-        const mats = Array.isArray(o.material) ? o.material : [o.material];
-        mats.forEach(m=>{ m.map = tex; m.color = new THREE.Color(TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TEXTURE_BRIGHTNESS); m.needsUpdate = true; });
-      }
-    });
-  }, undefined, err=>{
-    console.error('差し替えテクスチャの読み込みに失敗しました', err);
-  });
+  ctx.putImageData(img, 0, 0);
+}
+function buildProceduralTexture(gen){
+  const cv = document.createElement('canvas');
+  cv.width = PROC_TEXTURE_SIZE_X; cv.height = PROC_TEXTURE_SIZE_Z;
+  paintTerrainColors(cv.getContext('2d'), PROC_TEXTURE_SIZE_X, PROC_TEXTURE_SIZE_Z, gen);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.flipY = true; // canvas y=0 is the top row, matching PlaneGeometry's default UV v=1 at the top after our rotateX below
+  if('encoding' in tex) tex.encoding = THREE.sRGBEncoding;
+  if('colorSpace' in tex) tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
-// Sets up the renderer/scene/camera/lights, which are the same regardless of which map
-// is eventually chosen. Runs once at page load. The actual terrain GLB is NOT loaded here
-// -- that depends on the player's map choice (see selectMap()) and happens in
-// loadSelectedTerrain(), called once that choice is made.
+// per user request: builds the terrain mesh directly (a displaced PlaneGeometry spanning
+// exactly canvas-unit space) instead of loading a GLB -- see generateProceduralTerrain()
+// for the descriptor this displaces from and buildProceduralTexture() for its texture.
+// Segment counts are a readability/perf compromise: fine enough for smooth-looking hills,
+// coarse enough that displacing ~3000 vertices analytically is instant.
+const PROC_MESH_SEGMENTS_X = 90, PROC_MESH_SEGMENTS_Z = 72; // kept at the same units-per-segment density as before CANVAS_H was widened
+function buildProceduralTerrainMesh(gen){
+  const geo = new THREE.PlaneGeometry(CANVAS_W, CANVAS_H, PROC_MESH_SEGMENTS_X, PROC_MESH_SEGMENTS_Z);
+  geo.rotateX(-Math.PI/2); // lie flat in the XZ plane, Y up
+  geo.translate(CANVAS_W/2, 0, CANVAS_H/2); // shift from centered-at-origin to span X:[0,W], Z:[0,H]
+  const pos = geo.attributes.position;
+  for(let i=0;i<pos.count;i++){
+    const x = pos.getX(i), z = pos.getZ(i);
+    pos.setY(i, elevationAtFor(gen, x, z)*PROC_TERRAIN_HEIGHT_SCALE);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  const material = new THREE.MeshStandardMaterial({
+    map: buildProceduralTexture(gen),
+    color: new THREE.Color(TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TEXTURE_BRIGHTNESS),
+  });
+  const mesh = new THREE.Mesh(geo, material);
+  // per user request: the geometry above is built directly in raw canvas-unit space
+  // (X:[0,CANVAS_W], Z:[0,CANVAS_H]) since elevationAtFor/terrainTypeAtFor take raw
+  // canvas-unit coordinates -- but every OTHER 3D-facing consumer (camera position/lookAt,
+  // unit/projectile/prop placement) maps canvas-unit XZ into world space via
+  // canvasUnitToWorldXZ, which scales by WORLD.scaleX/scaleZ (METERS_PER_UNIT). Without this
+  // scale, the mesh's actual world footprint (at most 1300x460 units) sat almost entirely
+  // outside the camera's orbit around the correctly-scaled look-at point (thousands of units
+  // out) -- only a sliver of it near the world origin ever fell in view. That's the real cause
+  // behind "the battlefield is one flat color": the solid textured ground was rendering fine,
+  // just almost never on screen -- everything that looked like terrain (grid lines, contour
+  // lines, trees, unit markers) is drawn independently via canvasUnitToWorldXZ and so still
+  // lined up correctly with each other, masking that the ground surface itself was missing.
+  // Y is left unscaled since vertex heights above are already computed in world-height units
+  // (elevation * PROC_TERRAIN_HEIGHT_SCALE, which itself already bakes in METERS_PER_UNIT).
+  mesh.scale.set(WORLD.scaleX, 1, WORLD.scaleZ);
+  mesh.receiveShadow = true;
+  mesh.castShadow = true; // hills shadow their own far slopes and nearby valleys
+  return mesh;
+}
+
+// per user request: dusky sky tone shared by the renderer's clear color and scene3d.fog, so
+// the horizon (where fogged terrain fades into empty background) reads as one continuous sky
+// rather than a visible seam.
+const SKY_COLOR = 0x2b3440;
+
+// per user request: real-time shadows for terrain/units/props. The sun's shadow camera is a
+// fixed-size ortho box (not sized to the whole map, which would spread a 2048px shadow map
+// so thin over a multi-km battlefield that shadows would look blocky) that re-centers on
+// the current camera look-at point every frame instead -- see its repositioning in
+// updateCameraFromView(). Half-size is a compromise: big enough that shadows don't visibly
+// pop in/out near the edge of a normal zoomed-in view, small enough to keep shadow texels
+// reasonably crisp on units.
+const SHADOW_FRUSTUM_HALF = 900;
+const SUN_OFFSET = {x:800, y:950, z:450}; // ~44 deg from vertical -- steeper looked almost shadowless
+
+// Sets up the renderer/scene/camera/lights, which never change once the page loads. The
+// procedural terrain itself is NOT built here -- that happens per-wave (see
+// regenerateTerrain(), called from startStage()) since it now regenerates every wave.
 function initThree(){
   const canvas3d = document.getElementById('board3d');
-  if(typeof THREE === 'undefined' || !THREE.GLTFLoader){
+  if(typeof THREE === 'undefined'){
     console.warn('3D地形(Three.js)を読み込めませんでした。地図は表示されません。');
     return;
   }
   renderer3d = new THREE.WebGLRenderer({ canvas: canvas3d, antialias:true });
   renderer3d.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
-  renderer3d.setClearColor(0x11140d, 1);
+  // per user request: the map read as visually "lonely" -- partly because everything past the
+  // terrain mesh's finite edges (sky, horizon, beyond the map boundary) was this same
+  // near-black clear color with nothing to blend into it, so it looked like a void rather
+  // than a horizon. A dusky sky tone, paired with scene3d.fog of the exact same color (set
+  // in updateCameraFromView(), scaled to the current camera distance), lets distant terrain
+  // fade smoothly into the background instead of cutting off sharply.
+  renderer3d.setClearColor(SKY_COLOR, 1);
   // Without matching sRGB output encoding, lit colors (the flat terrain color, unit
   // markers, etc.) come out noticeably darker/duller than authored.
   if('outputEncoding' in renderer3d) renderer3d.outputEncoding = THREE.sRGBEncoding;
+  // per user request: ACES filmic tone mapping instead of none, for a less flat/washed-out
+  // look (highlights roll off instead of clipping straight to white). Exposure nudged up a
+  // touch since ACES also compresses midtones darker than a 1:1 mapping would.
+  renderer3d.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer3d.toneMappingExposure = 1.15;
+  // per user request: real shadows (terrain relief, units, props) instead of flat lighting
+  // with no depth cues at all -- soft-filtered (PCFSoftShadowMap) so shadow edges don't look
+  // jagged at the shadow map's necessarily-limited resolution (see SHADOW_FRUSTUM_HALF).
+  renderer3d.shadowMap.enabled = true;
+  renderer3d.shadowMap.type = THREE.PCFSoftShadowMap;
   scene3d = new THREE.Scene();
+  scene3d.fog = new THREE.Fog(SKY_COLOR, 1, 2); // near/far kept in sync with camera distance -- see updateCameraFromView()
 
-  camera3d = new THREE.PerspectiveCamera(45, 1, 1, 100000);
+  camera3d = new THREE.PerspectiveCamera(42, 1, 1, 100000);
   scene3d.add(camera3d);
 
-  // per user request: darkened alongside TERRAIN_TEXTURE_BRIGHTNESS -- the renderer uses no
-  // tone mapping, so any pixel whose light*color exceeds 1.0 just clips to flat white. The
-  // old light levels (0.95 ambient + 1.05 directional) were high enough that sun-facing
-  // terrain clipped white regardless of how dark material.color was, masking the brightness
-  // change entirely. Lower levels here leave headroom for material.color to actually show.
-  scene3d.add(new THREE.AmbientLight(0xffffff, 0.55));
-  const sun = new THREE.DirectionalLight(0xfff4e0, 0.6);
-  sun.position.set(600, 1200, 400);
-  scene3d.add(sun);
+  // per user request: a HemisphereLight (sky-tint from above, muted ground-tint from below)
+  // replaces the old flat-white AmbientLight -- shadowed/indirect-lit areas now pick up a
+  // believable cool-sky/warm-ground bounce instead of just being uniformly dimmer.
+  scene3d.add(new THREE.HemisphereLight(0x8fa8c2, 0x4a4030, 0.55));
+  sunLight = new THREE.DirectionalLight(0xfff4e0, 1.15);
+  sunLight.position.set(SUN_OFFSET.x, SUN_OFFSET.y, SUN_OFFSET.z);
+  sunLight.castShadow = true;
+  // per user request: 2048 was too costly on top of ~200 shadow-casting draw calls: dropped
+  // to 1024 alongside cutting most of those casters down to just terrain+tank+heli (see the
+  // `add`/`addBarrel` helpers in makeMarkerMesh3d below) for a real perf win.
+  sunLight.shadow.mapSize.set(1024, 1024);
+  sunLight.shadow.camera.left = -SHADOW_FRUSTUM_HALF;
+  sunLight.shadow.camera.right = SHADOW_FRUSTUM_HALF;
+  sunLight.shadow.camera.top = SHADOW_FRUSTUM_HALF;
+  sunLight.shadow.camera.bottom = -SHADOW_FRUSTUM_HALF;
+  sunLight.shadow.camera.near = 10;
+  sunLight.shadow.camera.far = SUN_OFFSET.y * 4;
+  sunLight.shadow.bias = -0.0015;
+  scene3d.add(sunLight);
+  scene3d.add(sunLight.target);
 
+  loadTankModel3d();
+  loadHeliModel3d();
   resizeThree();
 }
 
-// per user request: loads the terrain GLB/texture/roads for whichever map the player
-// picked (state.selectedMap, see MAPS/selectMap()). Called once after map selection.
-function loadSelectedTerrain(){
-  if(typeof THREE === 'undefined' || !THREE.GLTFLoader || !scene3d){
+function loadTankModel3d(){
+  if(tankModelLoadStarted || typeof THREE.FBXLoader !== 'function') return;
+  tankModelLoadStarted = true;
+  const loader = new THREE.FBXLoader();
+  loader.load('./models/tank/tank.fbx', obj=>{
+      const bounds = new THREE.Box3().setFromObject(obj);
+      const size = bounds.getSize(new THREE.Vector3());
+      const center = bounds.getCenter(new THREE.Vector3());
+      obj.position.sub(center);
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      // FBX assets often contain a different authoring-unit scale than OBJ assets.
+      // Normalize the imported bounds first, then apply the gameplay marker scale below.
+      obj.scale.setScalar(1/maxDim);
+      const normalizedBounds = new THREE.Box3().setFromObject(obj);
+      obj.position.y -= normalizedBounds.min.y;
+      obj.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+      tankModelTemplate3d = obj;
+      Object.keys(unitMarkers3d).forEach(key=>{
+        if(key.indexOf('tank')===0) disposeMarker3d(key);
+      });
+      syncUnitMarkers3d();
+      console.info('戦車モデルを読み込みました');
+    }, undefined, error=>console.warn('戦車FBXの読み込みに失敗しました', error));
+}
+
+function loadHeliModel3d(){
+  if(heliModelLoadStarted || typeof THREE.FBXLoader !== 'function') return;
+  heliModelLoadStarted = true;
+  const loader = new THREE.FBXLoader();
+  loader.load('./models/heli/heli.fbx', obj=>{
+      const bounds = new THREE.Box3().setFromObject(obj);
+      const size = bounds.getSize(new THREE.Vector3());
+      const center = bounds.getCenter(new THREE.Vector3());
+      obj.position.sub(center);
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      obj.scale.setScalar(1/maxDim);
+      const normalizedBounds = new THREE.Box3().setFromObject(obj);
+      obj.position.y -= normalizedBounds.min.y;
+      obj.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+      heliModelTemplate3d = obj;
+      if(obj.animations && obj.animations.length > 0){
+        heliAnimationMixer = new THREE.AnimationMixer(obj);
+        heliAnimationAction = heliAnimationMixer.clipAction(obj.animations[0]);
+        heliAnimationAction.play();
+      }
+      Object.keys(unitMarkers3d).forEach(key=>{
+        if(key.indexOf('target')===0){
+          const marker = unitMarkers3d[key];
+          if(marker && marker._heliMarker) disposeMarker3d(key);
+        }
+      });
+      syncUnitMarkers3d();
+      console.info('ヘリモデルを読み込みました');
+    }, undefined, error=>console.warn('ヘリFBXの読み込みに失敗しました', error));
+}
+
+// per user request: (re)builds the terrain -- mesh, contour lines, roads -- from a
+// procedural descriptor (see generateProceduralTerrain()). Called once at game start and
+// again at the top of every wave (startStage(), idea 1: the map genuinely changes wave to
+// wave instead of being the same fixed layout every time) and disposes the previous
+// mesh's geometry/texture first so repeated regeneration doesn't leak GPU resources.
+function regenerateTerrain(gen){
+  if(typeof THREE === 'undefined' || !scene3d){
     console.warn('3D地形(Three.js)を読み込めませんでした。地図は表示されません。');
     return;
   }
-  const mapConf = MAPS[state.selectedMap];
-  const glbBase64 = mapConf && mapConf.glb();
-  if(!glbBase64){
-    console.warn('地形データが見つかりませんでした。地図は表示されません。');
-    return;
+  if(terrainObject3d){
+    scene3d.remove(terrainObject3d);
+    terrainObject3d.geometry.dispose();
+    if(terrainObject3d.material.map) terrainObject3d.material.map.dispose();
+    terrainObject3d.material.dispose();
   }
+  state.terrainGen = gen;
+  terrainObject3d = buildProceduralTerrainMesh(gen);
+  scene3d.add(terrainObject3d);
 
-  let arrayBuffer;
-  try{
-    const binStr = atob(glbBase64);
-    const bytes = new Uint8Array(binStr.length);
-    for(let i=0;i<binStr.length;i++) bytes[i] = binStr.charCodeAt(i);
-    arrayBuffer = bytes.buffer;
-  } catch(e){
-    console.error('地形データのデコードに失敗しました', e);
-    return;
-  }
-
-  const loader = new THREE.GLTFLoader();
-  loader.parse(arrayBuffer, '', (gltf)=>{
-    terrainObject3d = gltf.scene;
-    // per user request: exaggerates vertical relief. Scaling terrainObject3d's own Y
-    // wouldn't reliably mean "world-up" -- the GLB node carries a baked-in 90deg rotation
-    // (Blender's Z-up -> Three's Y-up), and local scale is applied before that rotation, so
-    // a direct .scale.y would partly stretch the wrong world axis. Wrapping it in an
-    // unrotated parent group and scaling THAT group's Y instead guarantees the scale applies
-    // in world-vertical space regardless of the child's own rotation.
-    const terrainRig = new THREE.Group();
-    terrainRig.scale.y = TERRAIN_RELIEF_EXAGGERATION;
-    terrainRig.add(terrainObject3d);
-    scene3d.add(terrainRig);
-    terrainRig.updateMatrixWorld(true);
-    applyTerrainTextureOverride(terrainObject3d, mapConf.texture());
-
-    const box = new THREE.Box3().setFromObject(terrainObject3d);
-    const sizeX = box.max.x-box.min.x, sizeZ = box.max.z-box.min.z;
-    WORLD.minY = box.min.y; WORLD.maxY = box.max.y;
-    WORLD.refY = (box.min.y+box.max.y)/2;
-    WORLD.scaleX = sizeX/CANVAS_W;
-    WORLD.scaleZ = sizeZ/CANVAS_H;
-    WORLD.originX = box.min.x;
-    WORLD.originZ = box.min.z;
-
-    // per user request: buildHeightGrid's 2800 unaccelerated raycasts (plus the contour/road
-    // setup) are heavy enough to visibly freeze the page for a moment -- deferring them one
-    // animation frame lets the browser actually paint the current screen first, so the freeze
-    // (still the same total work) doesn't land in the same tick as the map selection click.
-    requestAnimationFrame(()=>{
-      buildHeightGrid();
-      buildContourLines();
-      buildRealRoads(mapConf.roads());
-      threeReady = true;
-      cameraNeedsInitialFit = true;
-      resizeThree();
-    });
-  }, (err)=>{
-    console.error('地形モデルの読み込みに失敗しました', err);
-  });
+  buildContourLines();
+  buildProceduralRoads(gen.roadPaths, gen.roadKinds);
+  buildTerrainProps(gen);
+  threeReady = true;
+  cameraNeedsInitialFit = true;
+  resizeThree();
 }
 
-// Precompute a coarse height field ONCE at load time (via real mesh raycasts) so that
-// per-frame lookups (terrainHeightAt) are cheap O(1) bilinear reads instead of raycasts
-// against a dense terrain mesh (which would be far too slow to do every frame).
-function buildHeightGrid(){
-  const COLS = 70, ROWS = 40;
-  const rc = new THREE.Raycaster();
-  const minX = WORLD.originX, minZ = WORLD.originZ;
-  const stepX = (CANVAS_W*WORLD.scaleX)/(COLS-1);
-  const stepZ = (CANVAS_H*WORLD.scaleZ)/(ROWS-1);
-  const values = new Float32Array(COLS*ROWS);
-  for(let r=0;r<ROWS;r++){
-    for(let c=0;c<COLS;c++){
-      const x = minX + c*stepX, z = minZ + r*stepZ;
-      rc.set(new THREE.Vector3(x, WORLD.maxY+2000, z), new THREE.Vector3(0,-1,0));
-      const hits = rc.intersectObject(terrainObject3d, true);
-      values[r*COLS+c] = hits.length ? hits[0].point.y : WORLD.refY;
+// per user request (idea 1): scatters tree/rock props over the terrain from gen.trees/
+// gen.rocks (see generateProceduralTerrain()) as instanced meshes -- one draw call per prop
+// type regardless of how many trees/rocks exist, so a few dozen props cost almost nothing.
+// Sized relative to WORLD.scaleX/scaleZ (world units per canvas unit) the same way unit
+// markers already are, so prop size stays sensible however canvas-unit space happens to map
+// to world space.
+function disposeTerrainProps(){
+  [treeTrunkMesh3d, treeFoliageMesh3d, rockMesh3d].forEach(m=>{
+    if(!m) return;
+    scene3d.remove(m);
+    m.geometry.dispose();
+    m.material.dispose();
+  });
+  treeTrunkMesh3d = treeFoliageMesh3d = rockMesh3d = null;
+}
+function buildTerrainProps(gen){
+  disposeTerrainProps();
+  const propScale = Math.max(1.4, (WORLD.scaleX+WORLD.scaleZ)/2*2.2);
+  const m = new THREE.Matrix4();
+  const trees = gen.trees||[];
+  if(trees.length){
+    const trunkGeo = new THREE.CylinderGeometry(0.5*propScale, 0.7*propScale, 5*propScale, 5);
+    const trunkMat = new THREE.MeshStandardMaterial({color:0x4a3826, roughness:0.9});
+    treeTrunkMesh3d = new THREE.InstancedMesh(trunkGeo, trunkMat, trees.length);
+    const foliageGeo = new THREE.ConeGeometry(4*propScale, 10*propScale, 7);
+    const foliageMat = new THREE.MeshStandardMaterial({color:0x2d4a22, roughness:0.85});
+    treeFoliageMesh3d = new THREE.InstancedMesh(foliageGeo, foliageMat, trees.length);
+    trees.forEach((t,i)=>{
+      const groundY = elevationAtFor(gen, t.x, t.y)*PROC_TERRAIN_HEIGHT_SCALE;
+      const {x,z} = canvasUnitToWorldXZ(t.x, t.y);
+      const sc = t.scale;
+      m.compose(new THREE.Vector3(x, groundY+2.5*propScale*sc, z), new THREE.Quaternion(), new THREE.Vector3(sc,sc,sc));
+      treeTrunkMesh3d.setMatrixAt(i, m);
+      m.compose(new THREE.Vector3(x, groundY+7.5*propScale*sc, z), new THREE.Quaternion(), new THREE.Vector3(sc,sc,sc));
+      treeFoliageMesh3d.setMatrixAt(i, m);
+    });
+    treeTrunkMesh3d.instanceMatrix.needsUpdate = true;
+    treeFoliageMesh3d.instanceMatrix.needsUpdate = true;
+    treeTrunkMesh3d.castShadow = treeTrunkMesh3d.receiveShadow = true;
+    treeFoliageMesh3d.castShadow = treeFoliageMesh3d.receiveShadow = true;
+    scene3d.add(treeTrunkMesh3d);
+    scene3d.add(treeFoliageMesh3d);
+  }
+  const rocks = gen.rocks||[];
+  if(rocks.length){
+    const rockGeo = new THREE.IcosahedronGeometry(2.2*propScale, 0);
+    const rockMat = new THREE.MeshStandardMaterial({color:0x5c5850, roughness:1, flatShading:true});
+    rockMesh3d = new THREE.InstancedMesh(rockGeo, rockMat, rocks.length);
+    rocks.forEach((r,i)=>{
+      const groundY = elevationAtFor(gen, r.x, r.y)*PROC_TERRAIN_HEIGHT_SCALE;
+      const {x,z} = canvasUnitToWorldXZ(r.x, r.y);
+      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(r.rotX, r.rotY, r.rotZ));
+      m.compose(new THREE.Vector3(x, groundY+1*propScale*r.scale, z), q, new THREE.Vector3(r.scale, r.scale*0.8, r.scale));
+      rockMesh3d.setMatrixAt(i, m);
+    });
+    rockMesh3d.instanceMatrix.needsUpdate = true;
+    rockMesh3d.castShadow = rockMesh3d.receiveShadow = true;
+    scene3d.add(rockMesh3d);
+  }
+}
+
+// ===================== Procedural terrain generation =====================
+// Replaces the old fixed real-world map (a GLB + aerial-photo texture + OSM road file, all
+// embedded as base64 <script> tags the browser had to fully download and parse before the
+// title screen's 作戦開始 button did anything) with a small, instantly-generated
+// battlefield. Because the same descriptor (hills/forestPatches/river/roadPaths) drives
+// BOTH the tactical math (elevationAt/terrainTypeAt below) AND the 3D mesh/texture the
+// player sees (buildProceduralTerrainMesh), the visual-vs-mechanical mismatch that the old
+// real-map pipeline was prone to can't happen here by construction -- there is no second
+// data source to drift out of sync with.
+//
+// Deterministic PRNG (mulberry32) so a given seed always reproduces the same map --
+// needed for the setup screen's seed preview (pick one of several candidates) and for
+// regenerating the identical map if ever needed, unlike Math.random().
+function mulberry32(seed){
+  let a = seed>>>0;
+  return function(){
+    a |= 0; a = (a+0x6D2B79F5)|0;
+    let t = Math.imul(a ^ (a>>>15), 1|a);
+    t = (t + Math.imul(t ^ (t>>>7), 61|t)) ^ t;
+    return ((t ^ (t>>>14))>>>0) / 4294967296;
+  };
+}
+function rngRange(rng, lo, hi){ return lo + (hi-lo)*rng(); }
+function rngRangeArr(rng, [lo,hi]){ return lo + (hi-lo)*rng(); }
+
+// per user request: named archetypes give the generator a distinct tactical character to
+// aim for instead of one generic "some hills" look -- see pickArchetypeForStage() for how
+// waves pick among these, escalating toward the more demanding ones over a run.
+const TERRAIN_ARCHETYPES = {
+  hills:  { label:'丘陵地帯', hillCount:[4,6], hillHeight:[0.5,0.85],  hillRadius:[90,180],  river:false, forestPatches:[3,5] },
+  river:  { label:'河川地帯', hillCount:[2,3], hillHeight:[0.3,0.55],  hillRadius:[100,200], river:true,  forestPatches:[2,4] },
+  forest: { label:'森林地帯', hillCount:[2,4], hillHeight:[0.25,0.5],  hillRadius:[90,160],  river:false, forestPatches:[5,8] },
+  urban:  { label:'市街地',   hillCount:[1,2], hillHeight:[0.15,0.3],  hillRadius:[80,140],  river:false, forestPatches:[1,2] },
+};
+// per user request: early waves stay to the gentlest archetype so players learn movement/
+// terrain basics without a river in the way; later waves draw from the full pool, biased
+// toward the river archetype as the single most demanding one (a forced chokepoint).
+function pickArchetypeForStage(stage, rng){
+  if(stage<=3) return 'hills';
+  if(stage<=8) return rng()<0.5 ? 'hills' : 'forest';
+  const roll = rng();
+  if(roll<0.4) return 'river';
+  if(roll<0.7) return 'forest';
+  if(roll<0.9) return 'hills';
+  return 'urban';
+}
+// Evaluated wherever the river's x-position along its length is needed (elevation dip,
+// water-zone test, texture painting, road routing) so all of them agree exactly.
+function riverXAt(river, y){
+  return river.baseX + Math.sin((y/CANVAS_H)*river.freq + river.phase)*river.amplitude;
+}
+const RIVER_VALLEY_DEPTH = 0.15;
+
+// per user request: builds the full battlefield descriptor -- hills (idea 1: real
+// elevation the player can read), a guaranteed contested high-ground hill near the map's
+// center (idea 3), an optional river with exactly one ford forming the map's one reliable
+// crossing point (idea 3/6: a genuine kill zone to pre-register fire on), forest patches
+// (idea 6), and a road forced through that ford (idea 3/6, reusing the existing road-
+// speed-bonus/A*-pathfinding system unchanged). seed+archetype are both stored so the UI
+// can label/reproduce a specific roll (idea 4's seed preview).
+function generateProceduralTerrain(seed, archetypeKey){
+  const rng = mulberry32(seed);
+  const key = TERRAIN_ARCHETYPES[archetypeKey] ? archetypeKey : 'hills';
+  const arch = TERRAIN_ARCHETYPES[key];
+
+  const hills = [];
+  hills.push({
+    x: rngRange(rng, CANVAS_W*0.42, CANVAS_W*0.58),
+    y: rngRange(rng, CANVAS_H*0.35, CANVAS_H*0.65),
+    r: rngRangeArr(rng, arch.hillRadius) * 1.15,
+    h: rngRangeArr(rng, arch.hillHeight) * 1.1,
+  });
+  const hillCount = Math.round(rngRangeArr(rng, arch.hillCount));
+  for(let i=1;i<hillCount;i++){
+    hills.push({
+      x: rngRange(rng, 120, CANVAS_W-120),
+      y: rngRange(rng, 40, CANVAS_H-40),
+      r: rngRangeArr(rng, arch.hillRadius),
+      h: rngRangeArr(rng, arch.hillHeight),
+    });
+  }
+
+  let river = null;
+  if(arch.river){
+    river = {
+      baseX: rngRange(rng, CANVAS_W*0.38, CANVAS_W*0.55),
+      amplitude: rngRange(rng, 20, 45),
+      freq: rngRange(rng, 2.5, 4),
+      phase: rngRange(rng, 0, Math.PI*2),
+      width: rngRange(rng, 20, 32),
+      fordY: rngRange(rng, CANVAS_H*0.25, CANVAS_H*0.75),
+      fordHalfHeight: 26,
+    };
+  }
+
+  const forestCount = Math.round(rngRangeArr(rng, arch.forestPatches));
+  const forestPatches = [];
+  for(let i=0;i<forestCount;i++){
+    forestPatches.push({
+      x: rngRange(rng, 100, CANVAS_W-100),
+      y: rngRange(rng, 30, CANVAS_H-30),
+      r: rngRange(rng, 60, 130),
+    });
+  }
+
+  const roadY1 = CANVAS_H*0.3;
+  const roadY2 = CANVAS_H*0.7;
+  const roadX = [CANVAS_W*0.27, CANVAS_W*0.5, CANVAS_W*0.73];
+  const mainRoad1 = [
+    {x:20, y:roadY1+rngRange(rng,-8,8)},
+    {x:CANVAS_W*0.25, y:roadY1+rngRange(rng,-18,18)},
+    {x:CANVAS_W*0.5, y:roadY1+rngRange(rng,-20,20)},
+    {x:CANVAS_W*0.75, y:roadY1+rngRange(rng,-18,18)},
+    {x:CANVAS_W-20, y:roadY1+rngRange(rng,-8,8)},
+  ];
+  const mainRoad2 = [
+    {x:20, y:roadY2+rngRange(rng,-8,8)},
+    {x:CANVAS_W*0.25, y:roadY2+rngRange(rng,-18,18)},
+    {x:CANVAS_W*0.5, y:roadY2+rngRange(rng,-20,20)},
+    {x:CANVAS_W*0.75, y:roadY2+rngRange(rng,-18,18)},
+    {x:CANVAS_W-20, y:roadY2+rngRange(rng,-8,8)},
+  ];
+  if(river){
+    const fordX = riverXAt(river, river.fordY);
+    mainRoad1[2] = {x:fordX, y:river.fordY};
+    mainRoad2[2] = {x:fordX, y:river.fordY};
+  }
+  const branchRoads = roadX.map((x, i)=>[
+    {x, y:mainRoad1[i+1].y},
+    {x:x+rngRange(rng,-18,18), y:CANVAS_H*0.5+rngRange(rng,-16,16)},
+    {x, y:mainRoad2[i+1].y},
+  ]);
+  const dirtRoads = [
+    [{x:20, y:CANVAS_H*0.9}, {x:CANVAS_W*0.18, y:CANVAS_H*0.78}, {x:roadX[0], y:mainRoad2[1].y}],
+    [{x:CANVAS_W-20, y:CANVAS_H*0.1}, {x:CANVAS_W*0.82, y:CANVAS_H*0.22}, {x:roadX[2], y:mainRoad1[3].y}],
+    [{x:CANVAS_W*0.5, y:CANVAS_H-20}, {x:CANVAS_W*0.54, y:CANVAS_H*0.82}, {x:roadX[1], y:mainRoad2[2].y}],
+  ];
+  const roadPaths = [mainRoad1, mainRoad2, ...branchRoads, ...dirtRoads];
+  const roadKinds = ['main', 'main', 'branch', 'branch', 'branch', 'dirt', 'dirt', 'dirt'];
+
+  // per user request (idea 1): tree/rock placements are part of the descriptor (drawn from
+  // the same rng, after everything else) so they're just as deterministic/reproducible from
+  // seed as the hills/forest/river -- see buildTerrainProps() for how these turn into meshes.
+  const trees = [];
+  forestPatches.forEach(f=>{
+    const count = Math.max(3, Math.round(f.r/16));
+    for(let i=0;i<count;i++){
+      const ang = rng()*Math.PI*2;
+      const rad = Math.sqrt(rng())*f.r*0.85;
+      trees.push({ x: f.x+Math.cos(ang)*rad, y: f.y+Math.sin(ang)*rad, scale: rngRange(rng,0.8,1.3) });
+    }
+  });
+  const ROCK_COUNT = 10;
+  const rocks = [];
+  for(let i=0;i<ROCK_COUNT;i++){
+    let rx, ry, tries=0;
+    do {
+      rx = rngRange(rng, 60, CANVAS_W-60);
+      ry = rngRange(rng, 30, CANVAS_H-30);
+      tries++;
+    } while(tries<20 && river && Math.abs(rx-riverXAt(river,ry))<(river.width/2+15) && Math.abs(ry-river.fordY)>=river.fordHalfHeight);
+    rocks.push({ x:rx, y:ry, scale: rngRange(rng,0.7,1.5), rotX: rng()*Math.PI, rotY: rng()*Math.PI, rotZ: rng()*Math.PI });
+  }
+
+  return { seed, archetype: key, label: arch.label, hills, forestPatches, river, roadPaths, roadKinds, trees, rocks };
+}
+
+const TERRAIN_TYPE_OPEN = 0, TERRAIN_TYPE_FOREST = 1, TERRAIN_TYPE_WATER = 2;
+// Direction-agnostic zone lookup against an explicit procedural descriptor: inside the
+// river band but outside its ford -> water; inside a forest patch -> forest; else open.
+// Split the same way as elevationAtFor/elevationAt -- see there for why.
+function terrainTypeAtFor(gen, x, y){
+  if(!gen) return TERRAIN_TYPE_OPEN;
+  if(gen.river){
+    const inFord = Math.abs(y-gen.river.fordY) < gen.river.fordHalfHeight;
+    if(!inFord){
+      const rx = riverXAt(gen.river, y);
+      if(Math.abs(x-rx) < gen.river.width/2) return TERRAIN_TYPE_WATER;
     }
   }
-  HEIGHT_GRID.cols = COLS; HEIGHT_GRID.rows = ROWS; HEIGHT_GRID.values = values;
-  HEIGHT_GRID.minX = minX; HEIGHT_GRID.minZ = minZ;
-  HEIGHT_GRID.stepX = stepX; HEIGHT_GRID.stepZ = stepZ;
+  for(let i=0;i<gen.forestPatches.length;i++){
+    const f = gen.forestPatches[i];
+    if(Math.hypot(x-f.x, y-f.y) < f.r) return TERRAIN_TYPE_FOREST;
+  }
+  return TERRAIN_TYPE_OPEN;
+}
+function terrainTypeAt(x, y){
+  return terrainTypeAtFor(state && state.terrainGen, x, y);
+}
+function terrainTypeLabel(type){
+  if(type===TERRAIN_TYPE_FOREST) return '森林';
+  if(type===TERRAIN_TYPE_WATER) return '水域';
+  return '開けた土地';
+}
+// See terrainTypeCoverBonus() (defined earlier, alongside the elevation-based
+// terrainCoverBonus) for how this is used.
+const TERRAIN_TYPE_COVER_BONUS = { [TERRAIN_TYPE_FOREST]: 12, [TERRAIN_TYPE_WATER]: -8 };
+const TERRAIN_TYPE_SPEED_MULT = { [TERRAIN_TYPE_FOREST]: 0.7, [TERRAIN_TYPE_WATER]: 0.35 };
+
+// per user request: the procedural road path (see generateProceduralTerrain) is already
+// in canvas-unit space -- no OSM-mesh-local-to-world conversion needed, since there's no
+// real mesh it was authored against. Kept as its own function (rather than inlining) so
+// the rest of the pipeline (state.roads, buildRoadGraph, A* vehicle pathfinding, the
+// on-road speed bonus) is untouched.
+function buildProceduralRoads(roadPaths, roadKinds){
+  REAL_ROADS_CANVAS.length = 0;
+  (roadPaths||[]).forEach(poly=> REAL_ROADS_CANVAS.push(poly));
+  if(state){
+    state.roads = REAL_ROADS_CANVAS;
+    state.roadKinds = roadKinds || [];
+  }
+  buildRoadGraph();
 }
 
-// Picks a "nice" (1/2/5 x 10^n) contour interval that yields roughly 10 contour lines
-// across the map's real elevation range, the way a paper topographic map's contour
-// interval is chosen relative to the terrain's relief.
-function niceContourInterval(range){
-  if(!(range>0)) return 10;
-  const raw = range/10;
-  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
-  const norm = raw/mag;
-  const nice = norm<1.5 ? 1 : norm<3.5 ? 2 : norm<7.5 ? 5 : 10;
-  return nice*mag;
-}
-
-// per user request: topographic-map-style contour lines, traced from the same real
-// elevation data as HEIGHT_GRID via a simplified marching-squares pass over its grid
-// (each cell's 4 edges are checked independently for a level crossing and paired off in
-// the order found -- this can occasionally split a saddle cell "wrong", which is
-// invisible at this line weight/zoom). Segments are stored in canvas-unit space so
-// drawBoard() can re-project and draw them exactly like any other map element.
+// Topographic-map-style contour lines, traced directly from elevationAt() (the same
+// function every gameplay formula uses) via a simplified marching-squares pass over the
+// canvas -- so, unlike the old real-mesh pipeline (a separate raycast height grid that
+// could in principle drift from what elevationAt reported), there is exactly one terrain
+// truth. CONTOUR_LEVELS are fixed (elevationAt is always normalized 0..1.3) rather than
+// picked per-map, since there's no arbitrary real elevation range to adapt to anymore.
 function buildContourLines(){
   CONTOUR_LINES_CANVAS.length = 0;
-  if(!HEIGHT_GRID.values) return;
-  const {cols, rows, values, minX, minZ, stepX, stepZ} = HEIGHT_GRID;
-  const range = WORLD.maxY-WORLD.minY;
-  const interval = niceContourInterval(range);
-  if(!(interval>0)) return;
-  const v = (r,c)=> values[r*cols+c];
-  const toCanvas = (wx, wz)=> ({ x:(wx-WORLD.originX)/WORLD.scaleX, y:(wz-WORLD.originZ)/WORLD.scaleZ });
-  const firstLevel = Math.ceil(WORLD.minY/interval)*interval;
-  for(let level=firstLevel; level<=WORLD.maxY; level+=interval){
-    for(let r=0; r<rows-1; r++){
-      for(let c=0; c<cols-1; c++){
-        const a=v(r,c), b=v(r,c+1), cc=v(r+1,c+1), d=v(r+1,c);
-        const ax=minX+c*stepX, az=minZ+r*stepZ;
-        const bx=minX+(c+1)*stepX, bz=az;
-        const cx2=bx, cz2=minZ+(r+1)*stepZ;
-        const dx=ax, dz=cz2;
-        const pts = [];
-        const tryEdge = (v0,v1,x0,z0,x1,z1)=>{
-          if((v0<level)!==(v1<level)){
-            const t = (level-v0)/(v1-v0);
-            pts.push({x:x0+(x1-x0)*t, z:z0+(z1-z0)*t});
-          }
-        };
-        tryEdge(a,b, ax,az, bx,bz);
-        tryEdge(b,cc, bx,bz, cx2,cz2);
-        tryEdge(cc,d, cx2,cz2, dx,dz);
-        tryEdge(d,a, dx,dz, ax,az);
-        for(let i=0; i+1<pts.length; i+=2){
-          const p0 = toCanvas(pts[i].x, pts[i].z);
-          const p1 = toCanvas(pts[i+1].x, pts[i+1].z);
-          CONTOUR_LINES_CANVAS.push({x1:p0.x, y1:p0.y, x2:p1.x, y2:p1.y});
+  CONTOUR_LEVELS.forEach(level=>{
+    for(let gy=0; gy<CANVAS_H; gy+=CONTOUR_CELL){
+      for(let gx=0; gx<CANVAS_W; gx+=CONTOUR_CELL){
+        const x0=gx, x1=Math.min(gx+CONTOUR_CELL,CANVAS_W), y0=gy, y1=Math.min(gy+CONTOUR_CELL,CANVAS_H);
+        const vTL=elevationAt(x0,y0), vTR=elevationAt(x1,y0), vBR=elevationAt(x1,y1), vBL=elevationAt(x0,y1);
+        const pts=[];
+        if((vTL>level)!==(vTR>level)){ const t=(level-vTL)/(vTR-vTL); pts.push({x:x0+t*(x1-x0), y:y0}); }
+        if((vTR>level)!==(vBR>level)){ const t=(level-vTR)/(vBR-vTR); pts.push({x:x1, y:y0+t*(y1-y0)}); }
+        if((vBL>level)!==(vBR>level)){ const t=(level-vBL)/(vBR-vBL); pts.push({x:x0+t*(x1-x0), y:y1}); }
+        if((vTL>level)!==(vBL>level)){ const t=(level-vTL)/(vBL-vTL); pts.push({x:x0, y:y0+t*(y1-y0)}); }
+        if(pts.length===2){
+          CONTOUR_LINES_CANVAS.push({x1:pts[0].x, y1:pts[0].y, x2:pts[1].x, y2:pts[1].y});
+        } else if(pts.length===4){
+          CONTOUR_LINES_CANVAS.push({x1:pts[0].x, y1:pts[0].y, x2:pts[1].x, y2:pts[1].y});
+          CONTOUR_LINES_CANVAS.push({x1:pts[2].x, y1:pts[2].y, x2:pts[3].x, y2:pts[3].y});
         }
       }
     }
-  }
-}
-
-// Converts the real OSM road network (mapcreate/roads_data.js, raw local terrain
-// meters as originally exported by gsi_terrain_to_obj.py) into canvas-unit
-// polylines. Uses the terrain mesh node's own accumulated world matrix
-// (localToWorld) rather than a hand-derived scale/rotation, so it stays correct
-// regardless of exactly how the GLB was authored/exported.
-function buildRealRoads(roadsRawData){
-  if(!roadsRawData || !terrainObject3d) return;
-  let meshNode = null;
-  terrainObject3d.traverse(o=>{ if(o.isMesh && !meshNode) meshNode = o; });
-  if(!meshNode) return;
-  meshNode.updateWorldMatrix(true, false);
-  const v = new THREE.Vector3();
-  REAL_ROADS_CANVAS.length = 0;
-  roadsRawData.forEach(way=>{
-    const poly = way.points.map(pt=>{
-      v.set(pt.x, pt.z, 0);
-      meshNode.localToWorld(v);
-      return {
-        x: (v.x-WORLD.originX)/WORLD.scaleX,
-        y: (v.z-WORLD.originZ)/WORLD.scaleZ,
-      };
-    });
-    REAL_ROADS_CANVAS.push(poly);
   });
-  if(state) state.roads = REAL_ROADS_CANVAS;
-  buildRoadGraph();
 }
 
 // Builds a graph (nodes + adjacency list) from REAL_ROADS_CANVAS so vehicles
@@ -7376,17 +9616,14 @@ function advanceAlongPath(fromX, fromY, path, stepLen){
 function canvasUnitToWorldXZ(cx, cy){
   return { x: WORLD.originX + cx*WORLD.scaleX, z: WORLD.originZ + cy*WORLD.scaleZ };
 }
+// World-space (real Three.js Y) terrain height at a canvas position -- the single choke
+// point every 3D-facing consumer (camera look-at/fit, unit/projectile screen projection)
+// goes through. Derived directly from elevationAt()'s 0..1.3 normalized value rather than
+// a raycast against a loaded mesh, since the procedural mesh built in
+// buildProceduralTerrainMesh() is displaced by this exact same formula -- what the camera
+// projects units onto and what the visible mesh surface actually is can't disagree.
 function terrainHeightAt(cx, cy){
-  if(!HEIGHT_GRID.values) return WORLD.refY||0;
-  const {x,z} = canvasUnitToWorldXZ(cx,cy);
-  const fc = clamp((x-HEIGHT_GRID.minX)/HEIGHT_GRID.stepX, 0, HEIGHT_GRID.cols-1.0001);
-  const fr = clamp((z-HEIGHT_GRID.minZ)/HEIGHT_GRID.stepZ, 0, HEIGHT_GRID.rows-1.0001);
-  const c0 = Math.floor(fc), r0 = Math.floor(fr), c1 = c0+1, r1 = r0+1;
-  const tx = fc-c0, tz = fr-r0;
-  const v = (r,c)=> HEIGHT_GRID.values[r*HEIGHT_GRID.cols+c];
-  const top = v(r0,c0)*(1-tx) + v(r0,c1)*tx;
-  const bot = v(r1,c0)*(1-tx) + v(r1,c1)*tx;
-  return top*(1-tz) + bot*tz;
+  return WORLD.minY + elevationAt(cx, cy)*PROC_TERRAIN_HEIGHT_SCALE;
 }
 
 // Screen-space projection of a logical (canvas-unit) point through the live 3D camera.
@@ -7396,15 +9633,20 @@ function project(cx, cy){
   return projectAtHeight(cx, cy, 0);
 }
 // Like project(), but adds extraH (real world-space units, same frame as terrainHeightAt's
-// output -- i.e. already reflecting TERRAIN_RELIEF_EXAGGERATION) on top of the terrain height
-// before projecting. Used for anything that flies above the ground, like mortar arcs -- see
-// their per-user-request comment for why a screen-pixel offset doesn't work for that.
+// output) on top of the LOCAL terrain height at (cx,cy) before projecting -- e.g. a marker
+// that should float a fixed height above whatever ground is directly beneath it.
 function projectAtHeight(cx, cy, extraH){
+  return projectAtWorldY(cx, cy, terrainHeightAt(cx,cy)+extraH);
+}
+// Screen-space projection of a logical (canvas-unit) XZ point at an EXPLICIT world-space Y,
+// ignoring whatever terrain happens to sit directly beneath that XZ position. Used for
+// anything whose height must NOT track local terrain -- see projectileArcWorldY() for why a
+// mortar shell's flight arc needs exactly this.
+function projectAtWorldY(cx, cy, worldY){
   if(!threeReady || !camera3d) return { x:cx, y:cy, visible:true };
   if(!_projForward){ _projForward = new THREE.Vector3(); _projToPoint = new THREE.Vector3(); }
-  const h = terrainHeightAt(cx,cy) + extraH;
   const {x,z} = canvasUnitToWorldXZ(cx,cy);
-  const worldPt = new THREE.Vector3(x, h, z);
+  const worldPt = new THREE.Vector3(x, worldY, z);
   camera3d.getWorldDirection(_projForward);
   _projToPoint.copy(worldPt).sub(camera3d.position);
   const inFront = _projToPoint.dot(_projForward) > 0.01;
@@ -7418,8 +9660,32 @@ function projectAtHeight(cx, cy, extraH){
 
 function updateCameraFromView(){
   if(!camera3d) return;
-  const look = canvasUnitToWorldXZ(MAP_VIEW.cx, MAP_VIEW.cy);
-  const lookY = terrainHeightAt(MAP_VIEW.cx, MAP_VIEW.cy);
+  let viewCx = MAP_VIEW.cx, viewCy = MAP_VIEW.cy, viewZoom = MAP_VIEW.zoom;
+  if(cameraCinematic){
+    const now = performance.now();
+    const c = cameraCinematic;
+    const elapsed = now-c.started;
+    if(elapsed >= c.duration){
+      cameraCinematic = null;
+    } else {
+      const t = clamp(elapsed/c.duration, 0, 1);
+      const ease = t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
+      const hold = now < c.holdUntil;
+      const blend = hold ? 1 : ease;
+      viewCx = c.returnView.cx + (c.target.x-c.returnView.cx)*blend;
+      viewCy = c.returnView.cy + (c.target.y-c.returnView.cy)*blend;
+      viewZoom = c.returnView.zoom + (c.target.zoom-c.returnView.zoom)*blend;
+    }
+  }
+  const look = canvasUnitToWorldXZ(viewCx, viewCy);
+  const lookY = terrainHeightAt(viewCx, viewCy);
+  // per user request: the sun's shadow camera is a small fixed-size box (SHADOW_FRUSTUM_HALF)
+  // rather than one sized to the whole map, so it has to follow the view instead of covering
+  // everything at once -- keep it centered on wherever the player is actually looking.
+  if(sunLight){
+    sunLight.position.set(look.x+SUN_OFFSET.x, lookY+SUN_OFFSET.y, look.z+SUN_OFFSET.z);
+    sunLight.target.position.set(look.x, lookY, look.z);
+  }
   camera3d.aspect = (MAP_VIEW.containerW||1)/(MAP_VIEW.containerH||1);
   const fieldW = (CANVAS_W*WORLD.scaleX) || 200;
   const fieldH = (CANVAS_H*WORLD.scaleZ) || 200;
@@ -7435,6 +9701,14 @@ function updateCameraFromView(){
     camera3d.near = Math.max(1, d*0.02);
     camera3d.far = d + (WORLD.maxY-WORLD.minY) + 8000;
     camera3d.updateProjectionMatrix();
+    // per user request: fog distance used to be recomputed right here too, but applyDist runs
+    // on every touchmove/mousemove while panning (not just once per rendered frame) -- doing
+    // the multi-ray scan below on every single input event, on top of everything else already
+    // running per frame, was heavy enough to visibly stutter touch-drag panning on mobile.
+    // Camera position/lookAt/projection above still update immediately every input event (that
+    // part must stay instant for panning to feel responsive) but the fog band now only gets
+    // recomputed once per animation frame from renderThreeFrame() -- see updateFogDistance().
+    lastCameraDist = d;
   };
 
   // Once per map load, pick a default zoom that fits the whole map on screen. An
@@ -7466,7 +9740,7 @@ function updateCameraFromView(){
     cameraNeedsInitialFit = false;
   }
 
-  applyDist((diag*0.9)/MAP_VIEW.zoom);
+  applyDist((diag*0.9)/viewZoom);
 }
 
 function resizeThree(){
@@ -7589,6 +9863,7 @@ function decoyLongPressEnd(){
   clearTimeout(decoyLongPressTimer);
 }
 
+
 function setupMapControls(){
   // Attached to #board (the topmost overlay canvas) since it visually covers
   // #board3d and would otherwise swallow all pointer events before they reach it.
@@ -7596,10 +9871,28 @@ function setupMapControls(){
   if(!el) return;
   el.addEventListener('contextmenu', e=>e.preventDefault());
 
+  // per user request: grabbing the FEBA line (see febaScreenHitDistance()) drags it instead
+  // of panning/rotating the map -- checked first since the line sits on top of the map.
+  const grabFebaAt = (clientX, clientY)=>{
+    if(!state || state.placementPending || state.decoyPlacementPending) return false;
+    const rect = el.getBoundingClientRect();
+    const px = clientX-rect.left, py = clientY-rect.top;
+    const sx = threeReady ? px : px/rect.width*CANVAS_W;
+    const sy = threeReady ? py : py/rect.height*CANVAS_H;
+    return febaScreenHitDistance(sx, sy) <= FEBA_GRAB_PX;
+  };
+  const dragFebaTo = (clientX, clientY)=>{
+    const rect = el.getBoundingClientRect();
+    const px = clientX-rect.left, py = clientY-rect.top;
+    const g = threeReady ? terrainCanvasUnitAt(px, py) : {x: px/rect.width*CANVAS_W};
+    if(g) state.febaX = clamp(g.x, FEBA_MIN_X, FEBA_MAX_X);
+  };
+
   let mode = null, lastX=0, lastY=0, dragGround=null;
   el.addEventListener('mousedown', e=>{
     mapDragMoved = false;
-    mode = e.button===2 ? 'rotate' : 'pan';
+    cancelCameraCinematic();
+    mode = grabFebaAt(e.clientX, e.clientY) ? 'feba' : (e.button===2 ? 'rotate' : 'pan');
     lastX = e.clientX; lastY = e.clientY;
     mapFocusTarget = null;
     decoyLongPressStart(e.clientX, e.clientY);
@@ -7614,7 +9907,9 @@ function setupMapControls(){
     const dx = e.clientX-lastX, dy = e.clientY-lastY;
     if(Math.abs(dx)>2 || Math.abs(dy)>2) mapDragMoved = true;
     lastX = e.clientX; lastY = e.clientY;
-    if(mode==='rotate'){
+    if(mode==='feba'){
+      dragFebaTo(e.clientX, e.clientY);
+    } else if(mode==='rotate'){
       MAP_VIEW.azimuth -= dx*0.006;
       MAP_VIEW.polar = clamp(MAP_VIEW.polar - dy*0.005, MAP_POLAR_MIN, MAP_POLAR_MAX);
       updateCameraFromView();
@@ -7633,6 +9928,7 @@ function setupMapControls(){
 
   el.addEventListener('wheel', e=>{
     e.preventDefault();
+    cancelCameraCinematic();
     mapFocusTarget = null;
     const factor = e.deltaY<0 ? 1.12 : 1/1.12;
     MAP_VIEW.zoom = clamp(MAP_VIEW.zoom*factor, MAP_ZOOM_MIN, MAP_ZOOM_MAX);
@@ -7661,6 +9957,7 @@ function setupMapControls(){
     y:(touches[0].clientY+touches[1].clientY)/2,
   });
   el.addEventListener('touchstart', e=>{
+    cancelCameraCinematic();
     mapFocusTarget = null;
     if(e.touches.length===1){
       touchLastX=e.touches[0].clientX; touchLastY=e.touches[0].clientY;
@@ -7670,7 +9967,8 @@ function setupMapControls(){
       // movement) must still synthesize its native 'click' so unit selection
       // keeps working. touch-action:none on #board (CSS) already stops the
       // browser's native pan/zoom gesture from engaging over the map.
-      touchMode='pan'; mapDragMoved=false;
+      touchMode = grabFebaAt(touchLastX, touchLastY) ? 'feba' : 'pan';
+      mapDragMoved=false;
       decoyLongPressStart(touchLastX, touchLastY);
       dragGround = groundPlaneCanvasUnitAt(lx, ly);
     } else if(e.touches.length===2){
@@ -7678,6 +9976,12 @@ function setupMapControls(){
       // it's safe (and necessary, as a fallback if touch-action isn't fully
       // honored) to preventDefault here without risking a lost click.
       e.preventDefault();
+      // per user request: a long-press timer armed by the FIRST finger (see
+      // decoyLongPressStart above) was never canceled when a second finger joined to start
+      // a pinch -- it could still fire mid-pinch/mid-gesture, placing a decoy out of
+      // nowhere and hijacking the gesture the player was actually in the middle of
+      // (reported as gestures sometimes just not working).
+      decoyLongPressEnd();
       touchMode='pinch'; mapDragMoved=true; dragGround=null;
       const [t0,t1] = e.touches;
       pinchStartDist = Math.hypot(t1.clientX-t0.clientX, t1.clientY-t0.clientY);
@@ -7688,7 +9992,11 @@ function setupMapControls(){
   }, {passive:false});
   el.addEventListener('touchmove', e=>{
     e.preventDefault();
-    if(touchMode==='pan' && e.touches.length===1){
+    if(touchMode==='feba' && e.touches.length===1){
+      touchLastX = e.touches[0].clientX; touchLastY = e.touches[0].clientY;
+      mapDragMoved = true;
+      dragFebaTo(touchLastX, touchLastY);
+    } else if(touchMode==='pan' && e.touches.length===1){
       decoyLongPressMove(e.touches[0].clientX, e.touches[0].clientY);
       const dx = e.touches[0].clientX-touchLastX, dy = e.touches[0].clientY-touchLastY;
       if(Math.abs(dx)>2 || Math.abs(dy)>2) mapDragMoved = true;
@@ -7734,9 +10042,20 @@ function setupMapControls(){
         const ct = e.changedTouches[0];
         const now = performance.now();
         const dist = Math.hypot(ct.clientX-lastTapX, ct.clientY-lastTapY);
-        if(now-lastTapTime < DOUBLETAP_MAX_INTERVAL_MS && dist < DOUBLETAP_MAX_DIST_PX){
-          const rect = el.getBoundingClientRect();
-          toggleDoubleTapZoom(ct.clientX-rect.left, ct.clientY-rect.top);
+        const rect = el.getBoundingClientRect();
+        const pxPixel = ct.clientX-rect.left, pyPixel = ct.clientY-rect.top;
+        // per user request: two quick taps close together used to always count as a
+        // double-tap-zoom, even when each tap actually landed ON a unit/enemy/decoy icon --
+        // rapidly tapping several nearby units (completely normal play, e.g. checking a
+        // cluster of squads back to back) easily satisfies the interval/distance check and
+        // triggered an unintended zoom. Only treat it as a double-tap-zoom when the tap hit
+        // empty ground (collectClickCandidates finds nothing there), the same WYSIWYG
+        // screen-space hit-test handleCanvasClick itself uses.
+        const sx = threeReady ? pxPixel : pxPixel/rect.width*CANVAS_W;
+        const sy = threeReady ? pyPixel : pyPixel/rect.height*CANVAS_H;
+        const hitEmptyGround = collectClickCandidates(sx, sy).length===0;
+        if(hitEmptyGround && now-lastTapTime < DOUBLETAP_MAX_INTERVAL_MS && dist < DOUBLETAP_MAX_DIST_PX){
+          toggleDoubleTapZoom(pxPixel, pyPixel);
           lastTapTime = 0;
         } else {
           lastTapTime = now; lastTapX = ct.clientX; lastTapY = ct.clientY;
@@ -7747,27 +10066,178 @@ function setupMapControls(){
   window.addEventListener('resize', resizeThree);
 }
 
-function makeMarkerMesh3d(shape, colorHex){
-  let geo;
-  const s = ()=> Math.max(0.6, (WORLD.scaleX+WORLD.scaleZ)/2*10);
-  if(shape==='cone') geo = new THREE.ConeGeometry(s()*0.55, s()*1.3, 8);
-  else if(shape==='diamond') geo = new THREE.OctahedronGeometry(s()*0.7);
-  else if(shape==='box') geo = new THREE.BoxGeometry(s()*0.9, s()*0.7, s()*0.9);
-  else if(shape==='cylinder') geo = new THREE.CylinderGeometry(s()*0.5, s()*0.5, s()*1.1, 10);
-  else geo = new THREE.SphereGeometry(s()*0.6, 10, 8);
-  const mat = new THREE.MeshStandardMaterial({ color: colorHex, roughness:0.7, metalness:0.05 });
-  const mesh = new THREE.Mesh(geo, mat);
-  return mesh;
+// per user request: friendly squads have no formation template of their own (unlike enemy
+// infantry groups, see ENEMY_FORMATION_TEMPLATES) -- a plain 2-row grid, up to SQUAD_SIZE.
+const SQUAD_GRID_OFFSETS = Array.from({length:SQUAD_SIZE}, (_,i)=>{
+  const col = i%5, row = Math.floor(i/5);
+  return {dx:(col-2)*10, dy:(row-0.5)*14};
+});
+
+function makeMarkerMesh3d(shape, colorHex, formationOffsets){
+  const group = new THREE.Group();
+  const s = Math.max(0.6, (WORLD.scaleX+WORLD.scaleZ)/2*7.5);
+  const mat = color=>new THREE.MeshStandardMaterial({color, roughness:0.7, metalness:0.05});
+  const add = (geometry, material, y=0, z=0)=>{
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(0, y, z);
+    // per user request: casting shadows from every one of these small primitive-shape
+    // markers (mortars, squads, snipers, etc. -- ~200 individual draw calls in the shadow
+    // pass) was too costly, especially on mobile GPUs. They still RECEIVE shadows (falling
+    // under a tank/tree/hill's shadow still darkens them -- that's a cheap shader flag, not
+    // an extra draw call) -- only the real FBX models (tank/heli) and terrain still cast.
+    mesh.receiveShadow = true;
+    group.add(mesh);
+    return mesh;
+  };
+  const addFlag = (color)=>{
+    add(new THREE.CylinderGeometry(s*0.035, s*0.035, s*1.8, 6), mat(0x3b3024), s*0.9);
+    const flag = add(new THREE.PlaneGeometry(s*0.65, s*0.32), mat(color), s*1.58);
+    flag.position.x = s*0.32;
+    flag.rotation.y = Math.PI/2;
+  };
+  const addBarrel = (color, length, height)=>{
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(s*0.08, s*0.1, length, 8), mat(color));
+    barrel.rotation.x = Math.PI/2;
+    barrel.position.set(0, height, length/2);
+    barrel.receiveShadow = true;
+    group.add(barrel);
+  };
+  const addTrack = (x)=>{
+    add(new THREE.BoxGeometry(s*0.28, s*0.25, s*1.72), mat(0x202a2b), s*0.18, 0).position.x = x;
+  };
+  if(shape==='tank'){
+    if(tankModelTemplate3d){
+      const model = tankModelTemplate3d.clone(true);
+      model.scale.setScalar(s*0.0025);
+      model.rotation.y = Math.PI;
+      group.add(model);
+    }
+  } else if(shape==='heli'){
+    if(heliModelTemplate3d){
+      const model = heliModelTemplate3d.clone(true);
+      model.scale.setScalar(s*0.004); // per user request: half the previous size
+      model.rotation.y = Math.PI;
+      group.add(model);
+      group._heliMarker = true;
+    }
+  } else if(shape==='mortar'){
+    add(new THREE.CylinderGeometry(s*0.5, s*0.58, s*0.24, 8), mat(colorHex), s*0.12);
+    const tube = add(new THREE.CylinderGeometry(s*0.12, s*0.16, s*0.95, 8), mat(0x3d4649), s*0.65);
+    tube.rotation.z = -Math.PI*0.28;
+    addFlag(colorHex);
+  } else if(shape==='sam'){
+    addTrack(-s*0.58);
+    addTrack(s*0.58);
+    add(new THREE.BoxGeometry(s*1.2, s*0.28, s*1.2), mat(colorHex), s*0.16);
+    add(new THREE.CylinderGeometry(s*0.18, s*0.24, s*0.65, 8), mat(0x39454d), s*0.55);
+    addBarrel(0x9aafbd, s*0.75, s*0.7);
+    addFlag(colorHex);
+  } else if(shape==='infantry'){
+    // per user request: one small stick-figure per soldier (matching the unit's actual
+    // roster, toggled visible/hidden per-soldier each frame as casualties happen -- see
+    // updateSoldierFigures3d()) instead of a fixed 5 figures regardless of squad strength.
+    // The offset pattern is the unit's real tactical formation for enemy infantry groups
+    // (ENEMY_FORMATION_TEMPLATES, generated at spawn but never actually rendered until now)
+    // or a plain grid for friendly squads (SQUAD_GRID_OFFSETS, which have no such template).
+    // Each pattern is normalized to its own bounding radius so box/line/wedge/skirmish/etc.
+    // all read as a similarly-sized cluster instead of some being tiny and others huge.
+    const offsets = formationOffsets && formationOffsets.length ? formationOffsets : SQUAD_GRID_OFFSETS;
+    const maxR = Math.max(1, ...offsets.map(o=>Math.hypot(o.dx,o.dy)));
+    // per user request: figures made bigger/more visible (was hard to make out from a
+    // distance) -- FIGURE_SCALE grows body/head size and cluster spacing together so the
+    // group keeps looking like a tight formation instead of soldiers overlapping.
+    const FIGURE_SCALE = 2.2;
+    const clusterR = s*1.1*FIGURE_SCALE;
+    const figures = offsets.map(o=>{
+      const x = (o.dx/maxR)*clusterR, z = (o.dy/maxR)*clusterR;
+      const fig = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(s*0.1*FIGURE_SCALE, s*0.12*FIGURE_SCALE, s*0.34*FIGURE_SCALE, 6), mat(colorHex));
+      body.position.set(x, s*0.24*FIGURE_SCALE, z);
+      body.receiveShadow = true;
+      fig.add(body);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(s*0.11*FIGURE_SCALE, 6, 5), mat(0xd1b28a));
+      head.position.set(x, s*0.46*FIGURE_SCALE, z);
+      head.receiveShadow = true;
+      fig.add(head);
+      group.add(fig);
+      return fig;
+    });
+    group._soldierFigures = figures;
+    addFlag(colorHex);
+  } else if(shape==='scout' || shape==='sniper'){
+    const count = 3;
+    const positions = [[-0.3,0.1],[0,-0.12],[0.3,0.1]];
+    positions.slice(0,count).forEach(([x,z])=>{
+      const soldier = add(new THREE.CylinderGeometry(s*0.13, s*0.15, s*0.42, 8), mat(colorHex), s*0.3, z*s*0.8);
+      soldier.position.x = x*s*0.8;
+      const head = add(new THREE.SphereGeometry(s*0.14, 8, 6), mat(0xd1b28a), s*0.58, z*s*0.8);
+      head.position.x = x*s*0.8;
+      const rifle = add(new THREE.CylinderGeometry(s*0.025, s*0.025, s*0.55, 5), mat(0x242a2b), s*0.34, z*s*0.8);
+      rifle.rotation.x = Math.PI/2;
+      rifle.rotation.z = -0.22;
+      rifle.position.x = x*s*0.8 + s*0.18;
+    });
+    addFlag(shape==='sniper' ? 0xc5c0a5 : colorHex);
+  } else if(shape==='engineer'){
+    add(new THREE.BoxGeometry(s*0.9, s*0.3, s*0.7), mat(colorHex), s*0.2);
+    add(new THREE.CylinderGeometry(s*0.22, s*0.22, s*0.8, 8), mat(0x6b573f), s*0.7);
+    addFlag(colorHex);
+  } else if(shape==='hq'){
+    add(new THREE.BoxGeometry(s*1.2, s*0.8, s*1.2), mat(colorHex), s*0.4);
+    add(new THREE.ConeGeometry(s*0.85, s*0.7, 4), mat(0x4b5961), s*1.15);
+    addFlag(colorHex);
+  } else {
+    let geo;
+    if(shape==='cone') geo = new THREE.ConeGeometry(s*0.55, s*1.3, 8);
+    else if(shape==='diamond') geo = new THREE.OctahedronGeometry(s*0.7);
+    else if(shape==='box') geo = new THREE.BoxGeometry(s*0.9, s*0.7, s*0.9);
+    else if(shape==='cylinder') geo = new THREE.CylinderGeometry(s*0.5, s*0.5, s*1.1, 10);
+    else geo = new THREE.SphereGeometry(s*0.6, 10, 8);
+    add(geo, mat(colorHex), s*0.5);
+  }
+  return group;
 }
 
-function getMarker3d(key, shape, colorHex){
+function getMarker3d(key, shape, colorHex, formationOffsets){
   let m = unitMarkers3d[key];
   if(!m){
-    m = makeMarkerMesh3d(shape, colorHex);
+    m = makeMarkerMesh3d(shape, colorHex, formationOffsets);
     scene3d.add(m);
     unitMarkers3d[key] = m;
   }
   return m;
+}
+// per user request: toggles each pre-built soldier figure visible/hidden to match who's
+// actually still alive right now, instead of rebuilding the marker on every casualty.
+function updateSoldierFigures3d(marker, aliveFlags){
+  if(!marker || !marker._soldierFigures) return;
+  marker._soldierFigures.forEach((fig,i)=>{ fig.visible = !!(aliveFlags && aliveFlags[i]); });
+}
+function updateTankHeading3d(marker, unit, visualX, visualY){
+  const prevX = unit._tankMarkerX;
+  const prevY = unit._tankMarkerY;
+  unit._tankMarkerX = visualX;
+  unit._tankMarkerY = visualY;
+  if(prevX===undefined || prevY===undefined) return;
+  const dx = visualX-prevX;
+  const dz = visualY-prevY;
+  if(Math.hypot(dx,dz) < 0.01) return;
+  const travelHeading = Math.atan2(dx, dz);
+  // The imported OBJ's nose points toward local -Z; the procedural fallback points +Z.
+  marker.rotation.y = travelHeading + (tankModelTemplate3d ? Math.PI : 0);
+}
+function updateHeliHeading3d(marker, target, visualX, visualY){
+  const prevX = target._heliMarkerX;
+  const prevY = target._heliMarkerY;
+  target._heliMarkerX = visualX;
+  target._heliMarkerY = visualY;
+  if(prevX===undefined || prevY===undefined) return;
+  const dx = visualX-prevX;
+  const dz = visualY-prevY;
+  if(Math.hypot(dx,dz) < 0.01) return;
+  const travelHeading = Math.atan2(dx, dz);
+  // The imported FBX helicopter's nose points toward local -Z.
+  marker.rotation.y = travelHeading + Math.PI;
 }
 function hideMarker3d(key){
   const m = unitMarkers3d[key];
@@ -7781,22 +10251,34 @@ function disposeMarker3d(key){
   const m = unitMarkers3d[key];
   if(!m) return;
   if(scene3d) scene3d.remove(m);
-  if(m.geometry) m.geometry.dispose();
-  if(m.material) m.material.dispose();
+  m.traverse(child=>{
+    if(child.geometry) child.geometry.dispose();
+    if(child.material){
+      if(Array.isArray(child.material)) child.material.forEach(material=>material.dispose());
+      else child.material.dispose();
+    }
+  });
   delete unitMarkers3d[key];
 }
 
 const FRIENDLY_MARK_COLOR_3D = 0x6f9bbf;
+// per user request: the heli used to get the same tiny ground-hugging clearance as
+// tanks/infantry (~46 units above LOCAL terrain height), which looked fine for a
+// wheeled/tracked unit but made a flying aircraft look embedded in any hillside it
+// crossed. Give it a real flight-altitude clearance instead, scaled off the same
+// constant that drives the terrain's own height range so it stays proportional.
+const HELI_FLIGHT_ALTITUDE = PROC_TERRAIN_HEIGHT_SCALE * 0.35;
 function syncUnitMarkers3d(){
   if(!threeReady || !state) return;
   const seen = {};
-  const place = (key, cx, cy, shape, colorHex, visible)=>{
+  const place = (key, cx, cy, shape, colorHex, visible, formationOffsets)=>{
     seen[key] = true;
     if(!visible){ hideMarker3d(key); return; }
-    const m = getMarker3d(key, shape, colorHex);
+    const m = getMarker3d(key, shape, colorHex, formationOffsets);
     const h = terrainHeightAt(cx, cy);
     const {x,z} = canvasUnitToWorldXZ(cx, cy);
-    m.position.set(x, h + (WORLD.scaleX+WORLD.scaleZ)/2*6, z);
+    const clearance = shape==='heli' ? HELI_FLIGHT_ALTITUDE : (WORLD.scaleX+WORLD.scaleZ)/2*6;
+    m.position.set(x, h + clearance, z);
     m.visible = true;
   };
 
@@ -7804,17 +10286,25 @@ function syncUnitMarkers3d(){
   // per user request: HQ is now movable -- use its smoothed visual position (set by
   // drawBoard's smoothVisualPos call) so this 3D box marker eases along with the 2D icon
   // instead of snapping straight to the logical position each tick.
-  place('hq', state.hq._visX!==undefined?state.hq._visX:state.hq.x, state.hq._visY!==undefined?state.hq._visY:state.hq.y, 'box', state.hq.hp>0 ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
-  // per user request: mortar/scout/squad/sniper now have their own 2D icon image drawn on
-  // the overlay canvas (see drawUnitIcon in drawBoard()) -- the old 3D primitive mesh for
-  // each (cone/diamond/box/cylinder) was showing through behind/around that icon, so it's
-  // hidden here instead of placed.
-  state.mortars.forEach((m,i)=>{ seen['mortar'+i]=true; hideMarker3d('mortar'+i); });
-  state.tanks.forEach((tk,i)=>{ seen['tank'+i]=true; hideMarker3d('tank'+i); });
-  state.scouts.forEach((s,i)=>{ seen['scout'+i]=true; hideMarker3d('scout'+i); });
-  state.squads.forEach((sq,i)=>{ seen['squad'+i]=true; hideMarker3d('squad'+i); });
-  state.snipers.forEach((sn,i)=>{ seen['sniper'+i]=true; hideMarker3d('sniper'+i); });
-  state.engineers.forEach((en,i)=>{ seen['engineer'+i]=true; hideMarker3d('engineer'+i); });
+  place('hq', state.hq._visX!==undefined?state.hq._visX:state.hq.x, state.hq._visY!==undefined?state.hq._visY:state.hq.y, 'hq', state.hq.hp>0 ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
+  // Primitive 3D unit markers are intentionally kept separate from the 2D labels/HUD.
+  // This is the first full-3D pass: the shapes can later be replaced by GLTF models
+  // without changing game state or order logic.
+  const friendlyUnit = (key, unit, shape, alive)=>{
+    const p = smoothVisualPos(unit, unit.x, unit.y);
+    place(key, p.x, p.y, shape, alive ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
+    if(shape==='tank') updateTankHeading3d(unitMarkers3d[key], unit, p.x, p.y);
+    if(shape==='heli') updateHeliHeading3d(unitMarkers3d[key], unit, p.x, p.y);
+    if(shape==='infantry') updateSoldierFigures3d(unitMarkers3d[key], unit.soldiers.map(s=>s.alive));
+  };
+  state.mortars.forEach((m,i)=>friendlyUnit('mortar'+i, m, 'mortar', m.hp>0));
+  state.tanks.forEach((tk,i)=>friendlyUnit('tank'+i, tk, 'tank', tk.hp>0));
+  state.sams.forEach((sam,i)=>friendlyUnit('sam'+i, sam, 'sam', sam.hp>0));
+  (state.helis||[]).forEach((heli,i)=>friendlyUnit('heli'+i, heli, 'heli', heli.hp>0));
+  state.scouts.forEach((s,i)=>friendlyUnit('scout'+i, s, 'scout', unitAlive(s)));
+  state.squads.forEach((sq,i)=>friendlyUnit('squad'+i, sq, 'infantry', unitAlive(sq)));
+  state.snipers.forEach((sn,i)=>friendlyUnit('sniper'+i, sn, 'sniper', unitAlive(sn)));
+  state.engineers.forEach((en,i)=>friendlyUnit('engineer'+i, en, 'engineer', unitAlive(en)));
   // per user request: 防壁(壁) -- 他の自軍ユニットと違い専用の2Dベクター描画に加えて、
   // 3Dミニマップ上でも障害物として視認できるよう箱形メッシュを配置する。
   state.walls.forEach(w=>{
@@ -7828,8 +10318,10 @@ function syncUnitMarkers3d(){
     if(!isTargetDetected(t)){ place(key, 0, 0, 'sphere', 0, false); return; }
     const eLogical = estPos(t);
     const e = smoothVisualPos(t, eLogical.x, eLogical.y);
-    const shape = t.type==='vehicle' ? 'box' : t.type==='artillery' ? 'cylinder' : t.type==='drone' ? 'diamond' : t.type==='heli' ? 'cone' : 'sphere';
-    place(key, e.x, e.y, shape, t.revealed ? (TARGET_TYPE_COLOR[t.type]||0xc1453b) : 0x8f9678, true);
+    const shape = t.type==='hq' ? 'hq' : t.type==='vehicle' ? 'tank' : t.type==='artillery' ? 'cylinder' : t.type==='drone' ? 'diamond' : t.type==='heli' ? 'heli' : t.type==='infantry' ? 'infantry' : 'sphere';
+    place(key, e.x, e.y, shape, t.revealed ? (TARGET_TYPE_COLOR[t.type]||0xc1453b) : 0x8f9678, true, t.formationOffsets);
+    if(shape==='heli') updateHeliHeading3d(unitMarkers3d[key], t, e.x, e.y);
+    if(shape==='infantry' && t.troops) updateSoldierFigures3d(unitMarkers3d[key], t.troops.map(s=>s.alive));
   });
 
   Object.keys(unitMarkers3d).forEach(key=>{
@@ -7840,14 +10332,64 @@ function syncUnitMarkers3d(){
 // per user request: enemy symbols unified to red on the 3D minimap too
 const TARGET_TYPE_COLOR = { infantry:0xc1453b, artillery:0xc1453b, vehicle:0xc1453b, drone:0xc1453b };
 
+// per user request: fog.near/far used to be a fixed multiple of the camera-to-lookAt distance
+// (first d*0.7/d*2.0, then also scaled by 1/cos(polar) for tilt). Both still assumed the
+// visible ground's depth range scales with that distance alone, which breaks down at the
+// default "whole map fits on screen" zoom: fitting the whole map needs a specific camera
+// distance for the map's on-screen SIZE, but says nothing about how much farther the top of the
+// screen (near the horizon, under any tilt at all) actually is from the camera -- that gap can
+// be many times the orbit distance even at a modest tilt once the field of view is wide enough
+// to show the whole map. The old formulas fogged out almost the entire map to flat SKY_COLOR at
+// exactly this (very common, it's the default) zoom level.
+//
+// Fixed properly by measuring the REAL farthest visible ground distance: ray-cast from the
+// camera through several points along the top edge of the screen (the farthest part of the view
+// under any downward tilt) onto the ground reference plane, exactly like clicks resolve a
+// screen point to a world position (see groundPlaneCanvasUnitAt) -- but keeping the ray's own
+// camera-relative distance instead of the hit's canvas-unit coordinates.
+//
+// Called once per rendered frame (from renderThreeFrame(), i.e. the rAF loop) rather than from
+// updateCameraFromView() itself, which runs on every touchmove/mousemove while panning -- doing
+// this multi-ray scan on every single input event visibly stuttered touch-drag panning on
+// mobile. A one-frame-stale fog band during a drag is imperceptible. Reuses scratch THREE
+// objects (never allocates per sample) for the same reason project()/projectAtWorldY() do.
+let _fogRayVec = null, _fogRayDir = null;
+function updateFogDistance(){
+  if(!camera3d || !scene3d || !scene3d.fog) return;
+  if(!_fogRayVec){ _fogRayVec = new THREE.Vector3(); _fogRayDir = new THREE.Vector3(); }
+  let maxDepth = 0;
+  for(const fx of [0, 0.25, 0.5, 0.75, 1]){
+    for(const fy of [1, 0.85, 0.65]){ // top edge first; fall back lower if it's above the horizon
+      _fogRayVec.set(fx*2-1, fy*2-1, 0.5).unproject(camera3d);
+      _fogRayDir.copy(_fogRayVec).sub(camera3d.position).normalize();
+      const t = Math.abs(_fogRayDir.y) < 1e-6 ? -1 : (WORLD.refY - camera3d.position.y)/_fogRayDir.y;
+      if(t > maxDepth) maxDepth = t;
+    }
+  }
+  if(maxDepth > 0){
+    scene3d.fog.near = maxDepth*0.45;
+    scene3d.fog.far = maxDepth*1.15;
+  } else {
+    // every sampled ray pointed above the horizon (e.g. looking mostly at open sky) --
+    // fall back to the old distance-based estimate rather than leaving fog at a stale value.
+    scene3d.fog.near = lastCameraDist*0.7;
+    scene3d.fog.far = lastCameraDist*2.0;
+  }
+}
 function renderThreeFrame(){
   if(!threeReady || !renderer3d) return;
   updateMapFocusEase();
   syncUnitMarkers3d();
+  updateFogDistance();
+  if(heliAnimationMixer){
+    const delta = 1/60;
+    heliAnimationMixer.update(delta);
+  }
   renderer3d.render(scene3d, camera3d);
 }
 
 function render(){
+  state.targets.forEach(t=>{ delete t._detectedThisRender; });
   updateRevealed();
   renderStats();
   selectNextTarget();
@@ -7855,6 +10397,7 @@ function render(){
   renderCommandBox();
   renderEnemyCommandBox();
   renderDecoyCommandBox();
+  renderMultiSelectBox();
   drawBoard();
 }
 
@@ -7949,6 +10492,7 @@ function repositionOpenCommandBoxes(){
       const unit = kind==='hq' ? state.hq
         : kind==='mortar' ? state.mortars[idx]
         : kind==='tank' ? state.tanks[idx]
+        : kind==='sam' ? state.sams[idx]
         : kind==='scout' ? state.scouts[idx]
         : kind==='squad' ? state.squads[idx]
         : kind==='sniper' ? state.snipers[idx]
@@ -7990,34 +10534,11 @@ function anyOverlayShown(){
   return !!document.querySelector('.overlay.show');
 }
 
-// Drives the continuous simulation: banks real elapsed time and spends it in fixed
-// SIM_STEP_MS chunks (see simulationStep()/deltaTurns()), decoupled from render frame rate.
-// While paused (state.simRunning off, or any of the same conditions autoCommitTick used to
-// gate on) the bank is reset to 0 rather than left to accrue, so lifting a long pause (e.g. a
-// unit command panel left open) can't replay dozens of banked steps in a single frame.
-let lastSimFrameAt = null;
-function advanceSimulation(){
-  const now = performance.now();
-  if(lastSimFrameAt===null){ lastSimFrameAt = now; return; }
-  const elapsed = now - lastSimFrameAt;
-  lastSimFrameAt = now;
-  if(!state || !state.simRunning || state.commandBox || state.enemyCommandBox || state.decoyCommandBox || state.placementPending || state.decoyPlacementPending){
-    simAccumMs = 0;
-    return;
-  }
-  simAccumMs += elapsed;
-  let steps = 0;
-  while(simAccumMs >= SIM_STEP_MS && steps < SIM_STEP_MAX_CATCHUP){
-    simulationStep();
-    simAccumMs -= SIM_STEP_MS;
-    steps++;
-  }
-  if(steps >= SIM_STEP_MAX_CATCHUP) simAccumMs = 0;
-}
 function loop(){
-  advanceSimulation();
   updateProjectiles();
   updateEnemyTracers();
+  update3dEffects();
+  updateImpactLights();
   if(state){
     repositionOpenCommandBoxes();
   }
@@ -8038,12 +10559,9 @@ document.getElementById('minimap').addEventListener('click', handleMinimapClick)
 document.addEventListener('contextmenu', e=>e.preventDefault());
 loadAchievements();
 renderAudioSettingsPanel();
-// initThree() must run before initGame() -- initGame() eagerly calls loadSelectedTerrain()
-// for the default map so it preloads while the setup screen is up, and that needs scene3d
-// (set up by initThree()) to already exist. Calling them in the other order left scene3d
-// undefined on first load, so loadSelectedTerrain() silently bailed out and no map ever
-// appeared until the player re-triggered it (e.g. by picking a map, which initThree() had
-// long since finished setting up by then).
+// initThree() sets up the renderer/scene/camera once at load; the actual terrain mesh
+// isn't built until the first wave starts (regenerateTerrain(), called from startStage()),
+// so initGame() itself only needs to roll the setup screen's seed candidates.
 initThree();
 initGame();
 setupMapControls();

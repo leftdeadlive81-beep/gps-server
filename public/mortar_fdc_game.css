@@ -1,15 +1,15 @@
   :root{
-    --bg:#11140d;
-    --bg-2:#171b11;
-    --panel:#1c2116;
-    --panel-2:#20261a;
-    --edge:#3a4128;
-    --edge-dim:#2a2f1e;
+    --bg:#090c0b;
+    --bg-2:#121916;
+    --panel:rgba(18,25,21,.94);
+    --panel-2:rgba(26,36,29,.92);
+    --edge:#52664d;
+    --edge-dim:#304032;
     --ink:#e8e3ce;
     --muted:#8f9678;
-    --amber:#d9a441;
-    --amber-dim:#7a5f2c;
-    --red:#c1453b;
+    --amber:#f0bd55;
+    --amber-dim:#9a722e;
+    --red:#e05a4f;
     --red-dim:#5c2a25;
     --green-id:#7fa568;
     --blue-id:#6f9bbf;
@@ -24,6 +24,7 @@
     background:var(--bg);
     color:var(--ink);
     font-family:var(--font-body);
+    letter-spacing:.01em;
   }
 
   .panel-title{
@@ -44,7 +45,21 @@
 
   .board-wrap{
     position:fixed; inset:0; overflow:hidden;
-    background:#0d0f09;
+    background:
+      radial-gradient(ellipse at 50% 42%, rgba(71,91,70,.18), transparent 62%),
+      linear-gradient(135deg,#101814 0%,#080b0a 100%);
+  }
+  .board-wrap::before{
+    content:""; position:absolute; inset:0; z-index:30; pointer-events:none;
+    background:
+      linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.014) 1px,transparent 1px);
+    background-size:4px 4px;
+    mix-blend-mode:screen; opacity:.28;
+  }
+  .board-wrap::after{
+    content:""; position:absolute; inset:0; z-index:31; pointer-events:none;
+    background:radial-gradient(ellipse at center, transparent 48%, rgba(0,0,0,.48) 100%);
   }
   #board3d{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;}
   #board{position:absolute;inset:0;width:100%;height:100%;display:block;background:transparent;touch-action:none;}
@@ -53,8 +68,10 @@
     position:absolute; top:calc(46px + env(safe-area-inset-top)); right:8px; z-index:41;
     width:132px; max-width:38vw; max-height:calc(100% - 60px - env(safe-area-inset-top));
     overflow-y:auto; pointer-events:none;
-    background:rgba(18,21,13,0.86); border:1px solid var(--red-dim); border-radius:4px;
-    padding:6px 8px; backdrop-filter:blur(2px);
+    background:linear-gradient(145deg,rgba(39,22,20,.94),rgba(18,21,16,.9));
+    border:1px solid rgba(224,90,79,.65); border-radius:6px;
+    padding:7px 9px; backdrop-filter:blur(8px);
+    box-shadow:0 8px 24px rgba(0,0,0,.28), inset 0 1px rgba(255,255,255,.06);
   }
   .eo-head{
     font-family:var(--font-mono);font-size:9px;letter-spacing:1px;color:var(--red);
@@ -65,7 +82,8 @@
   .minimap{
     position:absolute; top:calc(46px + env(safe-area-inset-top)); left:8px; z-index:41;
     width:160px; height:57px;
-    background:rgba(18,21,13,0.86); border:1px solid var(--edge-dim); border-radius:4px;
+    background:rgba(9,15,12,.88); border:1px solid var(--amber-dim); border-radius:6px;
+    box-shadow:0 6px 20px rgba(0,0,0,.3), 0 0 0 1px rgba(240,189,85,.08);
     cursor:pointer; touch-action:none;
   }
 
@@ -73,13 +91,15 @@
      visible; tapping it expands the full stat grid beneath it. --- */
   .hud-top{
     position:absolute; top:0; left:0; right:0; z-index:40;
-    background:rgba(18,21,13,0.9); border-bottom:1px solid var(--edge-dim);
-    backdrop-filter:blur(3px);
+    background:linear-gradient(180deg,rgba(8,13,11,.97),rgba(13,20,16,.82));
+    border-bottom:1px solid rgba(240,189,85,.28);
+    backdrop-filter:blur(12px);
     padding:8px 10px; padding-top:calc(8px + env(safe-area-inset-top));
   }
   .hud-top-row{display:flex;align-items:center;gap:8px;}
   .hud-brand{
-    font-family:var(--font-display);letter-spacing:1px;color:var(--amber);font-size:14px;
+    font-family:var(--font-display);letter-spacing:1.5px;color:var(--amber);font-size:15px;
+    text-shadow:0 0 14px rgba(240,189,85,.3);
     text-transform:uppercase;cursor:pointer;user-select:none;white-space:nowrap;flex:0 0 auto;
   }
   .hud-version{color:var(--muted);font-weight:400;font-size:11px;}
@@ -91,10 +111,12 @@
   .hud-icon-btn{
     position:relative; flex:0 0 auto; width:32px;height:32px;padding:0;
     border:1px solid var(--edge-dim); border-radius:6px;
-    background:var(--panel-2); color:var(--ink); font-size:14px; line-height:1;
+    background:linear-gradient(145deg,rgba(44,58,46,.9),rgba(19,28,22,.95));
+    color:var(--ink); font-size:14px; line-height:1;
     display:flex; align-items:center; justify-content:center; cursor:pointer;
   }
-  .hud-icon-btn:hover{background:var(--edge-dim); border-color:var(--amber-dim); color:var(--amber);}
+  .hud-icon-btn:hover{background:var(--edge-dim); border-color:var(--amber); color:var(--amber);box-shadow:0 0 14px rgba(240,189,85,.2);}
+  .hud-icon-btn.active{background:var(--amber-dim);border-color:var(--amber);color:#1a1608;}
   .hud-icon-badge{
     position:absolute; top:-4px; right:-4px; min-width:14px; height:14px; padding:0 3px;
     background:var(--red); color:#fff; border-radius:7px;
@@ -107,7 +129,8 @@
   .stat{
     flex:1;min-width:82px;
     background:var(--panel-2);border:1px solid var(--edge-dim);
-    border-radius:3px;padding:6px 8px;
+    border-radius:5px;padding:7px 8px;
+    box-shadow:inset 0 1px rgba(255,255,255,.04);
   }
   .stat .label{font-size:9.5px;color:var(--muted);letter-spacing:.5px;}
   .stat .value{font-family:var(--font-mono);font-size:17px;font-weight:700;color:var(--ink);}
@@ -124,24 +147,22 @@
   }
   .board-note.expanded{display:block;}
 
-  /* --- bottom HUD bar: the 状況開始/警報 controls, always visible over the map. --- */
+  /* --- bottom HUD bar: the 進行速度/状況開始 controls, always visible over the map. --- */
   .hud-bottom{
     position:fixed; left:0; right:0; bottom:0; z-index:42;
-    background:rgba(18,21,13,0.92); border-top:1px solid var(--edge-dim);
-    backdrop-filter:blur(3px);
+    background:linear-gradient(0deg,rgba(7,11,10,.98),rgba(14,23,18,.88));
+    border-top:1px solid rgba(240,189,85,.28);
+    backdrop-filter:blur(12px);
     padding:8px 8px; padding-bottom:calc(8px + env(safe-area-inset-bottom));
   }
-  /* per user request: 決心/自動 merged into a single 状況開始/状況中 toggle button, given
-     its own full-width row; the 赤/黄/白警報 buttons sit in a compact row underneath. */
+  /* per user request: 決心/自動 merged into a single 状況開始/状況中 toggle button, with the
+     進行速度 switcher sitting directly to its left instead of its own row underneath. */
   .hud-bottom .decision-box{
     display:flex; flex-direction:column; gap:6px;
     background:none; border:none; padding:0; margin-bottom:0;
   }
   .hud-bottom .decision-summary{display:none;}
-  .hud-bottom .alert-row-label{display:none;}
-  .hud-bottom .decision-btn{width:100%;}
-  .hud-bottom .alert-row{display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-top:0;}
-  .hud-bottom .alert-row button{padding:10px 3px; font-size:11px;}
+  .hud-bottom .speed-slider{width:56px;}
 
   .map-fullscreen-btn{width:32px;height:32px;}
 
@@ -150,7 +171,8 @@
   .drawer{
     position:fixed; left:0; right:0; bottom:0; z-index:49;
     max-height:65vh;
-    background:var(--panel); border-top:1px solid var(--edge); border-radius:10px 10px 0 0;
+    background:linear-gradient(160deg,rgba(25,36,29,.98),rgba(10,17,14,.98));
+    border-top:1px solid var(--amber-dim); border-radius:14px 14px 0 0;
     box-shadow:0 -6px 24px rgba(0,0,0,0.55);
     transform:translateY(105%); transition:transform .22s ease;
     display:flex; flex-direction:column;
@@ -173,7 +195,7 @@
   .drawer-backdrop.show{opacity:1; pointer-events:auto;}
 
   /* per user request: one-handed "スマート操作" command wizard entry point -- a thumb-
-     reachable circular button floating just above the 決心/警報 bar (hud-bottom), right
+     reachable circular button floating just above the 状況開始 bar (hud-bottom), right
      side by default since the example flow (迫撃砲→全隊→移動→実施せよ) is a right-thumb
      reach on most phones. */
   .smart-order-fab{
@@ -252,16 +274,42 @@
   .command-box .cb-close:hover{color:var(--ink);}
   .command-box .meta{margin-bottom:8px;}
 
+  /* per user request: multi-select toolbar stays pinned above the bottom HUD bar (rather
+     than anchored to a clicked point like the per-unit command boxes) since it applies to
+     however many units happen to be selected, not one map position. */
+  .multi-select-box{
+    left:50%; right:auto; top:auto; bottom:78px; transform:translateX(-50%);
+    width:280px;
+  }
+
   .decision-box{
     background:var(--panel-2);border:1px solid var(--amber-dim);border-radius:3px;
     padding:9px 10px;margin-bottom:14px;
   }
   .decision-summary{font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;}
-  .decision-btn{font-size:16px;padding:13px 9px;letter-spacing:1px;box-shadow:0 0 0 1px rgba(217,164,65,0.25);}
 
-  .alert-row-label{
-    font-family:var(--font-mono);font-size:9.5px;letter-spacing:1.5px;color:var(--muted);
-    text-transform:uppercase;margin-top:10px;padding-top:8px;border-top:1px dashed var(--edge);
+  /* per user request: game-speed switcher moved to sit directly to the left of 状況開始
+     (instead of its own labeled row underneath) and later changed from 3 stacked buttons to
+     a compact horizontal slider -- the whole point of shrinking 決心/状況開始 is to give the
+     battlefield view back more screen space (.hud-bottom is a fixed overlay directly above
+     the full-bleed 3D canvas), so a tall stacked-button column defeating that by keeping the
+     bar just as tall would miss the point entirely. */
+  .decision-controls-row{display:flex;align-items:center;gap:8px;}
+  .decision-controls-row .decision-btn{flex:1 1 auto;}
+  .speed-slider-row{display:flex;align-items:center;gap:6px;flex:0 0 auto;}
+  .speed-slider{
+    -webkit-appearance:none;appearance:none;
+    width:64px;height:4px;border-radius:2px;background:var(--edge-dim);outline:none;cursor:pointer;
+  }
+  .speed-slider::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;
+    width:14px;height:14px;border-radius:50%;background:var(--amber);border:1px solid var(--amber-dim);cursor:pointer;
+  }
+  .speed-slider::-moz-range-thumb{
+    width:14px;height:14px;border-radius:50%;background:var(--amber);border:1px solid var(--amber-dim);cursor:pointer;
+  }
+  .speed-slider-label{
+    font-family:var(--font-mono);font-size:10.5px;color:var(--muted);min-width:26px;text-align:center;
   }
 
   .roster-list{max-height:110px;overflow-y:auto;margin-bottom:8px;border-top:1px dashed var(--edge);padding-top:6px;}
@@ -334,24 +382,20 @@
   }
   .btn{
     cursor:pointer;font-weight:700;letter-spacing:.5px;text-align:center;
-    transition:background .15s, opacity .15s;
+    transition:background .15s, opacity .15s, transform .15s, box-shadow .15s;
   }
-  .btn:hover:not(:disabled){background:var(--edge-dim);}
+  .btn:hover:not(:disabled){background:var(--edge-dim);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.25);}
   .btn:disabled{opacity:.35;cursor:not-allowed;}
-  .btn.primary{background:var(--amber-dim);border-color:var(--amber);color:#1a1608;}
+  .btn.primary{background:linear-gradient(135deg,#c79438,#806126);border-color:var(--amber);color:#161308;box-shadow:0 0 16px rgba(240,189,85,.15);}
   .btn.primary:hover:not(:disabled){background:var(--amber);}
   .btn.recon{background:#26301e;border-color:var(--edge);}
+  /* per user request: shrunk to ~1/3 its old height -- placed after the base select,.btn
+     rule (same specificity, 0-1-0 each) so it actually wins the cascade instead of being
+     silently overridden by that rule's own font-size/padding, which is what was happening
+     when this lived up near .decision-box/.decision-summary earlier in the file. */
+  .decision-btn{font-size:12px;padding:2px 9px;letter-spacing:0.5px;box-shadow:0 0 0 1px rgba(217,164,65,0.25);}
   .row-2{display:flex;gap:8px;}
   .row-2 > div, .row-2 > button{flex:1;}
-
-  .alert-row{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:6px;}
-  .alert-row button{padding:6px 2px;font-size:11px;}
-  .alert-btn-red{background:#5c2a25;border-color:var(--red);color:#f2d9d5;}
-  .alert-btn-red:hover:not(:disabled){background:var(--red);color:#1a1608;}
-  .alert-btn-yellow{background:#5a4d1a;border-color:var(--amber);color:#f2e8c9;}
-  .alert-btn-yellow:hover:not(:disabled){background:var(--amber);color:#1a1608;}
-  .alert-btn-white{background:var(--edge-dim);border-color:var(--edge);color:var(--ink);}
-  .alert-btn-white:hover:not(:disabled){background:var(--edge);}
 
   .overlay{
     position:fixed;inset:0;background:rgba(10,12,7,.85);
@@ -360,9 +404,11 @@
   }
   .overlay.show{display:flex;}
   .overlay .card{
-    background:var(--panel);border:1px solid var(--amber);border-radius:6px;
+    background:linear-gradient(145deg,rgba(29,42,33,.98),rgba(11,18,15,.98));
+    border:1px solid var(--amber);border-radius:10px;
     padding:28px 34px;text-align:center;max-width:380px;
     max-height:85vh;overflow-y:auto;
+    box-shadow:0 20px 70px rgba(0,0,0,.65),0 0 35px rgba(240,189,85,.12);
   }
   .overlay .card h2{
     font-family:var(--font-display);letter-spacing:2px;color:var(--amber);
@@ -399,6 +445,8 @@
   .shop-row .sub{font-size:11px;color:var(--muted);margin-top:2px;}
   .shop-row .actions button{width:auto;padding:7px 12px;font-size:12px;white-space:nowrap;}
   .shop-row.selected{border-color:var(--amber);}
+  .seed-candidate-row{align-items:center;}
+  .seed-thumb{flex:0 0 auto;border-radius:3px;border:1px solid var(--edge-dim);display:block;}
 
   .achievements-progress{font-family:var(--font-mono);font-size:12px;color:var(--muted);margin-bottom:12px;}
   .shop-row.ach-unlocked{border-left:3px solid var(--green-id);}
@@ -406,6 +454,26 @@
   .ach-status{font-family:var(--font-mono);font-size:10px;letter-spacing:.5px;white-space:nowrap;}
   .ach-status.unlocked{color:var(--green-id);}
   .ach-status.locked{color:var(--muted);}
+
+  .gemini-drawer{z-index:50;}
+  .gemini-notice{font-size:11px;color:var(--muted);line-height:1.45;margin-bottom:8px;}
+  .gemini-settings,.gemini-form{display:flex;gap:6px;align-items:center;}
+  .gemini-settings{margin-bottom:8px;}
+  .gemini-settings input,.gemini-form input{
+    min-width:0;flex:1;background:var(--panel-2);border:1px solid var(--edge);
+    border-radius:3px;color:var(--ink);padding:8px;font:12px var(--font-body);
+  }
+  .gemini-settings .btn,.gemini-form .btn{width:auto;padding:8px 10px;white-space:nowrap;}
+  .gemini-messages{
+    flex:1;min-height:100px;overflow-y:auto;background:var(--bg-2);
+    border:1px solid var(--edge-dim);border-radius:3px;padding:8px;margin-bottom:8px;
+  }
+  .gemini-message{font-size:12px;line-height:1.5;margin-bottom:8px;white-space:pre-wrap;}
+  .gemini-message:last-child{margin-bottom:0;}
+  .gemini-message.user{color:var(--amber);}
+  .gemini-message.model{color:var(--ink);}
+  .gemini-message.error{color:var(--red);}
+  .gemini-message-label{font:10px var(--font-mono);color:var(--muted);margin-right:6px;}
 
   .shop-row.reward-squad{border-left:3px solid var(--blue-id);}
   .shop-row.reward-scout{border-left:3px solid var(--green-id);}
