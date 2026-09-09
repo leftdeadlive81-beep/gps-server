@@ -9936,6 +9936,14 @@ function setupMapControls(){
       // it's safe (and necessary, as a fallback if touch-action isn't fully
       // honored) to preventDefault here without risking a lost click.
       e.preventDefault();
+      // per user request: a long-press timer armed by the FIRST finger (see
+      // unitLongPressStart/decoyLongPressStart above) was never canceled when a second
+      // finger joined to start a pinch -- it could still fire mid-pinch/mid-gesture,
+      // popping up a quick-order box or placing a decoy out of nowhere and hijacking the
+      // gesture the player was actually in the middle of (reported as gestures sometimes
+      // just not working).
+      decoyLongPressEnd();
+      unitLongPressEnd();
       touchMode='pinch'; mapDragMoved=true; dragGround=null;
       const [t0,t1] = e.touches;
       pinchStartDist = Math.hypot(t1.clientX-t0.clientX, t1.clientY-t0.clientY);
@@ -9998,9 +10006,20 @@ function setupMapControls(){
         const ct = e.changedTouches[0];
         const now = performance.now();
         const dist = Math.hypot(ct.clientX-lastTapX, ct.clientY-lastTapY);
-        if(now-lastTapTime < DOUBLETAP_MAX_INTERVAL_MS && dist < DOUBLETAP_MAX_DIST_PX){
-          const rect = el.getBoundingClientRect();
-          toggleDoubleTapZoom(ct.clientX-rect.left, ct.clientY-rect.top);
+        const rect = el.getBoundingClientRect();
+        const pxPixel = ct.clientX-rect.left, pyPixel = ct.clientY-rect.top;
+        // per user request: two quick taps close together used to always count as a
+        // double-tap-zoom, even when each tap actually landed ON a unit/enemy/decoy icon --
+        // rapidly tapping several nearby units (completely normal play, e.g. checking a
+        // cluster of squads back to back) easily satisfies the interval/distance check and
+        // triggered an unintended zoom. Only treat it as a double-tap-zoom when the tap hit
+        // empty ground (collectClickCandidates finds nothing there), the same WYSIWYG
+        // screen-space hit-test handleCanvasClick itself uses.
+        const sx = threeReady ? pxPixel : pxPixel/rect.width*CANVAS_W;
+        const sy = threeReady ? pyPixel : pyPixel/rect.height*CANVAS_H;
+        const hitEmptyGround = collectClickCandidates(sx, sy).length===0;
+        if(hitEmptyGround && now-lastTapTime < DOUBLETAP_MAX_INTERVAL_MS && dist < DOUBLETAP_MAX_DIST_PX){
+          toggleDoubleTapZoom(pxPixel, pyPixel);
           lastTapTime = 0;
         } else {
           lastTapTime = now; lastTapX = ct.clientX; lastTapY = ct.clientY;
