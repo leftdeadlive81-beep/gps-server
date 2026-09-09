@@ -1,8 +1,13 @@
 const GAME_VERSION = '0.2';
-const CANVAS_W = 2600, CANVAS_H = 460;
-const OP_HOME_X = 180, OP_HOME_Y = 230;
+// per user request: the map read as a cramped horizontal strip (was 2600x460, a 5.65:1
+// aspect ratio -- only ~3.5km deep on a 20km-wide map). Widened to a 2.5:1 battlefield
+// (~8km deep) so there's real north-south room to flank instead of everyone being forced
+// into one thin east-west lane. OP_HOME_Y/HQ_Y/FRIENDLY_INF_POS.y/etc. below are expressed
+// relative to CANVAS_H so they stay correctly centered whatever this is set to.
+const CANVAS_W = 2600, CANVAS_H = 1040;
+const OP_HOME_X = 180, OP_HOME_Y = CANVAS_H/2;
 const OP = {x: OP_HOME_X, y: OP_HOME_Y};
-const HQ_X = 60, HQ_Y = 230;
+const HQ_X = 60, HQ_Y = CANVAS_H/2;
 const HQ_MAX_HP = 200;
 // per user request: HQ previously had no player-facing defenses at all (fixed position,
 // fixed exposure, no repair) despite enemy targeting logic actively preferring it (see
@@ -73,8 +78,8 @@ const WEATHER_TYPES = {
   night: {label:'夜間', dispersionMult:1.2,  counterMult:0.7,  errMult:1.2,  tint:'rgba(10,15,35,0.28)',    desc:'敵反撃頻度低下、照準精度も低下'},
 };
 const EQUIP_LABEL = {armor:'強化装甲', optics:'精密照準器', wideView:'広角観測機材', extMag:'予備弾倉'};
-const FRIENDLY_INF_POS = {x: 700, y: 230};
-const SNIPER_POS = {x: 290, y: 230};
+const FRIENDLY_INF_POS = {x: 700, y: CANVAS_H/2};
+const SNIPER_POS = {x: 290, y: CANVAS_H/2};
 const STAGE_COUNT = 50;
 const PRICE_HE = 35;
 const PRICE_HEAT = 70;
@@ -166,7 +171,7 @@ const NUM_MORTARS = 4;
 // with squad-like orders/direct-fire combat since they fight on the ground like infantry.
 const NUM_TANKS = 2;
 const TANK_MAX_HP = 220;
-const TANK_POS = {x: 320, y: 230};
+const TANK_POS = {x: 320, y: CANVAS_H/2};
 const TANK_EXPOSURE = 65; // armored -- harder to hit than a foot unit at EXPOSURE_DEFAULT (50)
 // per user request: bumped from 150 (≈1150m) to 325 (2500m) -- a modern tank main gun can
 // realistically hit out to 2-3km, so at the old range tanks had to close most of the way
@@ -182,7 +187,7 @@ const TANK_REPAIR_COST_PER_HP = 40;
 // 長射程・高威力な代わりに装甲が薄く脆い牽引式ランチャーという想定。
 const NUM_SAMS = 1;
 const SAM_MAX_HP = 70;
-const SAM_POS = {x: 200, y: 350};
+const SAM_POS = {x: 200, y: CANVAS_H/2 + 120}; // was a fixed 350 at the old CANVAS_H=460 (center 230) -- same +120 real offset south of the line
 const SAM_EXPOSURE = 45; // soft, unarmored launcher vehicle -- easier to hit than infantry
 // per user request: bumped from 420 (≈3230m) to 715 (5500m) -- a real SAM's standoff
 // advantage over ground-based indirect fire is a big part of its identity, so it should
@@ -197,7 +202,7 @@ const SAM_REPAIR_COST_PER_HP = 50;
 // 持たない(前進/防御/後退での移動と壁の構築のみ)。
 const NUM_ENGINEERS = 1;
 const ENGINEER_SQUAD_SIZE = 6;
-const ENGINEER_POS = {x: 260, y: 230};
+const ENGINEER_POS = {x: 260, y: CANVAS_H/2};
 const RESERVE_SIZE = 10;
 // per user request: 擬陣地 (decoy positions) -- placed at the start of each wave (auto or
 // manual, player's choice), these lure enemy indirect fire/vehicle assaults away from real
@@ -8758,7 +8763,7 @@ let mapFocusTarget = null;
 // gamma-corrects the result for display, so a naive 0.5 here would only look like
 // 0.5^(1/2.2) =~ 73% brightness on screen, not 50%.
 const TERRAIN_TEXTURE_BRIGHTNESS = 0.55;
-const PROC_TEXTURE_SIZE_X = 1040, PROC_TEXTURE_SIZE_Z = 184; // 5.652:1, matching CANVAS_W:CANVAS_H
+const PROC_TEXTURE_SIZE_X = 1040, PROC_TEXTURE_SIZE_Z = 416; // 2.5:1, matching CANVAS_W:CANVAS_H
 // Base ground colors across the elevation range (low -> high), and the forest/water zone
 // overlay colors -- painted from the exact same descriptor buildProceduralTerrainMesh()
 // displaces its geometry from, so the picture and the mechanics can't disagree.
@@ -8900,7 +8905,7 @@ function buildProceduralTexture(gen){
 // for the descriptor this displaces from and buildProceduralTexture() for its texture.
 // Segment counts are a readability/perf compromise: fine enough for smooth-looking hills,
 // coarse enough that displacing ~3000 vertices analytically is instant.
-const PROC_MESH_SEGMENTS_X = 90, PROC_MESH_SEGMENTS_Z = 32;
+const PROC_MESH_SEGMENTS_X = 90, PROC_MESH_SEGMENTS_Z = 72; // kept at the same units-per-segment density as before CANVAS_H was widened
 function buildProceduralTerrainMesh(gen){
   const geo = new THREE.PlaneGeometry(CANVAS_W, CANVAS_H, PROC_MESH_SEGMENTS_X, PROC_MESH_SEGMENTS_Z);
   geo.rotateX(-Math.PI/2); // lie flat in the XZ plane, Y up
