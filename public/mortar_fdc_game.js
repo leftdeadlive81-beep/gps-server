@@ -4959,7 +4959,7 @@ function resolveVehicleAssault(dt){
         // a direct line. Falls back to the old free-roaming terrainAwareStep
         // if the road graph never loaded (e.g. 3D terrain/road data failed).
         if(ROAD_GRAPH && ROAD_GRAPH.nodes.length){
-          const roadPath = findRoadPath(t.trueX, t.trueY, moveGoal.x, moveGoal.y);
+          const roadPath = getCachedRoadPath(t, t.trueX, t.trueY, moveGoal.x, moveGoal.y);
           if(roadPath && roadPath.length){
             const fullPath = roadPath.concat([{x:moveGoal.x, y:moveGoal.y}]);
             next = advanceAlongPath(t.trueX, t.trueY, fullPath, step);
@@ -5296,7 +5296,7 @@ function advanceEnemyInfantry(dt){
         const aimY = retreating ? t.trueY + (t.trueY-moveGoal.y) : moveGoal.y;
         const roadNear = nearestRoadPoint(t.trueX, t.trueY);
         const roadPath = roadNear && roadNear.dist < ROAD_PULL_RADIUS*1.5
-          ? findRoadPath(t.trueX, t.trueY, aimX, aimY) : null;
+          ? getCachedRoadPath(t, t.trueX, t.trueY, aimX, aimY) : null;
         const next = roadPath
           ? advanceAlongPath(t.trueX, t.trueY, roadPath, step)
           : terrainAwareStep(t.trueX, t.trueY, aimX, aimY, step);
@@ -5644,6 +5644,20 @@ let mortarFireCursor = 0;
 // actually crossed, using their original unconverted odds. Mortar fire is the one exception --
 // it stays near-instant (checked every step) since player responsiveness is the point of this
 // conversion; see mortarFireCursor above for how simultaneous multi-mortar orders still stagger.
+// render() rebuilds several DOM panels via innerHTML (renderStats/renderDecisionPanel/command
+// boxes) on top of drawBoard() -- expensive DOM work that's redundant every SIM_STEP_MS, since
+// drawBoard() itself already redraws the canvas every rendered frame regardless (see loop()).
+// Throttling simulationStep()'s routine end-of-step render to a lower, still-imperceptible rate
+// keeps the stat/panel text fresh without rebuilding those panels up to 10x/sec. Event-driven
+// renders elsewhere (game over, a shell landing) call render() directly and stay immediate.
+let lastStepRenderAt = 0;
+const STEP_RENDER_MIN_INTERVAL_MS = 150;
+function renderThrottledForStep(){
+  const now = performance.now();
+  if(now - lastStepRenderAt < STEP_RENDER_MIN_INTERVAL_MS) return;
+  lastStepRenderAt = now;
+  render();
+}
 function simulationStep(){
   if(!state || state.stageResolved || state.snipeMortarStrikesPending>0 || state.placementPending || state.decoyPlacementPending) return;
   const dt = deltaTurns();
@@ -5717,7 +5731,7 @@ function simulationStep(){
     });
   });
 
-  render();
+  renderThrottledForStep();
 }
 
 function finalizeVolley(snappedTarget, hitAny, volleyImpacts){
@@ -9596,6 +9610,26 @@ function nearestRoadNodeIdx(x, y){
   return best;
 }
 
+// findRoadPath (below) is a full A* search over the whole road graph -- expensive (an
+// unbounded open-set linear scan per node popped, plus several Map/Set allocations), and
+// callers used to redo it from scratch on every single call. Under the old discrete-turn
+// simulation that meant once per ~0.5-2s commit; under the continuous simulation it would
+// otherwise run on every SIM_STEP_MS (100ms) substep -- up to ~20x more often -- which is the
+// single biggest cost behind the game feeling heavy after that conversion. Caching the result
+// on the unit and only recomputing when its goal has moved meaningfully or a whole turn has
+// been crossed (turnJustCrossed()) restores the original recompute cadence while movement
+// itself (advanceAlongPath, called separately by each caller) still walks the cached path
+// every substep, so motion stays just as smooth as before.
+function getCachedRoadPath(unit, fromX, fromY, goalX, goalY){
+  const goalMoved = unit._roadPathGoalX===undefined
+    || Math.hypot(goalX-unit._roadPathGoalX, goalY-unit._roadPathGoalY) > 20;
+  if(goalMoved || turnJustCrossed() || unit._roadPathRaw===undefined){
+    unit._roadPathRaw = findRoadPath(fromX, fromY, goalX, goalY);
+    unit._roadPathGoalX = goalX;
+    unit._roadPathGoalY = goalY;
+  }
+  return unit._roadPathRaw;
+}
 // A* over the road graph from (fromX,fromY) to (toX,toY), both snapped to
 // their nearest graph node. Returns an ordered array of {x,y} waypoints
 // (graph nodes only -- the caller is responsible for the final off-road hop
