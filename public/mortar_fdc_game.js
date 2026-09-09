@@ -395,17 +395,18 @@ const SNIPER_FORMATION_OFFSETS = [
 ];
 const SCOUT_ADVANCE_LIMIT_X = 2200;
 const SQUAD_RETREAT_LIMIT_X = 300;
-// per user request: SQUAD_ADVANCE_LIMIT_X's old role (the fixed X the "前進" order advanced
-// to) is now the player-draggable FEBA line (see state.febaX, drawn in drawBoard() and
-// dragged via setupMapControls()). This constant survives only as febaX's initial value and
-// the drag range's bounds.
+// per user request: the fixed X the "前進"/"後退" standing orders converge on for every
+// dismounted/vehicle unit type (squads/engineers/tanks/sams/snipers). The drawn FEBA line
+// (state.febaX) is a separate, purely visual readout of our infantry's own frontmost position
+// (see computeFebaX()) -- it is no longer player-draggable, and orders no longer target it
+// directly, so a squad that's already the most-advanced one isn't stuck chasing a line defined
+// by its own position.
 const SQUAD_ADVANCE_LIMIT_X = 1240;
 const SQUAD_ASSAULT_LIMIT_X = 2300;
 const FEBA_MIN_X = SQUAD_RETREAT_LIMIT_X;
 const FEBA_MAX_X = SQUAD_ASSAULT_LIMIT_X;
 const FEBA_LINE_COLOR = 'rgba(50,130,255,0.95)';
 const FEBA_LINE_WIDTH = 4;
-const FEBA_GRAB_PX = 16;
 const SQUAD_ENGAGE_RANGE = 100;
 const DETECTION_RANGE = {infantry:100, artillery:50};
 const MAP_WIDTH_KM = 20;
@@ -988,7 +989,6 @@ function spawn3dImpactEffect(x, y, kind){
     });
     if(kind==='smoke') e.group.rotation.y += dt*0.0004;
   });
-  triggerCameraCinematic(x, y, kind==='explosion'?Math.min(MAP_ZOOM_MAX, MAP_VIEW.zoom*1.35):Math.min(MAP_ZOOM_MAX, MAP_VIEW.zoom*1.18), kind==='explosion'?850:500, kind==='explosion'?180:80);
 }
 function spawn3dProjectile(startX, startY, endX, endY, duration){
   if(typeof THREE === 'undefined' || !scene3d) return;
@@ -999,7 +999,6 @@ function spawn3dProjectile(startX, startY, endX, endY, duration){
   );
   group.add(mesh);
   const born = performance.now();
-  triggerCameraCinematic(endX, endY, Math.min(MAP_ZOOM_MAX, MAP_VIEW.zoom*1.12), Math.min(900, duration), 0);
   addEffect3d(group, born, duration, (e,t)=>{
     const x = startX+(endX-startX)*t;
     const y = startY+(endY-startY)*t;
@@ -1067,13 +1066,9 @@ function currentShakeOffset(){
 // regardless of camera orientation (see the squad-marker block in drawBoard()).
 const infantryIcon = new Image();
 infantryIcon.src = 'icons/infant.png';
-// per user request: same treatment for the mortar, sniper team, and scout markers.
+// per user request: same treatment for the mortar marker.
 const mortarIcon = new Image();
 mortarIcon.src = 'icons/mortar.png';
-const sniperIcon = new Image();
-sniperIcon.src = 'icons/sniper.png';
-const scoutIcon = new Image();
-scoutIcon.src = 'icons/rcn.png';
 // per user request: enemy infantry group icon.
 const enemyInfantryIcon = new Image();
 enemyInfantryIcon.src = 'icons/e-infant.png';
@@ -3358,12 +3353,12 @@ function applySquadMovement(sq, sqIdx, dt){
     return;
   }
   if(sq.order==='advance'){
-    const next = terrainAwareStep(sq.x, sq.y, state.febaX, sq.y, INFANTRY_MOVE_CAP*dt);
-    sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
+    const next = terrainAwareStep(sq.x, sq.y, SQUAD_ADVANCE_LIMIT_X, sq.y, INFANTRY_MOVE_CAP*dt);
+    sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
     sq.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(sq.order==='retreat'){
-    const next = terrainAwareStep(sq.x, sq.y, state.febaX, sq.y, INFANTRY_MOVE_CAP*dt);
-    sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
+    const next = terrainAwareStep(sq.x, sq.y, SQUAD_ADVANCE_LIMIT_X, sq.y, INFANTRY_MOVE_CAP*dt);
+    sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
     sq.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(sq.order==='assault'){
     const enemyInfantry = state.targets.filter(t=>!t.destroyed && t.type==='infantry');
@@ -3380,8 +3375,8 @@ function applySquadMovement(sq, sqIdx, dt){
         sq.y = clamp(next.y, 30, CANVAS_H-30);
       }
     } else {
-      const next = terrainAwareStep(sq.x, sq.y, state.febaX, sq.y, INFANTRY_MOVE_CAP*dt);
-      sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
+      const next = terrainAwareStep(sq.x, sq.y, SQUAD_ADVANCE_LIMIT_X, sq.y, INFANTRY_MOVE_CAP*dt);
+      sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
       sq.y = clamp(next.y, 30, CANVAS_H-30);
     }
   } else if(sq.order==='hunt' && sq.huntTargetId){
@@ -3419,12 +3414,12 @@ function applyEngineerMovement(en, enIdx, dt){
     return;
   }
   if(en.order==='advance'){
-    const next = terrainAwareStep(en.x, en.y, state.febaX, en.y, INFANTRY_MOVE_CAP*dt);
-    en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
+    const next = terrainAwareStep(en.x, en.y, SQUAD_ADVANCE_LIMIT_X, en.y, INFANTRY_MOVE_CAP*dt);
+    en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
     en.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(en.order==='retreat'){
-    const next = terrainAwareStep(en.x, en.y, state.febaX, en.y, INFANTRY_MOVE_CAP*dt);
-    en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
+    const next = terrainAwareStep(en.x, en.y, SQUAD_ADVANCE_LIMIT_X, en.y, INFANTRY_MOVE_CAP*dt);
+    en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
     en.y = clamp(next.y, 30, CANVAS_H-30);
   }
   checkMineTrigger('engineer', enIdx, en.x, en.y);
@@ -3557,12 +3552,12 @@ function applyTankMovement(tank, idx, dt){
     return;
   }
   if(tank.order==='advance'){
-    const next = terrainAwareStep(tank.x, tank.y, state.febaX, tank.y, TANK_MOVE_CAP*dt);
-    tank.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
+    const next = terrainAwareStep(tank.x, tank.y, SQUAD_ADVANCE_LIMIT_X, tank.y, TANK_MOVE_CAP*dt);
+    tank.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
     tank.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(tank.order==='retreat'){
-    const next = terrainAwareStep(tank.x, tank.y, state.febaX, tank.y, TANK_MOVE_CAP*dt);
-    tank.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
+    const next = terrainAwareStep(tank.x, tank.y, SQUAD_ADVANCE_LIMIT_X, tank.y, TANK_MOVE_CAP*dt);
+    tank.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
     tank.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(tank.order==='hunt' && tank.huntTargetId){
     const target = state.targets.find(t=>t.id===tank.huntTargetId);
@@ -3602,12 +3597,12 @@ function applySamMovement(sam, idx, dt){
     return;
   }
   if(sam.order==='advance'){
-    const next = terrainAwareStep(sam.x, sam.y, state.febaX, sam.y, SAM_MOVE_CAP*dt);
-    sam.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
+    const next = terrainAwareStep(sam.x, sam.y, SQUAD_ADVANCE_LIMIT_X, sam.y, SAM_MOVE_CAP*dt);
+    sam.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
     sam.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(sam.order==='retreat'){
-    const next = terrainAwareStep(sam.x, sam.y, state.febaX, sam.y, SAM_MOVE_CAP*dt);
-    sam.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
+    const next = terrainAwareStep(sam.x, sam.y, SQUAD_ADVANCE_LIMIT_X, sam.y, SAM_MOVE_CAP*dt);
+    sam.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
     sam.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(sam.order==='hunt' && sam.huntTargetId){
     const target = state.targets.find(t=>t.id===sam.huntTargetId);
@@ -3769,12 +3764,12 @@ function applySniperMovement(sn, dt){
     return;
   }
   if(sn.order==='advance'){
-    const next = terrainAwareStep(sn.x, sn.y, state.febaX, sn.y, SNIPER_MOVE_CAP*dt);
-    sn.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
+    const next = terrainAwareStep(sn.x, sn.y, SQUAD_ADVANCE_LIMIT_X, sn.y, SNIPER_MOVE_CAP*dt);
+    sn.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
     sn.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(sn.order==='retreat'){
-    const next = terrainAwareStep(sn.x, sn.y, state.febaX, sn.y, SNIPER_MOVE_CAP*dt);
-    sn.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
+    const next = terrainAwareStep(sn.x, sn.y, SQUAD_ADVANCE_LIMIT_X, sn.y, SNIPER_MOVE_CAP*dt);
+    sn.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
     sn.y = clamp(next.y, 30, CANVAS_H-30);
   }
   checkMineTrigger('sniper', sn.id, sn.x, sn.y);
@@ -5697,11 +5692,24 @@ function renderThrottledForStep(){
   lastStepRenderAt = now;
   render();
 }
+// per user request: FEBA is no longer player-draggable -- it now tracks our own infantry
+// squads' frontmost (largest-x, i.e. most-advanced-toward-the-enemy) live position, purely as
+// a visual readout (drawn in drawBoard()). The "前進"/"後退" standing orders target the fixed
+// SQUAD_ADVANCE_LIMIT_X instead of this value, so a squad that's already the frontmost one
+// isn't stuck chasing a target defined by its own position. Falls back to the default
+// deployment line if every squad is wiped, so the drawn line always has a sane value.
+function computeFebaX(){
+  const aliveSquads = state.squads.filter(sq=>unitAlive(sq));
+  if(!aliveSquads.length) return clamp(SQUAD_ADVANCE_LIMIT_X, FEBA_MIN_X, FEBA_MAX_X);
+  const frontX = Math.max(...aliveSquads.map(sq=>sq.x));
+  return clamp(frontX, FEBA_MIN_X, FEBA_MAX_X);
+}
 function simulationStep(){
   if(!state || state.stageResolved || state.snipeMortarStrikesPending>0 || state.placementPending || state.decoyPlacementPending) return;
   const dt = deltaTurns();
   state.turns += dt;
   state.missionMinutes += dt;
+  state.febaX = computeFebaX();
   updateTurnBoundary();
 
   // A mortar whose queued shot can't be afforded only cancels THAT mortar's
@@ -7604,10 +7612,10 @@ function drawBoard(){
     ctx.stroke();
   }
 
-  // per user request: FEBA (主戦闘地域前縁) line -- the player-draggable X that the
-  // "前進"/"後退" standing orders advance to/fall back to (see febaLineSegments(),
-  // febaScreenHitDistance(), and the drag handling in setupMapControls()). Drawn thick and
-  // blue so it reads clearly against the terrain/units.
+  // per user request: FEBA (主戦闘地域前縁) line -- the X that the "前進"/"後退" standing
+  // orders advance to/fall back to, now tracking our infantry's own frontmost position
+  // automatically (computeFebaX(), recomputed every simulationStep) instead of being
+  // player-draggable. Drawn thick and blue so it reads clearly against the terrain/units.
   strokeGridBucket(febaLineSegments(state.febaX), FEBA_LINE_COLOR, FEBA_LINE_WIDTH);
 
   // HQ marker (指揮所) ― per user request: now movable (see setUnitMoveDest/applyHqMovement),
@@ -7840,8 +7848,6 @@ function drawBoard(){
     const scoutAlive = aliveCount>0;
     ctx.save();
     ctx.translate(scoutVis.x, scoutVis.y);
-    // per user request: custom scout icon image (our side only) in place of the cross+circle glyph
-    drawUnitIcon(ctx, scoutIcon, 0, 0, scaledIconH(22), !scoutAlive);
     drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='scout' && state.commandBox.idx===scIdx);
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
@@ -8014,8 +8020,6 @@ function drawBoard(){
       const snVisL = smoothVisualPos(sn, sn.x, sn.y);
       const snVis = project(snVisL.x, snVisL.y);
       const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
-      // per user request: custom sniper icon image (our side only) in place of the triangle
-      drawUnitIcon(ctx, sniperIcon, snVis.x, snVis.y, scaledIconH(22), aliveSoldiers.length===0);
       drawSelectionRing(ctx, snVis.x, snVis.y, (state.commandBox && state.commandBox.kind==='sniper' && state.commandBox.idx===snIdx) || isMultiSelected('sniper', snIdx));
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, snVis.x+20, snVis.y, aliveSoldiers.length/sn.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
@@ -8839,8 +8843,9 @@ function buildGridLineSegments(){
 const GRID_LINES = buildGridLineSegments();
 
 // per user request: FEBA (主戦闘地域前縁) line -- rebuilt fresh each frame (unlike the static
-// GRID_LINES) since state.febaX can change live while dragging, using the same short-chord
-// terrain-hugging technique so it reads correctly against the 3D terrain at any camera angle.
+// GRID_LINES) since state.febaX now moves live as our infantry's frontmost squad does (see
+// computeFebaX()), using the same short-chord terrain-hugging technique so it reads correctly
+// against the 3D terrain at any camera angle.
 function febaLineSegments(x){
   const segs = [];
   for(let y=0; y<CANVAS_H; y+=GRID_LINE_SEGMENT){
@@ -8860,19 +8865,6 @@ function choppedLineSegments(x1, y1, x2, y2){
   }
   return segs;
 }
-// Screen-space distance from a click/drag point to the FEBA line -- same nearest-sample-point
-// technique as nearestVisibleTargetForScreen, so grabbing the line to drag it is exactly
-// WYSIWYG (matches what's drawn) regardless of camera angle, consistent with unit selection.
-function febaScreenHitDistance(sx, sy){
-  let best = Infinity;
-  for(let y=0; y<=CANVAS_H; y+=GRID_LINE_SEGMENT){
-    const p = project(state.febaX, y);
-    if(!p.visible) continue;
-    const d = Math.hypot(p.x-sx, p.y-sy);
-    if(d<best) best = d;
-  }
-  return best;
-}
 // On phones, start the camera rotated -90 deg so the friendly<->enemy axis
 // (canvas X: friendly at low X, enemy at high X) reads bottom-to-top on
 // screen (friendly near/bottom, enemy far/top) instead of the desktop's
@@ -8887,24 +8879,6 @@ const MAP_VIEW = {
 };
 const MAP_ZOOM_MIN = 0.35, MAP_ZOOM_MAX = 9; // per user request: allow zooming in further (was 5)
 const MAP_POLAR_MIN = 0.12, MAP_POLAR_MAX = 1.45;
-let cameraCinematic = null;
-function triggerCameraCinematic(x, y, zoom, duration, holdMs){
-  if(!camera3d || !MAP_VIEW.containerW) return;
-  const now = performance.now();
-  const current = cameraCinematic && cameraCinematic.returnView
-    ? cameraCinematic.returnView
-    : {cx:MAP_VIEW.cx, cy:MAP_VIEW.cy, zoom:MAP_VIEW.zoom};
-  cameraCinematic = {
-    returnView: current,
-    target:{x, y, zoom:clamp(zoom, MAP_ZOOM_MIN, MAP_ZOOM_MAX)},
-    started:now,
-    duration:Math.max(250, duration||700),
-    holdUntil:now+Math.max(0, holdMs||0),
-  };
-}
-function cancelCameraCinematic(){
-  cameraCinematic = null;
-}
 // scaleX/scaleZ are independent (not a single uniform unitsPerCanvasUnit) so that
 // canvas-unit space (0..CANVAS_W, 0..CANVAS_H) always covers the FULL loaded terrain
 // mesh in both directions, whatever its real-world aspect ratio happens to be. A single
@@ -9783,23 +9757,7 @@ function projectAtWorldY(cx, cy, worldY){
 
 function updateCameraFromView(){
   if(!camera3d) return;
-  let viewCx = MAP_VIEW.cx, viewCy = MAP_VIEW.cy, viewZoom = MAP_VIEW.zoom;
-  if(cameraCinematic){
-    const now = performance.now();
-    const c = cameraCinematic;
-    const elapsed = now-c.started;
-    if(elapsed >= c.duration){
-      cameraCinematic = null;
-    } else {
-      const t = clamp(elapsed/c.duration, 0, 1);
-      const ease = t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
-      const hold = now < c.holdUntil;
-      const blend = hold ? 1 : ease;
-      viewCx = c.returnView.cx + (c.target.x-c.returnView.cx)*blend;
-      viewCy = c.returnView.cy + (c.target.y-c.returnView.cy)*blend;
-      viewZoom = c.returnView.zoom + (c.target.zoom-c.returnView.zoom)*blend;
-    }
-  }
+  const viewCx = MAP_VIEW.cx, viewCy = MAP_VIEW.cy, viewZoom = MAP_VIEW.zoom;
   const look = canvasUnitToWorldXZ(viewCx, viewCy);
   const lookY = terrainHeightAt(viewCx, viewCy);
   // per user request: the sun's shadow camera is a small fixed-size box (SHADOW_FRUSTUM_HALF)
@@ -9994,28 +9952,10 @@ function setupMapControls(){
   if(!el) return;
   el.addEventListener('contextmenu', e=>e.preventDefault());
 
-  // per user request: grabbing the FEBA line (see febaScreenHitDistance()) drags it instead
-  // of panning/rotating the map -- checked first since the line sits on top of the map.
-  const grabFebaAt = (clientX, clientY)=>{
-    if(!state || state.placementPending || state.decoyPlacementPending) return false;
-    const rect = el.getBoundingClientRect();
-    const px = clientX-rect.left, py = clientY-rect.top;
-    const sx = threeReady ? px : px/rect.width*CANVAS_W;
-    const sy = threeReady ? py : py/rect.height*CANVAS_H;
-    return febaScreenHitDistance(sx, sy) <= FEBA_GRAB_PX;
-  };
-  const dragFebaTo = (clientX, clientY)=>{
-    const rect = el.getBoundingClientRect();
-    const px = clientX-rect.left, py = clientY-rect.top;
-    const g = threeReady ? terrainCanvasUnitAt(px, py) : {x: px/rect.width*CANVAS_W};
-    if(g) state.febaX = clamp(g.x, FEBA_MIN_X, FEBA_MAX_X);
-  };
-
   let mode = null, lastX=0, lastY=0, dragGround=null;
   el.addEventListener('mousedown', e=>{
     mapDragMoved = false;
-    cancelCameraCinematic();
-    mode = grabFebaAt(e.clientX, e.clientY) ? 'feba' : (e.button===2 ? 'rotate' : 'pan');
+    mode = e.button===2 ? 'rotate' : 'pan';
     lastX = e.clientX; lastY = e.clientY;
     mapFocusTarget = null;
     decoyLongPressStart(e.clientX, e.clientY);
@@ -10030,9 +9970,7 @@ function setupMapControls(){
     const dx = e.clientX-lastX, dy = e.clientY-lastY;
     if(Math.abs(dx)>2 || Math.abs(dy)>2) mapDragMoved = true;
     lastX = e.clientX; lastY = e.clientY;
-    if(mode==='feba'){
-      dragFebaTo(e.clientX, e.clientY);
-    } else if(mode==='rotate'){
+    if(mode==='rotate'){
       MAP_VIEW.azimuth -= dx*0.006;
       MAP_VIEW.polar = clamp(MAP_VIEW.polar - dy*0.005, MAP_POLAR_MIN, MAP_POLAR_MAX);
       updateCameraFromView();
@@ -10051,7 +9989,6 @@ function setupMapControls(){
 
   el.addEventListener('wheel', e=>{
     e.preventDefault();
-    cancelCameraCinematic();
     mapFocusTarget = null;
     const factor = e.deltaY<0 ? 1.12 : 1/1.12;
     MAP_VIEW.zoom = clamp(MAP_VIEW.zoom*factor, MAP_ZOOM_MIN, MAP_ZOOM_MAX);
@@ -10080,7 +10017,6 @@ function setupMapControls(){
     y:(touches[0].clientY+touches[1].clientY)/2,
   });
   el.addEventListener('touchstart', e=>{
-    cancelCameraCinematic();
     mapFocusTarget = null;
     if(e.touches.length===1){
       touchLastX=e.touches[0].clientX; touchLastY=e.touches[0].clientY;
@@ -10090,7 +10026,7 @@ function setupMapControls(){
       // movement) must still synthesize its native 'click' so unit selection
       // keeps working. touch-action:none on #board (CSS) already stops the
       // browser's native pan/zoom gesture from engaging over the map.
-      touchMode = grabFebaAt(touchLastX, touchLastY) ? 'feba' : 'pan';
+      touchMode = 'pan';
       mapDragMoved=false;
       decoyLongPressStart(touchLastX, touchLastY);
       dragGround = groundPlaneCanvasUnitAt(lx, ly);
@@ -10115,11 +10051,7 @@ function setupMapControls(){
   }, {passive:false});
   el.addEventListener('touchmove', e=>{
     e.preventDefault();
-    if(touchMode==='feba' && e.touches.length===1){
-      touchLastX = e.touches[0].clientX; touchLastY = e.touches[0].clientY;
-      mapDragMoved = true;
-      dragFebaTo(touchLastX, touchLastY);
-    } else if(touchMode==='pan' && e.touches.length===1){
+    if(touchMode==='pan' && e.touches.length===1){
       decoyLongPressMove(e.touches[0].clientX, e.touches[0].clientY);
       const dx = e.touches[0].clientX-touchLastX, dy = e.touches[0].clientY-touchLastY;
       if(Math.abs(dx)>2 || Math.abs(dy)>2) mapDragMoved = true;
@@ -10410,6 +10342,22 @@ function updateSoldierWalkCycle(marker, moving, dtSeconds){
     fig._armPivots[1].rotation.x = swing;
   });
 }
+// Rotates the whole marker (every soldier in the formation together, same as
+// updateTankHeading3d/updateHeliHeading3d below) to face its direction of travel. The
+// body/head cylinders are radially symmetric on their own -- without this, the weapon/pack
+// props and the walk cycle's leg swing (which happens in the marker's own local axes) would
+// stay pointed in a fixed world direction no matter which way the unit actually walks.
+function updateSoldierHeading3d(marker, unit, visualX, visualY){
+  const prevX = unit._soldierMarkerX;
+  const prevY = unit._soldierMarkerY;
+  unit._soldierMarkerX = visualX;
+  unit._soldierMarkerY = visualY;
+  if(prevX===undefined || prevY===undefined) return;
+  const dx = visualX-prevX;
+  const dz = visualY-prevY;
+  if(Math.hypot(dx,dz) < 0.01) return;
+  marker.rotation.y = Math.atan2(dx, dz);
+}
 function updateTankHeading3d(marker, unit, visualX, visualY){
   const prevX = unit._tankMarkerX;
   const prevY = unit._tankMarkerY;
@@ -10515,6 +10463,7 @@ function syncUnitMarkers3d(){
     if(shape==='infantry' || shape==='scout' || shape==='sniper'){
       updateSoldierFigures3d(unitMarkers3d[key], unit.soldiers.map(s=>s.alive));
       updateSoldierWalkCycle(unitMarkers3d[key], isVisuallyMoving(unit, p.x, p.y), walkDt);
+      updateSoldierHeading3d(unitMarkers3d[key], unit, p.x, p.y);
     }
   };
   state.mortars.forEach((m,i)=>friendlyUnit('mortar'+i, m, 'mortar', m.hp>0));
@@ -10544,6 +10493,7 @@ function syncUnitMarkers3d(){
     if(shape==='infantry' && t.troops){
       updateSoldierFigures3d(unitMarkers3d[key], t.troops.map(s=>s.alive));
       updateSoldierWalkCycle(unitMarkers3d[key], isVisuallyMoving(t, e.x, e.y), walkDt);
+      updateSoldierHeading3d(unitMarkers3d[key], t, e.x, e.y);
     }
   });
 
