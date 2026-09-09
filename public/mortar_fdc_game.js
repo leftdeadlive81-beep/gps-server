@@ -589,12 +589,35 @@ function unitMayFire(kind, index, tick){
   const interval = WEAPON_FIRE_INTERVAL[kind] || 3;
   return ((tick + index*2 + WEAPON_FIRE_OFFSET[kind]) % interval) === 0;
 }
+// Continuous-simulation core: the simulation now advances every SIM_STEP_MS of real time
+// (driven from loop()'s rAF accumulator, see advanceSimulation()) instead of jumping once per
+// GAME_SPEED_INTERVALS tick. Each step applies a fractional "turn" amount -- deltaTurns()
+// below -- so every existing per-turn constant (movement caps, suppression/smoke/illum
+// durations, cooldowns) keeps its original meaning without being redefined in seconds.
+const SIM_STEP_MS = 100;
+const SIM_STEP_MAX_CATCHUP = 5; // cap steps/frame so a long pause (tab backgrounded) can't burst-replay
+let simAccumMs = 0;
+function deltaTurns(){
+  return SIM_STEP_MS / GAME_SPEED_INTERVALS[(state && state.gameSpeed) || 'normal'];
+}
+// state.turns is now a continuously-increasing float instead of an integer bumped once per
+// discrete commit. Deterministic per-turn mechanics (unitMayFire's tick-modulo stagger, mine
+// placement, counter-attack rolls, ...) can't be evaluated fractionally, so they're gated to
+// fire exactly once per whole integer turn crossed -- currentTurnFloor()/turnJustCrossed() give
+// that boundary, evaluated once per simulationStep() via updateTurnBoundary().
+let currentTurnFloorValue = -1;
+let turnJustCrossedFlag = false;
+function updateTurnBoundary(){
+  const f = Math.floor(state.turns);
+  turnJustCrossedFlag = f !== currentTurnFloorValue;
+  currentTurnFloorValue = f;
+}
+function currentTurnFloor(){ return currentTurnFloorValue; }
+function turnJustCrossed(){ return turnJustCrossedFlag; }
 function visualTweenDurationMs(){
-  const ms = GAME_SPEED_INTERVALS[(state && state.gameSpeed) || 'normal'];
-  // Keep the next movement target slightly ahead of the visual marker. This removes the
-  // brief stop at the end of each simulation slice and makes successive orders read as one
-  // continuous movement instead of "advance, pause, advance".
-  return Math.round(ms*1.15);
+  // Now a small constant tied to the fixed sim step (rather than the old whole-turn interval)
+  // -- see SIM_STEP_MS above. Motion still finishes just ahead of the next step at any speed.
+  return Math.round(SIM_STEP_MS*1.15);
 }
 function smoothstep01(t){ return t*t*(3-2*t); }
 const SUPPRESSION_TURNS = 3;
@@ -1367,7 +1390,9 @@ function addNewScout(){
 function unitAlive(u){ return unitAliveCount(u) > 0; }
 
 function initGame(){
-  if(autoCommitTimer){ clearInterval(autoCommitTimer); autoCommitTimer = null; }
+  simAccumMs = 0;
+  lastSimFrameAt = null;
+  mortarFireCursor = 0;
   document.getElementById('overlay').classList.remove('show');
   document.getElementById('shop-overlay').classList.remove('show');
   state = {
@@ -1421,6 +1446,8 @@ function initGame(){
     enemyCommandBox: null,
     snipeMortarStrikesPending: 0,
     animating: false,
+    inFlightVolleys: 0,
+    simRunning: false,
     stageResolved: false,
     gameSpeed: 'normal',
     deploymentMode: 'auto',
@@ -1938,6 +1965,10 @@ function startStage(){
     state.hq.pendingDest = null;
   }
   state.animating = false;
+  state.inFlightVolleys = 0;
+  simAccumMs = 0;
+  currentTurnFloorValue = -1;
+  turnJustCrossedFlag = false;
   state.stageResolved = false;
   state.hpDroppedLow = false;
   state.orderMode = null;
@@ -2825,9 +2856,9 @@ function performRecon(t){
     log('fdc','FDC', `${t.id} の情報精度は限界に達した。これ以上の座標補正は望めない。`);
   }
 }
-function resolveOneScoutDecision(scout, idx){
+function resolveOneScoutDecision(scout, idx, dt){
   if(!unitAlive(scout)) return;
-  if(scout.resting){ tickUnitRest(scout, `斥候${idx+1}班`); return; }
+  if(scout.resting){ tickUnitRest(scout, `斥候${idx+1}班`, dt); return; }
   if(scout.pendingReconTargetId){
     const t = state.targets.find(x=>x.id===scout.pendingReconTargetId);
     scout.pendingReconTargetId = null;
@@ -2837,7 +2868,7 @@ function resolveOneScoutDecision(scout, idx){
       else log('sys','FDC', `${t.id} は斥候${idx+1}から視認できず偵察失敗。`);
     }
   } else if(scout.pendingDest){
-    const next = scoutTerrainAwareStep(scout.x, scout.y, scout.pendingDest.x, scout.pendingDest.y, SCOUT_MOVE_CAP);
+    const next = scoutTerrainAwareStep(scout.x, scout.y, scout.pendingDest.x, scout.pendingDest.y, SCOUT_MOVE_CAP*dt);
     scout.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SCOUT_ADVANCE_LIMIT_X);
     scout.y = clamp(next.y, 20, CANVAS_H-20);
     checkMineTrigger('scout', idx, scout.x, scout.y);
@@ -2847,20 +2878,18 @@ function resolveOneScoutDecision(scout, idx){
     }
   }
 }
-function resolveScoutDecision(){
-  state.scouts.forEach((scout,idx)=>resolveOneScoutDecision(scout, idx));
+function resolveScoutDecision(dt){
+  state.scouts.forEach((scout,idx)=>resolveOneScoutDecision(scout, idx, dt));
 }
-function resolveFriendlyHeliTurn(actionTurns){
+function resolveFriendlyHeliTurn(dt){
   (state.helis||[]).forEach(heli=>{
     if(heli.hp<=0) return;
-    for(let i=0;i<actionTurns;i++){
-      heli.orbitAngle = (heli.orbitAngle + 0.22) % (Math.PI*2);
-      const targetX = clamp(900 + Math.cos(heli.orbitAngle)*260, 520, CANVAS_W-260);
-      const targetY = clamp(CANVAS_H/2 + Math.sin(heli.orbitAngle)*150, 40, CANVAS_H-40);
-      const next = airborneStep(heli.x, heli.y, targetX, targetY, FRIENDLY_HELI_MOVE_UNITS);
-      heli.x = next.x;
-      heli.y = next.y;
-    }
+    heli.orbitAngle = (heli.orbitAngle + 0.22*dt) % (Math.PI*2);
+    const targetX = clamp(900 + Math.cos(heli.orbitAngle)*260, 520, CANVAS_W-260);
+    const targetY = clamp(CANVAS_H/2 + Math.sin(heli.orbitAngle)*150, 40, CANVAS_H-40);
+    const next = airborneStep(heli.x, heli.y, targetX, targetY, FRIENDLY_HELI_MOVE_UNITS*dt);
+    heli.x = next.x;
+    heli.y = next.y;
   });
 }
 function allScoutsWiped(){
@@ -2901,9 +2930,9 @@ function armMortarTargetOrder(idx){
   state.commandBox = null;
   render();
 }
-function resolveOneMortarDecision(mortar){
+function resolveOneMortarDecision(mortar, dt){
   if(mortar.order!=='move' || !mortar.pendingDest) return;
-  const next = terrainAwareStep(mortar.x, mortar.y, mortar.pendingDest.x, mortar.pendingDest.y, MORTAR_MOVE_CAP);
+  const next = terrainAwareStep(mortar.x, mortar.y, mortar.pendingDest.x, mortar.pendingDest.y, MORTAR_MOVE_CAP*dt);
   mortar.x = clamp(next.x, MORTAR_ZONE_MIN_X, MORTAR_ZONE_MAX_X);
   mortar.y = clamp(next.y, 30, CANVAS_H-30);
   checkMineTrigger('mortar', mortar.id, mortar.x, mortar.y);
@@ -2918,8 +2947,8 @@ function resolveOneMortarDecision(mortar){
     }
   }
 }
-function resolveMortarDecision(){
-  state.mortars.forEach(m=>resolveOneMortarDecision(m));
+function resolveMortarDecision(dt){
+  state.mortars.forEach(m=>resolveOneMortarDecision(m, dt));
 }
 
 let unlockedAchievements = new Set();
@@ -3171,7 +3200,7 @@ function log(role, who, text){
   el.scrollTo({top:0, behavior:'smooth'});
 }
 
-function enemyCounterAttack(actionTurns){
+function enemyCounterAttack(dt){
   let anyHit = false;
   const remaining = state.targets.filter(t=>!t.destroyed);
   // Balance note: infantry now arrives as several independent formation groups (see
@@ -3183,13 +3212,16 @@ function enemyCounterAttack(actionTurns){
   // the AGGREGATE attack-attempt rate equivalent to a single infantry unit's, regardless of
   // formation count, so SCOUT_EXPOSURE's intended survivability isn't eaten by this.
   const infantryGroupCount = remaining.filter(t=>t.type==='infantry').length;
-  for(let i=0;i<actionTurns;i++){
+  {
     remaining.forEach(t=>{
       if(t.destroyed) return;
       // Enemy formations also use staggered fire windows; otherwise the real-time
-      // resolver makes every visible contact shoot on the same simulation slice.
+      // resolver makes every visible contact shoot on the same simulation slice. This is a
+      // discrete once-per-turn stagger (not a rate), so it only evaluates the instant a whole
+      // turn is crossed, using the original modulo formula unchanged.
+      if(!turnJustCrossed()) return;
       const targetIndex = remaining.indexOf(t);
-      if(((state.turns + i + targetIndex) % 3) !== 0) return;
+      if(((currentTurnFloor() + targetIndex) % 3) !== 0) return;
       // per user request: the enemy HQ is a fixed structure, not a unit with a weapon of its
       // own -- it never counter-attacks (COUNTER_CHANCE/COUNTER_DAMAGE have no 'hq' entry,
       // same as 'heli', whose attacks are instead handled entirely by resolveHeliAssault).
@@ -3293,10 +3325,10 @@ function applyStandingOrder(unit, prefix, assaultAllowed){
 // per user request: 指揮所の移動 -- 小隊の pendingDest 移動(applySquadMovement)と同じ仕組みだが、
 // HQ には advance/retreat/assault/hunt のような戦闘スタンスは無いので、地図で指定した地点へ
 // 直進するだけの最小構成。移動速度は歩兵と同一(INFANTRY_MOVE_CAP)。
-function applyHqMovement(){
+function applyHqMovement(dt){
   const hq = state.hq;
   if(!hq.pendingDest) return;
-  const next = terrainAwareStep(hq.x, hq.y, hq.pendingDest.x, hq.pendingDest.y, INFANTRY_MOVE_CAP);
+  const next = terrainAwareStep(hq.x, hq.y, hq.pendingDest.x, hq.pendingDest.y, INFANTRY_MOVE_CAP*dt);
   hq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
   hq.y = clamp(next.y, 30, CANVAS_H-30);
   checkMineTrigger('hq', 0, hq.x, hq.y);
@@ -3305,18 +3337,15 @@ function applyHqMovement(){
     log('sys','前線', `指揮所、指定地点への移転完了。`);
   }
 }
-function resolveHqMovement(actionTurns){
+function resolveHqMovement(dt){
   if(state.hq.hp<=0 || !state.hq.pendingDest) return false;
-  for(let i=0;i<actionTurns;i++){
-    if(!state.hq.pendingDest) break;
-    applyHqMovement();
-  }
+  applyHqMovement(dt);
   return true;
 }
 
-function applySquadMovement(sq, sqIdx){
+function applySquadMovement(sq, sqIdx, dt){
   if(sq.pendingDest){
-    const next = terrainAwareStep(sq.x, sq.y, sq.pendingDest.x, sq.pendingDest.y, INFANTRY_MOVE_CAP);
+    const next = terrainAwareStep(sq.x, sq.y, sq.pendingDest.x, sq.pendingDest.y, INFANTRY_MOVE_CAP*dt);
     sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
     sq.y = clamp(next.y, 30, CANVAS_H-30);
     checkMineTrigger('squad', sqIdx, sq.x, sq.y);
@@ -3327,11 +3356,11 @@ function applySquadMovement(sq, sqIdx){
     return;
   }
   if(sq.order==='advance'){
-    const next = terrainAwareStep(sq.x, sq.y, state.febaX, sq.y, INFANTRY_MOVE_CAP);
+    const next = terrainAwareStep(sq.x, sq.y, state.febaX, sq.y, INFANTRY_MOVE_CAP*dt);
     sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
     sq.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(sq.order==='retreat'){
-    const next = terrainAwareStep(sq.x, sq.y, state.febaX, sq.y, INFANTRY_MOVE_CAP);
+    const next = terrainAwareStep(sq.x, sq.y, state.febaX, sq.y, INFANTRY_MOVE_CAP*dt);
     sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
     sq.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(sq.order==='assault'){
@@ -3344,12 +3373,12 @@ function applySquadMovement(sq, sqIdx){
         if(d<nd){ nd=d; nearest=e; }
       });
       if(nearest){
-        const next = terrainAwareStep(sq.x, sq.y, nearest.x, nearest.y, INFANTRY_MOVE_CAP);
+        const next = terrainAwareStep(sq.x, sq.y, nearest.x, nearest.y, INFANTRY_MOVE_CAP*dt);
         sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
         sq.y = clamp(next.y, 30, CANVAS_H-30);
       }
     } else {
-      const next = terrainAwareStep(sq.x, sq.y, state.febaX, sq.y, INFANTRY_MOVE_CAP);
+      const next = terrainAwareStep(sq.x, sq.y, state.febaX, sq.y, INFANTRY_MOVE_CAP*dt);
       sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
       sq.y = clamp(next.y, 30, CANVAS_H-30);
     }
@@ -3363,7 +3392,7 @@ function applySquadMovement(sq, sqIdx){
       const e = estPos(target);
       const dist = Math.hypot(e.x-sq.x, e.y-sq.y);
       if(dist > SQUAD_ENGAGE_RANGE*0.8){
-        const next = terrainAwareStep(sq.x, sq.y, e.x, e.y, INFANTRY_MOVE_CAP);
+        const next = terrainAwareStep(sq.x, sq.y, e.x, e.y, INFANTRY_MOVE_CAP*dt);
         sq.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
         sq.y = clamp(next.y, 30, CANVAS_H-30);
       }
@@ -3375,9 +3404,9 @@ function applySquadMovement(sq, sqIdx){
 
 // per user request: 工兵小隊の移動 -- 小隊(applySquadMovement)の advance/retreat/pendingDest と
 // 同じ仕組みだが、assault/hunt のような交戦系スタンスは持たない(工兵は戦闘要員ではないため)。
-function applyEngineerMovement(en, enIdx){
+function applyEngineerMovement(en, enIdx, dt){
   if(en.pendingDest){
-    const next = terrainAwareStep(en.x, en.y, en.pendingDest.x, en.pendingDest.y, INFANTRY_MOVE_CAP);
+    const next = terrainAwareStep(en.x, en.y, en.pendingDest.x, en.pendingDest.y, INFANTRY_MOVE_CAP*dt);
     en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
     en.y = clamp(next.y, 30, CANVAS_H-30);
     checkMineTrigger('engineer', enIdx, en.x, en.y);
@@ -3388,11 +3417,11 @@ function applyEngineerMovement(en, enIdx){
     return;
   }
   if(en.order==='advance'){
-    const next = terrainAwareStep(en.x, en.y, state.febaX, en.y, INFANTRY_MOVE_CAP);
+    const next = terrainAwareStep(en.x, en.y, state.febaX, en.y, INFANTRY_MOVE_CAP*dt);
     en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
     en.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(en.order==='retreat'){
-    const next = terrainAwareStep(en.x, en.y, state.febaX, en.y, INFANTRY_MOVE_CAP);
+    const next = terrainAwareStep(en.x, en.y, state.febaX, en.y, INFANTRY_MOVE_CAP*dt);
     en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
     en.y = clamp(next.y, 30, CANVAS_H-30);
   }
@@ -3401,32 +3430,33 @@ function applyEngineerMovement(en, enIdx){
 function allEngineersWiped(){
   return !state.engineers.length || state.engineers.every(e=>!unitAlive(e));
 }
-function resolveEngineerOrders(actionTurns){
+function resolveEngineerOrders(dt){
   let anyEvent = false;
-  for(let i=0;i<actionTurns;i++){
-    state.engineers.forEach((en, enIdx)=>{
-      const aliveSoldiers = en.soldiers.filter(s=>s.alive);
-      if(aliveSoldiers.length===0) return;
-      if(en.resting){ tickUnitRest(en, '工兵小隊'); return; }
-      applyStandingOrder(en, '工兵小隊', false);
-      const beforeX = en.x, beforeY = en.y;
-      applyEngineerMovement(en, enIdx);
-      if(en.x!==beforeX || en.y!==beforeY) anyEvent = true;
-    });
-  }
+  state.engineers.forEach((en, enIdx)=>{
+    const aliveSoldiers = en.soldiers.filter(s=>s.alive);
+    if(aliveSoldiers.length===0) return;
+    if(en.resting){ tickUnitRest(en, '工兵小隊', dt); return; }
+    applyStandingOrder(en, '工兵小隊', false);
+    const beforeX = en.x, beforeY = en.y;
+    applyEngineerMovement(en, enIdx, dt);
+    if(en.x!==beforeX || en.y!==beforeY) anyEvent = true;
+  });
   return anyEvent;
 }
 
-function resolveSquadOrders(actionTurns){
+function resolveSquadOrders(dt){
   let anyEvent = false;
-  for(let i=0;i<actionTurns;i++){
+  {
     state.squads.forEach((sq, sqIdx)=>{
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
       if(aliveSoldiers.length===0) return;
-      if(!unitMayFire('squad', sqIdx, state.turns+i+1)) return;
-      if(sq.resting){ tickUnitRest(sq, `第${sqIdx+1}小隊`); return; }
+      // Movement/rest used to be gated by unitMayFire too (on a turn residue offset by 1 from
+      // the fire gate below, so the two could never coincide) -- that made squads advance in
+      // intermittent pulses. Now that movement is continuous like every other unit, that gate
+      // is dropped here; only the fire gate further down keeps its original turn cadence.
+      if(sq.resting){ tickUnitRest(sq, `第${sqIdx+1}小隊`, dt); return; }
       applyStandingOrder(sq, `第${sqIdx+1}小隊`, true);
-      applySquadMovement(sq, sqIdx);
+      applySquadMovement(sq, sqIdx, dt);
 
       // per user request: 砲兵は無装甲の砲側員なので、歩兵と同じ通常の交戦対象に含める
       // (以前は歩兵タイプのみが対象で、真横にいる砲兵さえ無視して撃たなかった)。
@@ -3438,7 +3468,10 @@ function resolveSquadOrders(actionTurns){
         if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
       }
       if(engageTargets.length===0) return;
-      if(!unitMayFire('squad', sqIdx, state.turns+i)) return;
+      // Firing is a discrete once-per-turn event (unitMayFire's tick-modulo stagger is
+      // deterministic, not a rate) -- only evaluate it the instant a whole turn is crossed,
+      // using the original tick formula unchanged.
+      if(!turnJustCrossed() || !unitMayFire('squad', sqIdx, currentTurnFloor())) return;
       let dmgMult=1, casualtyMult=1;
       if(sq.order==='assault' || sq.order==='hunt'){ dmgMult=1.6; casualtyMult=1.5; }
       else if(sq.order==='hold'){ dmgMult=0.9; casualtyMult=0.6; }
@@ -3509,9 +3542,9 @@ function resolveSquadOrders(actionTurns){
 // per user request: 2 friendly tanks. Movement mirrors applySquadMovement (advance/retreat/
 // hunt), but combat is HP-based like a mortar taking damage rather than squad's per-soldier
 // casualty rolls, since tanks don't carry a tracked soldiers roster.
-function applyTankMovement(tank, idx){
+function applyTankMovement(tank, idx, dt){
   if(tank.pendingDest){
-    const next = terrainAwareStep(tank.x, tank.y, tank.pendingDest.x, tank.pendingDest.y, TANK_MOVE_CAP);
+    const next = terrainAwareStep(tank.x, tank.y, tank.pendingDest.x, tank.pendingDest.y, TANK_MOVE_CAP*dt);
     tank.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
     tank.y = clamp(next.y, 30, CANVAS_H-30);
     checkMineTrigger('tank', idx, tank.x, tank.y);
@@ -3522,11 +3555,11 @@ function applyTankMovement(tank, idx){
     return;
   }
   if(tank.order==='advance'){
-    const next = terrainAwareStep(tank.x, tank.y, state.febaX, tank.y, TANK_MOVE_CAP);
+    const next = terrainAwareStep(tank.x, tank.y, state.febaX, tank.y, TANK_MOVE_CAP*dt);
     tank.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
     tank.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(tank.order==='retreat'){
-    const next = terrainAwareStep(tank.x, tank.y, state.febaX, tank.y, TANK_MOVE_CAP);
+    const next = terrainAwareStep(tank.x, tank.y, state.febaX, tank.y, TANK_MOVE_CAP*dt);
     tank.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
     tank.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(tank.order==='hunt' && tank.huntTargetId){
@@ -3539,7 +3572,7 @@ function applyTankMovement(tank, idx){
       const e = estPos(target);
       const dist = Math.hypot(e.x-tank.x, e.y-tank.y);
       if(dist > TANK_ENGAGE_RANGE*0.8){
-        const next = terrainAwareStep(tank.x, tank.y, e.x, e.y, TANK_MOVE_CAP);
+        const next = terrainAwareStep(tank.x, tank.y, e.x, e.y, TANK_MOVE_CAP*dt);
         tank.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
         tank.y = clamp(next.y, 30, CANVAS_H-30);
       }
@@ -3554,9 +3587,9 @@ function allTanksWiped(){
 
 // per user request: 対空ミサイル部隊 -- 移動は戦車と同じ枠組み(pendingDest/advance/retreat/
 // hunt、FEBA線を前進/後退の目標にする)を流用。
-function applySamMovement(sam, idx){
+function applySamMovement(sam, idx, dt){
   if(sam.pendingDest){
-    const next = terrainAwareStep(sam.x, sam.y, sam.pendingDest.x, sam.pendingDest.y, SAM_MOVE_CAP);
+    const next = terrainAwareStep(sam.x, sam.y, sam.pendingDest.x, sam.pendingDest.y, SAM_MOVE_CAP*dt);
     sam.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
     sam.y = clamp(next.y, 30, CANVAS_H-30);
     checkMineTrigger('sam', idx, sam.x, sam.y);
@@ -3567,11 +3600,11 @@ function applySamMovement(sam, idx){
     return;
   }
   if(sam.order==='advance'){
-    const next = terrainAwareStep(sam.x, sam.y, state.febaX, sam.y, SAM_MOVE_CAP);
+    const next = terrainAwareStep(sam.x, sam.y, state.febaX, sam.y, SAM_MOVE_CAP*dt);
     sam.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
     sam.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(sam.order==='retreat'){
-    const next = terrainAwareStep(sam.x, sam.y, state.febaX, sam.y, SAM_MOVE_CAP);
+    const next = terrainAwareStep(sam.x, sam.y, state.febaX, sam.y, SAM_MOVE_CAP*dt);
     sam.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
     sam.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(sam.order==='hunt' && sam.huntTargetId){
@@ -3584,7 +3617,7 @@ function applySamMovement(sam, idx){
       const e = estPos(target);
       const dist = Math.hypot(e.x-sam.x, e.y-sam.y);
       if(dist > SAM_ENGAGE_RANGE*0.8){
-        const next = terrainAwareStep(sam.x, sam.y, e.x, e.y, SAM_MOVE_CAP);
+        const next = terrainAwareStep(sam.x, sam.y, e.x, e.y, SAM_MOVE_CAP*dt);
         sam.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
         sam.y = clamp(next.y, 30, CANVAS_H-30);
       }
@@ -3600,12 +3633,12 @@ function allSamsWiped(){
 // per user request: 対地目標(歩兵・車両・砲兵)には一切交戦できない(engageTargetsがheli/drone
 // のみ) ―― 陸上部隊には無力な代わりに、対空目標には高威力。戦車のような被弾デュエルは持たない
 // (迫撃砲と同様、被害はcheckFriendlyFireAt経由の対砲兵射撃やヘリ自身のAIからのみ発生する)。
-function resolveSamOrders(actionTurns){
+function resolveSamOrders(dt){
   let anyEvent = false;
-  for(let i=0;i<actionTurns;i++){
+  {
     state.sams.forEach((sam, idx)=>{
       if(sam.hp<=0) return;
-      applySamMovement(sam, idx);
+      applySamMovement(sam, idx, dt);
 
       let engageTargets = state.targets.filter(t=>!t.destroyed && (t.type==='heli' || t.type==='drone'));
       if(sam.order==='hunt' && sam.huntTargetId){
@@ -3613,7 +3646,7 @@ function resolveSamOrders(actionTurns){
         if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
       }
       if(engageTargets.length===0) return;
-      if(!unitMayFire('sam', idx, state.turns+i)) return;
+      if(!turnJustCrossed() || !unitMayFire('sam', idx, currentTurnFloor())) return;
       let dmgMult=1;
       if(sam.order==='hunt'){ dmgMult=1.5; }
       else if(sam.order==='hold'){ dmgMult=0.9; }
@@ -3647,12 +3680,12 @@ function resolveSamOrders(actionTurns){
   return anyEvent;
 }
 
-function resolveTankOrders(actionTurns){
+function resolveTankOrders(dt){
   let anyEvent = false;
-  for(let i=0;i<actionTurns;i++){
+  {
     state.tanks.forEach((tank, idx)=>{
       if(tank.hp<=0) return;
-      applyTankMovement(tank, idx);
+      applyTankMovement(tank, idx, dt);
 
       let engageTargets = state.targets.filter(t=>!t.destroyed && (t.type==='infantry' || t.type==='vehicle'));
       if(tank.order==='hunt' && tank.huntTargetId){
@@ -3662,7 +3695,7 @@ function resolveTankOrders(actionTurns){
         if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
       }
       if(engageTargets.length===0) return;
-      if(!unitMayFire('tank', idx, state.turns+i)) return;
+      if(!turnJustCrossed() || !unitMayFire('tank', idx, currentTurnFloor())) return;
       let dmgMult=1, incomingMult=1;
       if(tank.order==='hunt'){ dmgMult=1.5; incomingMult=1.3; }
       else if(tank.order==='hold'){ dmgMult=0.9; incomingMult=0.7; }
@@ -3721,9 +3754,9 @@ function resolveTankOrders(actionTurns){
   return anyEvent;
 }
 
-function applySniperMovement(sn){
+function applySniperMovement(sn, dt){
   if(sn.pendingDest){
-    const next = terrainAwareStep(sn.x, sn.y, sn.pendingDest.x, sn.pendingDest.y, SNIPER_MOVE_CAP);
+    const next = terrainAwareStep(sn.x, sn.y, sn.pendingDest.x, sn.pendingDest.y, SNIPER_MOVE_CAP*dt);
     sn.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
     sn.y = clamp(next.y, 30, CANVAS_H-30);
     checkMineTrigger('sniper', sn.id, sn.x, sn.y);
@@ -3734,11 +3767,11 @@ function applySniperMovement(sn){
     return;
   }
   if(sn.order==='advance'){
-    const next = terrainAwareStep(sn.x, sn.y, state.febaX, sn.y, SNIPER_MOVE_CAP);
+    const next = terrainAwareStep(sn.x, sn.y, state.febaX, sn.y, SNIPER_MOVE_CAP*dt);
     sn.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
     sn.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(sn.order==='retreat'){
-    const next = terrainAwareStep(sn.x, sn.y, state.febaX, sn.y, SNIPER_MOVE_CAP);
+    const next = terrainAwareStep(sn.x, sn.y, state.febaX, sn.y, SNIPER_MOVE_CAP*dt);
     sn.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, state.febaX);
     sn.y = clamp(next.y, 30, CANVAS_H-30);
   }
@@ -3858,16 +3891,16 @@ function callInMortarHeatStrike(target, sn){
   });
 }
 
-function resolveSniperOrders(actionTurns){
+function resolveSniperOrders(dt){
   let anyEvent = false;
-  for(let i=0;i<actionTurns;i++){
+  {
     state.snipers.forEach(sn=>{
       const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
       if(aliveSoldiers.length===0) return;
-      if(sn.resting){ tickUnitRest(sn, `狙撃${sn.id+1}班`); return; }
+      if(sn.resting){ tickUnitRest(sn, `狙撃${sn.id+1}班`, dt); return; }
       applyStandingOrder(sn, `狙撃${sn.id+1}班`, false);
-      applySniperMovement(sn);
-      if(!unitMayFire('sniper', sn.id, state.turns+i)) return;
+      applySniperMovement(sn, dt);
+      if(!turnJustCrossed() || !unitMayFire('sniper', sn.id, currentTurnFloor())) return;
 
       if(sn.pendingSnipeTargetId){
         const t = state.targets.find(x=>x.id===sn.pendingSnipeTargetId);
@@ -4370,7 +4403,8 @@ function requestReinforcement(kind, idx){
   });
   unit.reinforceUsed = true;
   log('op','斥候', `${reinforceUnitLabel(kind,idx)}に予備兵力${revived}名(${arrivedNames.join('、')})が到着。¥${cost}を消費(残り予備 ${state.reserve}名)。`);
-  resolveEnemyTurn(1);
+  // per continuous-sim conversion: no longer forces an extra resolveEnemyTurn(1) here -- the
+  // enemy already advances continuously via loop()'s accumulator, so this would double-apply.
   checkEnd();
   render();
 }
@@ -4415,9 +4449,9 @@ function startRest(kind, idx){
 // resolve*Orders per-turn loop so it advances at the same actionTurns granularity (2 ticks on
 // a mortar-fired commit, same as every other per-turn effect) instead of once per commitDecision
 // regardless of how many turns that commit actually spent.
-function tickUnitRest(unit, label){
+function tickUnitRest(unit, label, dt){
   if(!unit.resting) return;
-  unit.restTurnsLeft -= 1;
+  unit.restTurnsLeft -= dt;
   const elapsed = REST_DURATION_TURNS - unit.restTurnsLeft;
   const shouldBeRevived = Math.floor(unit.restDeficitStart * elapsed / REST_DURATION_TURNS);
   while(unit.restRevived < shouldBeRevived){
@@ -4444,7 +4478,8 @@ function buildHqCover(){
   state.hq.coverBuilt = true;
   state.turns += 1;
   log('sys','工兵', `指揮所、掩体構築完了。掩蔽率 ${state.hq.exposure}に向上(このWAVE中の再実施は不可)。`);
-  resolveEnemyTurn(1);
+  // per continuous-sim conversion: no longer forces an extra resolveEnemyTurn(1) here -- the
+  // enemy already advances continuously via loop()'s accumulator, so this would double-apply.
   checkEnd();
   render();
 }
@@ -4461,7 +4496,8 @@ function repairHq(){
   state.hq.hp = Math.min(state.hq.maxHp, state.hq.hp+restoreHp);
   state.turns += 1;
   log('sys','工兵', `指揮所、応急修復完了(+${restoreHp}HP)。¥${cost}を消費(現在HP ${state.hq.hp}/${state.hq.maxHp})。`);
-  resolveEnemyTurn(1);
+  // per continuous-sim conversion: no longer forces an extra resolveEnemyTurn(1) here -- the
+  // enemy already advances continuously via loop()'s accumulator, so this would double-apply.
   checkEnd();
   render();
 }
@@ -4812,6 +4848,7 @@ function mergeAdjustedGoal(t, defaultGoal){
 // (state.roads) is still tracked purely as a "judgment" data source (see the
 // terrainAwareStep comment) -- mines are placed along that same geometry.
 function maybePlaceMine(){
+  if(!turnJustCrossed()) return;
   if(!state.roads || state.roads.length===0) return;
   if(state.mines.length >= MINE_MAX_ACTIVE) return;
   if(Math.random() > MINE_PLACEMENT_CHANCE) return;
@@ -4837,16 +4874,16 @@ function checkMineTrigger(kind, idx, x, y){
 // regroup tendency), but holds once within ARTILLERY_STANDOFF_RANGE_UNITS
 // rather than closing to melee, since it keeps attacking indirectly via
 // enemyCounterAttack regardless of distance.
-function advanceEnemyArtillery(actionTurns){
+function advanceEnemyArtillery(dt){
   const artillery = state.targets.filter(t=>!t.destroyed && t.type==='artillery');
   if(artillery.length===0) return false;
   let moved = false;
-  for(let i=0;i<actionTurns;i++){
+  {
     artillery.forEach(t=>{
       if(t.destroyed) return;
       const near = nearestFriendlyAsset(t.trueX, t.trueY, true);
       if(!near || near.dist <= ARTILLERY_STANDOFF_RANGE_UNITS) return;
-      const step = ARTILLERY_MOVE_CAP * (isSuppressed(t) ? SUPPRESSION_MOVE_MULT : 1);
+      const step = ARTILLERY_MOVE_CAP * dt * (isSuppressed(t) ? SUPPRESSION_MOVE_MULT : 1);
       const moveGoal = mergeAdjustedGoal(t, near);
       const next = terrainAwareStep(t.trueX, t.trueY, moveGoal.x, moveGoal.y, step);
       t.trueX = next.x; t.trueY = clamp(next.y, 30, CANVAS_H-30);
@@ -4859,14 +4896,14 @@ function advanceEnemyArtillery(actionTurns){
   return moved;
 }
 
-function resolveVehicleAssault(actionTurns){
+function resolveVehicleAssault(dt){
   const vehicles = state.targets.filter(t=>!t.destroyed && t.type==='vehicle');
   if(vehicles.length===0) return false;
   let anyEvent = false;
   // per user request: "last stand" -- once few enough enemies remain, vehicles ignore
   // whatever's nearest and drive straight at the HQ instead, faster than their normal advance.
   const lastStand = lastStandActive();
-  for(let i=0;i<actionTurns;i++){
+  {
     vehicles.forEach(t=>{
       if(t.destroyed) return;
       const near = (lastStand && state.hq.hp>0)
@@ -4874,6 +4911,10 @@ function resolveVehicleAssault(actionTurns){
         : nearestFriendlyAsset(t.trueX, t.trueY, true);
       if(!near) return;
       if(near.dist <= VEHICLE_ASSAULT_RANGE && hasLineOfSight(t.trueX, t.trueY, near.x, near.y)){
+        // The attack itself is a discrete once-per-turn event (not a continuous rate), so it
+        // only fires the instant a whole turn is crossed -- the vehicle otherwise just holds
+        // here (matching the original "hold and slug it out" behavior in this range branch).
+        if(!turnJustCrossed()) return;
         anyEvent = true;
         const blockWall = wallBlockingLineOfFire(t.trueX, t.trueY, near.x, near.y);
         if(blockWall){
@@ -4907,7 +4948,7 @@ function resolveVehicleAssault(actionTurns){
         }
       } else {
         const suppressionMoveMult = (isSuppressed(t) && !lastStand) ? SUPPRESSION_MOVE_MULT : 1;
-        const step = Math.min((45 + state.stage*2.6) * DIFFICULTIES[state.difficulty].advanceMult, VEHICLE_MOVE_CAP) * suppressionMoveMult * (lastStand ? 1.6 : 1);
+        const step = Math.min((45 + state.stage*2.6) * DIFFICULTIES[state.difficulty].advanceMult, VEHICLE_MOVE_CAP) * dt * suppressionMoveMult * (lastStand ? 1.6 : 1);
         // per user request: no falling back to regroup with a wounded ally during the last
         // stand -- straight at the HQ, full speed, regardless of own condition.
         const moveGoal = lastStand ? {x:near.x, y:near.y} : mergeAdjustedGoal(t, near);
@@ -4950,11 +4991,11 @@ function resolveVehicleAssault(actionTurns){
 // the requested behavior (and why 'heli' is deliberately absent from COUNTER_CHANCE/
 // COUNTER_DAMAGE -- that generic ranged-harassment roll would otherwise let it keep hitting
 // targets from anywhere at any time, defeating the withdraw phase).
-function resolveHeliAssault(actionTurns){
+function resolveHeliAssault(dt){
   const helis = state.targets.filter(t=>!t.destroyed && t.type==='heli');
   if(helis.length===0) return false;
   let anyEvent = false;
-  for(let i=0;i<actionTurns;i++){
+  {
     helis.forEach(h=>{
       if(h.destroyed) return;
       const recomputeBearing = ()=>{
@@ -4963,14 +5004,14 @@ function resolveHeliAssault(actionTurns){
         h.trueDistance = Math.sqrt(dx*dx+dy*dy);
       };
       if(h.heliCooldown>0){
-        h.heliCooldown -= 1;
+        h.heliCooldown -= dt;
         return;
       }
       if(h.heliPhase==='withdraw'){
         const dx = h.trueX-h.heliAnchor.x, dy = h.trueY-h.heliAnchor.y;
         const dist = Math.hypot(dx,dy) || 1;
         const fleeX = h.trueX + (dx/dist)*500, fleeY = h.trueY + (dy/dist)*500;
-        const next = airborneStep(h.trueX, h.trueY, fleeX, fleeY, HELI_MOVE_CAP);
+        const next = airborneStep(h.trueX, h.trueY, fleeX, fleeY, HELI_MOVE_CAP*dt);
         h.trueX = next.x; h.trueY = clamp(next.y, 30, CANVAS_H-30);
         recomputeBearing();
         anyEvent = true;
@@ -4986,14 +5027,17 @@ function resolveHeliAssault(actionTurns){
       if(!near) return;
       if(near.dist > HELI_ENGAGE_RANGE){
         h.heliPhase = 'approach';
-        const next = airborneStep(h.trueX, h.trueY, near.x, near.y, HELI_MOVE_CAP);
+        const next = airborneStep(h.trueX, h.trueY, near.x, near.y, HELI_MOVE_CAP*dt);
         h.trueX = next.x; h.trueY = clamp(next.y, 30, CANVAS_H-30);
         recomputeBearing();
         anyEvent = true;
         return;
       }
-      // in range -- attack
+      // in range -- attack. Each shot in the burst is a discrete once-per-turn event, so it
+      // only fires the instant a whole turn is crossed (heliBurstLeft is a shot counter, not a
+      // duration, so it isn't scaled by dt the way heliCooldown above is).
       h.heliPhase = 'attack';
+      if(!turnJustCrossed()) return;
       anyEvent = true;
       const e = estPos(h);
       if(revealTarget(h)){
@@ -5022,9 +5066,10 @@ function resolveHeliAssault(actionTurns){
 // resolveDroneSwarm each action tick so a squad gets a shot at a drone closing
 // in on it while it's still outside DRONE_DETONATE_RANGE, not just after the
 // fact -- independent of the squad's current order/standing order (always on).
-function resolveSquadAntiDrone(actionTurns){
+function resolveSquadAntiDrone(dt){
   let anyEvent = false;
-  for(let i=0;i<actionTurns;i++){
+  {
+    if(!turnJustCrossed()) return anyEvent;
     state.squads.forEach((sq, sqIdx)=>{
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
       if(aliveSoldiers.length===0) return;
@@ -5062,13 +5107,13 @@ function resolveSquadAntiDrone(actionTurns){
 // same point-blank range (VEHICLE_ASSAULT_RANGE) the enemy vehicle itself would use to assault --
 // independent of the squad's current order/standing order (always on), same as
 // resolveSquadAntiDrone above.
-function resolveSquadAntiVehicle(actionTurns){
+function resolveSquadAntiVehicle(dt){
   let anyEvent = false;
-  for(let i=0;i<actionTurns;i++){
+  {
     state.squads.forEach((sq, sqIdx)=>{
       const curAlive = sq.soldiers.filter(s=>s.alive);
       if(curAlive.length===0) return;
-      if(!unitMayFire('squad', sqIdx, state.turns+i+2)) return;
+      if(!turnJustCrossed() || !unitMayFire('squad', sqIdx, currentTurnFloor()+2)) return;
       state.targets.forEach(t=>{
         if(t.destroyed || t.type!=='vehicle') return;
         if(Math.hypot(t.trueX-sq.x, t.trueY-sq.y) > VEHICLE_ASSAULT_RANGE) return;
@@ -5097,11 +5142,11 @@ function resolveSquadAntiVehicle(actionTurns){
   return anyEvent;
 }
 
-function resolveDroneSwarm(actionTurns){
+function resolveDroneSwarm(dt){
   const drones = state.targets.filter(t=>!t.destroyed && t.type==='drone');
   if(drones.length===0) return false;
   let anyEvent = false;
-  for(let i=0;i<actionTurns;i++){
+  {
     drones.forEach(t=>{
       if(t.destroyed) return;
       const near = nearestFriendlyAsset(t.trueX, t.trueY, true);
@@ -5127,7 +5172,7 @@ function resolveDroneSwarm(actionTurns){
       } else {
         const dx = near.x-t.trueX, dy = near.y-t.trueY;
         const dist = Math.hypot(dx,dy) || 1;
-        const step = Math.min(DRONE_SPEED*DIFFICULTIES[state.difficulty].advanceMult, dist);
+        const step = Math.min(DRONE_SPEED*dt*DIFFICULTIES[state.difficulty].advanceMult, dist);
         t.trueX += dx/dist*step;
         t.trueY = clamp(t.trueY + dy/dist*step, 20, CANVAS_H-20);
         const bx = t.trueX-OP.x, by = t.trueY-OP.y;
@@ -5139,8 +5184,11 @@ function resolveDroneSwarm(actionTurns){
   return anyEvent;
 }
 
-function resolveEnemyEvasion(actionTurns){
+function resolveEnemyEvasion(dt){
   let moved = false;
+  // Already fired once per commit regardless of turnCost before this conversion (unlike its
+  // siblings' for(i<actionTurns) loops) -- now consistently gated to once per whole turn.
+  if(!turnJustCrossed()) return moved;
   state.targets.filter(t=>!t.destroyed && t.revealed && (t.type==='infantry' || t.type==='vehicle')).forEach(t=>{
     if(Math.random() > 0.35) return;
     const near = nearestFriendlyAsset(t.trueX, t.trueY, false);
@@ -5157,7 +5205,7 @@ function resolveEnemyEvasion(actionTurns){
   return moved;
 }
 
-function advanceEnemyInfantry(actionTurns){
+function advanceEnemyInfantry(dt){
   const enemyInfantry = state.targets.filter(t=>!t.destroyed && t.type==='infantry');
   if(enemyInfantry.length===0) return false;
   const aliveSquads = state.squads.filter(sq=>sq.soldiers.some(s=>s.alive));
@@ -5170,17 +5218,18 @@ function advanceEnemyInfantry(actionTurns){
   const goal = targetHq ? state.hq : FRIENDLY_INF_POS;
   const minX = targetHq ? state.hq.x+20 : FRIENDLY_INF_POS.x+20;
   let moved = false;
-  for(let i=0;i<actionTurns;i++){
+  {
     enemyInfantry.forEach(t=>{
       if(t.destroyed) return;
       if(state.stage >= DRONE_INTRO_STAGE && performance.now()-(state.stageStartAt||0) >= 3000){
         if(t._droneCooldown === undefined) t._droneCooldown = Math.floor(rnd(2, INFANTRY_DRONE_COOLDOWN_TICKS));
         if(t._droneCooldown > 0){
-          t._droneCooldown -= 1;
+          t._droneCooldown -= dt;
         // per-group chance is divided by the live group count (see the matching
         // correction in enemyCounterAttack) so splitting infantry into more formation
-        // groups doesn't also multiply total drone-swarm launch volume per tick
-        } else if(Math.random() < INFANTRY_DRONE_LAUNCH_CHANCE/Math.max(1, enemyInfantry.length)){
+        // groups doesn't also multiply total drone-swarm launch volume per tick. A discrete
+        // once-per-turn roll, so it only fires the instant a whole turn is crossed.
+        } else if(turnJustCrossed() && Math.random() < INFANTRY_DRONE_LAUNCH_CHANCE/Math.max(1, enemyInfantry.length)){
           spawnInfantryDroneSwarm(t);
           t._droneCooldown = INFANTRY_DRONE_COOLDOWN_TICKS;
         }
@@ -5196,6 +5245,9 @@ function advanceEnemyInfantry(actionTurns){
       if(targetHq && state.hq.hp>0){
         const hqDist = Math.hypot(t.trueX-state.hq.x, t.trueY-state.hq.y);
         if(hqDist <= SQUAD_ENGAGE_RANGE){
+          // Melee attempts on the HQ are a discrete once-per-turn event, so they only
+          // resolve the instant a whole turn is crossed.
+          if(!turnJustCrossed()) return;
           if(rollExposureHit(getUnitExposure({kind:'hq'}))){
             const dmg = Math.round(rnd(6,16) * DIFFICULTIES[state.difficulty].counterMult); // per user request: enemy attack power doubled
             state.hq.hp = Math.max(0, state.hq.hp-dmg);
@@ -5209,7 +5261,7 @@ function advanceEnemyInfantry(actionTurns){
         }
       }
       const suppressed = isSuppressed(t);
-      const step = INFANTRY_MOVE_CAP * (t.speedMult||1) * (suppressed && !lastStand ? SUPPRESSION_MOVE_MULT : 1) * (lastStand ? 1.6 : 1);
+      const step = INFANTRY_MOVE_CAP * dt * (t.speedMult||1) * (suppressed && !lastStand ? SUPPRESSION_MOVE_MULT : 1) * (lastStand ? 1.6 : 1);
       if(t.trueX > minX){
         if(lastStand){
           // per user request: no flanking spread or suppression-flinch during the last
@@ -5232,8 +5284,14 @@ function advanceEnemyInfantry(actionTurns){
         const moveGoal = mergeAdjustedGoal(t, flankGoal);
         // per user request: suppression retreat -- pinned down under fire, a suppressed
         // group has a chance to flinch back away from its goal this tick instead of
-        // advancing (on top of the existing move-speed penalty).
-        const retreating = suppressed && Math.random() < SUPPRESSION_RETREAT_CHANCE;
+        // advancing (on top of the existing move-speed penalty). The coin flip itself is a
+        // discrete once-per-turn decision -- re-rolled only when a whole turn is crossed,
+        // then held for the whole turn so continuous movement doesn't flicker direction
+        // every SIM_STEP_MS.
+        if(turnJustCrossed() || t._retreatingThisTurn===undefined){
+          t._retreatingThisTurn = suppressed && Math.random() < SUPPRESSION_RETREAT_CHANCE;
+        }
+        const retreating = t._retreatingThisTurn;
         const aimX = retreating ? t.trueX + (t.trueX-moveGoal.x) : moveGoal.x;
         const aimY = retreating ? t.trueY + (t.trueY-moveGoal.y) : moveGoal.y;
         const roadNear = nearestRoadPoint(t.trueX, t.trueY);
@@ -5258,13 +5316,13 @@ function advanceEnemyInfantry(actionTurns){
 // counter-battery radar triangulating it (see the MORTAR_CB_* constants). Once flagged, the
 // player has a couple of turns to actually complete a relocation (resolveOneMortarDecision
 // clears cbWarnTurns on arrival) before a guaranteed, heavy strike lands on that position.
-function resolveMortarCounterBattery(actionTurns){
+function resolveMortarCounterBattery(dt){
   let anyEvent = false;
-  for(let i=0;i<actionTurns;i++){
+  {
     state.mortars.forEach(mortar=>{
       if(mortar.hp<=0) return;
       if(mortar.cbWarnTurns!==null && mortar.cbWarnTurns!==undefined){
-        mortar.cbWarnTurns -= 1;
+        mortar.cbWarnTurns -= dt;
         if(mortar.cbWarnTurns<=0){
           mortar.cbWarnTurns = null;
           mortar.shotsSinceMove = 0;
@@ -5285,7 +5343,9 @@ function resolveMortarCounterBattery(actionTurns){
         }
         return;
       }
-      if(mortar.shotsSinceMove > MORTAR_CB_SHOTS_THRESHOLD){
+      // Detection is a discrete once-per-turn roll (re-tried every turn once eligible), so it
+      // only evaluates the instant a whole turn is crossed, using the original odds unchanged.
+      if(mortar.shotsSinceMove > MORTAR_CB_SHOTS_THRESHOLD && turnJustCrossed()){
         const chance = MORTAR_CB_DETECT_BASE + state.stage*0.01;
         if(Math.random() < chance){
           mortar.cbWarnTurns = MORTAR_CB_WARN_TURNS;
@@ -5299,7 +5359,7 @@ function resolveMortarCounterBattery(actionTurns){
   return anyEvent;
 }
 
-function resolveEnemyTurn(actionTurns){
+function resolveEnemyTurn(dt){
   maybePlaceMine();
   // per user request: "last stand" -- reveal every remaining enemy the instant the wave drops
   // to LAST_STAND_THRESHOLD or fewer (see isTargetDetected/lastStandActive), and announce it
@@ -5311,48 +5371,49 @@ function resolveEnemyTurn(actionTurns){
     }
     state.targets.forEach(t=>{ if(!t.destroyed) revealTarget(t); });
   }
-  resolveHqMovement(actionTurns);
-  const advanced = advanceEnemyInfantry(actionTurns);
-  const repositioned = advanceEnemyArtillery(actionTurns);
-  const assaulted = resolveVehicleAssault(actionTurns);
-  const heliEvent = resolveHeliAssault(actionTurns);
-  const evaded = resolveEnemyEvasion(actionTurns);
-  const antiDroned = resolveSquadAntiDrone(actionTurns);
-  const antiVehicled = resolveSquadAntiVehicle(actionTurns);
-  const swarmed = resolveDroneSwarm(actionTurns);
-  const hit = enemyCounterAttack(actionTurns);
-  const cbEvent = resolveMortarCounterBattery(actionTurns);
+  resolveHqMovement(dt);
+  advanceEnemyInfantry(dt);
+  advanceEnemyArtillery(dt);
+  resolveVehicleAssault(dt);
+  const heliEvent = resolveHeliAssault(dt);
+  resolveEnemyEvasion(dt);
+  const antiDroned = resolveSquadAntiDrone(dt);
+  resolveSquadAntiVehicle(dt);
+  resolveDroneSwarm(dt);
+  enemyCounterAttack(dt);
+  resolveMortarCounterBattery(dt);
   let infEvent = false;
   if(!allSquadsWiped()){
-    infEvent = resolveSquadOrders(actionTurns);
+    infEvent = resolveSquadOrders(dt);
   }
   let sniperEvent = false;
   if(!allSnipersWiped()){
-    sniperEvent = resolveSniperOrders(actionTurns);
+    sniperEvent = resolveSniperOrders(dt);
   }
   let tankEvent = false;
   if(!allTanksWiped()){
-    tankEvent = resolveTankOrders(actionTurns);
+    tankEvent = resolveTankOrders(dt);
   }
   let samEvent = false;
   if(!allSamsWiped()){
-    samEvent = resolveSamOrders(actionTurns);
+    samEvent = resolveSamOrders(dt);
   }
   if(!allEngineersWiped()){
-    resolveEngineerOrders(actionTurns);
+    resolveEngineerOrders(dt);
   }
   // Keep independently commanded formations from collapsing into one marker while
   // they advance toward the same FEBA or contact point in real time.
   maintainFriendlySpacing();
-  if(!hit && !infEvent && !sniperEvent && !tankEvent && !samEvent && !advanced && !assaulted && !heliEvent && !evaded && !swarmed && !cbEvent && !antiDroned && !antiVehicled){
-    log('sys','敵ターン', '目立った動きなし。');
-  }
+  // per continuous-sim conversion: the "目立った動きなし" turn-marker log line is gone --
+  // resolveEnemyTurn now runs every SIM_STEP_MS, so printing it every step (the common case,
+  // since most steps fall between turn crossings) would flood the log instead of marking a
+  // discrete turn.
   // per user request: 交戦時のサウンド -- looping battlefield-combat ambience plays while
   // squads/snipers are actively engaging this turn, and pauses again once nothing is
   // actively engaging.
   if(infEvent || sniperEvent || tankEvent || samEvent || antiDroned || heliEvent) playCombatAmbience(); else stopCombatAmbience();
   state.targets.forEach(t=>{
-    if(t.suppressed>0) t.suppressed = Math.max(0, t.suppressed-actionTurns);
+    if(t.suppressed>0) t.suppressed = Math.max(0, t.suppressed-dt);
   });
   // per user request: destroyed targets were never actually removed from state.targets
   // (only flagged), so a long wave with heavy drone-swarm spawning could grow this array
@@ -5530,78 +5591,77 @@ function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarget, onVo
   }
 }
 
-// Real-time simulation loop. The resolver still uses one-second simulation slices so existing
-// movement, ballistic timing, and damage rules remain stable, but no 決心 input is required.
-let autoCommitTimer = null;
-function isAutoCommitRunning(){ return autoCommitTimer!==null; }
-function autoCommitTick(){
-  commitDecision();
-}
+// Real-time simulation loop. simulationStep() runs every SIM_STEP_MS (see loop()'s
+// advanceSimulation() accumulator) and advances everything by a fractional "turn" (deltaTurns())
+// each time, so movement/combat/suppression/smoke-illum decay all flow continuously instead of
+// jumping. No 決心 input is required -- state.simRunning just gates whether the accumulator is
+// allowed to spend banked time (replaces the old setInterval(autoCommitTick,...) timer).
+function isAutoCommitRunning(){ return !!(state && state.simRunning); }
 function startRealtimeLoop(){
-  if(!state || state.stageResolved || state.placementPending || state.decoyPlacementPending || autoCommitTimer) return;
-  autoCommitTimer = setInterval(autoCommitTick, GAME_SPEED_INTERVALS[state.gameSpeed]);
+  if(!state || state.stageResolved || state.placementPending || state.decoyPlacementPending || state.simRunning) return;
+  state.simRunning = true;
+  simAccumMs = 0;
   log('sys','システム', `リアルタイム戦闘開始(${GAME_SPEED_LABEL[state.gameSpeed]})。命令は即時反映されます。`);
-  autoCommitTick();
   render();
 }
 function toggleAutoCommit(){
-  if(autoCommitTimer){
-    clearInterval(autoCommitTimer);
-    autoCommitTimer = null;
+  if(!state) return;
+  if(state.simRunning){
+    state.simRunning = false;
     log('sys','システム', 'リアルタイム戦闘を一時停止。');
   } else {
     startRealtimeLoop();
+    return;
   }
   render();
 }
-// per user request: 低速/通常/高速 の進行速度切り替え -- 状況中に変更した場合は、その場で
-// 現在のタイマーを新しい間隔で再スタートする(次の状況開始まで待たせない)。
+// per user request: 低速/通常/高速 の進行速度切り替え -- deltaTurns()が毎ステップstate.gameSpeedを
+// 参照するだけなので、戦闘中でも即座に反映される(タイマーの再作成は不要)。
 function setGameSpeed(speed){
   if(!state || !GAME_SPEED_INTERVALS[speed] || state.gameSpeed===speed) return;
   state.gameSpeed = speed;
-  if(autoCommitTimer){
-    clearInterval(autoCommitTimer);
-    autoCommitTimer = setInterval(autoCommitTick, GAME_SPEED_INTERVALS[speed]);
-  }
   log('sys','システム', `リアルタイム速度を${GAME_SPEED_LABEL[speed]}に変更。`);
   render();
 }
-// per user request: pause auto-commit while the tab is hidden (backgrounded/minimized).
-// setInterval keeps firing commitDecision() in a hidden tab (browsers only throttle
-// background timers, they don't stop them), while the requestAnimationFrame-driven render
-// loop that drives smoothVisualPos() is fully paused by the browser -- so several turns'
-// worth of movement pile up invisibly and then have to be crammed into a single fixed-length
-// tween the moment the tab is shown again, reading as units flying across the map or
-// teleporting. Resuming on visibility restores the same interval so play isn't otherwise
-// affected.
-let autoCommitPausedByVisibility = false;
-document.addEventListener('visibilitychange', ()=>{
-  if(document.hidden){
-    if(autoCommitTimer){
-      clearInterval(autoCommitTimer);
-      autoCommitTimer = null;
-      autoCommitPausedByVisibility = true;
-    }
-  } else if(autoCommitPausedByVisibility){
-    autoCommitPausedByVisibility = false;
-    startRealtimeLoop();
-  }
-});
+// Note: the old visibilitychange handler (paused the setInterval timer while the tab was
+// hidden, since setInterval keeps firing in the background but the rAF render loop doesn't) is
+// no longer needed -- advanceSimulation() is itself only ever called from inside loop(), which
+// requestAnimationFrame simply stops invoking while the tab is hidden, so simulation and
+// rendering now pause/resume together automatically.
 
-function commitDecision(){
-  if(!state || state.stageResolved || state.animating || state.snipeMortarStrikesPending>0 || state.placementPending || state.decoyPlacementPending) return;
+// Mortars fire independently and near-instantly once ordered (no more waiting for a shared
+// decision cycle), but firing several at the exact same instant would still read as one
+// simultaneous volley -- this cursor lets simulationStep() launch at most one newly-queued
+// mortar per SIM_STEP_MS, cycling through whichever mortars have a pending order, so multiple
+// simultaneous fire orders still stagger across consecutive steps instead of firing together.
+let mortarFireCursor = 0;
+// Replaces the old commitDecision(): instead of resolving one whole discrete turn per press,
+// this runs every SIM_STEP_MS (via loop()'s advanceSimulation() accumulator) and advances the
+// simulation by a fractional "turn" (deltaTurns()) each time. Movement/duration-style
+// mechanics (see the resolve*/apply* functions below) scale continuously by that fraction;
+// discrete once-per-turn mechanics (unitMayFire-gated weapon fire, counter-attack rolls, mine
+// placement, ...) instead check turnJustCrossed() and only fire the moment an integer turn is
+// actually crossed, using their original unconverted odds. Mortar fire is the one exception --
+// it stays near-instant (checked every step) since player responsiveness is the point of this
+// conversion; see mortarFireCursor above for how simultaneous multi-mortar orders still stagger.
+function simulationStep(){
+  if(!state || state.stageResolved || state.snipeMortarStrikesPending>0 || state.placementPending || state.decoyPlacementPending) return;
+  const dt = deltaTurns();
+  state.turns += dt;
+  state.missionMinutes += dt;
+  updateTurnBoundary();
 
   // A mortar whose queued shot can't be afforded only cancels THAT mortar's
-  // order (reverts to standby) -- it must never block the whole decision
-  // cycle, or the entire game (including the enemy's turn) softlocks
-  // permanently once ammo runs low, since every future 決心 press would hit
-  // the same shortfall and return before anything else ever resolves.
+  // order (reverts to standby) -- it must never block the whole step, or the
+  // entire game (including the enemy's advancement) softlocks permanently
+  // once ammo runs low.
   let heBudget = state.ammo.he, heatBudget = state.ammo.heat;
   const firingMortars = [];
   const queuedMortars = state.mortars.filter(m=>m.hp>0 && m.pendingFire);
   const selectedMortarId = queuedMortars.length
-    ? queuedMortars[Math.floor(state.turns/2) % queuedMortars.length].id
+    ? queuedMortars[mortarFireCursor % queuedMortars.length].id
     : null;
+  if(queuedMortars.length) mortarFireCursor++;
   state.mortars.forEach(m=>{
     if(m.hp<=0 || !m.pendingFire || m.id!==selectedMortarId) return;
     if(m.fireShell==='he' || m.fireShell==='heat'){
@@ -5618,30 +5678,24 @@ function commitDecision(){
     firingMortars.push(m);
   });
   const ammoNeeded = {he: state.ammo.he-heBudget, heat: state.ammo.heat-heatBudget};
-
-  const turnCost = firingMortars.length>0 ? 2 : 1;
-
-  state.turns += turnCost;
-  state.missionMinutes += turnCost;
   state.ammo.he -= ammoNeeded.he;
   state.ammo.heat -= ammoNeeded.heat;
 
-  state.smokeClouds.forEach(c=>{ c.turnsLeft -= 1; });
+  state.smokeClouds.forEach(c=>{ c.turnsLeft -= dt; });
   state.smokeClouds = state.smokeClouds.filter(c=>c.turnsLeft>0);
-  state.illumFlares.forEach(f=>{ f.turnsLeft -= 1; });
+  state.illumFlares.forEach(f=>{ f.turnsLeft -= dt; });
   state.illumFlares = state.illumFlares.filter(f=>f.turnsLeft>0);
 
-  speakCoordination();
-  resolveScoutDecision();
-  resolveFriendlyHeliTurn(turnCost);
-  resolveMortarDecision();
-  resolveEnemyTurn(turnCost);
+  if(turnJustCrossed()) speakCoordination();
+  resolveScoutDecision(dt);
+  resolveMortarDecision(dt);
+  resolveFriendlyHeliTurn(dt);
+  resolveEnemyTurn(dt);
 
   if(allMortarsWiped() || allSquadsWiped()){
     checkEnd(); render(); return;
   }
 
-  const volleys = [];
   firingMortars.forEach(m=>{
     const aim = m.pendingFire;
     m.pendingFire = null;
@@ -5651,25 +5705,18 @@ function commitDecision(){
       log('fdc','FDC', `${snappedTarget.id} は既に撃破済み。迫撃砲${m.id+1}の射撃指示を中止。`);
       return;
     }
-    volleys.push({mortar:m, shell:m.fireShell, fuze:m.fireFuze, count:m.fireCount, aim, snappedTarget});
+    // Mortars now fire independently and can overlap in flight, so in-flight state is a
+    // counter (state.inFlightVolleys), not the single boolean state.animating used to be.
+    state.inFlightVolleys += 1;
+    state.animating = true;
+    launchMortarVolley(m, m.fireShell, m.fireFuze, m.fireCount, aim, snappedTarget, ()=>{
+      state.inFlightVolleys -= 1;
+      if(state.inFlightVolleys<=0) state.animating = false;
+      checkEnd();
+      render();
+    });
   });
 
-  if(volleys.length>0){
-    state.animating = true;
-    let remaining = volleys.length;
-    volleys.forEach(v=>{
-      launchMortarVolley(v.mortar, v.shell, v.fuze, v.count, v.aim, v.snappedTarget, ()=>{
-        remaining -= 1;
-        if(remaining<=0){
-          state.animating = false;
-          checkEnd();
-          render();
-        }
-      });
-    });
-  } else {
-    checkEnd();
-  }
   render();
 }
 
@@ -5980,6 +6027,7 @@ function showStageFailed(reason){
   ov.classList.add('show');
   log('sys','システム', `WAVE ${state.stage} 失敗。`);
   state.animating = false;
+  state.inFlightVolleys = 0;
 }
 
 function precisionDots(n){
@@ -6479,7 +6527,8 @@ function repairTank(idx){
   tank.hp = Math.min(tank.maxHp, tank.hp+restoreHp);
   state.turns += 1;
   log('sys','工兵', `戦車${idx+1}、応急修復完了(+${restoreHp}HP)。¥${cost}を消費(現在HP ${tank.hp}/${tank.maxHp})。`);
-  resolveEnemyTurn(1);
+  // per continuous-sim conversion: no longer forces an extra resolveEnemyTurn(1) here -- the
+  // enemy already advances continuously via loop()'s accumulator, so this would double-apply.
   checkEnd();
   render();
 }
@@ -6519,7 +6568,8 @@ function repairSam(idx){
   sam.hp = Math.min(sam.maxHp, sam.hp+restoreHp);
   state.turns += 1;
   log('sys','工兵', `対空${idx+1}、応急修復完了(+${restoreHp}HP)。¥${cost}を消費(現在HP ${sam.hp}/${sam.maxHp})。`);
-  resolveEnemyTurn(1);
+  // per continuous-sim conversion: no longer forces an extra resolveEnemyTurn(1) here -- the
+  // enemy already advances continuously via loop()'s accumulator, so this would double-apply.
   checkEnd();
   render();
 }
@@ -6663,7 +6713,7 @@ function mortarBoxHtml(idx){
   `;
 
   const cbWarnHtml = (!dead && mortar.cbWarnTurns!==null && mortar.cbWarnTurns!==undefined)
-    ? `<div class="meta" style="color:var(--red);margin-bottom:6px;">⚠ 対砲兵射撃警戒中 ― あと${mortar.cbWarnTurns}ターンで着弾。直ちに陣地転換せよ</div>`
+    ? `<div class="meta" style="color:var(--red);margin-bottom:6px;">⚠ 対砲兵射撃警戒中 ― あと${Math.ceil(mortar.cbWarnTurns)}ターンで着弾。直ちに陣地転換せよ</div>`
     : (!dead && mortar.shotsSinceMove>MORTAR_CB_SHOTS_THRESHOLD
         ? `<div class="meta" style="margin-bottom:6px;">同一陣地からの連続射撃 ${mortar.shotsSinceMove}回 ― 対砲兵レーダーに捕捉される危険あり</div>`
         : '');
@@ -7087,7 +7137,7 @@ function renderEnemyCommandBox(){
   // correction toward the true position -- so this just shows how far off the current
   // estimate (what you'd actually be aiming at) might still be. Falls with 偵察 (see
   // performRecon) and with each volley fired at this target (see finalizeVolley).
-  const staleTurns = t.lastSeenTurn===undefined ? null : Math.max(0, state.turns-t.lastSeenTurn);
+  const staleTurns = t.lastSeenTurn===undefined ? null : Math.floor(Math.max(0, state.turns-t.lastSeenTurn));
   const contactHtml = t.lastKnownX===undefined
     ? '最終確認位置: 未取得'
     : `最終確認: ${staleTurns===0?'現在接触':`${staleTurns}ターン前`} / ${t.lastSeenBy==='heli'?'ヘリ':t.lastSeenBy==='scout'?'斥候':'地上部隊'} / 信頼度 ${Math.round((t.trackingConfidence||0.4)*100)}%`;
@@ -7112,7 +7162,7 @@ function renderStats(){
   document.querySelector('#stat-difficulty .value').textContent = DIFFICULTIES[state.difficulty].label;
   document.querySelector('#stat-weather .value').textContent = WEATHER_TYPES[state.weather].label;
   document.querySelector('#stat-achievements .value').textContent = unlockedAchievements.size+' / '+Object.keys(ACHIEVEMENTS).length;
-  document.querySelector('#stat-turns .value').textContent = `${state.missionMinutes}分`;
+  document.querySelector('#stat-turns .value').textContent = `${Math.floor(state.missionMinutes)}分`;
   document.querySelector('#stat-money .value').textContent = '¥'+state.money.toLocaleString();
   const remainingTargets = state.targets.filter(t=>!t.destroyed).length;
   document.getElementById('stat-left').textContent = remainingTargets + ' / ' + state.targetsSpawnedTotal;
@@ -7129,7 +7179,7 @@ function renderStats(){
   const clockNow = gameClockNow();
   const clockTimeOnly = `${String(clockNow.getHours()).padStart(2,'0')}${String(clockNow.getMinutes()).padStart(2,'0')}`;
   document.getElementById('statbar-mini').textContent =
-    `${clockTimeOnly} ・ WAVE ${state.stage}/${STAGE_COUNT} ・ 経過${state.missionMinutes}分 ・ ¥${state.money.toLocaleString()} ・ 兵力${aliveTotal}/${totalRosterCapacity()}`;
+    `${clockTimeOnly} ・ WAVE ${state.stage}/${STAGE_COUNT} ・ 経過${Math.floor(state.missionMinutes)}分 ・ ¥${state.money.toLocaleString()} ・ 兵力${aliveTotal}/${totalRosterCapacity()}`;
 
   const revealed = state.targets.filter(t=>t.revealed && !t.destroyed);
   const byType = {};
@@ -10534,7 +10584,34 @@ function anyOverlayShown(){
   return !!document.querySelector('.overlay.show');
 }
 
+// Drives the continuous simulation: banks real elapsed time and spends it in fixed
+// SIM_STEP_MS chunks (see simulationStep()/deltaTurns()), decoupled from render frame rate.
+// While paused (state.simRunning off, or any of the same conditions autoCommitTick used to
+// gate on) the bank is reset to 0 rather than left to accrue, so lifting a long pause (e.g. a
+// unit command panel left open, or the tab being backgrounded -- loop() simply isn't called by
+// rAF while hidden, so this naturally replaces the old visibilitychange pause/resume handler)
+// can't replay a burst of banked steps in a single frame.
+let lastSimFrameAt = null;
+function advanceSimulation(){
+  const now = performance.now();
+  if(lastSimFrameAt===null){ lastSimFrameAt = now; return; }
+  const elapsed = now - lastSimFrameAt;
+  lastSimFrameAt = now;
+  if(!state || !state.simRunning || state.stageResolved || state.commandBox || state.enemyCommandBox || state.decoyCommandBox || state.placementPending || state.decoyPlacementPending){
+    simAccumMs = 0;
+    return;
+  }
+  simAccumMs += elapsed;
+  let steps = 0;
+  while(simAccumMs >= SIM_STEP_MS && steps < SIM_STEP_MAX_CATCHUP){
+    simulationStep();
+    simAccumMs -= SIM_STEP_MS;
+    steps++;
+  }
+  if(steps >= SIM_STEP_MAX_CATCHUP) simAccumMs = 0;
+}
 function loop(){
+  advanceSimulation();
   updateProjectiles();
   updateEnemyTracers();
   update3dEffects();
