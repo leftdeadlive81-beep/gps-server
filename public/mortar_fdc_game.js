@@ -8614,6 +8614,9 @@ let threeReady = false;
 // own zoom, since zooming in necessarily pushes the map's corners off-screen.
 let cameraNeedsInitialFit = true;
 let scene3d, camera3d, renderer3d, terrainObject3d;
+// per user request: camera-to-lookAt distance from the most recent updateCameraFromView() call,
+// used only as updateFogDistance()'s fallback when every sampled ray points above the horizon.
+let lastCameraDist = 0;
 // per user request (idea 1): tree/rock props scattered across the terrain (see
 // buildTerrainProps()) so forest patches read as actual forest and hillsides aren't bare.
 let treeTrunkMesh3d = null, treeFoliageMesh3d = null, rockMesh3d = null;
@@ -9579,41 +9582,14 @@ function updateCameraFromView(){
     camera3d.near = Math.max(1, d*0.02);
     camera3d.far = d + (WORLD.maxY-WORLD.minY) + 8000;
     camera3d.updateProjectionMatrix();
-    // per user request: fog.near/far used to be a fixed multiple of d (camera-to-lookAt
-    // distance) -- first d*0.7/d*2.0, then also scaled by 1/cos(polar) for tilt. Both still
-    // assumed the visible ground's depth range scales with d alone, which breaks down at the
-    // default "whole map fits on screen" zoom: fitting the whole map needs a specific d for
-    // the map's on-screen SIZE, but says nothing about how much farther the top of the screen
-    // (near the horizon, under any tilt at all) actually is from the camera than d -- that gap
-    // can be many times d even at a modest tilt once the field of view is wide enough to show
-    // the whole map. The old formulas fogged out almost the entire map to flat SKY_COLOR at
-    // exactly this (very common, it's the default) zoom level.
-    //
-    // Fixed properly by measuring the REAL farthest visible ground distance: ray-cast from the
-    // camera through several points along the top edge of the screen (the farthest part of the
-    // view under any downward tilt) onto the ground reference plane, exactly like clicks
-    // resolve a screen point to a world position (see groundPlaneCanvasUnitAt) -- but keeping
-    // the ray's own camera-relative distance instead of the hit's canvas-unit coordinates.
-    if(scene3d && scene3d.fog){
-      let maxDepth = 0;
-      for(const fx of [0, 0.25, 0.5, 0.75, 1]){
-        for(const fy of [1, 0.85, 0.65]){ // top edge first; fall back lower if it's above the horizon
-          const ndcVec = new THREE.Vector3(fx*2-1, fy*2-1, 0.5).unproject(camera3d);
-          const rayDir = ndcVec.sub(camera3d.position).normalize();
-          const t = Math.abs(rayDir.y) < 1e-6 ? -1 : (WORLD.refY - camera3d.position.y)/rayDir.y;
-          if(t > maxDepth) maxDepth = t;
-        }
-      }
-      if(maxDepth > 0){
-        scene3d.fog.near = maxDepth*0.45;
-        scene3d.fog.far = maxDepth*1.15;
-      } else {
-        // every sampled ray pointed above the horizon (e.g. looking mostly at open sky) --
-        // fall back to the old distance-based estimate rather than leaving fog at a stale value.
-        scene3d.fog.near = d*0.7;
-        scene3d.fog.far = d*2.0;
-      }
-    }
+    // per user request: fog distance used to be recomputed right here too, but applyDist runs
+    // on every touchmove/mousemove while panning (not just once per rendered frame) -- doing
+    // the multi-ray scan below on every single input event, on top of everything else already
+    // running per frame, was heavy enough to visibly stutter touch-drag panning on mobile.
+    // Camera position/lookAt/projection above still update immediately every input event (that
+    // part must stay instant for panning to feel responsive) but the fog band now only gets
+    // recomputed once per animation frame from renderThreeFrame() -- see updateFogDistance().
+    lastCameraDist = d;
   };
 
   // Once per map load, pick a default zoom that fits the whole map on screen. An
@@ -10242,10 +10218,55 @@ function syncUnitMarkers3d(){
 // per user request: enemy symbols unified to red on the 3D minimap too
 const TARGET_TYPE_COLOR = { infantry:0xc1453b, artillery:0xc1453b, vehicle:0xc1453b, drone:0xc1453b };
 
+// per user request: fog.near/far used to be a fixed multiple of the camera-to-lookAt distance
+// (first d*0.7/d*2.0, then also scaled by 1/cos(polar) for tilt). Both still assumed the
+// visible ground's depth range scales with that distance alone, which breaks down at the
+// default "whole map fits on screen" zoom: fitting the whole map needs a specific camera
+// distance for the map's on-screen SIZE, but says nothing about how much farther the top of the
+// screen (near the horizon, under any tilt at all) actually is from the camera -- that gap can
+// be many times the orbit distance even at a modest tilt once the field of view is wide enough
+// to show the whole map. The old formulas fogged out almost the entire map to flat SKY_COLOR at
+// exactly this (very common, it's the default) zoom level.
+//
+// Fixed properly by measuring the REAL farthest visible ground distance: ray-cast from the
+// camera through several points along the top edge of the screen (the farthest part of the view
+// under any downward tilt) onto the ground reference plane, exactly like clicks resolve a
+// screen point to a world position (see groundPlaneCanvasUnitAt) -- but keeping the ray's own
+// camera-relative distance instead of the hit's canvas-unit coordinates.
+//
+// Called once per rendered frame (from renderThreeFrame(), i.e. the rAF loop) rather than from
+// updateCameraFromView() itself, which runs on every touchmove/mousemove while panning -- doing
+// this multi-ray scan on every single input event visibly stuttered touch-drag panning on
+// mobile. A one-frame-stale fog band during a drag is imperceptible. Reuses scratch THREE
+// objects (never allocates per sample) for the same reason project()/projectAtWorldY() do.
+let _fogRayVec = null, _fogRayDir = null;
+function updateFogDistance(){
+  if(!camera3d || !scene3d || !scene3d.fog) return;
+  if(!_fogRayVec){ _fogRayVec = new THREE.Vector3(); _fogRayDir = new THREE.Vector3(); }
+  let maxDepth = 0;
+  for(const fx of [0, 0.25, 0.5, 0.75, 1]){
+    for(const fy of [1, 0.85, 0.65]){ // top edge first; fall back lower if it's above the horizon
+      _fogRayVec.set(fx*2-1, fy*2-1, 0.5).unproject(camera3d);
+      _fogRayDir.copy(_fogRayVec).sub(camera3d.position).normalize();
+      const t = Math.abs(_fogRayDir.y) < 1e-6 ? -1 : (WORLD.refY - camera3d.position.y)/_fogRayDir.y;
+      if(t > maxDepth) maxDepth = t;
+    }
+  }
+  if(maxDepth > 0){
+    scene3d.fog.near = maxDepth*0.45;
+    scene3d.fog.far = maxDepth*1.15;
+  } else {
+    // every sampled ray pointed above the horizon (e.g. looking mostly at open sky) --
+    // fall back to the old distance-based estimate rather than leaving fog at a stale value.
+    scene3d.fog.near = lastCameraDist*0.7;
+    scene3d.fog.far = lastCameraDist*2.0;
+  }
+}
 function renderThreeFrame(){
   if(!threeReady || !renderer3d) return;
   updateMapFocusEase();
   syncUnitMarkers3d();
+  updateFogDistance();
   if(heliAnimationMixer){
     const delta = 1/60;
     heliAnimationMixer.update(delta);
