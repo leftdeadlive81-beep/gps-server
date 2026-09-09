@@ -7873,7 +7873,11 @@ function drawBoard(){
       const sqVisL = smoothVisualPos(sq, sq.x, sq.y);
       const sqVis = project(sqVisL.x, sqVisL.y);
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
-      drawUnitIcon(ctx, infantryIcon, sqVis.x, sqVis.y, scaledIconH(22), aliveSoldiers.length===0);
+      // per user request: now a cluster of individual 3D figures (one per living soldier --
+      // see makeMarkerMesh3d's 'infantry' branch) instead of one flat icon, matching how
+      // tank/heli already rely on their own 3D model instead of a 2D sprite. Still falls
+      // back to the flat icon when 3D isn't available at all.
+      if(!threeReady) drawUnitIcon(ctx, infantryIcon, sqVis.x, sqVis.y, scaledIconH(22), aliveSoldiers.length===0);
       drawSelectionRing(ctx, sqVis.x, sqVis.y, (state.commandBox && state.commandBox.kind==='squad' && state.commandBox.idx===sqIdx) || isMultiSelected('squad', sqIdx));
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, sqVis.x+32, sqVis.y, aliveSoldiers.length/sq.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
@@ -7985,7 +7989,10 @@ function drawBoard(){
         // per user request: custom enemy infantry icon image in place of the plain circle --
         // muted (grayscale) until identified, same treatment as a friendly unit with no survivors.
         const aliveTroops = t.troops.filter(s=>s.alive);
-        drawUnitIcon(ctx, enemyInfantryIcon, e.x, e.y, scaledIconH(22), !t.revealed);
+        // per user request: now a cluster of individual 3D figures in its real tactical
+        // formation (see makeMarkerMesh3d's 'infantry' branch) instead of one flat icon --
+        // still falls back to the flat icon when 3D isn't available at all.
+        if(!threeReady) drawUnitIcon(ctx, enemyInfantryIcon, e.x, e.y, scaledIconH(22), !t.revealed);
         if(t.revealed) drawAttritionBar(ctx, e.x+14, e.y, t.hp/t.maxHp);
         labelY = e.y+26;
         if(t.revealed){
@@ -10059,7 +10066,14 @@ function setupMapControls(){
   window.addEventListener('resize', resizeThree);
 }
 
-function makeMarkerMesh3d(shape, colorHex){
+// per user request: friendly squads have no formation template of their own (unlike enemy
+// infantry groups, see ENEMY_FORMATION_TEMPLATES) -- a plain 2-row grid, up to SQUAD_SIZE.
+const SQUAD_GRID_OFFSETS = Array.from({length:SQUAD_SIZE}, (_,i)=>{
+  const col = i%5, row = Math.floor(i/5);
+  return {dx:(col-2)*10, dy:(row-0.5)*14};
+});
+
+function makeMarkerMesh3d(shape, colorHex, formationOffsets){
   const group = new THREE.Group();
   const s = Math.max(0.6, (WORLD.scaleX+WORLD.scaleZ)/2*7.5);
   const mat = color=>new THREE.MeshStandardMaterial({color, roughness:0.7, metalness:0.05});
@@ -10118,11 +10132,37 @@ function makeMarkerMesh3d(shape, colorHex){
     add(new THREE.CylinderGeometry(s*0.18, s*0.24, s*0.65, 8), mat(0x39454d), s*0.55);
     addBarrel(0x9aafbd, s*0.75, s*0.7);
     addFlag(colorHex);
-  } else if(shape==='infantry' || shape==='scout' || shape==='sniper'){
-    const count = shape==='infantry' ? 5 : 3;
-    const positions = shape==='infantry'
-      ? [[-0.42,0.1],[-0.21,-0.14],[0,0.14],[0.21,-0.14],[0.42,0.1]]
-      : [[-0.3,0.1],[0,-0.12],[0.3,0.1]];
+  } else if(shape==='infantry'){
+    // per user request: one small stick-figure per soldier (matching the unit's actual
+    // roster, toggled visible/hidden per-soldier each frame as casualties happen -- see
+    // updateSoldierFigures3d()) instead of a fixed 5 figures regardless of squad strength.
+    // The offset pattern is the unit's real tactical formation for enemy infantry groups
+    // (ENEMY_FORMATION_TEMPLATES, generated at spawn but never actually rendered until now)
+    // or a plain grid for friendly squads (SQUAD_GRID_OFFSETS, which have no such template).
+    // Each pattern is normalized to its own bounding radius so box/line/wedge/skirmish/etc.
+    // all read as a similarly-sized cluster instead of some being tiny and others huge.
+    const offsets = formationOffsets && formationOffsets.length ? formationOffsets : SQUAD_GRID_OFFSETS;
+    const maxR = Math.max(1, ...offsets.map(o=>Math.hypot(o.dx,o.dy)));
+    const clusterR = s*1.1;
+    const figures = offsets.map(o=>{
+      const x = (o.dx/maxR)*clusterR, z = (o.dy/maxR)*clusterR;
+      const fig = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(s*0.1, s*0.12, s*0.34, 6), mat(colorHex));
+      body.position.set(x, s*0.24, z);
+      body.receiveShadow = true;
+      fig.add(body);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(s*0.11, 6, 5), mat(0xd1b28a));
+      head.position.set(x, s*0.46, z);
+      head.receiveShadow = true;
+      fig.add(head);
+      group.add(fig);
+      return fig;
+    });
+    group._soldierFigures = figures;
+    addFlag(colorHex);
+  } else if(shape==='scout' || shape==='sniper'){
+    const count = 3;
+    const positions = [[-0.3,0.1],[0,-0.12],[0.3,0.1]];
     positions.slice(0,count).forEach(([x,z])=>{
       const soldier = add(new THREE.CylinderGeometry(s*0.13, s*0.15, s*0.42, 8), mat(colorHex), s*0.3, z*s*0.8);
       soldier.position.x = x*s*0.8;
@@ -10154,14 +10194,20 @@ function makeMarkerMesh3d(shape, colorHex){
   return group;
 }
 
-function getMarker3d(key, shape, colorHex){
+function getMarker3d(key, shape, colorHex, formationOffsets){
   let m = unitMarkers3d[key];
   if(!m){
-    m = makeMarkerMesh3d(shape, colorHex);
+    m = makeMarkerMesh3d(shape, colorHex, formationOffsets);
     scene3d.add(m);
     unitMarkers3d[key] = m;
   }
   return m;
+}
+// per user request: toggles each pre-built soldier figure visible/hidden to match who's
+// actually still alive right now, instead of rebuilding the marker on every casualty.
+function updateSoldierFigures3d(marker, aliveFlags){
+  if(!marker || !marker._soldierFigures) return;
+  marker._soldierFigures.forEach((fig,i)=>{ fig.visible = !!(aliveFlags && aliveFlags[i]); });
 }
 function updateTankHeading3d(marker, unit, visualX, visualY){
   const prevX = unit._tankMarkerX;
@@ -10221,10 +10267,10 @@ const HELI_FLIGHT_ALTITUDE = PROC_TERRAIN_HEIGHT_SCALE * 0.35;
 function syncUnitMarkers3d(){
   if(!threeReady || !state) return;
   const seen = {};
-  const place = (key, cx, cy, shape, colorHex, visible)=>{
+  const place = (key, cx, cy, shape, colorHex, visible, formationOffsets)=>{
     seen[key] = true;
     if(!visible){ hideMarker3d(key); return; }
-    const m = getMarker3d(key, shape, colorHex);
+    const m = getMarker3d(key, shape, colorHex, formationOffsets);
     const h = terrainHeightAt(cx, cy);
     const {x,z} = canvasUnitToWorldXZ(cx, cy);
     const clearance = shape==='heli' ? HELI_FLIGHT_ALTITUDE : (WORLD.scaleX+WORLD.scaleZ)/2*6;
@@ -10245,6 +10291,7 @@ function syncUnitMarkers3d(){
     place(key, p.x, p.y, shape, alive ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
     if(shape==='tank') updateTankHeading3d(unitMarkers3d[key], unit, p.x, p.y);
     if(shape==='heli') updateHeliHeading3d(unitMarkers3d[key], unit, p.x, p.y);
+    if(shape==='infantry') updateSoldierFigures3d(unitMarkers3d[key], unit.soldiers.map(s=>s.alive));
   };
   state.mortars.forEach((m,i)=>friendlyUnit('mortar'+i, m, 'mortar', m.hp>0));
   state.tanks.forEach((tk,i)=>friendlyUnit('tank'+i, tk, 'tank', tk.hp>0));
@@ -10267,9 +10314,10 @@ function syncUnitMarkers3d(){
     if(!isTargetDetected(t)){ place(key, 0, 0, 'sphere', 0, false); return; }
     const eLogical = estPos(t);
     const e = smoothVisualPos(t, eLogical.x, eLogical.y);
-    const shape = t.type==='hq' ? 'hq' : t.type==='vehicle' ? 'tank' : t.type==='artillery' ? 'cylinder' : t.type==='drone' ? 'diamond' : t.type==='heli' ? 'heli' : 'sphere';
-    place(key, e.x, e.y, shape, t.revealed ? (TARGET_TYPE_COLOR[t.type]||0xc1453b) : 0x8f9678, true);
+    const shape = t.type==='hq' ? 'hq' : t.type==='vehicle' ? 'tank' : t.type==='artillery' ? 'cylinder' : t.type==='drone' ? 'diamond' : t.type==='heli' ? 'heli' : t.type==='infantry' ? 'infantry' : 'sphere';
+    place(key, e.x, e.y, shape, t.revealed ? (TARGET_TYPE_COLOR[t.type]||0xc1453b) : 0x8f9678, true, t.formationOffsets);
     if(shape==='heli') updateHeliHeading3d(unitMarkers3d[key], t, e.x, e.y);
+    if(shape==='infantry' && t.troops) updateSoldierFigures3d(unitMarkers3d[key], t.troops.map(s=>s.alive));
   });
 
   Object.keys(unitMarkers3d).forEach(key=>{
