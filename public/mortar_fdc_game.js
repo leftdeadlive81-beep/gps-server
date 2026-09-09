@@ -3213,14 +3213,16 @@ function enemyCounterAttack(dt){
   // formation count, so SCOUT_EXPOSURE's intended survivability isn't eaten by this.
   const infantryGroupCount = remaining.filter(t=>t.type==='infantry').length;
   {
-    remaining.forEach(t=>{
+    // per-element index from forEach itself -- was previously remaining.indexOf(t), an O(n)
+    // lookup per element (O(n^2) total across the wave) for no reason, since forEach already
+    // hands back the index for free.
+    remaining.forEach((t, targetIndex)=>{
       if(t.destroyed) return;
       // Enemy formations also use staggered fire windows; otherwise the real-time
       // resolver makes every visible contact shoot on the same simulation slice. This is a
       // discrete once-per-turn stagger (not a rate), so it only evaluates the instant a whole
       // turn is crossed, using the original modulo formula unchanged.
       if(!turnJustCrossed()) return;
-      const targetIndex = remaining.indexOf(t);
       if(((currentTurnFloor() + targetIndex) % 3) !== 0) return;
       // per user request: the enemy HQ is a fixed structure, not a unit with a weapon of its
       // own -- it never counter-attacks (COUNTER_CHANCE/COUNTER_DAMAGE have no 'hq' entry,
@@ -4827,14 +4829,50 @@ function spawnInfantryDroneSwarm(source){
 
 // As an enemy unit's own losses (HP) mount, it tends to fall back and
 // regroup with the nearest other surviving unit instead of continuing to
-// press its own advance alone.
-function nearestOtherAliveTarget(t){
-  let best=null, bd=Infinity;
-  state.targets.forEach(o=>{
-    if(o===t || o.destroyed) return;
-    const d = Math.hypot(o.trueX-t.trueX, o.trueY-t.trueY);
-    if(d<bd){ bd=d; best=o; }
+// press its own advance alone. nearestOtherAliveTarget used to brute-force scan every entry
+// in state.targets for every damaged unit that asks -- O(n) per query, and since it's called
+// from inside the per-unit movement resolvers (advanceEnemyArtillery/resolveVehicleAssault/
+// advanceEnemyInfantry), that's effectively O(n^2) across a wave. Fine at the game's current
+// scale (a few dozen targets), but the first thing to blow up if enemy counts ever grow into
+// the thousands. targetGrid below buckets targets into a uniform grid (rebuilt once per
+// resolveEnemyTurn(), since positions only change within a step -- see rebuildTargetGrid()),
+// and nearestOtherAliveTarget searches outward ring-by-ring from the querying unit's own cell
+// instead of the whole list. This is a heuristic "who to fall back on" pick, not a
+// balance-sensitive combat roll, so the one-ring safety margin below (search one ring past the
+// first hit rather than proving strict optimality) is an acceptable, much cheaper trade.
+const TARGET_GRID_CELL_SIZE = 200;
+const TARGET_GRID_MAX_RINGS = 12;
+let targetGrid = null; // Map<"cx,cy", target[]>, non-destroyed targets only
+function targetGridCellKey(cx, cy){ return cx+','+cy; }
+function rebuildTargetGrid(){
+  targetGrid = new Map();
+  state.targets.forEach(t=>{
+    if(t.destroyed) return;
+    const key = targetGridCellKey(Math.floor(t.trueX/TARGET_GRID_CELL_SIZE), Math.floor(t.trueY/TARGET_GRID_CELL_SIZE));
+    let bucket = targetGrid.get(key);
+    if(!bucket){ bucket = []; targetGrid.set(key, bucket); }
+    bucket.push(t);
   });
+}
+function nearestOtherAliveTarget(t){
+  if(!targetGrid) return null;
+  const cx = Math.floor(t.trueX/TARGET_GRID_CELL_SIZE), cy = Math.floor(t.trueY/TARGET_GRID_CELL_SIZE);
+  let best=null, bd=Infinity, foundAtRadius=-1;
+  for(let radius=0; radius<=TARGET_GRID_MAX_RINGS; radius++){
+    if(foundAtRadius>=0 && radius>foundAtRadius+1) break;
+    for(let dx=-radius; dx<=radius; dx++){
+      for(let dy=-radius; dy<=radius; dy++){
+        if(Math.max(Math.abs(dx),Math.abs(dy))!==radius) continue;
+        const bucket = targetGrid.get(targetGridCellKey(cx+dx, cy+dy));
+        if(!bucket) continue;
+        bucket.forEach(o=>{
+          if(o===t) return;
+          const d = Math.hypot(o.trueX-t.trueX, o.trueY-t.trueY);
+          if(d<bd){ bd=d; best=o; if(foundAtRadius<0) foundAtRadius=radius; }
+        });
+      }
+    }
+  }
   return best;
 }
 function mergeAdjustedGoal(t, defaultGoal){
@@ -5360,6 +5398,7 @@ function resolveMortarCounterBattery(dt){
 }
 
 function resolveEnemyTurn(dt){
+  rebuildTargetGrid();
   maybePlaceMine();
   // per user request: "last stand" -- reveal every remaining enemy the instant the wave drops
   // to LAST_STAND_THRESHOLD or fewer (see isTargetDetected/lastStandActive), and announce it
