@@ -12,7 +12,7 @@
 
 <div class="board-wrap">
   <canvas id="board3d"></canvas>
-  <canvas id="board" width="1300" height="460"></canvas>
+  <canvas id="board" width="2600" height="460"></canvas>
 
   <div class="enemy-overlay">
     <div class="eo-head">敵状 ― CONTACTS</div>
@@ -36,6 +36,7 @@
       <span class="statbar-caret" id="statbar-caret" onclick="toggleStatbar()">▸</span>
       <button class="hud-icon-btn" onclick="toggleDrawer('log')" title="通信記録">📋</button>
       <button class="hud-icon-btn" onclick="toggleDrawer('status')" title="部隊稼働状況">👥<span class="hud-icon-badge" id="force-list-badge"></span></button>
+      <button class="hud-icon-btn" onclick="toggleDrawer('gemini')" title="Gemini参謀">✦</button>
       <button class="hud-icon-btn" onclick="toggleBoardNote()" title="使い方">?</button>
       <button class="hud-icon-btn" id="mapFullscreenBtn" onclick="toggleMapFullscreen()" title="全画面表示にする">⛶</button>
     </div>
@@ -45,7 +46,7 @@
       <div class="stat" id="stat-difficulty"><div class="label">難易度</div><div class="value">--</div></div>
       <div class="stat" id="stat-weather"><div class="label">天候</div><div class="value">--</div></div>
       <div class="stat" id="stat-achievements" style="cursor:pointer;" onclick="openAchievements()"><div class="label">実績</div><div class="value">--</div></div>
-      <div class="stat" id="stat-turns"><div class="label">経過ターン</div><div class="value">--</div></div>
+      <div class="stat" id="stat-turns"><div class="label">経過時間</div><div class="value">--</div></div>
       <div class="stat" id="stat-money" style="cursor:pointer;" onclick="openShop()"><div class="label">所持金</div><div class="value">--</div></div>
       <div class="stat" id="stat-roster"><div class="label">総兵力</div><div class="value">--</div></div>
     </div>
@@ -86,6 +87,24 @@
   <div class="force-list" id="force-list"></div>
   <div class="self-ammo-line" id="self-ammo-line">弾薬: --</div>
   <div class="audio-settings-panel" id="audio-settings-panel"></div>
+</div>
+
+<div class="drawer gemini-drawer" id="gemini-drawer">
+  <div class="drawer-header">
+    <span>Gemini参謀</span>
+    <button class="drawer-close" onclick="toggleDrawer('gemini')">✕</button>
+  </div>
+  <div class="gemini-notice">APIキーはこのブラウザのlocalStorageにのみ保存されます。共有端末では使用後に削除してください。</div>
+  <div class="gemini-settings">
+    <input id="gemini-api-key" type="password" autocomplete="off" placeholder="Google AI Studio APIキー">
+    <button class="btn" onclick="saveGeminiApiKey()">保存</button>
+    <button class="btn" onclick="clearGeminiApiKey()">削除</button>
+  </div>
+  <div class="gemini-messages" id="gemini-messages"></div>
+  <form class="gemini-form" onsubmit="sendGeminiMessage(event)">
+    <input id="gemini-input" type="text" maxlength="1000" autocomplete="off" placeholder="作戦について質問…">
+    <button class="btn primary" type="submit">送信</button>
+  </form>
 </div>
 
 <div class="drawer-backdrop" id="drawer-backdrop" onclick="closeAllDrawers()"></div>
@@ -151,6 +170,8 @@
 <div class="command-box quick-order-box" id="quick-order-box" style="display:none;"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fflate@0.6.10/umd/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
 <script src="mortar_fdc_game.js"></script>
 </body>
 </html>
