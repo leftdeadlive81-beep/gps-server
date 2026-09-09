@@ -10271,15 +10271,33 @@ function makeMarkerMesh3d(shape, colorHex, formationOffsets){
     // group keeps looking like a tight formation instead of soldiers overlapping.
     const FIGURE_SCALE = 2.2;
     const clusterR = s*1.1*FIGURE_SCALE;
+    // per user request: still no bones/skinning (keeps every soldier a handful of cheap
+    // static primitives, no per-frame skinning cost, no animation state to track across
+    // potentially thousands of individuals) -- just legs and arms added alongside the existing
+    // body/head so the "peg doll" reads as a person instead of a lollipop. All still receiveShadow
+    // only (no cast) for the same per-figure-count reason as every other marker here.
+    const legMat = mat(0x3b342a);
     const figures = offsets.map(o=>{
       const x = (o.dx/maxR)*clusterR, z = (o.dy/maxR)*clusterR;
       const fig = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(s*0.1*FIGURE_SCALE, s*0.12*FIGURE_SCALE, s*0.34*FIGURE_SCALE, 6), mat(colorHex));
-      body.position.set(x, s*0.24*FIGURE_SCALE, z);
+      const legH = s*0.22*FIGURE_SCALE, bodyH = s*0.34*FIGURE_SCALE;
+      const bodyY = legH + bodyH*0.5;
+      [-1,1].forEach(side=>{
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(s*0.045*FIGURE_SCALE, s*0.05*FIGURE_SCALE, legH, 5), legMat);
+        leg.position.set(x + side*s*0.05*FIGURE_SCALE, legH*0.5, z);
+        leg.receiveShadow = true;
+        fig.add(leg);
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(s*0.04*FIGURE_SCALE, s*0.045*FIGURE_SCALE, s*0.26*FIGURE_SCALE, 5), mat(colorHex));
+        arm.position.set(x + side*s*0.16*FIGURE_SCALE, bodyY, z);
+        arm.receiveShadow = true;
+        fig.add(arm);
+      });
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(s*0.1*FIGURE_SCALE, s*0.12*FIGURE_SCALE, bodyH, 6), mat(colorHex));
+      body.position.set(x, bodyY, z);
       body.receiveShadow = true;
       fig.add(body);
       const head = new THREE.Mesh(new THREE.SphereGeometry(s*0.11*FIGURE_SCALE, 6, 5), mat(0xd1b28a));
-      head.position.set(x, s*0.46*FIGURE_SCALE, z);
+      head.position.set(x, bodyY + bodyH*0.5 + s*0.05*FIGURE_SCALE, z);
       head.receiveShadow = true;
       fig.add(head);
       group.add(fig);
