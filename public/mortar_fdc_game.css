@@ -116,6 +116,7 @@
     display:flex; align-items:center; justify-content:center; cursor:pointer;
   }
   .hud-icon-btn:hover{background:var(--edge-dim); border-color:var(--amber); color:var(--amber);box-shadow:0 0 14px rgba(240,189,85,.2);}
+  .hud-icon-btn.active{background:var(--amber-dim);border-color:var(--amber);color:#1a1608;}
   .hud-icon-badge{
     position:absolute; top:-4px; right:-4px; min-width:14px; height:14px; padding:0 3px;
     background:var(--red); color:#fff; border-radius:7px;
@@ -272,6 +273,14 @@
   }
   .command-box .cb-close:hover{color:var(--ink);}
   .command-box .meta{margin-bottom:8px;}
+
+  /* per user request: multi-select toolbar stays pinned above the bottom HUD bar (rather
+     than anchored to a clicked point like the per-unit command boxes) since it applies to
+     however many units happen to be selected, not one map position. */
+  .multi-select-box{
+    left:50%; right:auto; top:auto; bottom:78px; transform:translateX(-50%);
+    width:280px;
+  }
 
   .decision-box{
     background:var(--panel-2);border:1px solid var(--amber-dim);border-radius:3px;

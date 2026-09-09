@@ -2646,30 +2646,9 @@ function rotateScout(idx, delta){
   scout.watchAngle = (scout.watchAngle + delta + 360) % 360;
   render();
 }
-function armSquadMoveOrder(idx){
-  if(state.squads[idx] && state.squads[idx].resting) return;
-  state.orderMode = {kind:'squad', idx};
-  state.commandBox = null;
-  render();
-}
-function armTankMoveOrder(idx){
-  state.orderMode = {kind:'tank-move', idx};
-  state.commandBox = null;
-  render();
-}
-function armSamMoveOrder(idx){
-  state.orderMode = {kind:'sam-move', idx};
-  state.commandBox = null;
-  render();
-}
 // per user request: 指揮所も移動できるように(移動速度は歩兵と同一 -- applyHqMovement で
-// INFANTRY_MOVE_CAP を使う)。HQ は配列ではなく単一オブジェクトなので idx を持たない点だけ
-// tank/squad の同名関数と異なる。
-function armHqMoveOrder(){
-  state.orderMode = {kind:'hq-move'};
-  state.commandBox = null;
-  render();
-}
+// INFANTRY_MOVE_CAP を使う)。squad/tank/sam/hq は地図を直接クリックするだけで移動先を
+// 指定できる(setUnitMoveDest/DIRECT_MOVE_KINDS参照) -- 明示的なarm操作は不要。
 function clearHqDest(){
   state.hq.pendingDest = null;
   state.orderMode = null;
@@ -4494,19 +4473,14 @@ function hqBoxHtml(){
   const repairCost = Math.round(HQ_REPAIR_COST_PER_HP*repairAmount);
   const canRepair = hq.hp<hq.maxHp && state.money>=repairCost;
   const canCover = !hq.coverBuilt && hq.exposure<HQ_COVER_EXPOSURE_CAP;
-  const arming = state.orderMode && state.orderMode.kind==='hq-move';
-  const destStatus = arming ? '地図をクリックして移転先を指定…' : (hq.pendingDest ? '移転先: 設定済み' : '移転先: 未設定');
   return `
     <div class="meta">HP: ${hq.hp} / ${hq.maxHp}</div>
     <div class="hpbar big" style="margin-bottom:8px;"><div style="width:${Math.max(0,hq.hp/hq.maxHp*100)}%"></div></div>
     ${exposureMetaHtml(getUnitExposure({kind:'hq'}))}
     <button class="btn" ${canCover?'':'disabled'} onclick="buildHqCover()" style="margin:8px 0 4px;">掩体構築(掩蔽率+${HQ_COVER_EXPOSURE_BONUS}${hq.coverBuilt?' ・ このWAVEは実施済み':hq.exposure>=HQ_COVER_EXPOSURE_CAP?' ・ 上限到達':''})</button>
     <button class="btn" ${canRepair?'':'disabled'} onclick="repairHq()">応急修復(+${repairAmount}HP ・ ¥${repairCost})${hq.hp>=hq.maxHp?' ・ HP満タン':''}</button>
-    <div class="row-2" style="margin:8px 0 4px;">
-      <button class="btn ${arming?'active squad-order-btn':''}" onclick="armHqMoveOrder()">移転先を指定</button>
-      <button class="btn" ${!hq.pendingDest?'disabled':''} onclick="clearHqDest()">解除</button>
-    </div>
-    <div class="meta">${destStatus}(移動速度: 歩兵と同一)</div>
+    <div class="meta" style="margin:8px 0 4px;">${hq.pendingDest ? '移転先: 設定済み(地図クリックで変更)' : '地図をクリックすると移転先を指定できます'}(移動速度: 歩兵と同一)</div>
+    ${hq.pendingDest ? `<button class="btn" onclick="clearHqDest()">移転先を解除</button>` : ''}
   `;
 }
 
@@ -6020,6 +5994,171 @@ function selectNextTarget(){
   if(!live.some(t=>t.id===state.selectedId)) state.selectedId = live[0].id;
 }
 
+// per user request: giving orders to several units used to mean re-opening each one's
+// command box and re-clicking the same order button over and over. setUnitMoveDest()
+// centralizes the exact per-kind move-destination logic (previously duplicated inline in
+// the orderMode dispatch below) so it can also be called directly -- from a plain map click
+// while a single unit's box is open (no more "移動先を指定" arm step first, for the kinds
+// where a click can only ever mean "move," see DIRECT_MOVE_KINDS below) and from bulk-move
+// in multi-select mode. `silent` skips the per-unit log line for bulk calls, which print
+// their own single aggregate line instead.
+function setUnitMoveDest(kind, idx, px, py, silent){
+  if(kind==='squad'){
+    const sq = state.squads[idx];
+    if(!sq || sq.resting) return false;
+    sq.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+    if(!silent) log('sys','前線', `第${idx+1}小隊に移動目標を指示。`);
+    return true;
+  }
+  if(kind==='tank'){
+    const tank = state.tanks[idx];
+    if(!tank || tank.hp<=0) return false;
+    tank.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+    if(!silent) log('sys','前線', `戦車${idx+1}に移動目標を指示。`);
+    return true;
+  }
+  if(kind==='sam'){
+    const sam = state.sams[idx];
+    if(!sam || sam.hp<=0) return false;
+    sam.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+    if(!silent) log('sys','前線', `対空${idx+1}に移動目標を指示。`);
+    return true;
+  }
+  if(kind==='hq'){
+    if(state.hq.hp<=0) return false;
+    state.hq.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+    if(!silent) log('sys','前線', `指揮所に移転先を指示。`);
+    return true;
+  }
+  if(kind==='engineer'){
+    const en = state.engineers[idx];
+    if(!en || !unitAlive(en) || en.resting) return false;
+    en.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+    if(!silent) log('sys','前線', `工兵小隊に移動目標を指示。`);
+    return true;
+  }
+  if(kind==='sniper'){
+    const sn = state.snipers[idx];
+    if(!sn || !sn.soldiers.some(s=>s.alive) || sn.resting) return false;
+    sn.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+    if(!silent) log('sys','前線', `狙撃${idx+1}班に移動目標を指示。`);
+    return true;
+  }
+  if(kind==='scout'){
+    const scout = state.scouts[idx];
+    if(!scout || !unitAlive(scout) || scout.resting) return false;
+    scout.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SCOUT_ADVANCE_LIMIT_X), y: clamp(py, 20, CANVAS_H-20) };
+    scout.pendingReconTargetId = null;
+    if(!silent) log('op','斥候', `斥候${idx+1}、移動目標を了解。`);
+    return true;
+  }
+  if(kind==='mortar'){
+    const mortar = state.mortars[idx];
+    if(!mortar || mortar.hp<=0) return false;
+    mortar.pendingDest = { x: clamp(px, MORTAR_ZONE_MIN_X, MORTAR_ZONE_MAX_X), y: clamp(py, 30, CANVAS_H-30) };
+    if(!silent) log('mortar','迫撃砲班', `迫撃砲${idx+1}、陣地転換先を了解。`);
+    return true;
+  }
+  return false;
+}
+// per user request: plain map-click-to-move for the unit kinds where a click can only ever
+// mean "move here" (mortar/sniper/scout/engineer each have other click-based actions --
+// fire, aim, recon, wall/trench -- that still need their own explicit arm button first, to
+// stay unambiguous).
+const DIRECT_MOVE_KINDS = ['squad','tank','sam','hq'];
+
+// per user request: select several squads/tanks/SAMs/snipers/engineers at once (tap to
+// toggle each into the selection while multi-select mode is on) and issue one order --
+// including a single map click to move all of them -- instead of re-opening and re-ordering
+// each unit's own command box individually.
+const MULTI_SELECT_KINDS = ['squad','tank','sam','sniper','engineer'];
+let multiSelectMode = false;
+let multiSelected = [];
+function toggleMultiSelectMode(){
+  multiSelectMode = !multiSelectMode;
+  const btn = document.getElementById('multiSelectBtn');
+  if(btn) btn.classList.toggle('active', multiSelectMode);
+  if(multiSelectMode){
+    state.commandBox = null;
+    state.enemyCommandBox = null;
+    state.decoyCommandBox = null;
+    state.orderMode = null;
+    state.smartOrderMode = null;
+  } else {
+    multiSelected = [];
+  }
+  render();
+}
+function isMultiSelected(kind, idx){
+  return multiSelectMode && multiSelected.some(e=>e.kind===kind && e.idx===idx);
+}
+function pruneMultiSelected(){
+  multiSelected = multiSelected.filter(({kind, idx})=>{
+    if(kind==='squad') return state.squads[idx] && state.squads[idx].soldiers.some(s=>s.alive);
+    if(kind==='tank') return state.tanks[idx] && state.tanks[idx].hp>0;
+    if(kind==='sam') return state.sams[idx] && state.sams[idx].hp>0;
+    if(kind==='sniper') return state.snipers[idx] && state.snipers[idx].soldiers.some(s=>s.alive);
+    if(kind==='engineer') return state.engineers[idx] && unitAlive(state.engineers[idx]);
+    return false;
+  });
+}
+function multiSelectCommonOrders(){
+  if(!multiSelected.length) return ['advance','hold','retreat'];
+  const allSquads = multiSelected.every(e=>e.kind==='squad');
+  return allSquads ? ['advance','hold','assault','retreat'] : ['advance','hold','retreat'];
+}
+const MULTI_SELECT_ORDER_SETTER = {
+  squad: (idx, order)=>{ if(state.squads[idx] && !state.squads[idx].resting) state.squads[idx].order = order; },
+  tank: (idx, order)=>{ if(state.tanks[idx]) state.tanks[idx].order = order; },
+  sam: (idx, order)=>{ if(state.sams[idx]) state.sams[idx].order = order; },
+  sniper: (idx, order)=>{ if(state.snipers[idx] && !state.snipers[idx].resting) state.snipers[idx].order = order; },
+  engineer: (idx, order)=>{ if(state.engineers[idx] && !state.engineers[idx].resting) state.engineers[idx].order = order; },
+};
+function multiSelectSetOrder(order){
+  if(!multiSelected.length) return;
+  let count = 0;
+  multiSelected.forEach(({kind, idx})=>{
+    const setter = MULTI_SELECT_ORDER_SETTER[kind];
+    if(setter){ setter(idx, order); count++; }
+  });
+  if(count>0) log('sys','司令部', `選択中の${count}隊に「${ORDER_LABEL[order]}」を指示。`);
+  render();
+}
+function handleMultiSelectClick(sx, sy, px, py){
+  const hit = resolveClickHit(sx, sy);
+  if(hit && hit.type==='friendly' && MULTI_SELECT_KINDS.includes(hit.payload.kind)){
+    const {kind, idx} = hit.payload;
+    const i = multiSelected.findIndex(e=>e.kind===kind && e.idx===idx);
+    if(i>=0) multiSelected.splice(i,1);
+    else multiSelected.push({kind, idx});
+    return;
+  }
+  if(!hit && multiSelected.length){
+    let moved = 0;
+    multiSelected.forEach(({kind, idx})=>{ if(setUnitMoveDest(kind, idx, px, py, true)) moved++; });
+    if(moved>0) log('sys','司令部', `選択中の${moved}隊に移動目標を指示。`);
+  }
+}
+function renderMultiSelectBox(){
+  const box = document.getElementById('multi-select-box');
+  if(!box) return;
+  if(!multiSelectMode){ box.style.display = 'none'; return; }
+  pruneMultiSelected();
+  const orders = multiSelectCommonOrders();
+  const btns = orders.map(o=>
+    `<button class="btn squad-order-btn" ${multiSelected.length?'':'disabled'} onclick="multiSelectSetOrder('${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
+  ).join('');
+  box.style.display = 'block';
+  box.innerHTML = `
+    <div class="cb-head">
+      <span class="cb-title">複数選択(${multiSelected.length}隊)</span>
+      <button class="cb-close" onclick="toggleMultiSelectMode()">×</button>
+    </div>
+    <div class="meta" style="margin-bottom:6px;">${multiSelected.length ? '地図をクリックで選択中の全隊に移動先を指示。ユニットを再タップで選択解除。' : '小隊/戦車/対空/狙撃/工兵をタップして選択してください。'}</div>
+    <div class="squad-orders" style="grid-template-columns:repeat(${orders.length},1fr);margin-bottom:4px;">${btns}</div>
+  `;
+}
+
 function handleCanvasClick(evt){
   if(!state || state.stageResolved || state.animating || state.snipeMortarStrikesPending>0) return;
   if(mapDragMoved) return;
@@ -6057,30 +6196,17 @@ function handleCanvasClick(evt){
     const mode = state.smartOrderMode;
     state.smartOrderMode = null;
     const idxs = resolveSmartUnitIdxs(mode.unitType, mode.unitScope);
-    idxs.forEach(idx=>{
-      if(mode.unitType==='mortar'){
-        const m = state.mortars[idx];
-        m.order = 'move'; m.pendingFire = null;
-        m.pendingDest = { x: clamp(px, MORTAR_ZONE_MIN_X, MORTAR_ZONE_MAX_X), y: clamp(py, 30, CANVAS_H-30) };
-      } else if(mode.unitType==='scout'){
-        const s = state.scouts[idx];
-        s.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SCOUT_ADVANCE_LIMIT_X), y: clamp(py, 20, CANVAS_H-20) };
-        s.pendingReconTargetId = null;
-      } else if(mode.unitType==='squad'){
-        const sq = state.squads[idx];
-        sq.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
-      } else if(mode.unitType==='sniper'){
-        const sn = state.snipers[idx];
-        sn.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
-      } else if(mode.unitType==='tank'){
-        const tk = state.tanks[idx];
-        tk.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
-      } else if(mode.unitType==='sam'){
-        const sam = state.sams[idx];
-        sam.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
-      }
-    });
+    if(mode.unitType==='mortar'){
+      idxs.forEach(idx=>{ const m = state.mortars[idx]; m.order = 'move'; m.pendingFire = null; });
+    }
+    idxs.forEach(idx=>setUnitMoveDest(mode.unitType, idx, px, py, true));
     log('sys','司令部', `スマート操作: ${SMART_UNIT_TYPES[mode.unitType].label} ${idxs.length}隊に移動目標を指示。`);
+    render();
+    return;
+  }
+
+  if(multiSelectMode){
+    handleMultiSelectClick(sx, sy, px, py);
     render();
     return;
   }
@@ -6089,47 +6215,15 @@ function handleCanvasClick(evt){
     const mode = state.orderMode;
     state.orderMode = null;
     if(mode.kind==='squad'){
-      const sq = state.squads[mode.idx];
-      if(sq){
-        sq.pendingDest = {
-          x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X),
-          y: clamp(py, 30, CANVAS_H-30),
-        };
-        log('sys','前線', `第${mode.idx+1}小隊に移動目標を指示。`);
-      }
+      setUnitMoveDest('squad', mode.idx, px, py);
     } else if(mode.kind==='tank-move'){
-      const tank = state.tanks[mode.idx];
-      if(tank){
-        tank.pendingDest = {
-          x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X),
-          y: clamp(py, 30, CANVAS_H-30),
-        };
-        log('sys','前線', `戦車${mode.idx+1}に移動目標を指示。`);
-      }
+      setUnitMoveDest('tank', mode.idx, px, py);
     } else if(mode.kind==='sam-move'){
-      const sam = state.sams[mode.idx];
-      if(sam){
-        sam.pendingDest = {
-          x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X),
-          y: clamp(py, 30, CANVAS_H-30),
-        };
-        log('sys','前線', `対空${mode.idx+1}に移動目標を指示。`);
-      }
+      setUnitMoveDest('sam', mode.idx, px, py);
     } else if(mode.kind==='hq-move'){
-      state.hq.pendingDest = {
-        x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X),
-        y: clamp(py, 30, CANVAS_H-30),
-      };
-      log('sys','前線', `指揮所に移転先を指示。`);
+      setUnitMoveDest('hq', mode.idx, px, py);
     } else if(mode.kind==='engineer-move'){
-      const en = state.engineers[mode.idx];
-      if(en){
-        en.pendingDest = {
-          x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X),
-          y: clamp(py, 30, CANVAS_H-30),
-        };
-        log('sys','前線', `工兵小隊に移動目標を指示。`);
-      }
+      setUnitMoveDest('engineer', mode.idx, px, py);
     } else if(mode.kind==='wall-build'){
       buildWallAt(clamp(px, 10, CANVAS_W-10), clamp(py, 20, CANVAS_H-20));
     } else if(mode.kind==='trench-build-p1'){
@@ -6141,15 +6235,7 @@ function handleCanvasClick(evt){
     } else if(mode.kind==='trench-build-p2'){
       buildTrenchAt(mode.x1, mode.y1, clamp(px, 10, CANVAS_W-10), clamp(py, 20, CANVAS_H-20));
     } else if(mode.kind==='scout-move'){
-      const scout = state.scouts[mode.idx];
-      if(scout){
-        scout.pendingDest = {
-          x: clamp(px, SQUAD_RETREAT_LIMIT_X, SCOUT_ADVANCE_LIMIT_X),
-          y: clamp(py, 20, CANVAS_H-20),
-        };
-        scout.pendingReconTargetId = null;
-        log('op','斥候', `斥候${mode.idx+1}、移動目標を了解。`);
-      }
+      setUnitMoveDest('scout', mode.idx, px, py);
     } else if(mode.kind==='scout-recon'){
       const scout = state.scouts[mode.idx];
       const best = nearestVisibleTargetForScreen(sx, sy, 42);
@@ -6170,23 +6256,9 @@ function handleCanvasClick(evt){
         }
       }
     } else if(mode.kind==='mortar-move'){
-      const mortar = state.mortars[mode.idx];
-      if(mortar){
-        mortar.pendingDest = {
-          x: clamp(px, MORTAR_ZONE_MIN_X, MORTAR_ZONE_MAX_X),
-          y: clamp(py, 30, CANVAS_H-30),
-        };
-        log('mortar','迫撃砲班', `迫撃砲${mode.idx+1}、陣地転換先を了解。`);
-      }
+      setUnitMoveDest('mortar', mode.idx, px, py);
     } else if(mode.kind==='sniper-move'){
-      const sn = state.snipers[mode.idx];
-      if(sn){
-        sn.pendingDest = {
-          x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X),
-          y: clamp(py, 30, CANVAS_H-30),
-        };
-        log('sys','前線', `狙撃${mode.idx+1}班に移動目標を指示。`);
-      }
+      setUnitMoveDest('sniper', mode.idx, px, py);
     } else if(mode.kind==='sniper-target'){
       const sn = state.snipers[mode.idx];
       const best = nearestVisibleTargetForScreen(sx, sy, 42);
@@ -6214,6 +6286,18 @@ function handleCanvasClick(evt){
   }
 
   const hit = resolveClickHit(sx, sy);
+  // per user request: while a squad/tank/SAM/HQ's command box is open, a plain click on
+  // empty ground now moves it there directly instead of requiring "移動先を指定" first --
+  // these are the only kinds where a click can unambiguously only ever mean "move" (mortar/
+  // sniper/scout/engineer each have other click-based actions that still need their own
+  // explicit arm button to stay unambiguous, see DIRECT_MOVE_KINDS above).
+  if(!hit && state.commandBox && DIRECT_MOVE_KINDS.includes(state.commandBox.kind)){
+    if(setUnitMoveDest(state.commandBox.kind, state.commandBox.idx, px, py)){
+      state.commandBox = null;
+      render();
+      return;
+    }
+  }
   state.decoyCommandBox = (hit && hit.type==='decoy') ? hit.payload : null;
   state.enemyCommandBox = (hit && hit.type==='enemy') ? hit.payload.id : null;
   state.commandBox = (hit && hit.type==='friendly') ? hit.payload : null;
@@ -6712,8 +6796,6 @@ function squadBoxHtml(idx){
   const btns = ['advance','hold','assault','retreat'].map(o=>
     `<button class="btn squad-order-btn ${sq.order===o?'active':''}" ${wiped?'disabled':''} onclick="setSquadOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
-  const arming = state.orderMode && state.orderMode.kind==='squad' && state.orderMode.idx===idx;
-  const destStatus = arming ? '地図をクリックして移動先指定…' : (sq.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
   const huntTarget = sq.huntTargetId ? state.targets.find(t=>t.id===sq.huntTargetId) : null;
   const huntStatus = (huntTarget && !huntTarget.destroyed)
     ? `攻撃目標: ${huntTarget.id} (${huntTarget.revealed?huntTarget.def.label:'識別不能'})`
@@ -6723,11 +6805,8 @@ function squadBoxHtml(idx){
     ${exposureMetaHtml(getUnitExposure({kind:'squad', idx}))}
     ${restButtonHtml('squad', idx, sq)}
     <div class="squad-orders" style="margin:6px 0;">${btns}</div>
-    <div class="row-2" style="margin-bottom:6px;">
-      <button class="btn ${arming?'active squad-order-btn':''}" ${wiped?'disabled':''} onclick="armSquadMoveOrder(${idx})">移動先を指定</button>
-      <button class="btn" ${wiped||!sq.pendingDest?'disabled':''} onclick="clearSquadDest(${idx})">解除</button>
-    </div>
-    <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
+    <div class="meta" style="margin-bottom:6px;">${wiped ? '移動先: 指定不可' : (sq.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます')}</div>
+    ${sq.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearSquadDest(${idx})">移動先を解除</button>` : ''}
     ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearSquadHunt(${idx})">攻撃目標を解除</button>` : ''}
     ${standingOrderSelectHtml('squad', idx, sq, true)}
     ${soldierRosterHtml(sq.soldiers)}
@@ -6741,8 +6820,6 @@ function tankBoxHtml(idx){
   const btns = ['advance','hold','retreat'].map(o=>
     `<button class="btn squad-order-btn ${tank.order===o?'active':''}" ${dead?'disabled':''} onclick="setTankOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
-  const arming = state.orderMode && state.orderMode.kind==='tank-move' && state.orderMode.idx===idx;
-  const destStatus = arming ? '地図をクリックして移動先指定…' : (tank.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
   const huntTarget = tank.huntTargetId ? state.targets.find(t=>t.id===tank.huntTargetId) : null;
   const huntStatus = (huntTarget && !huntTarget.destroyed)
     ? `攻撃目標: ${huntTarget.id} (${huntTarget.revealed?huntTarget.def.label:'識別不能'})`
@@ -6756,11 +6833,8 @@ function tankBoxHtml(idx){
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,tank.hp/tank.maxHp*100)}%"></div></div>
     ${exposureMetaHtml(getUnitExposure({kind:'tank', idx}))}
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
-    <div class="row-2" style="margin-bottom:6px;">
-      <button class="btn ${arming?'active squad-order-btn':''}" onclick="armTankMoveOrder(${idx})">移動先を指定</button>
-      <button class="btn" ${!tank.pendingDest?'disabled':''} onclick="clearTankDest(${idx})">解除</button>
-    </div>
-    <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
+    <div class="meta" style="margin-bottom:6px;">${tank.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
+    ${tank.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearTankDest(${idx})">移動先を解除</button>` : ''}
     ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearTankHunt(${idx})">攻撃目標を解除</button>` : ''}
     <button class="btn" ${canRepair?'':'disabled'} onclick="repairTank(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${tank.hp>=tank.maxHp?' ・ HP満タン':''}</button>
   `;
@@ -6774,8 +6848,6 @@ function samBoxHtml(idx){
   const btns = ['advance','hold','retreat'].map(o=>
     `<button class="btn squad-order-btn ${sam.order===o?'active':''}" ${dead?'disabled':''} onclick="setSamOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
-  const arming = state.orderMode && state.orderMode.kind==='sam-move' && state.orderMode.idx===idx;
-  const destStatus = arming ? '地図をクリックして移動先指定…' : (sam.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
   const huntTarget = sam.huntTargetId ? state.targets.find(t=>t.id===sam.huntTargetId) : null;
   const huntStatus = (huntTarget && !huntTarget.destroyed)
     ? `攻撃目標: ${huntTarget.id} (${huntTarget.revealed?huntTarget.def.label:'識別不能'})`
@@ -6790,11 +6862,8 @@ function samBoxHtml(idx){
     ${exposureMetaHtml(getUnitExposure({kind:'sam', idx}))}
     <div class="meta" style="margin-bottom:6px;color:var(--muted);">対空目標(ヘリ・ドローン)専任 ― 対地目標には交戦不可</div>
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
-    <div class="row-2" style="margin-bottom:6px;">
-      <button class="btn ${arming?'active squad-order-btn':''}" onclick="armSamMoveOrder(${idx})">移動先を指定</button>
-      <button class="btn" ${!sam.pendingDest?'disabled':''} onclick="clearSamDest(${idx})">解除</button>
-    </div>
-    <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
+    <div class="meta" style="margin-bottom:6px;">${sam.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
+    ${sam.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearSamDest(${idx})">移動先を解除</button>` : ''}
     ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearSamHunt(${idx})">攻撃目標を解除</button>` : ''}
     <button class="btn" ${canRepair?'':'disabled'} onclick="repairSam(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${sam.hp>=sam.maxHp?' ・ HP満タン':''}</button>
   `;
@@ -7438,7 +7507,7 @@ function drawBoard(){
   // blue so it reads clearly against the terrain/units.
   strokeGridBucket(febaLineSegments(state.febaX), FEBA_LINE_COLOR, FEBA_LINE_WIDTH);
 
-  // HQ marker (指揮所) ― per user request: now movable (see armHqMoveOrder/applyHqMovement),
+  // HQ marker (指揮所) ― per user request: now movable (see setUnitMoveDest/applyHqMovement),
   // so it uses smoothVisualPos like every other mobile unit instead of a bare project(hq.x,hq.y).
   {
     const hq = state.hq;
@@ -7698,7 +7767,7 @@ function drawBoard(){
     const tAlive = tank.hp>0;
     ctx.save();
     ctx.translate(tVis.x, tVis.y);
-    drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='tank' && state.commandBox.idx===tIdx);
+    drawSelectionRing(ctx, 0, 0, (state.commandBox && state.commandBox.kind==='tank' && state.commandBox.idx===tIdx) || isMultiSelected('tank', tIdx));
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign='center';
@@ -7738,7 +7807,7 @@ function drawBoard(){
     ctx.save();
     ctx.translate(samVis.x, samVis.y);
     drawSamIcon(ctx, 0, 0, scaledIconH(22), !samAlive);
-    drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='sam' && state.commandBox.idx===samIdx);
+    drawSelectionRing(ctx, 0, 0, (state.commandBox && state.commandBox.kind==='sam' && state.commandBox.idx===samIdx) || isMultiSelected('sam', samIdx));
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign='center';
@@ -7788,7 +7857,7 @@ function drawBoard(){
     ctx.save();
     ctx.translate(enVis.x, enVis.y);
     drawEngineerIcon(ctx, 0, 0, scaledIconH(22), aliveSoldiers.length===0);
-    drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='engineer' && state.commandBox.idx===enIdx);
+    drawSelectionRing(ctx, 0, 0, (state.commandBox && state.commandBox.kind==='engineer' && state.commandBox.idx===enIdx) || isMultiSelected('engineer', enIdx));
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '14px "JetBrains Mono"';
     ctx.textAlign='center';
@@ -7805,7 +7874,7 @@ function drawBoard(){
       const sqVis = project(sqVisL.x, sqVisL.y);
       const aliveSoldiers = sq.soldiers.filter(s=>s.alive);
       drawUnitIcon(ctx, infantryIcon, sqVis.x, sqVis.y, scaledIconH(22), aliveSoldiers.length===0);
-      drawSelectionRing(ctx, sqVis.x, sqVis.y, state.commandBox && state.commandBox.kind==='squad' && state.commandBox.idx===sqIdx);
+      drawSelectionRing(ctx, sqVis.x, sqVis.y, (state.commandBox && state.commandBox.kind==='squad' && state.commandBox.idx===sqIdx) || isMultiSelected('squad', sqIdx));
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, sqVis.x+32, sqVis.y, aliveSoldiers.length/sq.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
@@ -7840,7 +7909,7 @@ function drawBoard(){
       const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
       // per user request: custom sniper icon image (our side only) in place of the triangle
       drawUnitIcon(ctx, sniperIcon, snVis.x, snVis.y, scaledIconH(22), aliveSoldiers.length===0);
-      drawSelectionRing(ctx, snVis.x, snVis.y, state.commandBox && state.commandBox.kind==='sniper' && state.commandBox.idx===snIdx);
+      drawSelectionRing(ctx, snVis.x, snVis.y, (state.commandBox && state.commandBox.kind==='sniper' && state.commandBox.idx===snIdx) || isMultiSelected('sniper', snIdx));
       if(aliveSoldiers.length>0) drawAttritionBar(ctx, snVis.x+20, snVis.y, aliveSoldiers.length/sn.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
@@ -10223,6 +10292,7 @@ function render(){
   renderCommandBox();
   renderEnemyCommandBox();
   renderDecoyCommandBox();
+  renderMultiSelectBox();
   drawBoard();
 }
 

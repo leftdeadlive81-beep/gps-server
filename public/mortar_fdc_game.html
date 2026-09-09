@@ -38,6 +38,7 @@
       <button class="hud-icon-btn" onclick="toggleDrawer('status')" title="部隊稼働状況">👥<span class="hud-icon-badge" id="force-list-badge"></span></button>
       <button class="hud-icon-btn" onclick="toggleDrawer('gemini')" title="Gemini参謀">✦</button>
       <button class="hud-icon-btn" onclick="toggleBoardNote()" title="使い方">?</button>
+      <button class="hud-icon-btn" id="multiSelectBtn" onclick="toggleMultiSelectMode()" title="複数選択">☑</button>
       <button class="hud-icon-btn" id="mapFullscreenBtn" onclick="toggleMapFullscreen()" title="全画面表示にする">⛶</button>
     </div>
     <div class="statbar" id="statbar-content">
@@ -165,6 +166,9 @@
 <div class="command-box" id="command-box" style="display:none;"></div>
 <div class="command-box" id="enemy-command-box" style="display:none;"></div>
 <div class="command-box" id="decoy-command-box" style="display:none;"></div>
+<!-- per user request: 複数選択モード -- 小隊/戦車/対空/狙撃/工兵をタップで選択に追加/解除し、
+     ここのボタンで選択中の全隊へ一括で命令できる(移動は地図クリックで一括指示)。 -->
+<div class="command-box multi-select-box" id="multi-select-box" style="display:none;"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/fflate@0.6.10/umd/index.js"></script>
