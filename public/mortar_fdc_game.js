@@ -10196,6 +10196,77 @@ const SQUAD_GRID_OFFSETS = Array.from({length:SQUAD_SIZE}, (_,i)=>{
   return {dx:(col-2)*10, dy:(row-0.5)*14};
 });
 
+// Builds one small bones-free humanoid (legs/arms/body/head, walk-cycle-ready -- see
+// updateSoldierWalkCycle) per roster slot in `offsets`. Shared by every dismounted-soldier unit
+// type (squad/scout/sniper for friendlies, infantry groups for enemy targets) so they all get
+// the same body, the same per-soldier alive/dead visibility toggle (updateSoldierFigures3d),
+// and the same walk animation for free. `opts.weapon`/`opts.pack` let a caller hang a small
+// distinguishing prop off an otherwise-identical body so branches still read apart from each
+// other at a glance despite sharing one build path (per user request: 斥候・狙撃班も人型に、
+// かつ兵種ごとに見分けられるように).
+function buildHumanoidFigures(group, matFn, s, colorHex, offsets, opts){
+  opts = opts || {};
+  const FIGURE_SCALE = opts.figureScale || 2.2;
+  const clusterR = s*1.1*FIGURE_SCALE;
+  const maxR = Math.max(1, ...offsets.map(o=>Math.hypot(o.dx,o.dy)));
+  const legMat = matFn(0x3b342a);
+  return offsets.map(o=>{
+    const x = (o.dx/maxR)*clusterR, z = (o.dy/maxR)*clusterR;
+    const fig = new THREE.Group();
+    const legH = s*0.22*FIGURE_SCALE, bodyH = s*0.34*FIGURE_SCALE, armH = s*0.26*FIGURE_SCALE;
+    const hipY = legH, bodyY = legH + bodyH*0.5, shoulderY = bodyY + bodyH*0.5;
+    const legPivots = [], armPivots = [];
+    [-1,1].forEach(side=>{
+      const legPivot = new THREE.Group();
+      legPivot.position.set(x + side*s*0.05*FIGURE_SCALE, hipY, z);
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(s*0.045*FIGURE_SCALE, s*0.05*FIGURE_SCALE, legH, 5), legMat);
+      leg.position.set(0, -legH*0.5, 0);
+      leg.receiveShadow = true;
+      legPivot.add(leg);
+      fig.add(legPivot);
+      legPivots.push(legPivot);
+
+      const armPivot = new THREE.Group();
+      armPivot.position.set(x + side*s*0.16*FIGURE_SCALE, shoulderY, z);
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(s*0.04*FIGURE_SCALE, s*0.045*FIGURE_SCALE, armH, 5), matFn(colorHex));
+      arm.position.set(0, -armH*0.5, 0);
+      arm.receiveShadow = true;
+      armPivot.add(arm);
+      fig.add(armPivot);
+      armPivots.push(armPivot);
+    });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(s*0.1*FIGURE_SCALE, s*0.12*FIGURE_SCALE, bodyH, 6), matFn(colorHex));
+    body.position.set(x, bodyY, z);
+    body.receiveShadow = true;
+    fig.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(s*0.11*FIGURE_SCALE, 6, 5), matFn(0xd1b28a));
+    head.position.set(x, shoulderY + s*0.05*FIGURE_SCALE, z);
+    head.receiveShadow = true;
+    fig.add(head);
+    // Attached to the torso (fig), not a swinging arm pivot, so it stays a calm, readable
+    // silhouette instead of flailing around with the walk-cycle arm swing.
+    if(opts.weapon){
+      const len = s*(opts.weapon==='longrifle'?0.62:0.42)*FIGURE_SCALE;
+      const rifle = new THREE.Mesh(new THREE.CylinderGeometry(s*0.022*FIGURE_SCALE, s*0.022*FIGURE_SCALE, len, 5), matFn(0x242a2b));
+      rifle.rotation.z = Math.PI/2.3;
+      rifle.position.set(x + s*0.15*FIGURE_SCALE, bodyY, z + s*0.09*FIGURE_SCALE);
+      rifle.receiveShadow = true;
+      fig.add(rifle);
+    }
+    if(opts.pack){
+      const pack = new THREE.Mesh(new THREE.BoxGeometry(s*0.13*FIGURE_SCALE, s*0.17*FIGURE_SCALE, s*0.09*FIGURE_SCALE), matFn(0x4a5a3a));
+      pack.position.set(x, bodyY, z - s*0.1*FIGURE_SCALE);
+      pack.receiveShadow = true;
+      fig.add(pack);
+    }
+    fig._legPivots = legPivots;
+    fig._armPivots = armPivots;
+    fig._walkPhase = Math.random()*Math.PI*2;
+    fig._walkAmp = 0;
+    group.add(fig);
+    return fig;
+  });
+}
 function makeMarkerMesh3d(shape, colorHex, formationOffsets){
   const group = new THREE.Group();
   const s = Math.max(0.6, (WORLD.scaleX+WORLD.scaleZ)/2*7.5);
@@ -10265,78 +10336,15 @@ function makeMarkerMesh3d(shape, colorHex, formationOffsets){
     // Each pattern is normalized to its own bounding radius so box/line/wedge/skirmish/etc.
     // all read as a similarly-sized cluster instead of some being tiny and others huge.
     const offsets = formationOffsets && formationOffsets.length ? formationOffsets : SQUAD_GRID_OFFSETS;
-    const maxR = Math.max(1, ...offsets.map(o=>Math.hypot(o.dx,o.dy)));
-    // per user request: figures made bigger/more visible (was hard to make out from a
-    // distance) -- FIGURE_SCALE grows body/head size and cluster spacing together so the
-    // group keeps looking like a tight formation instead of soldiers overlapping.
-    const FIGURE_SCALE = 2.2;
-    const clusterR = s*1.1*FIGURE_SCALE;
-    // per user request: still no bones/skinning (keeps every soldier a handful of cheap
-    // static primitives, no per-frame skinning cost, no animation state to track across
-    // potentially thousands of individuals) -- just legs and arms added alongside the existing
-    // body/head so the "peg doll" reads as a person instead of a lollipop. All still receiveShadow
-    // only (no cast) for the same per-figure-count reason as every other marker here.
-    const legMat = mat(0x3b342a);
-    // Legs/arms hang from a pivot Group positioned at the hip/shoulder (rather than being
-    // positioned directly, centered on themselves) so a walk cycle can later just rotate the
-    // pivot -- see updateSoldierWalkCycle() -- instead of the limb swinging around its own
-    // middle. _walkPhase gives each soldier a slightly different cadence so a whole squad
-    // doesn't animate in lockstep.
-    const figures = offsets.map(o=>{
-      const x = (o.dx/maxR)*clusterR, z = (o.dy/maxR)*clusterR;
-      const fig = new THREE.Group();
-      const legH = s*0.22*FIGURE_SCALE, bodyH = s*0.34*FIGURE_SCALE, armH = s*0.26*FIGURE_SCALE;
-      const hipY = legH, bodyY = legH + bodyH*0.5, shoulderY = bodyY + bodyH*0.5;
-      const legPivots = [], armPivots = [];
-      [-1,1].forEach(side=>{
-        const legPivot = new THREE.Group();
-        legPivot.position.set(x + side*s*0.05*FIGURE_SCALE, hipY, z);
-        const leg = new THREE.Mesh(new THREE.CylinderGeometry(s*0.045*FIGURE_SCALE, s*0.05*FIGURE_SCALE, legH, 5), legMat);
-        leg.position.set(0, -legH*0.5, 0);
-        leg.receiveShadow = true;
-        legPivot.add(leg);
-        fig.add(legPivot);
-        legPivots.push(legPivot);
-
-        const armPivot = new THREE.Group();
-        armPivot.position.set(x + side*s*0.16*FIGURE_SCALE, shoulderY, z);
-        const arm = new THREE.Mesh(new THREE.CylinderGeometry(s*0.04*FIGURE_SCALE, s*0.045*FIGURE_SCALE, armH, 5), mat(colorHex));
-        arm.position.set(0, -armH*0.5, 0);
-        arm.receiveShadow = true;
-        armPivot.add(arm);
-        fig.add(armPivot);
-        armPivots.push(armPivot);
-      });
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(s*0.1*FIGURE_SCALE, s*0.12*FIGURE_SCALE, bodyH, 6), mat(colorHex));
-      body.position.set(x, bodyY, z);
-      body.receiveShadow = true;
-      fig.add(body);
-      const head = new THREE.Mesh(new THREE.SphereGeometry(s*0.11*FIGURE_SCALE, 6, 5), mat(0xd1b28a));
-      head.position.set(x, shoulderY + s*0.05*FIGURE_SCALE, z);
-      head.receiveShadow = true;
-      fig.add(head);
-      fig._legPivots = legPivots;
-      fig._armPivots = armPivots;
-      fig._walkPhase = Math.random()*Math.PI*2;
-      fig._walkAmp = 0;
-      group.add(fig);
-      return fig;
-    });
-    group._soldierFigures = figures;
+    group._soldierFigures = buildHumanoidFigures(group, mat, s, colorHex, offsets);
     addFlag(colorHex);
   } else if(shape==='scout' || shape==='sniper'){
-    const count = 3;
-    const positions = [[-0.3,0.1],[0,-0.12],[0.3,0.1]];
-    positions.slice(0,count).forEach(([x,z])=>{
-      const soldier = add(new THREE.CylinderGeometry(s*0.13, s*0.15, s*0.42, 8), mat(colorHex), s*0.3, z*s*0.8);
-      soldier.position.x = x*s*0.8;
-      const head = add(new THREE.SphereGeometry(s*0.14, 8, 6), mat(0xd1b28a), s*0.58, z*s*0.8);
-      head.position.x = x*s*0.8;
-      const rifle = add(new THREE.CylinderGeometry(s*0.025, s*0.025, s*0.55, 5), mat(0x242a2b), s*0.34, z*s*0.8);
-      rifle.rotation.x = Math.PI/2;
-      rifle.rotation.z = -0.22;
-      rifle.position.x = x*s*0.8 + s*0.18;
-    });
+    // per user request: 斥候・狙撃班も小隊と同じ人型フィギュア(buildHumanoidFigures)にする一方、
+    // 兵種が見分けられるよう小道具で差別化する -- 斥候は背嚢(偵察装備)のみで武器は目立たせず、
+    // 狙撃班は長い狙撃銃を携行し、旗の色も従来通りタン系(0xc5c0a5)のまま維持する。
+    const offsets = SQUAD_GRID_OFFSETS.slice(0, shape==='scout' ? SCOUT_SQUAD_SIZE : SNIPER_SQUAD_SIZE);
+    group._soldierFigures = buildHumanoidFigures(group, mat, s, colorHex, offsets,
+      shape==='sniper' ? {weapon:'longrifle'} : {pack:true});
     addFlag(shape==='sniper' ? 0xc5c0a5 : colorHex);
   } else if(shape==='engineer'){
     add(new THREE.BoxGeometry(s*0.9, s*0.3, s*0.7), mat(colorHex), s*0.2);
@@ -10504,7 +10512,7 @@ function syncUnitMarkers3d(){
     place(key, p.x, p.y, shape, alive ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
     if(shape==='tank') updateTankHeading3d(unitMarkers3d[key], unit, p.x, p.y);
     if(shape==='heli') updateHeliHeading3d(unitMarkers3d[key], unit, p.x, p.y);
-    if(shape==='infantry'){
+    if(shape==='infantry' || shape==='scout' || shape==='sniper'){
       updateSoldierFigures3d(unitMarkers3d[key], unit.soldiers.map(s=>s.alive));
       updateSoldierWalkCycle(unitMarkers3d[key], isVisuallyMoving(unit, p.x, p.y), walkDt);
     }
