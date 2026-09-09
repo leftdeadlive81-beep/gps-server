@@ -2387,6 +2387,17 @@ function terrainAwareStep(fromX, fromY, targetX, targetY, stepLen, ignoreWalls){
   return ignoreWalls ? best : applyWallBlock(fromX, fromY, best.x, best.y);
 }
 
+// per user request: the heli's movement looked jerky because it reused terrainAwareStep,
+// which is built for GROUND units -- road-pull speed boosts, forest/water slowdowns, and a
+// slope-avoidance heading fan all applied to an aircraft with no reason to care about any of
+// them. A heli should just fly straight at its target at a constant speed.
+function airborneStep(fromX, fromY, targetX, targetY, stepLen){
+  const dx = targetX-fromX, dy = targetY-fromY;
+  const dist = Math.hypot(dx,dy) || 1;
+  if(dist <= stepLen) return {x: targetX, y: targetY};
+  return {x: fromX + (dx/dist)*stepLen, y: fromY + (dy/dist)*stepLen};
+}
+
 // terrainAwareStep only lets elevation nudge the HEADING (a small subset of
 // candidate headings score better on flatter ground) -- it never actually
 // slows movement down for climbing/descending, so in practice units barely
@@ -2875,7 +2886,7 @@ function resolveFriendlyHeliTurn(actionTurns){
       heli.orbitAngle = (heli.orbitAngle + 0.22) % (Math.PI*2);
       const targetX = clamp(900 + Math.cos(heli.orbitAngle)*260, 520, CANVAS_W-260);
       const targetY = clamp(CANVAS_H/2 + Math.sin(heli.orbitAngle)*150, 40, CANVAS_H-40);
-      const next = terrainAwareStep(heli.x, heli.y, targetX, targetY, FRIENDLY_HELI_MOVE_UNITS, true);
+      const next = airborneStep(heli.x, heli.y, targetX, targetY, FRIENDLY_HELI_MOVE_UNITS);
       heli.x = next.x;
       heli.y = next.y;
     }
@@ -4994,7 +5005,7 @@ function resolveHeliAssault(actionTurns){
         const dx = h.trueX-h.heliAnchor.x, dy = h.trueY-h.heliAnchor.y;
         const dist = Math.hypot(dx,dy) || 1;
         const fleeX = h.trueX + (dx/dist)*500, fleeY = h.trueY + (dy/dist)*500;
-        const next = terrainAwareStep(h.trueX, h.trueY, fleeX, fleeY, HELI_MOVE_CAP, true);
+        const next = airborneStep(h.trueX, h.trueY, fleeX, fleeY, HELI_MOVE_CAP);
         h.trueX = next.x; h.trueY = clamp(next.y, 30, CANVAS_H-30);
         recomputeBearing();
         anyEvent = true;
@@ -5010,7 +5021,7 @@ function resolveHeliAssault(actionTurns){
       if(!near) return;
       if(near.dist > HELI_ENGAGE_RANGE){
         h.heliPhase = 'approach';
-        const next = terrainAwareStep(h.trueX, h.trueY, near.x, near.y, HELI_MOVE_CAP, true);
+        const next = airborneStep(h.trueX, h.trueY, near.x, near.y, HELI_MOVE_CAP);
         h.trueX = next.x; h.trueY = clamp(next.y, 30, CANVAS_H-30);
         recomputeBearing();
         anyEvent = true;
@@ -10065,7 +10076,7 @@ function makeMarkerMesh3d(shape, colorHex){
   } else if(shape==='heli'){
     if(heliModelTemplate3d){
       const model = heliModelTemplate3d.clone(true);
-      model.scale.setScalar(s*0.008);
+      model.scale.setScalar(s*0.004); // per user request: half the previous size
       model.rotation.y = Math.PI;
       group.add(model);
       group._heliMarker = true;
@@ -10176,6 +10187,12 @@ function disposeMarker3d(key){
 }
 
 const FRIENDLY_MARK_COLOR_3D = 0x6f9bbf;
+// per user request: the heli used to get the same tiny ground-hugging clearance as
+// tanks/infantry (~46 units above LOCAL terrain height), which looked fine for a
+// wheeled/tracked unit but made a flying aircraft look embedded in any hillside it
+// crossed. Give it a real flight-altitude clearance instead, scaled off the same
+// constant that drives the terrain's own height range so it stays proportional.
+const HELI_FLIGHT_ALTITUDE = PROC_TERRAIN_HEIGHT_SCALE * 0.35;
 function syncUnitMarkers3d(){
   if(!threeReady || !state) return;
   const seen = {};
@@ -10185,7 +10202,8 @@ function syncUnitMarkers3d(){
     const m = getMarker3d(key, shape, colorHex);
     const h = terrainHeightAt(cx, cy);
     const {x,z} = canvasUnitToWorldXZ(cx, cy);
-    m.position.set(x, h + (WORLD.scaleX+WORLD.scaleZ)/2*6, z);
+    const clearance = shape==='heli' ? HELI_FLIGHT_ALTITUDE : (WORLD.scaleX+WORLD.scaleZ)/2*6;
+    m.position.set(x, h + clearance, z);
     m.visible = true;
   };
 
