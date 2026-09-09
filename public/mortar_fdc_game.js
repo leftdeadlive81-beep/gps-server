@@ -10143,16 +10143,20 @@ function makeMarkerMesh3d(shape, colorHex, formationOffsets){
     // all read as a similarly-sized cluster instead of some being tiny and others huge.
     const offsets = formationOffsets && formationOffsets.length ? formationOffsets : SQUAD_GRID_OFFSETS;
     const maxR = Math.max(1, ...offsets.map(o=>Math.hypot(o.dx,o.dy)));
-    const clusterR = s*1.1;
+    // per user request: figures made bigger/more visible (was hard to make out from a
+    // distance) -- FIGURE_SCALE grows body/head size and cluster spacing together so the
+    // group keeps looking like a tight formation instead of soldiers overlapping.
+    const FIGURE_SCALE = 2.2;
+    const clusterR = s*1.1*FIGURE_SCALE;
     const figures = offsets.map(o=>{
       const x = (o.dx/maxR)*clusterR, z = (o.dy/maxR)*clusterR;
       const fig = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(s*0.1, s*0.12, s*0.34, 6), mat(colorHex));
-      body.position.set(x, s*0.24, z);
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(s*0.1*FIGURE_SCALE, s*0.12*FIGURE_SCALE, s*0.34*FIGURE_SCALE, 6), mat(colorHex));
+      body.position.set(x, s*0.24*FIGURE_SCALE, z);
       body.receiveShadow = true;
       fig.add(body);
-      const head = new THREE.Mesh(new THREE.SphereGeometry(s*0.11, 6, 5), mat(0xd1b28a));
-      head.position.set(x, s*0.46, z);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(s*0.11*FIGURE_SCALE, 6, 5), mat(0xd1b28a));
+      head.position.set(x, s*0.46*FIGURE_SCALE, z);
       head.receiveShadow = true;
       fig.add(head);
       group.add(fig);
