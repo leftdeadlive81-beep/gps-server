@@ -8679,7 +8679,7 @@ let threeReady = false;
 // forcing this fit on every call (as a previous version did) fights the user's
 // own zoom, since zooming in necessarily pushes the map's corners off-screen.
 let cameraNeedsInitialFit = true;
-let scene3d, camera3d, renderer3d, terrainObject3d;
+let scene3d, camera3d, renderer3d, terrainObject3d, sunLight;
 // per user request: camera-to-lookAt distance from the most recent updateCameraFromView() call,
 // used only as updateFogDistance()'s fallback when every sampled ray points above the horizon.
 let lastCameraDist = 0;
@@ -9006,6 +9006,8 @@ function buildProceduralTerrainMesh(gen){
   // Y is left unscaled since vertex heights above are already computed in world-height units
   // (elevation * PROC_TERRAIN_HEIGHT_SCALE, which itself already bakes in METERS_PER_UNIT).
   mesh.scale.set(WORLD.scaleX, 1, WORLD.scaleZ);
+  mesh.receiveShadow = true;
+  mesh.castShadow = true; // hills shadow their own far slopes and nearby valleys
   return mesh;
 }
 
@@ -9013,6 +9015,16 @@ function buildProceduralTerrainMesh(gen){
 // the horizon (where fogged terrain fades into empty background) reads as one continuous sky
 // rather than a visible seam.
 const SKY_COLOR = 0x2b3440;
+
+// per user request: real-time shadows for terrain/units/props. The sun's shadow camera is a
+// fixed-size ortho box (not sized to the whole map, which would spread a 2048px shadow map
+// so thin over a multi-km battlefield that shadows would look blocky) that re-centers on
+// the current camera look-at point every frame instead -- see its repositioning in
+// updateCameraFromView(). Half-size is a compromise: big enough that shadows don't visibly
+// pop in/out near the edge of a normal zoomed-in view, small enough to keep shadow texels
+// reasonably crisp on units.
+const SHADOW_FRUSTUM_HALF = 900;
+const SUN_OFFSET = {x:800, y:950, z:450}; // ~44 deg from vertical -- steeper looked almost shadowless
 
 // Sets up the renderer/scene/camera/lights, which never change once the page loads. The
 // procedural terrain itself is NOT built here -- that happens per-wave (see
@@ -9035,20 +9047,39 @@ function initThree(){
   // Without matching sRGB output encoding, lit colors (the flat terrain color, unit
   // markers, etc.) come out noticeably darker/duller than authored.
   if('outputEncoding' in renderer3d) renderer3d.outputEncoding = THREE.sRGBEncoding;
+  // per user request: ACES filmic tone mapping instead of none, for a less flat/washed-out
+  // look (highlights roll off instead of clipping straight to white). Exposure nudged up a
+  // touch since ACES also compresses midtones darker than a 1:1 mapping would.
+  renderer3d.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer3d.toneMappingExposure = 1.15;
+  // per user request: real shadows (terrain relief, units, props) instead of flat lighting
+  // with no depth cues at all -- soft-filtered (PCFSoftShadowMap) so shadow edges don't look
+  // jagged at the shadow map's necessarily-limited resolution (see SHADOW_FRUSTUM_HALF).
+  renderer3d.shadowMap.enabled = true;
+  renderer3d.shadowMap.type = THREE.PCFSoftShadowMap;
   scene3d = new THREE.Scene();
   scene3d.fog = new THREE.Fog(SKY_COLOR, 1, 2); // near/far kept in sync with camera distance -- see updateCameraFromView()
 
   camera3d = new THREE.PerspectiveCamera(42, 1, 1, 100000);
   scene3d.add(camera3d);
 
-  // per user request: nudged up slightly (alongside brightening PROC_COLOR_LOW) so low-lying
-  // ground doesn't read as near-black -- still comfortably under 1.0 combined with
-  // TERRAIN_TEXTURE_BRIGHTNESS(0.55) so sun-facing terrain doesn't clip to flat white (the
-  // renderer uses no tone mapping).
-  scene3d.add(new THREE.AmbientLight(0xffffff, 0.65));
-  const sun = new THREE.DirectionalLight(0xfff4e0, 0.68);
-  sun.position.set(600, 1200, 400);
-  scene3d.add(sun);
+  // per user request: a HemisphereLight (sky-tint from above, muted ground-tint from below)
+  // replaces the old flat-white AmbientLight -- shadowed/indirect-lit areas now pick up a
+  // believable cool-sky/warm-ground bounce instead of just being uniformly dimmer.
+  scene3d.add(new THREE.HemisphereLight(0x8fa8c2, 0x4a4030, 0.55));
+  sunLight = new THREE.DirectionalLight(0xfff4e0, 1.15);
+  sunLight.position.set(SUN_OFFSET.x, SUN_OFFSET.y, SUN_OFFSET.z);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.set(2048, 2048);
+  sunLight.shadow.camera.left = -SHADOW_FRUSTUM_HALF;
+  sunLight.shadow.camera.right = SHADOW_FRUSTUM_HALF;
+  sunLight.shadow.camera.top = SHADOW_FRUSTUM_HALF;
+  sunLight.shadow.camera.bottom = -SHADOW_FRUSTUM_HALF;
+  sunLight.shadow.camera.near = 10;
+  sunLight.shadow.camera.far = SUN_OFFSET.y * 4;
+  sunLight.shadow.bias = -0.0015;
+  scene3d.add(sunLight);
+  scene3d.add(sunLight.target);
 
   loadTankModel3d();
   loadHeliModel3d();
@@ -9070,6 +9101,7 @@ function loadTankModel3d(){
       obj.scale.setScalar(1/maxDim);
       const normalizedBounds = new THREE.Box3().setFromObject(obj);
       obj.position.y -= normalizedBounds.min.y;
+      obj.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
       tankModelTemplate3d = obj;
       Object.keys(unitMarkers3d).forEach(key=>{
         if(key.indexOf('tank')===0) disposeMarker3d(key);
@@ -9092,6 +9124,7 @@ function loadHeliModel3d(){
       obj.scale.setScalar(1/maxDim);
       const normalizedBounds = new THREE.Box3().setFromObject(obj);
       obj.position.y -= normalizedBounds.min.y;
+      obj.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
       heliModelTemplate3d = obj;
       if(obj.animations && obj.animations.length > 0){
         heliAnimationMixer = new THREE.AnimationMixer(obj);
@@ -9175,6 +9208,8 @@ function buildTerrainProps(gen){
     });
     treeTrunkMesh3d.instanceMatrix.needsUpdate = true;
     treeFoliageMesh3d.instanceMatrix.needsUpdate = true;
+    treeTrunkMesh3d.castShadow = treeTrunkMesh3d.receiveShadow = true;
+    treeFoliageMesh3d.castShadow = treeFoliageMesh3d.receiveShadow = true;
     scene3d.add(treeTrunkMesh3d);
     scene3d.add(treeFoliageMesh3d);
   }
@@ -9191,6 +9226,7 @@ function buildTerrainProps(gen){
       rockMesh3d.setMatrixAt(i, m);
     });
     rockMesh3d.instanceMatrix.needsUpdate = true;
+    rockMesh3d.castShadow = rockMesh3d.receiveShadow = true;
     scene3d.add(rockMesh3d);
   }
 }
@@ -9633,6 +9669,13 @@ function updateCameraFromView(){
   }
   const look = canvasUnitToWorldXZ(viewCx, viewCy);
   const lookY = terrainHeightAt(viewCx, viewCy);
+  // per user request: the sun's shadow camera is a small fixed-size box (SHADOW_FRUSTUM_HALF)
+  // rather than one sized to the whole map, so it has to follow the view instead of covering
+  // everything at once -- keep it centered on wherever the player is actually looking.
+  if(sunLight){
+    sunLight.position.set(look.x+SUN_OFFSET.x, lookY+SUN_OFFSET.y, look.z+SUN_OFFSET.z);
+    sunLight.target.position.set(look.x, lookY, look.z);
+  }
   camera3d.aspect = (MAP_VIEW.containerW||1)/(MAP_VIEW.containerH||1);
   const fieldW = (CANVAS_W*WORLD.scaleX) || 200;
   const fieldH = (CANVAS_H*WORLD.scaleZ) || 200;
@@ -10020,6 +10063,8 @@ function makeMarkerMesh3d(shape, colorHex){
   const add = (geometry, material, y=0, z=0)=>{
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(0, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     group.add(mesh);
     return mesh;
   };
@@ -10033,6 +10078,8 @@ function makeMarkerMesh3d(shape, colorHex){
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(s*0.08, s*0.1, length, 8), mat(color));
     barrel.rotation.x = Math.PI/2;
     barrel.position.set(0, height, length/2);
+    barrel.castShadow = true;
+    barrel.receiveShadow = true;
     group.add(barrel);
   };
   const addTrack = (x)=>{
