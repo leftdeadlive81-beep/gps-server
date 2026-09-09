@@ -1531,6 +1531,7 @@ function startStage(){
   state.smokeClouds = [];
   state.illumFlares = [];
   state.mines = [];
+  state.lastStandAnnounced = false;
   // per user request: no more flat "3 units per wave" cap -- infantry now spawns as
   // several formation groups (buildEnemyInfantryGroups) totalling ~50 soldiers, generated
   // independently from the small mixed pool of artillery/vehicle/drone below.
@@ -2394,10 +2395,21 @@ function localDetection(t){
     return Math.hypot(t.trueX-s.x, t.trueY-s.y) <= DETECTION_RANGE.infantry;
   });
 }
+// per user request: "last stand" -- once a wave is down to just a few stragglers, they stop
+// trying to sneak/hold position and throw themselves at the HQ instead, fully revealed. Uses
+// the exact same "残り" count the player already sees in the HUD (#stat-left, remainingTargets
+// in updateHud) so the threshold matches what's on screen, not some separate internal number.
+const LAST_STAND_THRESHOLD = 3;
+function lastStandActive(){
+  return !!state && state.targets.filter(t=>!t.destroyed).length <= LAST_STAND_THRESHOLD;
+}
 function isTargetDetected(t){
   // per user request: 戦闘ヘリは常時見えているものとする -- ドローンと同様、斥候の視界/接触に
   // 関係なく常に現在位置が追跡される(スポット位置がフェードして推定円になることはない)。
   if(t.type==='heli') return true;
+  // per user request: 残存数が僅かになったら(lastStandActive)、全ての敵を無条件で発見済み
+  // 扱いにする -- 死に物狂いで本部へ突撃してくる以上、隠れる余地はないという想定。
+  if(lastStandActive()) return true;
   return inScoutCone(t) || localDetection(t);
 }
 function visibilityBlockReasonFor(scout, t){
@@ -4536,10 +4548,15 @@ function resolveVehicleAssault(actionTurns){
   const vehicles = state.targets.filter(t=>!t.destroyed && t.type==='vehicle');
   if(vehicles.length===0) return false;
   let anyEvent = false;
+  // per user request: "last stand" -- once few enough enemies remain, vehicles ignore
+  // whatever's nearest and drive straight at the HQ instead, faster than their normal advance.
+  const lastStand = lastStandActive();
   for(let i=0;i<actionTurns;i++){
     vehicles.forEach(t=>{
       if(t.destroyed) return;
-      const near = nearestFriendlyAsset(t.trueX, t.trueY, true);
+      const near = (lastStand && state.hq.hp>0)
+        ? {kind:'hq', idx:0, x:state.hq.x, y:state.hq.y, dist:Math.hypot(t.trueX-state.hq.x, t.trueY-state.hq.y)}
+        : nearestFriendlyAsset(t.trueX, t.trueY, true);
       if(!near) return;
       if(near.dist <= VEHICLE_ASSAULT_RANGE && hasLineOfSight(t.trueX, t.trueY, near.x, near.y)){
         anyEvent = true;
@@ -4574,9 +4591,11 @@ function resolveVehicleAssault(actionTurns){
           }
         }
       } else {
-        const suppressionMoveMult = isSuppressed(t) ? SUPPRESSION_MOVE_MULT : 1;
-        const step = Math.min((45 + state.stage*2.6) * DIFFICULTIES[state.difficulty].advanceMult, VEHICLE_MOVE_CAP) * suppressionMoveMult;
-        const moveGoal = mergeAdjustedGoal(t, near);
+        const suppressionMoveMult = (isSuppressed(t) && !lastStand) ? SUPPRESSION_MOVE_MULT : 1;
+        const step = Math.min((45 + state.stage*2.6) * DIFFICULTIES[state.difficulty].advanceMult, VEHICLE_MOVE_CAP) * suppressionMoveMult * (lastStand ? 1.6 : 1);
+        // per user request: no falling back to regroup with a wounded ally during the last
+        // stand -- straight at the HQ, full speed, regardless of own condition.
+        const moveGoal = lastStand ? {x:near.x, y:near.y} : mergeAdjustedGoal(t, near);
         let next = null;
         // Vehicles are road-bound: route along the real road network via A*
         // rather than cutting cross-country. Only the final short hop from
@@ -4809,8 +4828,13 @@ function advanceEnemyInfantry(actionTurns){
   if(enemyInfantry.length===0) return false;
   const aliveSquads = state.squads.filter(sq=>sq.soldiers.some(s=>s.alive));
   const squadsAlive = aliveSquads.length>0;
-  const goal = squadsAlive ? FRIENDLY_INF_POS : state.hq;
-  const minX = squadsAlive ? FRIENDLY_INF_POS.x+20 : state.hq.x+20;
+  // per user request: "last stand" -- once few enough enemies remain (lastStandActive), they
+  // stop trying to reach/hold the normal front line and instead beeline straight for the HQ,
+  // faster, without stopping to fight squad contact or flinching under suppression.
+  const lastStand = lastStandActive();
+  const targetHq = lastStand || !squadsAlive;
+  const goal = targetHq ? state.hq : FRIENDLY_INF_POS;
+  const minX = targetHq ? state.hq.x+20 : FRIENDLY_INF_POS.x+20;
   let moved = false;
   for(let i=0;i<actionTurns;i++){
     enemyInfantry.forEach(t=>{
@@ -4827,7 +4851,7 @@ function advanceEnemyInfantry(actionTurns){
           t._droneCooldown = INFANTRY_DRONE_COOLDOWN_TICKS;
         }
       }
-      const inContact = aliveSquads.some(sq=>Math.hypot(t.trueX-sq.x, t.trueY-sq.y) <= SQUAD_ENGAGE_RANGE);
+      const inContact = !lastStand && aliveSquads.some(sq=>Math.hypot(t.trueX-sq.x, t.trueY-sq.y) <= SQUAD_ENGAGE_RANGE);
       if(inContact){
         if(!t._contactLogged){
           t._contactLogged = true;
@@ -4835,7 +4859,7 @@ function advanceEnemyInfantry(actionTurns){
         }
         return;
       }
-      if(!squadsAlive && state.hq.hp>0){
+      if(targetHq && state.hq.hp>0){
         const hqDist = Math.hypot(t.trueX-state.hq.x, t.trueY-state.hq.y);
         if(hqDist <= SQUAD_ENGAGE_RANGE){
           if(rollExposureHit(getUnitExposure({kind:'hq'}))){
@@ -4851,8 +4875,21 @@ function advanceEnemyInfantry(actionTurns){
         }
       }
       const suppressed = isSuppressed(t);
-      const step = INFANTRY_MOVE_CAP * (t.speedMult||1) * (suppressed ? SUPPRESSION_MOVE_MULT : 1);
+      const step = INFANTRY_MOVE_CAP * (t.speedMult||1) * (suppressed && !lastStand ? SUPPRESSION_MOVE_MULT : 1) * (lastStand ? 1.6 : 1);
       if(t.trueX > minX){
+        if(lastStand){
+          // per user request: no flanking spread or suppression-flinch during the last
+          // stand -- a straight line at the HQ, ignoring being pinned down (already
+          // desperate, nothing left to lose).
+          const next = terrainAwareStep(t.trueX, t.trueY, goal.x, goal.y, step);
+          t.trueX = Math.max(minX, next.x);
+          t.trueY = clamp(next.y, 30, CANVAS_H-30);
+          const dx = t.trueX-OP.x, dy = t.trueY-OP.y;
+          t.trueBearing = (Math.atan2(dx,-dy)*180/Math.PI+360)%360;
+          t.trueDistance = Math.sqrt(dx*dx+dy*dy);
+          moved = true;
+          return;
+        }
         // per user request: flanking -- each group keeps a persistent lateral offset from
         // the main approach point so groups spread out and press from multiple angles
         // instead of all funneling onto the exact same spot.
@@ -4925,6 +4962,16 @@ function resolveMortarCounterBattery(actionTurns){
 function resolveEnemyTurn(actionTurns){
   log('sys','敵ターン', '━━━ 敵が行動 ━━━');
   maybePlaceMine();
+  // per user request: "last stand" -- reveal every remaining enemy the instant the wave drops
+  // to LAST_STAND_THRESHOLD or fewer (see isTargetDetected/lastStandActive), and announce it
+  // once per wave rather than spamming the log every tick it stays true.
+  if(lastStandActive()){
+    if(!state.lastStandAnnounced){
+      state.lastStandAnnounced = true;
+      log('sys','警報', '敵残存わずか。全戦力が本部へ死に物狂いの突撃を開始した模様!');
+    }
+    state.targets.forEach(t=>{ if(!t.destroyed) revealTarget(t); });
+  }
   resolveHqMovement(actionTurns);
   const advanced = advanceEnemyInfantry(actionTurns);
   const repositioned = advanceEnemyArtillery(actionTurns);
