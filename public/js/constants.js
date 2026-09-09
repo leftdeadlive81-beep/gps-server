@@ -36,11 +36,7 @@ export const SCOUT_LOWER_Y = 405;
 
 export const INITIAL_DEPLOY_SPACING_MULT = 1.4;
 
-export const SCOUT_HALF_FOV_BASE = 22.5;
-
-export const SCOUT_HALF_FOV_WIDE = 32.5;
-
-export const PRICE_EQUIP = {armor:1200, optics:1000, wideView:900, extMag:800};
+export const PRICE_EQUIP = {armor:1200, optics:1000, extMag:800};
 
 export const REINFORCE_COST_PER_SOLDIER = 220;
 
@@ -77,7 +73,7 @@ export const WEATHER_TYPES = {
   night: {label:'夜間', dispersionMult:1.2,  counterMult:0.7,  errMult:1.2,  tint:'rgba(10,15,35,0.28)',    desc:'敵反撃頻度低下、照準精度も低下'},
 };
 
-export const EQUIP_LABEL = {armor:'強化装甲', optics:'精密照準器', wideView:'広角観測機材', extMag:'予備弾倉'};
+export const EQUIP_LABEL = {armor:'強化装甲', optics:'精密照準器', extMag:'予備弾倉'};
 
 export const FRIENDLY_INF_POS = {x: 700, y: CANVAS_H/2};
 

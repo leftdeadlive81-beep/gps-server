@@ -1,7 +1,7 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement, unlockedAchievements } from './achievements.js';
-import { addNewScout, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, isAutoCommitRunning, isTargetDetected, mapSeedCandidates, scoutHalfFov, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
-import { ACHIEVEMENTS, AMMO_PACK, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GEMINI_API_KEY_STORAGE, GEMINI_MODEL, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, LOG_MAX_ENTRIES, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_SQUAD_SIZE, SMART_ACTIONS, SMART_UNIT_TYPES, SNIPER_AIM_RANGE_M, SNIPER_RANGE_M, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
+import { addNewScout, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, isAutoCommitRunning, isTargetDetected, mapSeedCandidates, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
+import { ACHIEVEMENTS, AMMO_PACK, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GEMINI_API_KEY_STORAGE, GEMINI_MODEL, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, LOG_MAX_ENTRIES, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_MAX_RANGE_UNITS, SCOUT_SQUAD_SIZE, SMART_ACTIONS, SMART_UNIT_TYPES, SNIPER_AIM_RANGE_M, SNIPER_RANGE_M, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
 import { canvasToScreen, multiSelectCommonOrders, multiSelectMode, multiSelected, pruneMultiSelected } from './input.js';
 import { render } from './main.js';
 import { elevationAt, elevationLabel, terrainTypeAt, terrainTypeLabel } from './terrain.js';
@@ -132,7 +132,6 @@ export function renderShop(){
       const descs = {
         armor:'FDCへの反撃ダメージ -25%',
         optics:'初期照準誤差 -20%',
-        wideView:'斥候視野 45°→65°',
         extMag:'最大発射数 4発→6発',
       };
       return `
@@ -772,7 +771,7 @@ export function scoutBoxHtml(idx){
   return `
     <div class="meta">${alive<=0?'戦闘不能':alive+'/'+scout.soldiers.length+'名'} ・ 標高: ${elevationLabel(elevationAt(scout.x,scout.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(scout.x,scout.y))}</div>
     ${exposureMetaHtml(getUnitExposure({kind:'scout', idx}))}
-    <div class="meta">観測方向: ${Math.round(scout.watchAngle)}° (視野約${Math.round(scoutHalfFov()*2)}°)</div>
+    <div class="meta">索敵範囲: 半径${unitsToMeters(SCOUT_MAX_RANGE_UNITS)}m(全周)</div>
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/scout.soldiers.length*100)}%"></div></div>
     ${restButtonHtml('scout', idx, scout)}
     <div class="row-2" style="margin-bottom:6px;">
@@ -780,10 +779,6 @@ export function scoutBoxHtml(idx){
       <button class="btn ${armingRecon?'active squad-order-btn':''}" ${dead?'disabled':''} onclick="armScoutReconOrder(${idx})">偵察目標を指定</button>
     </div>
     <div class="meta" style="margin-bottom:8px;">${orderStatus}</div>
-    <div class="row-2" style="margin-bottom:6px;">
-      <button class="btn" ${dead?'disabled':''} onclick="rotateScout(${idx},-15)">◄ 左へ旋回</button>
-      <button class="btn" ${dead?'disabled':''} onclick="rotateScout(${idx},15)">右へ旋回 ►</button>
-    </div>
     <button class="btn" ${dead||(!scout.pendingDest&&!scout.pendingReconTargetId)?'disabled':''} onclick="clearScoutOrder(${idx})">行動を解除</button>
     ${soldierRosterHtml(scout.soldiers)}
     ${reinforceButtonHtml('scout', idx, scout)}

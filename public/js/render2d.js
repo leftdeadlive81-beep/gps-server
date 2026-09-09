@@ -1,5 +1,5 @@
 // Split out of the former monolithic mortar_fdc_game.js.
-import { computeDispersionAt, currentPlacementUnit, estPos, isSuppressed, isTargetDetected, scoutHalfFov, smoothVisualPos, state, unitAlive, unitAliveCount } from './combat.js';
+import { computeDispersionAt, currentPlacementUnit, estPos, isSuppressed, isTargetDetected, smoothVisualPos, state, unitAlive, unitAliveCount } from './combat.js';
 import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, ESTIMATE_MARKER_RADIUS_UNITS, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FRIENDLY_MARK_COLOR, GRID_LINES, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_VIEW, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SNIPER_AIM_RANGE_UNITS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, TRENCH_LINE_WIDTH, UNCERTAINTY_CIRCLE_CAP, UNCERTAINTY_CIRCLE_MIN, UNCERTAINTY_CIRCLE_SCALE, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
 import { isMultiSelected } from './input.js';
 import { choppedLineSegments, febaLineSegments } from './terrain.js';
@@ -496,55 +496,52 @@ export function drawBoard(){
     }
   });
 
-  // scout observation cones (約45度) ― drawn before the markers so they sit underneath
-  // per user request: restored -- this is not the primitive that was meant to go (that was
-  // the 3D minimap's leftover box/cone/etc. meshes, see syncUnitMarkers3d).
+  // scout detection radius (2km, all-around) ― drawn before the markers so it sits underneath.
+  // per user request: replaces the former ~45deg observation cone -- scout detection no longer
+  // depends on facing, so this is just an outline circle showing how far a scout can spot
+  // targets in any direction (still subject to line-of-sight, see inScoutRangeFor).
   //
-  // per user request: drawn as a ground-plane wedge again (projected through the real 3D
-  // camera per point), NOT as a screen-space arc -- a screen-space arc kept its apparent size
-  // constant, but under a near-horizontal camera it pointed the wedge toward the horizon
-  // (i.e. up into the sky on screen) instead of laying it along the ground, since "far along
-  // the ground" and "toward the vanishing point" become nearly the same screen direction at a
-  // grazing viewing angle. A real ground-plane wedge can never point into the sky.
+  // drawn as a ground-plane circle (projected through the real 3D camera per point), NOT as a
+  // screen-space arc -- a screen-space arc kept its apparent size constant, but under a
+  // near-horizontal camera it pointed toward the horizon (i.e. up into the sky on screen)
+  // instead of laying along the ground, since "far along the ground" and "toward the vanishing
+  // point" become nearly the same screen direction at a grazing viewing angle. A real
+  // ground-plane circle can never point into the sky.
   //
-  // What IS fixed here vs. the original ground-plane version: bearingToXY's sin/cos assumed
-  // canvas-unit X and Y cover equal real-world distances, which stopped being true once
-  // WORLD.scaleX/scaleZ became independent per-axis (see canvasUnitToWorldXZ) -- on any map
-  // whose real terrain isn't exactly canvas-aspect-shaped, that made a canvas-space "circle"
-  // project as a real-world ELLIPSE, so the cone reached a different real distance north/south
-  // than east/west even before the camera saw it. Scaling the north/south (Y) component by
-  // scaleX/scaleZ below cancels that out, so the wedge is a true circle in real-world meters.
-  // The remaining direction-dependent foreshortening once the tilted camera renders that true
-  // circle is normal, correct 3D perspective (the same reason distant objects look smaller) --
-  // not something to eliminate.
+  // bearingToXY's sin/cos assumed canvas-unit X and Y cover equal real-world distances, which
+  // stopped being true once WORLD.scaleX/scaleZ became independent per-axis (see
+  // canvasUnitToWorldXZ) -- on any map whose real terrain isn't exactly canvas-aspect-shaped,
+  // that made a canvas-space "circle" project as a real-world ELLIPSE, reaching a different
+  // real distance north/south than east/west even before the camera saw it. Scaling the
+  // north/south (Y) component by scaleX/scaleZ below cancels that out, so this is a true circle
+  // in real-world meters. The remaining direction-dependent foreshortening once the tilted
+  // camera renders that true circle is normal, correct 3D perspective (the same reason distant
+  // objects look smaller) -- not something to eliminate.
   state.scouts.forEach(scout=>{
     const scoutVisL = smoothVisualPos(scout, scout.x, scout.y);
     const scoutVis = project(scoutVisL.x, scoutVisL.y);
     if(unitAlive(scout) && scoutVis.visible){
-      const coneLen = SCOUT_MAX_RANGE_UNITS;
-      const halfFov = scoutHalfFov();
-      const steps = 24;
+      const radius = SCOUT_MAX_RANGE_UNITS;
+      const steps = 48;
       const aniso = (WORLD.scaleZ>0.0001) ? (WORLD.scaleX/WORLD.scaleZ) : 1;
       const boundary = [];
       for(let i=0;i<=steps;i++){
-        const ang = scout.watchAngle - halfFov + (halfFov*2)*(i/steps);
+        const ang = 360*(i/steps);
         const rad = ang*Math.PI/180;
         const pL = {
-          x: scoutVisL.x + coneLen*Math.sin(rad),
-          y: scoutVisL.y - coneLen*aniso*Math.cos(rad),
+          x: scoutVisL.x + radius*Math.sin(rad),
+          y: scoutVisL.y - radius*aniso*Math.cos(rad),
         };
         const p = project(pL.x, pL.y);
         if(!p.visible || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
         boundary.push(p);
       }
       ctx.beginPath();
-      ctx.moveTo(scoutVis.x, scoutVis.y);
-      boundary.forEach(p=>{
-        ctx.lineTo(p.x, p.y);
+      boundary.forEach((p,i)=>{
+        if(i===0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
       });
       ctx.closePath();
-      ctx.fillStyle = 'rgba(111,155,191,0.14)';
-      ctx.fill();
       ctx.strokeStyle = 'rgba(111,155,191,0.55)';
       ctx.lineWidth = 1;
       ctx.stroke();
