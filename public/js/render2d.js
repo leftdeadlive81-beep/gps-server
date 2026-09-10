@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { computeDispersionAt, currentPlacementUnit, estPos, isSuppressed, isTargetDetected, smoothVisualPos, state, unitAlive, unitAliveCount } from './combat.js';
-import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, ESTIMATE_MARKER_RADIUS_UNITS, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FRIENDLY_MARK_COLOR, GRID_LINES, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_VIEW, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SNIPER_AIM_RANGE_UNITS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, TRENCH_LINE_WIDTH, UNCERTAINTY_CIRCLE_CAP, UNCERTAINTY_CIRCLE_MIN, UNCERTAINTY_CIRCLE_SCALE, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
+import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, ESTIMATE_MARKER_RADIUS_UNITS, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FRIENDLY_MARK_COLOR, GRID_LINES, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_VIEW, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SNIPER_AIM_RANGE_UNITS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, TRENCH_LINE_WIDTH, UNCERTAINTY_CIRCLE_CAP, UNCERTAINTY_CIRCLE_MIN, UNCERTAINTY_CIRCLE_SCALE, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
 import { isMultiSelected } from './input.js';
 import { choppedLineSegments, febaLineSegments } from './terrain.js';
 import { project, projectAtWorldY, scaledIconH, threeReady } from './three.js';
@@ -496,10 +496,13 @@ export function drawBoard(){
     }
   });
 
-  // scout detection radius (2km, all-around) ― drawn before the markers so it sits underneath.
-  // per user request: replaces the former ~45deg observation cone -- scout detection no longer
-  // depends on facing, so this is just an outline circle showing how far a scout can spot
-  // targets in any direction (still subject to line-of-sight, see inScoutRangeFor).
+  // scout/heli detection radius, all-around ― drawn before the markers so it sits underneath.
+  // per user request: replaces the former ~45deg scout observation cone -- detection no longer
+  // depends on facing, so this is just an outline circle showing how far a unit can spot
+  // targets in any direction (still subject to line-of-sight, see inScoutRangeFor). The heli
+  // previously had no matching circle at all (its own separate rectangular observation-area
+  // display was removed per user request) -- it now shares this exact same drawing, just with
+  // its own (larger) range.
   //
   // drawn as a ground-plane circle (projected through the real 3D camera per point), NOT as a
   // screen-space arc -- a screen-space arc kept its apparent size constant, but under a
@@ -517,35 +520,40 @@ export function drawBoard(){
   // in real-world meters. The remaining direction-dependent foreshortening once the tilted
   // camera renders that true circle is normal, correct 3D perspective (the same reason distant
   // objects look smaller) -- not something to eliminate.
+  const drawGroundDetectionCircle = (centerL, radius)=>{
+    const steps = 48;
+    const aniso = (WORLD.scaleZ>0.0001) ? (WORLD.scaleX/WORLD.scaleZ) : 1;
+    const boundary = [];
+    for(let i=0;i<=steps;i++){
+      const ang = 360*(i/steps);
+      const rad = ang*Math.PI/180;
+      const pL = {
+        x: centerL.x + radius*Math.sin(rad),
+        y: centerL.y - radius*aniso*Math.cos(rad),
+      };
+      const p = project(pL.x, pL.y);
+      if(!p.visible || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
+      boundary.push(p);
+    }
+    ctx.beginPath();
+    boundary.forEach((p,i)=>{
+      if(i===0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    });
+    ctx.closePath();
+    ctx.strokeStyle = 'rgba(111,155,191,0.55)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  };
   state.scouts.forEach(scout=>{
     const scoutVisL = smoothVisualPos(scout, scout.x, scout.y);
     const scoutVis = project(scoutVisL.x, scoutVisL.y);
-    if(unitAlive(scout) && scoutVis.visible){
-      const radius = SCOUT_MAX_RANGE_UNITS;
-      const steps = 48;
-      const aniso = (WORLD.scaleZ>0.0001) ? (WORLD.scaleX/WORLD.scaleZ) : 1;
-      const boundary = [];
-      for(let i=0;i<=steps;i++){
-        const ang = 360*(i/steps);
-        const rad = ang*Math.PI/180;
-        const pL = {
-          x: scoutVisL.x + radius*Math.sin(rad),
-          y: scoutVisL.y - radius*aniso*Math.cos(rad),
-        };
-        const p = project(pL.x, pL.y);
-        if(!p.visible || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
-        boundary.push(p);
-      }
-      ctx.beginPath();
-      boundary.forEach((p,i)=>{
-        if(i===0) ctx.moveTo(p.x, p.y);
-        else ctx.lineTo(p.x, p.y);
-      });
-      ctx.closePath();
-      ctx.strokeStyle = 'rgba(111,155,191,0.55)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
+    if(unitAlive(scout) && scoutVis.visible) drawGroundDetectionCircle(scoutVisL, SCOUT_MAX_RANGE_UNITS);
+  });
+  (state.helis||[]).forEach(heli=>{
+    const heliVisL = smoothVisualPos(heli, heli.x, heli.y);
+    const heliVis = project(heliVisL.x, heliVisL.y);
+    if(heli.hp>0 && heliVis.visible) drawGroundDetectionCircle(heliVisL, HELI_MAX_RANGE_UNITS);
   });
 
   // scout markers (自軍, left side) ― 斥候, vulnerable to enemy attack

@@ -423,11 +423,12 @@ export function startStage(){
   state.weather = stage===1 ? 'clear' : choice(Object.keys(WEATHER_TYPES));
   const weather = WEATHER_TYPES[state.weather];
   const opticsMult = (state.equipment.optics ? 0.8 : 1) * weather.errMult;
-  // per user request: a bounded circular position estimate (see MAX_ESTIMATE_ERROR_M) that
-  // grows with stage (spotting gets harder against a more dispersed/careful enemy) but is
-  // always clamped to the same real-world cap regardless of stage/optics/weather, so the
-  // estimate is never off by more than that no matter how bad conditions get.
-  const posErrBase = clamp((40 + (stage-1)*1.5) * opticsMult, 15, MAX_ESTIMATE_ERROR_M) / METERS_PER_UNIT;
+  // per user request: enemy position estimates are now always exact -- no error vs the true
+  // position (was a bounded circular estimate that grew with stage/weather, see
+  // MAX_ESTIMATE_ERROR_M above). t.posErr flows through unchanged (reconCount/precision-dot
+  // UI, the mortar aim panel's 誤差±Xm text, etc. all still read it -- zeroing it at the
+  // source keeps everything downstream self-consistent with the now error-free marker).
+  const posErrBase = 0;
   const totalCount = infantryGroups.length + otherCount;
   const spots = generateSpots(totalCount);
   const otherTypes = pickTypesForCount(otherCount, stage);
@@ -814,18 +815,16 @@ export function deployStage(){
 }
 
 export function estimatedTargetPos(t){
-  const mag = Math.hypot(t.bOffset, t.dOffset);
-  const scale = mag>1 ? 1/mag : 1;
   const tracked = t.lastKnownX!==undefined && !isTargetDetected(t);
   const originX = tracked ? t.lastKnownX : t.trueX;
   const originY = tracked ? t.lastKnownY : t.trueY;
-  const staleTurns = tracked ? Math.max(0, (state.turns||0)-(t.lastSeenTurn||0)) : 0;
-  const staleDrift = tracked ? Math.min(MAX_ESTIMATE_ERROR_M/METERS_PER_UNIT, staleTurns*8) : 0;
-  const x = originX + t.bOffset*scale*(t.posErr+staleDrift);
-  const y = originY + t.dOffset*scale*(t.posErr+staleDrift);
+  // per user request: no estimation error at all -- the displayed position is always exactly
+  // the origin (true position if currently tracked, last-known if stale). This used to add
+  // t.bOffset/dOffset*(posErr+staleDrift) jitter; posErr is 0 at the source now (see
+  // posErrBase in startStage()) and staleDrift is dropped too, so this is just the origin.
   return {
-    x: clamp(x, ESTIMATE_CLAMP_MARGIN, CANVAS_W-ESTIMATE_CLAMP_MARGIN),
-    y: clamp(y, ESTIMATE_CLAMP_MARGIN, CANVAS_H-ESTIMATE_CLAMP_MARGIN),
+    x: clamp(originX, ESTIMATE_CLAMP_MARGIN, CANVAS_W-ESTIMATE_CLAMP_MARGIN),
+    y: clamp(originY, ESTIMATE_CLAMP_MARGIN, CANVAS_H-ESTIMATE_CLAMP_MARGIN),
   };
 }
 

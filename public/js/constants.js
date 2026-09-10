@@ -478,11 +478,13 @@ export const MORTAR_MAINLINE_RANGE_UNITS = MORTAR_MAINLINE_RANGE_M / METERS_PER_
 
 export const MORTAR_MAINLINE_HALF_FOV = 15;
 
-export const SCOUT_MAX_RANGE_UNITS = 2000 / METERS_PER_UNIT;
+export const SCOUT_MAX_RANGE_UNITS = 700 / METERS_PER_UNIT;
+
+export const HELI_MAX_RANGE_UNITS = 1000 / METERS_PER_UNIT;
 
 export const SENSOR_RANGE_UNITS = {
   scout: SCOUT_MAX_RANGE_UNITS,
-  heli: 5000 / METERS_PER_UNIT,
+  heli: HELI_MAX_RANGE_UNITS,
   tank: 900 / METERS_PER_UNIT,
   mortar: 300 / METERS_PER_UNIT,
 };
@@ -586,7 +588,9 @@ export const MORTAR_CB_WARN_TURNS = 2;
 
 export const MORTAR_CB_STRIKE_DMG = [56, 84];
 
-export const GAME_SPEED_INTERVALS = { slow: 2000, normal: 1000, fast: 500 };
+// per user request: overall game pace halved -- each tier's interval doubled (so the same
+// relative slow/normal/fast ratios still hold, just twice as long between simulation steps).
+export const GAME_SPEED_INTERVALS = { slow: 4000, normal: 2000, fast: 1000 };
 
 export const GAME_SPEED_LABEL = { slow: '0.5x', normal: '1x', fast: '2x' };
 
