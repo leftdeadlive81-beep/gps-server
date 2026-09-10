@@ -433,23 +433,9 @@ export const FEBA_LINE_WIDTH = 4;
 
 export const SQUAD_ENGAGE_RANGE = 100;
 
-export const DETECTION_RANGE = {infantry:100, artillery:50};
-
 export const MAP_WIDTH_KM = 20;
 
 export const METERS_PER_UNIT = (MAP_WIDTH_KM*1000) / CANVAS_W;
-
-export const CONTACT_RANGE_M = 200;
-
-export const CONTACT_RANGE_UNITS = CONTACT_RANGE_M / METERS_PER_UNIT;
-
-export const SQUAD_FORCE_REVEAL_RANGE_M = 500;
-
-export const SQUAD_FORCE_REVEAL_RANGE_UNITS = SQUAD_FORCE_REVEAL_RANGE_M / METERS_PER_UNIT;
-
-export const ESTIMATE_MARKER_RADIUS_M = 500;
-
-export const ESTIMATE_MARKER_RADIUS_UNITS = ESTIMATE_MARKER_RADIUS_M / METERS_PER_UNIT;
 
 export const SQUAD_ANTI_DRONE_RANGE_M = 200;
 
@@ -484,13 +470,6 @@ export const MORTAR_MAINLINE_HALF_FOV = 15;
 export const SCOUT_MAX_RANGE_UNITS = 700 / METERS_PER_UNIT;
 
 export const HELI_MAX_RANGE_UNITS = 1000 / METERS_PER_UNIT;
-
-export const SENSOR_RANGE_UNITS = {
-  scout: SCOUT_MAX_RANGE_UNITS,
-  heli: HELI_MAX_RANGE_UNITS,
-  tank: 900 / METERS_PER_UNIT,
-  mortar: 300 / METERS_PER_UNIT,
-};
 
 export const ROAD_SPEED_KMH = {vehicle:60, infantry:10, sniper:5, scout:12, mortar:40, artillery:5};
 
@@ -561,7 +540,7 @@ export const ILLUM_BURST_HEIGHT = 130;
 
 export const ILLUM_FALL_DURATION = 3000;
 
-export const MARKER_REVEAL_RADIUS_UNITS = CONTACT_RANGE_UNITS;
+export const MARKER_REVEAL_RADIUS_UNITS = 200 / METERS_PER_UNIT;
 
 export const MINE_TRIGGER_RADIUS_M = 20;
 
@@ -580,8 +559,6 @@ export const MORTAR_MIN_RANGE_M = 150;
 export const MORTAR_MIN_RANGE_UNITS = MORTAR_MIN_RANGE_M / METERS_PER_UNIT;
 
 export const SHELL_DISPERSION_MULT = {heat:0.6};
-
-export const MAX_ESTIMATE_ERROR_M = 100;
 
 export const MORTAR_CB_SHOTS_THRESHOLD = 3;
 
@@ -680,12 +657,6 @@ export const SOLDIER_FORMATION_SCALE = 1.4;
 export const ENEMY_FORMATION_BASE_SIZE = 6;
 
 export const ENEMY_INFANTRY_TOTAL_TARGET = 50;
-
-export const UNCERTAINTY_CIRCLE_MIN = 16;
-
-export const UNCERTAINTY_CIRCLE_CAP = 70;
-
-export const UNCERTAINTY_CIRCLE_SCALE = 5;
 
 export const ORDER_LABEL = {advance:'前進', retreat:'後退', hold:'防御', assault:'突撃', hunt:'追跡攻撃', resting:'大休止'};
 
@@ -830,7 +801,6 @@ export const SMART_ACTIONS = {
   ],
   scout: [
     {key:'move', label:'移動', kind:'map'},
-    {key:'recon', label:'偵察目標指定', kind:'target'},
   ],
   squad: [
     {key:'advance', label:'前進', kind:'instant'},

@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { computeDispersionAt, currentPlacementUnit, estPos, isSuppressed, isTargetDetected, smoothVisualPos, state, unitAlive, unitAliveCount } from './combat.js';
-import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, ESTIMATE_MARKER_RADIUS_UNITS, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FRIENDLY_MARK_COLOR, GRID_LINES, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_VIEW, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SNIPER_AIM_RANGE_UNITS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, TRENCH_LINE_WIDTH, UNCERTAINTY_CIRCLE_CAP, UNCERTAINTY_CIRCLE_MIN, UNCERTAINTY_CIRCLE_SCALE, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
+import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FRIENDLY_MARK_COLOR, GRID_LINES, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_VIEW, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SNIPER_AIM_RANGE_UNITS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, TRENCH_LINE_WIDTH, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
 import { isMultiSelected } from './input.js';
 import { choppedLineSegments, febaLineSegments } from './terrain.js';
 import { project, projectAtWorldY, scaledIconH, threeReady } from './three.js';
@@ -130,33 +130,6 @@ export function drawWallShape(ctx, cx, cy, dead){
   ctx.fill();
   ctx.stroke();
   ctx.restore();
-}
-
-export function estMarkerOffsetFor(t){
-  if(!t._estMarkerOffset){
-    const ang = Math.random()*Math.PI*2;
-    const dist = Math.sqrt(Math.random())*ESTIMATE_MARKER_RADIUS_UNITS; // uniform over the disc, not biased toward center
-    t._estMarkerOffset = {dx: Math.cos(ang)*dist, dy: Math.sin(ang)*dist};
-  }
-  return t._estMarkerOffset;
-}
-
-export function drawEstimatedPositionMarker(ctx, t){
-  const off = estMarkerOffsetFor(t);
-  const mx = t.trueX+off.dx, my = t.trueY+off.dy;
-  const m = project(mx, my);
-  if(!m.visible) return;
-  ctx.beginPath();
-  ctx.fillStyle = '#e8d23a';
-  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
-  ctx.lineWidth = 1;
-  ctx.arc(m.x, m.y, 6, 0, Math.PI*2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = '#e8d23a';
-  ctx.font = '12px "JetBrains Mono"';
-  ctx.textAlign = 'center';
-  ctx.fillText(`${t.id} 見積もり位置`, m.x, m.y-12);
 }
 
 export function drawAttritionBar(ctx, x, y, frac){
@@ -506,13 +479,10 @@ export function drawBoard(){
     }
   });
 
-  // scout/heli detection radius, all-around ― drawn before the markers so it sits underneath.
-  // per user request: replaces the former ~45deg scout observation cone -- detection no longer
-  // depends on facing, so this is just an outline circle showing how far a unit can spot
-  // targets in any direction (still subject to line-of-sight, see inScoutRangeFor). The heli
-  // previously had no matching circle at all (its own separate rectangular observation-area
-  // display was removed per user request) -- it now shares this exact same drawing, just with
-  // its own (larger) range.
+  // scout/heli sensor-range radius, all-around ― drawn before the markers so it sits
+  // underneath. Purely a reference indicator now: detection itself (and the line-of-sight
+  // gating it used to have) was removed per user request -- every unit is always visible
+  // regardless of range, so this circle no longer affects what you can see or engage.
   //
   // drawn as a ground-plane circle (projected through the real 3D camera per point), NOT as a
   // screen-space arc -- a screen-space arc kept its apparent size constant, but under a
@@ -599,7 +569,6 @@ export function drawBoard(){
     if(scoutAlive){
       let scoutOrderLabel = '[観測]';
       if(scout.resting) scoutOrderLabel = '[大休止]';
-      else if(scout.pendingReconTargetId) scoutOrderLabel = '[偵察]';
       else if(scout.pendingDest) scoutOrderLabel = '[移動]';
       ctx.fillStyle = LABEL_TEXT_COLOR;
       ctx.font = 'bold 13px "JetBrains Mono"';
@@ -806,15 +775,11 @@ export function drawBoard(){
   }
 
   state.targets.forEach(t=>{
-    // uncertainty circle
+    // per user request: detection/estimation is gone -- every non-destroyed target is always
+    // shown at its exact true position, so there's no "undetected" fallback marker and no
+    // position-uncertainty ring to draw here anymore (both used to depend on isTargetDetected/
+    // t.posErr, which no longer exist).
     if(!t.destroyed){
-      if(!isTargetDetected(t)){
-        // Known to exist (identified at some point) but not currently
-        // pinned down by any detector -- show a rough last-known-area
-        // marker instead of nothing.
-        if(t.revealed) drawEstimatedPositionMarker(ctx, t);
-        return;
-      }
       const eLogical = estPos(t);
       const eVisL = smoothVisualPos(t, eLogical.x, eLogical.y);
       const e = project(eVisL.x, eVisL.y);
@@ -823,13 +788,6 @@ export function drawBoard(){
       // aimed at (selectedId) -- previously clicking a target to open that box gave no
       // on-map confirmation of which one was selected.
       const selected = t.id===state.selectedId || t.id===state.enemyCommandBox;
-      ctx.beginPath();
-      ctx.setLineDash([5,4]);
-      ctx.strokeStyle = selected ? 'rgba(217,164,65,0.9)' : 'rgba(217,164,65,0.35)';
-      ctx.lineWidth = 1.5;
-      ctx.arc(e.x, e.y, clamp(t.posErr*UNCERTAINTY_CIRCLE_SCALE, UNCERTAINTY_CIRCLE_MIN, UNCERTAINTY_CIRCLE_CAP), 0, Math.PI*2);
-      ctx.stroke();
-      ctx.setLineDash([]);
 
       drawSelectionRing(ctx, e.x, e.y, selected, 15);
 
@@ -1396,4 +1354,4 @@ export function drawBoard(){
 }
 
 
-Object.assign(window, { mortarStatusIcon, drawUnitBase, drawUnitIcon, drawTankIcon, drawSamIcon, drawEngineerIcon, drawWallShape, estMarkerOffsetFor, drawEstimatedPositionMarker, drawAttritionBar, drawSelectionRing, drawMinimap, drawBoard });
+Object.assign(window, { mortarStatusIcon, drawUnitBase, drawUnitIcon, drawTankIcon, drawSamIcon, drawEngineerIcon, drawWallShape, drawAttritionBar, drawSelectionRing, drawMinimap, drawBoard });

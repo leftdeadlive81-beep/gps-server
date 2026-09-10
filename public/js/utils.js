@@ -66,12 +66,6 @@ export function distanceToSegment(px, py, x1, y1, x2, y2){
   return Math.hypot(px-(x1+dx*t), py-(y1+dy*t));
 }
 
-export function precisionDots(n){
-  let html = '<span class="prec-dots">';
-  for(let i=0;i<3;i++) html += `<span class="prec-dot ${i<n?'on':''}"></span>`;
-  return html+'</span>';
-}
-
 export function hash2(x, y, seed){
   let h = Math.imul(x|0, 374761393) ^ Math.imul(y|0, 668265263) ^ Math.imul(seed|0, 2246822519);
   h = Math.imul(h ^ (h>>>15), 2246822519);
@@ -106,4 +100,4 @@ export function rngRange(rng, lo, hi){ return lo + (hi-lo)*rng(); }
 export function rngRangeArr(rng, [lo,hi]){ return lo + (hi-lo)*rng(); }
 
 
-Object.assign(window, { hitChanceFromExposure, exposureNormalizedMult, kmhToUnitsPerTurn, visualTweenDurationMs, smoothstep01, unitsToMeters, rnd, choice, gauss, clamp, wanderPos, bearingBetween, angleDiff, bearingToXY, distanceToSegment, precisionDots, hash2, valueNoise2D, mulberry32, rngRange, rngRangeArr });
+Object.assign(window, { hitChanceFromExposure, exposureNormalizedMult, kmhToUnitsPerTurn, visualTweenDurationMs, smoothstep01, unitsToMeters, rnd, choice, gauss, clamp, wanderPos, bearingBetween, angleDiff, bearingToXY, distanceToSegment, hash2, valueNoise2D, mulberry32, rngRange, rngRangeArr });

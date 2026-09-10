@@ -1,12 +1,12 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement, unlockedAchievements } from './achievements.js';
 import { addNewScout, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, isAutoCommitRunning, isTargetDetected, mapSeedCandidates, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
-import { ACHIEVEMENTS, AMMO_PACK, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GEMINI_API_KEY_STORAGE, GEMINI_MODEL, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, LOG_MAX_ENTRIES, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_MAX_RANGE_UNITS, SCOUT_SQUAD_SIZE, SMART_ACTIONS, SMART_UNIT_TYPES, SNIPER_AIM_RANGE_M, SNIPER_RANGE_M, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
+import { ACHIEVEMENTS, AMMO_PACK, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GEMINI_API_KEY_STORAGE, GEMINI_MODEL, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, LOG_MAX_ENTRIES, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_SQUAD_SIZE, SMART_ACTIONS, SMART_UNIT_TYPES, SNIPER_AIM_RANGE_M, SNIPER_RANGE_M, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
 import { canvasToScreen, multiSelectCommonOrders, multiSelectMode, multiSelected, pruneMultiSelected } from './input.js';
 import { render } from './main.js';
 import { elevationAt, elevationLabel, terrainTypeAt, terrainTypeLabel } from './terrain.js';
 import { paintTerrainColors } from './three.js';
-import { bearingBetween, clamp, hitChanceFromExposure, precisionDots, rnd, unitsToMeters } from './utils.js';
+import { bearingBetween, clamp, hitChanceFromExposure, rnd, unitsToMeters } from './utils.js';
 import { speakRandomAliveUnit } from './voice.js';
 
 export function renderMapSelectOverlay(){
@@ -630,8 +630,8 @@ export function mortarBoxHtml(idx){
         : `<span class="type unknown">識別不能</span>`;
       infoHtml = `
         <div class="sel-target-info">
-          <div class="row1"><span class="id">${snapped.id}</span> ${typeHtml} ${precisionDots(snapped.reconCount)}</div>
-          <div class="meta">本砲基準 方位約${Math.round(e.bearing)}° / 距離約${unitsToMeters(e.dist)}m / 誤差±${unitsToMeters(snapped.posErr)}m</div>
+          <div class="row1"><span class="id">${snapped.id}</span> ${typeHtml}</div>
+          <div class="meta">本砲基準 方位${Math.round(e.bearing)}° / 距離${unitsToMeters(e.dist)}m</div>
           <div class="hpbar"><div style="width:${Math.max(0,snapped.hp/snapped.maxHp*100)}%"></div></div>
         </div>
       `;
@@ -762,24 +762,19 @@ export function scoutBoxHtml(idx){
   const alive = unitAliveCount(scout);
   const dead = alive<=0 || scout.resting;
   const armingMove = state.orderMode && state.orderMode.kind==='scout-move' && state.orderMode.idx===idx;
-  const armingRecon = state.orderMode && state.orderMode.kind==='scout-recon' && state.orderMode.idx===idx;
-  let orderStatus = '行動: 未設定(観測のみ)';
+  let orderStatus = '行動: 未設定';
   if(armingMove) orderStatus = '地図をクリックして移動先指定…';
-  else if(armingRecon) orderStatus = '捕捉中の目標をクリックして偵察指示…';
   else if(scout.pendingDest) orderStatus = '行動: 移動先へ前進予定';
-  else if(scout.pendingReconTargetId) orderStatus = `行動: ${scout.pendingReconTargetId} を偵察予定`;
   return `
     <div class="meta">${alive<=0?'戦闘不能':alive+'/'+scout.soldiers.length+'名'} ・ 標高: ${elevationLabel(elevationAt(scout.x,scout.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(scout.x,scout.y))}</div>
     ${exposureMetaHtml(getUnitExposure({kind:'scout', idx}))}
-    <div class="meta">索敵範囲: 半径${unitsToMeters(SCOUT_MAX_RANGE_UNITS)}m(全周)</div>
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/scout.soldiers.length*100)}%"></div></div>
     ${restButtonHtml('scout', idx, scout)}
     <div class="row-2" style="margin-bottom:6px;">
       <button class="btn ${armingMove?'active squad-order-btn':''}" ${dead?'disabled':''} onclick="armScoutMoveOrder(${idx})">移動先を指定</button>
-      <button class="btn ${armingRecon?'active squad-order-btn':''}" ${dead?'disabled':''} onclick="armScoutReconOrder(${idx})">偵察目標を指定</button>
     </div>
     <div class="meta" style="margin-bottom:8px;">${orderStatus}</div>
-    <button class="btn" ${dead||(!scout.pendingDest&&!scout.pendingReconTargetId)?'disabled':''} onclick="clearScoutOrder(${idx})">行動を解除</button>
+    <button class="btn" ${dead||!scout.pendingDest?'disabled':''} onclick="clearScoutOrder(${idx})">行動を解除</button>
     ${soldierRosterHtml(scout.soldiers)}
     ${reinforceButtonHtml('scout', idx, scout)}
   `;
@@ -1082,21 +1077,11 @@ export function renderEnemyCommandBox(){
     return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignSamHunt(${idx})">対空${idx+1}に攻撃させる${active?'(攻撃中)':''}</button>`;
   }).filter(Boolean).join('');
   const allBtns = mortarBtns + tankBtns + samBtns + squadBtns;
-  // per user request: fire always lands exactly where aimed (plus dispersion) -- no hidden
-  // correction toward the true position -- so this just shows how far off the current
-  // estimate (what you'd actually be aiming at) might still be. Falls with 偵察 (see
-  // performRecon) and with each volley fired at this target (see finalizeVolley).
-  const staleTurns = t.lastSeenTurn===undefined ? null : Math.floor(Math.max(0, state.turns-t.lastSeenTurn));
-  const contactHtml = t.lastKnownX===undefined
-    ? '最終確認位置: 未取得'
-    : `最終確認: ${staleTurns===0?'現在接触':`${staleTurns}ターン前`} / ${t.lastSeenBy==='heli'?'ヘリ':t.lastSeenBy==='scout'?'斥候':'地上部隊'} / 信頼度 ${Math.round((t.trackingConfidence||0.4)*100)}%`;
-  const precisionHtml = `<div class="meta" style="margin-bottom:8px;color:var(--amber);">${contactHtml}<br>見積り誤差: 最大約${Math.round(unitsToMeters(t.posErr))}m(偵察・弾着観測で縮小)</div>`;
   box.innerHTML = `
     <div class="cb-head">
       <span class="cb-title">${t.id} ― ${t.revealed?t.def.label:'識別不能'}</span>
       <button class="cb-close" onclick="closeEnemyCommandBox()">×</button>
     </div>
-    ${precisionHtml}
     <div class="meta" style="margin-bottom:8px;">この目標を攻撃させるユニットを選択:</div>
     <div style="display:flex;flex-direction:column;gap:6px;">
       ${allBtns || '<div class="empty-hint" style="padding:4px 0;">出撃可能なユニットがありません</div>'}
@@ -1143,7 +1128,7 @@ export function renderStats(){
     const pct = totalMax>0 ? Math.round(totalHp/totalMax*100) : 0;
     return `<div class="eb-row"><span class="eb-dot" style="background:${TARGET_TYPES[type].mark}"></span><span class="eb-type">${TARGET_TYPES[type].label}</span><span class="eb-scale">×${group.length} 戦力${pct}%</span></div>`;
   });
-  document.getElementById('enemy-breakdown').innerHTML = ebRows.length ? ebRows.join('') : '<div class="eb-empty">敵情報なし ― 偵察未了</div>';
+  document.getElementById('enemy-breakdown').innerHTML = ebRows.length ? ebRows.join('') : '<div class="eb-empty">敵情報なし</div>';
 
   function forceRow(label, frac, pctText, barColor, kind, idx){
     const dead = frac<=0;
@@ -1236,8 +1221,7 @@ export function renderDecisionPanel(){
     else if(m.order==='move' && m.pendingDest) queued.push(`迫撃砲${idx+1}: 陣地転換`);
   });
   state.scouts.forEach((s,idx)=>{
-    if(s.pendingReconTargetId) queued.push(`斥候${idx+1}: 偵察`);
-    else if(s.pendingDest) queued.push(`斥候${idx+1}: 移動`);
+    if(s.pendingDest) queued.push(`斥候${idx+1}: 移動`);
   });
   state.squads.forEach((sq,idx)=>{ if(sq.pendingDest) queued.push(`第${idx+1}小隊: 移動`); });
   state.snipers.forEach((sn,idx)=>{

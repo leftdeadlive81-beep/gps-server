@@ -1,7 +1,7 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { loadAchievements } from './achievements.js';
 import { renderAudioSettingsPanel } from './audio.js';
-import { advanceSimulation, initGame, state, updateRevealed } from './combat.js';
+import { advanceSimulation, initGame, state } from './combat.js';
 import { handleCanvasClick, handleMinimapClick, selectNextTarget, setupMapControls } from './input.js';
 import { drawBoard, drawMinimap } from './render2d.js';
 import { initThree, renderThreeFrame } from './three.js';
@@ -9,8 +9,6 @@ import { anyOverlayShown, renderCommandBox, renderDecisionPanel, renderDecoyComm
 import { update3dEffects, updateEnemyTracers, updateImpactLights, updateProjectiles } from './vfx.js';
 
 export function render(){
-  state.targets.forEach(t=>{ delete t._detectedThisRender; });
-  updateRevealed();
   renderStats();
   selectNextTarget();
   renderDecisionPanel();

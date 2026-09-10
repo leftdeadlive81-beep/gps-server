@@ -66,7 +66,6 @@ export function setUnitMoveDest(kind, idx, px, py, silent){
     const scout = state.scouts[idx];
     if(!scout || !unitAlive(scout) || scout.resting) return false;
     scout.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SCOUT_ADVANCE_LIMIT_X), y: clamp(py, 20, CANVAS_H-20) };
-    scout.pendingReconTargetId = null;
     if(!silent) log('op','斥候', `斥候${idx+1}、移動目標を了解。`);
     return true;
   }
@@ -225,16 +224,6 @@ export function handleCanvasClick(evt){
       buildTrenchAt(mode.x1, mode.y1, clamp(px, 10, CANVAS_W-10), clamp(py, 20, CANVAS_H-20));
     } else if(mode.kind==='scout-move'){
       setUnitMoveDest('scout', mode.idx, px, py);
-    } else if(mode.kind==='scout-recon'){
-      const scout = state.scouts[mode.idx];
-      const best = nearestVisibleTargetForScreen(sx, sy, 42);
-      if(scout && best){
-        scout.pendingReconTargetId = best.id;
-        scout.pendingDest = null;
-        log('op','斥候', `斥候${mode.idx+1}、${best.id} を偵察目標に指示。`);
-      } else {
-        log('sys','システム','偵察目標が見つかりません。捕捉中の目標付近をクリックしてください。');
-      }
     } else if(mode.kind==='mortar-target'){
       const mortar = state.mortars[mode.idx];
       if(mortar){
