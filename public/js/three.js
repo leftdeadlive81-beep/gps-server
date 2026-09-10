@@ -2,7 +2,7 @@
 import { estPos, smoothVisualPos, state, unitAlive } from './combat.js';
 import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, FRIENDLY_MARK_COLOR_3D, GRID_LINES, HELI_FLIGHT_ALTITUDE, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, PROC_CANOPY_CELL, PROC_CANOPY_DARK, PROC_CANOPY_LIGHT, PROC_CLEARING_CELL, PROC_CLEARING_COLOR, PROC_CLEARING_EDGE0, PROC_CLEARING_EDGE1, PROC_COLOR_HIGH, PROC_COLOR_LOW, PROC_COLOR_WATER, PROC_DRY_PATCH_CELL, PROC_DRY_PATCH_COLOR, PROC_DRY_PATCH_EDGE0, PROC_DRY_PATCH_EDGE1, PROC_MESH_SEGMENTS_X, PROC_MESH_SEGMENTS_Z, PROC_OPEN_MOTTLE_AMOUNT, PROC_OPEN_MOTTLE_CELL, PROC_TERRAIN_HEIGHT_SCALE, PROC_TEXTURE_NOISE_COARSE_AMOUNT, PROC_TEXTURE_NOISE_COARSE_CELL, PROC_TEXTURE_NOISE_FINE_AMOUNT, PROC_TEXTURE_NOISE_FINE_CELL, PROC_TEXTURE_SIZE_X, PROC_TEXTURE_SIZE_Z, SCOUT_SQUAD_SIZE, SHADOW_FRUSTUM_HALF, SKY_COLOR, SNIPER_SQUAD_SIZE, SQUAD_GRID_OFFSETS, SUN_OFFSET, TARGET_TYPE_COLOR, TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, WALK_AMP_EASE, WALK_CYCLE_SPEED, WALK_SWING_MAX, WORLD, unitMarkers3d } from './constants.js';
 import { updateMapFocusEase } from './input.js';
-import { buildContourLines, buildProceduralRoads, elevationAt, elevationAtFor, nearestPointOnRoad, terrainTypeAtFor } from './terrain.js';
+import { buildContourLines, buildProceduralRoads, elevationAt, elevationAtFor, nearestPointOnRoad, riverXAt, terrainTypeAtFor } from './terrain.js';
 import { clamp, smoothstep01, valueNoise2D } from './utils.js';
 
 export function scaledIconH(baseH){
@@ -86,6 +86,21 @@ export function paintTerrainColors(ctx, w, h, gen){
       const noise = ((valueNoise2D(cx/PROC_TEXTURE_NOISE_COARSE_CELL, cy/PROC_TEXTURE_NOISE_COARSE_CELL, gen.seed)-0.5)*PROC_TEXTURE_NOISE_COARSE_AMOUNT
                    + (valueNoise2D(cx/PROC_TEXTURE_NOISE_FINE_CELL, cy/PROC_TEXTURE_NOISE_FINE_CELL, gen.seed+1)-0.5)*PROC_TEXTURE_NOISE_FINE_AMOUNT) * noiseMult;
       r = clamp(r+noise, 0, 255); g = clamp(g+noise*0.9, 0, 255); b = clamp(b+noise*0.7, 0, 255);
+      const eEast = elevationAtFor(gen, Math.min(CANVAS_W, cx+10), cy);
+      const eSouth = elevationAtFor(gen, cx, Math.min(CANVAS_H, cy+10));
+      const slopeX = eEast-e;
+      const slopeY = eSouth-e;
+      const hillshade = clamp(0.78 + (-slopeX*1.1 - slopeY*0.55), 0.56, 1.24);
+      const ridge = clamp((Math.abs(slopeX)+Math.abs(slopeY))*2.8, 0, 0.22);
+      r = clamp(r*hillshade + 255*ridge, 0, 255);
+      g = clamp(g*hillshade + 245*ridge, 0, 255);
+      b = clamp(b*hillshade + 220*ridge, 0, 255);
+      if(type===TERRAIN_TYPE_WATER){
+        const shimmer = Math.sin(cx*0.09 + valueNoise2D(cx/24, cy/18, gen.seed+31)*Math.PI*2) * 10;
+        r = clamp(r + shimmer*0.25, 0, 255);
+        g = clamp(g + shimmer*0.55, 0, 255);
+        b = clamp(b + shimmer, 0, 255);
+      }
       const road = roadDistance(cx, cy);
       if(road && road.dist < road.width + 5){
         const edge = clamp((road.dist-road.width)/5, 0, 1);
@@ -99,6 +114,15 @@ export function paintTerrainColors(ctx, w, h, gen){
           r += (0x9a-r)*shoulderBlend*0.35;
           g += (0x86-g)*shoulderBlend*0.35;
           b += (0x5b-b)*shoulderBlend*0.35;
+        }
+      } else if(gen.river){
+        const rx = riverXAt(gen.river, cy);
+        const shoreDist = Math.abs(cx-rx) - gen.river.width/2;
+        if(shoreDist > 0 && shoreDist < 9){
+          const shore = 1 - shoreDist/9;
+          r += (0x8d-r)*shore*0.28;
+          g += (0x83-g)*shore*0.28;
+          b += (0x64-b)*shore*0.28;
         }
       }
       const idx = (py*w+px)*4;

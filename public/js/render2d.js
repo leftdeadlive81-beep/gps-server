@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { computeDispersionAt, currentPlacementUnit, estPos, isSuppressed, smoothVisualPos, state, unitAlive, unitAliveCount } from './combat.js';
-import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FRIENDLY_MARK_COLOR, GRID_LINES, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_VIEW, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SNIPER_AIM_RANGE_UNITS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, TRENCH_LINE_WIDTH, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
+import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FRIENDLY_MARK_COLOR, GRID_LINES, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_VIEW, METERS_PER_UNIT, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SNIPER_AIM_RANGE_UNITS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, TRENCH_LINE_WIDTH, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
 import { isMultiSelected } from './input.js';
 import { choppedLineSegments, febaLineSegments } from './terrain.js';
 import { project, projectAtWorldY, scaledIconH, threeReady } from './three.js';
@@ -274,7 +274,12 @@ export function drawBoard(){
       const kind = (state.roadKinds||[])[roadIdx] || 'main';
       const width = kind==='dirt' ? 3 : kind==='branch' ? 5 : 7;
       const base = kind==='dirt' ? 'rgba(139,106,67,0.72)' : kind==='branch' ? 'rgba(123,122,103,0.72)' : 'rgba(145,143,127,0.78)';
+      strokePath(proj, 'rgba(35,29,22,0.62)', width+3, null);
       strokePath(proj, base, width, null);
+      if(kind!=='dirt'){
+        strokePath(proj, 'rgba(225,218,176,0.42)', 1, kind==='main' ? [10,12] : [5,9]);
+      }
+      strokePath(proj, 'rgba(20,18,14,0.28)', 1, null);
     });
   }
 
@@ -301,8 +306,8 @@ export function drawBoard(){
     });
     ctx.stroke();
   };
-  strokeGridBucket(GRID_LINES.minor, 'rgba(220,225,235,0.12)', 1);
-  strokeGridBucket(GRID_LINES.major, 'rgba(220,225,235,0.28)', 1);
+  strokeGridBucket(GRID_LINES.minor, 'rgba(210,225,235,0.07)', 1);
+  strokeGridBucket(GRID_LINES.major, 'rgba(210,225,235,0.18)', 1);
 
   // per user request: topographic-map-style contour lines (see buildContourLines()), drawn
   // the same way roads were above -- endpoints whose height was cached per-wave (see
@@ -311,7 +316,18 @@ export function drawBoard(){
   // endpoints fall off-screen just aren't drawn rather than being connected through.
   if(CONTOUR_LINES_CANVAS.length){
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(150,110,55,0.55)';
+    ctx.strokeStyle = 'rgba(72,50,28,0.36)';
+    ctx.lineWidth = 3;
+    CONTOUR_LINES_CANVAS.forEach(seg=>{
+      const p0 = seg.h1!==undefined ? projectAtWorldY(seg.x1, seg.y1, seg.h1) : project(seg.x1, seg.y1);
+      const p1 = seg.h2!==undefined ? projectAtWorldY(seg.x2, seg.y2, seg.h2) : project(seg.x2, seg.y2);
+      if(!p0.visible || !p1.visible) return;
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+    });
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(203,157,86,0.47)';
     ctx.lineWidth = 1;
     CONTOUR_LINES_CANVAS.forEach(seg=>{
       const p0 = seg.h1!==undefined ? projectAtWorldY(seg.x1, seg.y1, seg.h1) : project(seg.x1, seg.y1);
@@ -322,6 +338,23 @@ export function drawBoard(){
     });
     ctx.stroke();
   }
+
+  // Subtle operational map frame and 1km grid labels give the view a finished commercial
+  // wargame-map feel without adding new controls.
+  ctx.save();
+  ctx.fillStyle = 'rgba(232,227,206,0.44)';
+  ctx.font = 'bold 10px "JetBrains Mono"';
+  ctx.textAlign = 'center';
+  for(let x=0; x<=CANVAS_W+0.001; x+=1000/METERS_PER_UNIT){
+    const p = project(x, 18);
+    if(p.visible) ctx.fillText(String(Math.round(x*WORLD.scaleX/1000)).padStart(2,'0'), p.x, p.y);
+  }
+  ctx.textAlign = 'left';
+  for(let y=0; y<=CANVAS_H+0.001; y+=1000/METERS_PER_UNIT){
+    const p = project(18, y);
+    if(p.visible) ctx.fillText(String(Math.round(y*WORLD.scaleZ/1000)).padStart(2,'0'), p.x, p.y);
+  }
+  ctx.restore();
 
   // per user request: FEBA (主戦闘地域前縁) line -- the X that the "前進"/"後退" standing
   // orders advance to/fall back to, now tracking our infantry's own frontmost position
