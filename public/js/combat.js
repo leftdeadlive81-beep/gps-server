@@ -882,7 +882,14 @@ export function hasLineOfSight(fromX,fromY,toX,toY){
 }
 
 export function lastStandActive(){
-  return !!state && state.targets.filter(t=>!t.destroyed).length <= LAST_STAND_THRESHOLD;
+  if(!state) return false;
+  // per user request: enemies trickle in over the first WAVE_SPAWN_WINDOW_MS of a wave (see
+  // startStage()/processSpawnQueue()) -- during that window state.targets only holds whatever
+  // has spawned so far (often just the HQ), so it must not be mistaken for "few enemies left"
+  // and trigger last-stand (which force-reveals every remaining target, including the HQ,
+  // long before it should ever be detected).
+  const pendingCount = state.pendingSpawns ? state.pendingSpawns.length : 0;
+  return (state.targets.filter(t=>!t.destroyed).length + pendingCount) <= LAST_STAND_THRESHOLD;
 }
 
 // per user request: detection (sensor range, scout line-of-sight, "recon to identify") is
@@ -2786,9 +2793,11 @@ export function resolveEnemyHqAttack(dt){
     const near = nearestFriendlyAsset(hqTarget.trueX, hqTarget.trueY, true);
     if(!near || near.dist > MORTAR_MAX_RANGE_UNITS || !turnJustCrossed()) return 0;
     anyEvent = true;
-    if(revealTarget(hqTarget)){
-      log('op','斥候', `${hqTarget.id} から迫撃砲の発射炎を確認、<b>${hqTarget.def.label}</b>と識別。`);
-    }
+    // per user request: the HQ stays hidden until a friendly unit physically gets within
+    // detection range (see updateHqDetection()) -- firing on it, even from up close, must not
+    // reveal it on its own, or every wave's HQ would out itself within the first few turns via
+    // its 6km-range mortars. Impacts still land on whatever it hits; the source just stays
+    // unconfirmed until scouted.
     projectiles.push({
       startX: hqTarget.trueX, startY: hqTarget.trueY,
       endX: near.x, endY: near.y,
@@ -2813,9 +2822,8 @@ export function resolveEnemyHqAttack(dt){
     const near = nearestFriendlyAsset(hqTarget.trueX, hqTarget.trueY, true);
     if(!near || near.dist > TANK_ENGAGE_RANGE || !hasLineOfSight(hqTarget.trueX, hqTarget.trueY, near.x, near.y) || !turnJustCrossed()) return 0;
     anyEvent = true;
-    if(revealTarget(hqTarget)){
-      log('op','斥候', `${hqTarget.id} から戦車砲の砲撃を確認、<b>${hqTarget.def.label}</b>と識別。`);
-    }
+    // per user request: see the matching note on the mortar branch above -- firing must not
+    // reveal the HQ on its own, only proximity-based detection (updateHqDetection()) does.
     const blockWall = wallBlockingLineOfFire(hqTarget.trueX, hqTarget.trueY, near.x, near.y);
     if(blockWall){
       damageWall(blockWall, Math.round(rnd(HQ_TANKGUN_DAMAGE[0], HQ_TANKGUN_DAMAGE[1])), `${hqTarget.id}(敵本部戦車砲)の砲撃`);
