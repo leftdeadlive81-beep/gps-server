@@ -1156,7 +1156,8 @@ export function renderStats(){
   // still-queued reinforcements (state.pendingSpawns) count as "remaining" too, so this
   // doesn't read as a near-clear while most of the wave hasn't arrived yet.
   const remainingTargets = state.targets.filter(t=>!t.destroyed).length + (state.pendingSpawns?state.pendingSpawns.length:0);
-  document.getElementById('stat-left').textContent = remainingTargets + ' / ' + state.targetsSpawnedTotal;
+  const targetsSpawnedTotal = state.targetsSpawnedTotal || remainingTargets;
+  document.getElementById('stat-left').textContent = remainingTargets + ' / ' + targetsSpawnedTotal;
   const aliveMortarPersonnel = state.mortars.filter(m=>m.hp>0).length * MORTAR_CREW_SIZE;
   const aliveScoutPersonnel = state.scouts.reduce((s,sc)=>s+unitAliveCount(sc),0);
   const aliveSquadPersonnel = totalAliveSoldiers();

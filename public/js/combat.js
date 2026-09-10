@@ -318,6 +318,7 @@ export function initGame(){
     // block in startStage() and processSpawnQueue(). Holds targets already built for the wave
     // but not yet due to spawn; moved into state.targets one by one as their spawnAt arrives.
     pendingSpawns: [],
+    targetsSpawnedTotal: 0,
     selectedId: null,
     commandBox: null,
     enemyCommandBox: null,
