@@ -1276,19 +1276,15 @@ export function enemyCounterAttack(dt){
   // formation count, so SCOUT_EXPOSURE's intended survivability isn't eaten by this.
   const infantryGroupCount = remaining.filter(t=>t.type==='infantry').length;
   {
-    // per-element index from forEach itself -- was previously remaining.indexOf(t), an O(n)
-    // lookup per element (O(n^2) total across the wave) for no reason, since forEach already
-    // hands back the index for free.
-    remaining.forEach((t, targetIndex)=>{
+    remaining.forEach(t=>{
       if(t.destroyed) return;
-      // Enemy formations also use staggered fire windows; otherwise the real-time
-      // resolver makes every visible contact shoot on the same simulation slice. This is a
-      // discrete once-per-turn stagger (not a rate), so it only evaluates the instant a whole
-      // turn is crossed, using the original modulo formula unchanged.
-      // per user request: firing interval lengthened 10x (was % 3) to match
-      // WEAPON_FIRE_INTERVAL's friendly-side change above.
+      // The counter-attack chance roll below is a discrete once-per-turn event (not a
+      // continuous rate), so it only evaluates the instant a whole turn is crossed.
+      // per user request (correction of an earlier request that had the direction backwards):
+      // firing interval shortened, not lengthened -- this used to also stagger across turns
+      // (a % 3 turn-modulo, briefly % 30) on top of the once-per-turn gate; that extra stagger
+      // is gone now, so the roll is evaluated every single turn, the fastest this gate can go.
       if(!turnJustCrossed()) return;
-      if(((currentTurnFloor() + targetIndex) % 30) !== 0) return;
       // per user request: the enemy HQ is a fixed structure, not a unit with a weapon of its
       // own -- it never counter-attacks (COUNTER_CHANCE/COUNTER_DAMAGE have no 'hq' entry,
       // same as 'heli', whose attacks are instead handled entirely by resolveHeliAssault).
@@ -2709,7 +2705,7 @@ export function resolveVehicleAssault(dt){
   // whatever's nearest and drive straight at the HQ instead, faster than their normal advance.
   const lastStand = lastStandActive();
   {
-    vehicles.forEach((t, vehIdx)=>{
+    vehicles.forEach(t=>{
       if(t.destroyed) return;
       const near = (lastStand && state.hq.hp>0)
         ? {kind:'hq', idx:0, x:state.hq.x, y:state.hq.y, dist:Math.hypot(t.trueX-state.hq.x, t.trueY-state.hq.y)}
@@ -2719,11 +2715,11 @@ export function resolveVehicleAssault(dt){
         // The attack itself is a discrete once-per-turn event (not a continuous rate), so it
         // only fires the instant a whole turn is crossed -- the vehicle otherwise just holds
         // here (matching the original "hold and slug it out" behavior in this range branch).
+        // per user request (correction of an earlier request that had the direction backwards):
+        // firing interval shortened, not lengthened -- this briefly had a % 10 stagger added
+        // on top of this gate; removed again, so it's back to firing every single turn once in
+        // range, the fastest this gate can go.
         if(!turnJustCrossed()) return;
-        // per user request: firing interval lengthened 10x -- this used to fire every single
-        // turn once in range (an effective interval of 1), now staggered like every other
-        // direct-fire duel in the game.
-        if(((currentTurnFloor() + vehIdx) % 10) !== 0) return;
         anyEvent = true;
         const blockWall = wallBlockingLineOfFire(t.trueX, t.trueY, near.x, near.y);
         if(blockWall){

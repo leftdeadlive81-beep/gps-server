@@ -165,9 +165,10 @@ export const HELI_WITHDRAW_DIST = 380;
 
 export const HELI_ATTACK_BURST = 2;
 
-// per user request: firing interval lengthened 10x (was 5) to match the slower pace applied
-// to every other weapon's engagement cadence (WEAPON_FIRE_INTERVAL above).
-export const HELI_COOLDOWN_TICKS = 50;
+// per user request (correction of an earlier request that had the direction backwards):
+// firing interval shortened, not lengthened (was 5, briefly 50) -- 1 turn between attack
+// passes is the fastest the heli can re-engage under this turn-based cooldown.
+export const HELI_COOLDOWN_TICKS = 1;
 
 export const HELI_ATTACK_DAMAGE = [18, 34];
 
@@ -600,9 +601,12 @@ export const GAME_SPEED_ORDER = ['slow', 'normal', 'fast'];
 
 export const MORTAR_RELOAD_MS = 650;
 
-// per user request: firing interval for both sides lengthened 10x (was {squad:3, tank:4,
-// sam:3, sniper:5} turns between shots) for a slower, more deliberate pace of engagement.
-export const WEAPON_FIRE_INTERVAL = { squad:30, tank:40, sam:30, sniper:50 };
+// per user request (correction of an earlier request that had the direction backwards):
+// firing interval shortened, not lengthened -- was {squad:3, tank:4, sam:3, sniper:5} turns
+// between shots. Every value here divided by 10 rounds below 1, and 1 (fire every eligible
+// turn) is the fastest rate the turn-based unitMayFire() modulo can express, so that's the
+// floor for all four -- this is "as fast as the simulation's turn granularity allows".
+export const WEAPON_FIRE_INTERVAL = { squad:1, tank:1, sam:1, sniper:1 };
 
 export const WEAPON_FIRE_OFFSET = { squad:0, tank:1, sam:2, sniper:3 };
 
