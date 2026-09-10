@@ -9,6 +9,21 @@ import { paintTerrainColors } from './three.js';
 import { bearingBetween, clamp, hitChanceFromExposure, rnd, unitsToMeters } from './utils.js';
 import { speakRandomAliveUnit } from './voice.js';
 
+const terrainThumbCache = new Map();
+
+function drawCachedTerrainThumb(canvas, gen){
+  const key = `${gen.seed}:${gen.archetype}:${canvas.width}x${canvas.height}`;
+  let thumb = terrainThumbCache.get(key);
+  if(!thumb){
+    thumb = document.createElement('canvas');
+    thumb.width = canvas.width;
+    thumb.height = canvas.height;
+    paintTerrainColors(thumb.getContext('2d'), thumb.width, thumb.height, gen);
+    terrainThumbCache.set(key, thumb);
+  }
+  canvas.getContext('2d').drawImage(thumb, 0, 0);
+}
+
 export function renderMapSelectOverlay(){
   renderMapSelectBody();
   renderDeploymentSelectBody();
@@ -32,7 +47,7 @@ export function renderMapSelectBody(){
   }).join('');
   mapSeedCandidates.forEach((gen, idx)=>{
     const canvas = document.getElementById('seed-thumb-'+idx);
-    if(canvas) paintTerrainColors(canvas.getContext('2d'), MAP_SEED_THUMB_W, MAP_SEED_THUMB_H, gen);
+    if(canvas) drawCachedTerrainThumb(canvas, gen);
   });
 }
 

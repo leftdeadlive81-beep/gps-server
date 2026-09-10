@@ -1018,6 +1018,16 @@ export const MAP_ZOOM_MIN = 0.35, MAP_ZOOM_MAX = 9;
 
 export const MAP_POLAR_MIN = 0.12, MAP_POLAR_MAX = 1.45;
 
+export const MAP_DETAIL_LABEL_ZOOM = 0.72;
+
+export const MAP_FULL_DETAIL_ZOOM = 1.05;
+
+export const MAP_DETAIL_EFFECT_ZOOM = 0.58;
+
+export const WALK_ANIM_DETAIL_ZOOM = 0.78;
+
+export const WALK_ANIM_MIN_INTERVAL_MS = 140;
+
 export const PROC_TERRAIN_HEIGHT_SCALE = 110 * METERS_PER_UNIT;
 
 export const WORLD = {
