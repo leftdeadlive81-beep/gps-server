@@ -842,7 +842,9 @@ export const GEMINI_API_KEY_STORAGE = 'mortar-fdc-gemini-api-key';
 
 export const GEMINI_MODEL = 'gemini-2.5-flash';
 
-export const LOG_MAX_ENTRIES = 300;
+// per user request: the Radio Log drawer (and its LOG_MAX_ENTRIES cap) is gone -- replaced by
+// a ticker of important events (see announceTicker() in ui.js), capped at this many entries.
+export const TICKER_MAX_ENTRIES = 12;
 
 export const SMART_UNIT_TYPES = {
   mortar: {label:'迫撃砲', list:()=>state.mortars, isAlive:m=>m.hp>0, nameOf:i=>`迫撃砲${i+1}`},

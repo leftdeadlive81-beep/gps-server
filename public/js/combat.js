@@ -6,7 +6,7 @@ import { resetClickCycle } from './input.js';
 import { render } from './main.js';
 import { ROAD_GRAPH, advanceAlongPath, airborneStep, altitudeBonus, applyWallBlock, computeFebaX, damageWall, elevationAt, generateProceduralTerrain, generateSpots, getCachedRoadPath, nearestRoadPoint, nearestWallHit, pickArchetypeForStage, pickTerrainForStage, pickTypesForCount, scoutTerrainAwareStep, terrainAwareStep, terrainCoverTotal, terrainTypeAt, trenchCoverBonusAt, wallBlockingLineOfFire } from './terrain.js';
 import { disposeMarker3d, regenerateTerrain } from './three.js';
-import { closeSmartOrder, log, renderMapSelectOverlay, showGameClear, showStageClear, showStageFailed, showWaveRewardChoice, smartWizard } from './ui.js';
+import { announceTicker, closeSmartOrder, log, renderMapSelectOverlay, showGameClear, showStageClear, showStageFailed, showWaveRewardChoice, smartWizard } from './ui.js';
 import { bearingBetween, choice, clamp, exposureNormalizedMult, gauss, hitChanceFromExposure, rnd, smoothstep01, unitsToMeters, visualTweenDurationMs } from './utils.js';
 import { fireTracer, onTargetDestroyed, projectiles, resetAllVfx, ripples, spawn3dImpactEffect, spawn3dProjectile, spawnDestructionEffect } from './vfx.js';
 import { speakCoordination, speakRandomAliveUnit, unitSpeak, unitSpeakInjury, unitSpeakOrder } from './voice.js';
@@ -336,7 +336,6 @@ export function initGame(){
     febaX: SQUAD_ADVANCE_LIMIT_X,
   };
   resetAllVfx();
-  document.getElementById('log').innerHTML='';
   log('sys', 'システム', `コンシム v${GAME_VERSION} 起動。マップと配置方法を選択し、作戦を開始せよ。`);
   rollMapSeedCandidates();
   renderMapSelectOverlay();
@@ -1494,6 +1493,7 @@ export function resolveSquadOrders(dt){
           const victim = choice(curAlive);
           victim.alive = false;
           log('sys','前線', `第${sqIdx+1}小隊、${t.id}との交戦で<b>${victim.rank} ${victim.name}</b> 戦死。残存 ${sq.soldiers.filter(s=>s.alive).length}/${sq.soldiers.length}名。`);
+          announceTicker(`${victim.rank} ${victim.name} 殉職`, 'death');
           // per user request: the enemy infantry group's return fire also shows a muzzle flash
           // on each of its still-alive stick figures rather than one flash at its aggregate
           // position (t.type check since this branch also covers artillery targets, which have
@@ -2386,7 +2386,10 @@ export function damageFriendlyAsset(target, dmg, sourceLabel){
     state.hq.hp = Math.max(0, state.hq.hp-dmg);
     if(state.hq.hp <= state.hq.maxHp*0.3) state.hpDroppedLow = true;
     log('sys','被弾', `${sourceLabel}が<b>指揮所</b>を攻撃。被害 ${dmg}。`);
-    if(wasAlive && state.hq.hp<=0) spawnDestructionEffect(state.hq.x, state.hq.y, '指揮所 陥落!', FRIENDLY_MARK_COLOR);
+    if(wasAlive && state.hq.hp<=0){
+      spawnDestructionEffect(state.hq.x, state.hq.y, '指揮所 陥落!', FRIENDLY_MARK_COLOR);
+      announceTicker('指揮所 陥落!', 'death');
+    }
   } else if(target.kind==='scout'){
     const scout = state.scouts[target.idx];
     if(!scout) return;
@@ -2395,9 +2398,11 @@ export function damageFriendlyAsset(target, dmg, sourceLabel){
       const victim = choice(aliveSoldiers);
       victim.alive = false;
       log('sys','被弾', `${sourceLabel}が斥候${target.idx+1}を攻撃。<b>${victim.rank} ${victim.name}</b> 戦死。`);
+      announceTicker(`${victim.rank} ${victim.name} 殉職`, 'death');
       unitSpeakInjury('scout', target.idx);
       if(aliveSoldiers.length===1){
         spawnDestructionEffect(scout.x, scout.y, `斥候${target.idx+1} 全滅!`, FRIENDLY_MARK_COLOR);
+        announceTicker(`斥候${target.idx+1} 全滅!`, 'death');
         speakRandomAliveUnit('outburst');
       }
     }
@@ -2409,9 +2414,11 @@ export function damageFriendlyAsset(target, dmg, sourceLabel){
       const victim = choice(aliveSoldiers);
       victim.alive = false;
       log('sys','被弾', `${sourceLabel}が第${target.idx+1}小隊を攻撃。<b>${victim.rank} ${victim.name}</b> 戦死。`);
+      announceTicker(`${victim.rank} ${victim.name} 殉職`, 'death');
       unitSpeakInjury('squad', target.idx);
       if(aliveSoldiers.length===1){
         spawnDestructionEffect(sq.x, sq.y, `第${target.idx+1}小隊 全滅!`, FRIENDLY_MARK_COLOR);
+        announceTicker(`第${target.idx+1}小隊 全滅!`, 'death');
         speakRandomAliveUnit('outburst');
       }
     }
@@ -2423,9 +2430,11 @@ export function damageFriendlyAsset(target, dmg, sourceLabel){
       const victim = choice(aliveSoldiers);
       victim.alive = false;
       log('sys','被弾', `${sourceLabel}が狙撃${target.idx+1}班を攻撃。<b>${victim.rank} ${victim.name}</b> 戦死。`);
+      announceTicker(`${victim.rank} ${victim.name} 殉職`, 'death');
       unitSpeakInjury('sniper', target.idx);
       if(aliveSoldiers.length===1){
         spawnDestructionEffect(sn.x, sn.y, `狙撃${target.idx+1}班 全滅!`, FRIENDLY_MARK_COLOR);
+        announceTicker(`狙撃${target.idx+1}班 全滅!`, 'death');
         speakRandomAliveUnit('outburst');
       }
     }
@@ -2437,14 +2446,20 @@ export function damageFriendlyAsset(target, dmg, sourceLabel){
     if(mortar.hp <= mortar.maxHp*0.2) state.hpDroppedLow = true;
     log('sys','被弾', `${sourceLabel}が迫撃砲${target.idx+1}を攻撃。被害 ${dmg}。`);
     if(mortar.hp>0) unitSpeak('mortar', target.idx, 'warning');
-    else if(wasAlive) spawnDestructionEffect(mortar.x, mortar.y, `迫撃砲${target.idx+1} 戦闘不能!`, FRIENDLY_MARK_COLOR);
+    else if(wasAlive){
+      spawnDestructionEffect(mortar.x, mortar.y, `迫撃砲${target.idx+1} 戦闘不能!`, FRIENDLY_MARK_COLOR);
+      announceTicker(`迫撃砲${target.idx+1} 戦闘不能!`, 'death');
+    }
   } else if(target.kind==='heli'){
     const heli = state.helis && state.helis[target.idx];
     if(!heli) return;
     const wasAlive = heli.hp>0;
     heli.hp = Math.max(0, heli.hp-dmg);
     log('sys','被弾', `${sourceLabel}がヘリ${target.idx+1}を攻撃。被害 ${dmg}。`);
-    if(wasAlive && heli.hp<=0) spawnDestructionEffect(heli.x, heli.y, `ヘリ${target.idx+1} 撃墜!`, FRIENDLY_MARK_COLOR);
+    if(wasAlive && heli.hp<=0){
+      spawnDestructionEffect(heli.x, heli.y, `ヘリ${target.idx+1} 撃墜!`, FRIENDLY_MARK_COLOR);
+      announceTicker(`ヘリ${target.idx+1} 撃墜!`, 'death');
+    }
   } else if(target.kind==='tank'){
     const tank = state.tanks[target.idx];
     if(!tank) return;
@@ -2452,7 +2467,10 @@ export function damageFriendlyAsset(target, dmg, sourceLabel){
     tank.hp = Math.max(0, tank.hp-dmg);
     if(tank.hp <= tank.maxHp*0.2) state.hpDroppedLow = true;
     log('sys','被弾', `${sourceLabel}が戦車${target.idx+1}を攻撃。被害 ${dmg}。`);
-    if(wasAlive && tank.hp<=0) spawnDestructionEffect(tank.x, tank.y, `戦車${target.idx+1} 撃破!`, FRIENDLY_MARK_COLOR);
+    if(wasAlive && tank.hp<=0){
+      spawnDestructionEffect(tank.x, tank.y, `戦車${target.idx+1} 撃破!`, FRIENDLY_MARK_COLOR);
+      announceTicker(`戦車${target.idx+1} 撃破!`, 'death');
+    }
   } else if(target.kind==='sam'){
     const sam = state.sams[target.idx];
     if(!sam) return;
@@ -2460,7 +2478,10 @@ export function damageFriendlyAsset(target, dmg, sourceLabel){
     sam.hp = Math.max(0, sam.hp-dmg);
     if(sam.hp <= sam.maxHp*0.2) state.hpDroppedLow = true;
     log('sys','被弾', `${sourceLabel}が対空${target.idx+1}を攻撃。被害 ${dmg}。`);
-    if(wasAlive && sam.hp<=0) spawnDestructionEffect(sam.x, sam.y, `対空${target.idx+1} 撃破!`, FRIENDLY_MARK_COLOR);
+    if(wasAlive && sam.hp<=0){
+      spawnDestructionEffect(sam.x, sam.y, `対空${target.idx+1} 撃破!`, FRIENDLY_MARK_COLOR);
+      announceTicker(`対空${target.idx+1} 撃破!`, 'death');
+    }
   } else if(target.kind==='engineer'){
     const en = state.engineers[target.idx];
     if(!en) return;
@@ -2469,9 +2490,11 @@ export function damageFriendlyAsset(target, dmg, sourceLabel){
       const victim = choice(aliveSoldiers);
       victim.alive = false;
       log('sys','被弾', `${sourceLabel}が工兵小隊を攻撃。<b>${victim.rank} ${victim.name}</b> 戦死。`);
+      announceTicker(`${victim.rank} ${victim.name} 殉職`, 'death');
       unitSpeakInjury('engineer', target.idx);
       if(aliveSoldiers.length===1){
         spawnDestructionEffect(en.x, en.y, '工兵小隊 全滅!', FRIENDLY_MARK_COLOR);
+        announceTicker('工兵小隊 全滅!', 'death');
         speakRandomAliveUnit('outburst');
       }
     }

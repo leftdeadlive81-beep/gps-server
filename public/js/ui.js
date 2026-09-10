@@ -1,7 +1,7 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement, unlockedAchievements } from './achievements.js';
 import { addNewScout, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, isAutoCommitRunning, isTargetDetected, mapSeedCandidates, mortarNotReadyToFire, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
-import { ACHIEVEMENTS, AMMO_PACK, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GEMINI_API_KEY_STORAGE, GEMINI_MODEL, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, LOG_MAX_ENTRIES, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_SQUAD_SIZE, SMART_ACTIONS, SMART_UNIT_TYPES, SNIPER_AIM_RANGE_M, SNIPER_RANGE_M, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
+import { ACHIEVEMENTS, AMMO_PACK, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GEMINI_API_KEY_STORAGE, GEMINI_MODEL, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_SQUAD_SIZE, SMART_ACTIONS, SMART_UNIT_TYPES, SNIPER_AIM_RANGE_M, SNIPER_RANGE_M, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
 import { canvasToScreen, multiSelectCommonOrders, multiSelectMode, multiSelected, pruneMultiSelected } from './input.js';
 import { render } from './main.js';
 import { elevationAt, elevationLabel, terrainTypeAt, terrainTypeLabel } from './terrain.js';
@@ -294,15 +294,41 @@ document.addEventListener('fullscreenchange', updateFullscreenBtnIcon);
 
 document.addEventListener('webkitfullscreenchange', updateFullscreenBtnIcon);
 
+// per user request: the 通信記録(Radio Log) drawer this fed is gone -- important events now
+// surface via the on-screen ticker (see announceTicker() below) instead of a scrollable panel.
+// log() is kept as a no-op rather than ripped out of its ~150 call sites across combat.js.
 export function log(role, who, text){
-  const el = document.getElementById('log');
-  const cls = role==='op'?'l-op':role==='fdc'?'l-fdc':role==='mortar'?'l-mortar':'l-sys';
-  const div = document.createElement('div');
-  div.className = cls;
-  div.innerHTML = `<b>[${who}]</b> ${text}`;
-  el.insertBefore(div, el.firstChild);
-  while(el.childElementCount > LOG_MAX_ENTRIES) el.removeChild(el.lastChild);
-  el.scrollTo({top:0, behavior:'smooth'});
+}
+
+export let tickerMessages = [];
+
+// per user request: replaces the removed Radio Log drawer -- important battlefield events
+// scroll across a fixed ticker bar instead of sitting in a scrollable panel. cls is an
+// optional CSS class (e.g. 'death' for a KIA announcement) to color that one entry.
+export function announceTicker(text, cls){
+  tickerMessages.push({text, cls: cls||''});
+  if(tickerMessages.length > TICKER_MAX_ENTRIES) tickerMessages.shift();
+  renderTicker();
+}
+
+export function renderTicker(){
+  const bar = document.getElementById('ticker-bar');
+  const track = document.getElementById('ticker-track');
+  if(!bar || !track) return;
+  if(tickerMessages.length===0){
+    bar.classList.add('empty');
+    track.innerHTML = '';
+    return;
+  }
+  bar.classList.remove('empty');
+  const itemsHtml = tickerMessages.map(m=>`<span class="ticker-item ${m.cls}">${m.text}</span>`).join('');
+  // duplicated back-to-back so a -50% translateX loop is seamless regardless of content length
+  track.innerHTML = itemsHtml + itemsHtml;
+  requestAnimationFrame(()=>{
+    const halfWidth = track.scrollWidth/2;
+    const pxPerSec = 55;
+    track.style.animationDuration = Math.max(8, halfWidth/pxPerSec) + 's';
+  });
 }
 
 export let smartWizard = {step:1, unitType:null, unitScope:null, actionKey:null};

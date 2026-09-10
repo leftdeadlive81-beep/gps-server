@@ -34,7 +34,6 @@
       <span class="hud-brand" onclick="toggleStatbar()">コンシム <span class="hud-version">v0.2</span></span>
       <span class="statbar-mini" id="statbar-mini" onclick="toggleStatbar()">-- </span>
       <span class="statbar-caret" id="statbar-caret" onclick="toggleStatbar()">▸</span>
-      <button class="hud-icon-btn" onclick="toggleDrawer('log')" title="通信記録">📋</button>
       <button class="hud-icon-btn" onclick="toggleDrawer('status')" title="部隊稼働状況">👥<span class="hud-icon-badge" id="force-list-badge"></span></button>
       <button class="hud-icon-btn" onclick="toggleDrawer('gemini')" title="Gemini参謀">✦</button>
       <button class="hud-icon-btn" onclick="toggleBoardNote()" title="使い方">?</button>
@@ -50,6 +49,11 @@
       <div class="stat" id="stat-turns"><div class="label">経過時間</div><div class="value">--</div></div>
       <div class="stat" id="stat-money" style="cursor:pointer;" onclick="openShop()"><div class="label">所持金</div><div class="value">--</div></div>
       <div class="stat" id="stat-roster"><div class="label">総兵力</div><div class="value">--</div></div>
+    </div>
+    <!-- per user request: 通信記録(Radio Log)ドロワーを廃止し、代わりに戦況の重要情報を
+         流すテロップに置き換え -->
+    <div class="ticker-bar" id="ticker-bar">
+      <div class="ticker-track" id="ticker-track"></div>
     </div>
   </div>
 
@@ -70,14 +74,6 @@
     <button class="drawer-close" onclick="closeSmartOrder()">✕</button>
   </div>
   <div id="smart-order-body"></div>
-</div>
-
-<div class="drawer" id="log-drawer">
-  <div class="drawer-header">
-    <span>通信記録 ― Radio Log</span>
-    <button class="drawer-close" onclick="toggleDrawer('log')">✕</button>
-  </div>
-  <div class="log" id="log"></div>
 </div>
 
 <div class="drawer" id="status-drawer">

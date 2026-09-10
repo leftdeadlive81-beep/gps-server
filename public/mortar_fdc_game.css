@@ -166,6 +166,28 @@
 
   .map-fullscreen-btn{width:32px;height:32px;}
 
+  /* per user request: 通信記録(Radio Log)ドロワーの代わりに、戦況の重要情報(隊員の
+     殉職など)を流すテロップ。hud-topの一部として常時表示。 */
+  .ticker-bar{
+    margin-top:6px; height:20px; overflow:hidden; position:relative;
+    background:rgba(0,0,0,.35); border:1px solid var(--edge-dim); border-radius:4px;
+  }
+  .ticker-bar.empty{display:none;}
+  .ticker-track{
+    position:absolute; top:0; left:0; height:100%; white-space:nowrap;
+    display:flex; align-items:center;
+    animation:ticker-scroll linear infinite;
+  }
+  .ticker-item{
+    font-family:var(--font-mono); font-size:11.5px; color:var(--ink);
+    padding:0 22px; display:inline-flex; align-items:center;
+  }
+  .ticker-item.death{color:var(--red); font-weight:700;}
+  @keyframes ticker-scroll{
+    from{transform:translateX(0);}
+    to{transform:translateX(-50%);}
+  }
+
   /* --- slide-up drawers (通信記録 / 部隊稼働状況), opened via the hud-top icon
      buttons (see toggleDrawer()). Only one open at a time. --- */
   .drawer{
