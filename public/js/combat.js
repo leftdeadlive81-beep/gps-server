@@ -1,7 +1,7 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement } from './achievements.js';
 import { pickWaveBgm, playCombatAmbience, playSfx, startBgm, stopCombatAmbience } from './audio.js';
-import { ANOMALOUS_JUMP_UNITS, ARTILLERY_FIRE_RANGE_UNITS, ARTILLERY_MOVE_CAP, ARTILLERY_STANDOFF_RANGE_UNITS, CANVAS_H, CANVAS_W, COUNTER_CHANCE, COUNTER_DAMAGE, DECOY_LURE_MULT_DAY, DECOY_LURE_MULT_NIGHT, DECOY_MAX_HP, DECOY_MODES, DEPLOYMENT_MODES, DEPLOY_BOX_METERS, DIFFICULTIES, DRONE_DETONATE_DAMAGE, DRONE_DETONATE_RANGE, DRONE_INTRO_STAGE, DRONE_SPEED, ENEMY_FORMATION_BASE_SIZE, ENEMY_FORMATION_NAMES, ENEMY_FORMATION_TEMPLATES, ENEMY_HQ_EXPOSURE, ENEMY_INFANTRY_TOTAL_TARGET, ENEMY_SPAWN_MIN_X, ENGINEER_POS, ESTIMATE_CLAMP_MARGIN, EXPOSURE_DEFAULT, FLANK_OFFSET_RANGE_UNITS, FLIGHT_DURATION, FRIENDLY_HELI_MOVE_UNITS, FRIENDLY_INF_POS, FRIENDLY_KIND_LIST, FRIENDLY_MARK_COLOR, FRIENDLY_SPACING_PUSH, FRIENDLY_SPACING_RADIUS, FUZES, GAME_SPEED_INTERVALS, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GAME_START_DATETIME, GAME_VERSION, HELI_ATTACK_BURST, HELI_ATTACK_DAMAGE, HELI_COOLDOWN_TICKS, HELI_ENGAGE_RANGE, HELI_EXPOSURE, HELI_MAX_RANGE_UNITS, HELI_MOVE_CAP, HELI_WITHDRAW_DIST, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_DETECT_RANGE_UNITS, HQ_MAX_HP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, HQ_X, HQ_Y, ILLUM_DURATION_TURNS, ILLUM_RADIUS_M, INFANTRY_DRONE_COOLDOWN_TICKS, INFANTRY_DRONE_LAUNCH_CHANCE, INFANTRY_DRONE_SWARM_SIZE, INFANTRY_DUEL_DMG_TO_ENEMY, INFANTRY_MOVE_CAP, INFANTRY_STANDOFF_UNITS, INITIAL_DEPLOY_SPACING_MULT, LAST_STAND_THRESHOLD, LAUNCH_INTERVAL, MAP_SEED_CANDIDATE_COUNT, MARKER_REVEAL_RADIUS_UNITS, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MERGE_HP_THRESHOLD, METERS_PER_UNIT, MINE_DAMAGE, MINE_MAX_ACTIVE, MINE_PLACEMENT_CHANCE, MINE_TRIGGER_RADIUS_UNITS, MORTAR_BEST_LOADOUT, MORTAR_CB_DETECT_BASE, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CB_STRIKE_DMG, MORTAR_CB_WARN_TURNS, MORTAR_CREW_SIZE, MORTAR_DISPERSION_UNITS, MORTAR_MAX_RANGE_M, MORTAR_MAX_RANGE_UNITS, MORTAR_MIN_RANGE_M, MORTAR_MIN_RANGE_UNITS, MORTAR_MOVE_CAP, MORTAR_ORDER_LABEL, MORTAR_RELOAD_MS, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, NUM_ENGINEERS, NUM_MORTARS, NUM_SAMS, NUM_SCOUTS, NUM_SNIPERS, NUM_SQUADS, NUM_TANKS, OP, OP_HOME_X, OP_HOME_Y, ORDER_LABEL, PERSONNEL_ROSTER, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, ROAD_PULL_RADIUS, ROSTER_ENGINEER_TEAMS, ROSTER_MORTAR_CREWS, ROSTER_RESERVE_INITIAL, ROSTER_SCOUT_TEAMS, ROSTER_SNIPER_TEAMS, ROSTER_SQUADS, SAM_DUEL_DMG_TO_ENEMY, SAM_ENGAGE_RANGE, SAM_EXPOSURE, SAM_MAX_HP, SAM_MOVE_CAP, SAM_POS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_ADVANCE_LIMIT_X, SCOUT_EXPOSURE, SCOUT_LOWER_Y, SCOUT_MAX_RANGE_UNITS, SCOUT_MOVE_CAP, SCOUT_SQUAD_SIZE, SCOUT_UPPER_Y, SCOUT_X, SHELLS, SHELL_DISPERSION_MULT, SHELL_KILL_RADIUS_UNITS, SIM_STEP_MAX_CATCHUP, SIM_STEP_MS, SMART_ACTIONS, SMART_UNIT_TYPES, SMOKE_DURATION_TURNS, SMOKE_RADIUS_M, SMOKE_RADIUS_UNITS, SNIPER_AIM_LINE_WIDTH_UNITS, SNIPER_AIM_RANGE_UNITS, SNIPER_DMG, SNIPER_EXECUTE_HP_THRESHOLD, SNIPER_MOVE_CAP, SNIPER_POS, SNIPER_RANGE_UNITS, SQUAD_ADVANCE_LIMIT_X, SQUAD_ANTI_DRONE_DMG, SQUAD_ANTI_DRONE_HIT_CHANCE, SQUAD_ANTI_DRONE_RANGE_UNITS, SQUAD_ASSAULT_LIMIT_X, SQUAD_ENGAGE_RANGE, SQUAD_FORMATION_ADJUST_M, SQUAD_GRID_OFFSETS, SQUAD_RETREAT_LIMIT_X, SQUAD_SIZE, STAGE_COUNT, STEP_RENDER_MIN_INTERVAL_MS, SUPPRESSION_CASUALTY_MULT, SUPPRESSION_COUNTER_MULT, SUPPRESSION_DUEL_DMG_BONUS, SUPPRESSION_MOVE_MULT, SUPPRESSION_NEARMISS_TURNS, SUPPRESSION_RETREAT_CHANCE, SUPPRESSION_TURNS, TANK_DUEL_DMG_TO_ENEMY, TANK_ENGAGE_RANGE, TANK_EXPOSURE, TANK_INCOMING_DMG, TANK_MAX_HP, TANK_MOVE_CAP, TANK_POS, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_GRID_CELL_SIZE, TARGET_GRID_MAX_RINGS, TARGET_TYPES, TERRAIN_TYPE_FOREST, TRENCH_BUILD_COST, VEHICLE_ASSAULT_DAMAGE, VEHICLE_ASSAULT_RANGE, VEHICLE_MOVE_CAP, VET_DMG_BONUS_PER_LEVEL, VET_EXPOSURE_BONUS_PER_LEVEL, VET_MAX_LEVEL, VET_XP_PER_LEVEL, WALL_BUILD_COST, WALL_MAX_HP, WALL_RADIUS, WAVE_CLEAR_EFFECT_WAIT_MS, WAVE_CLEAR_FANFARE_HOLD_MS, WEAPON_FIRE_INTERVAL, WEAPON_FIRE_OFFSET, WEATHER_TYPES, WORLD } from './constants.js';
+import { AA_ATTACK_DAMAGE, AA_COOLDOWN_TICKS, AA_ENGAGE_RANGE, ANOMALOUS_JUMP_UNITS, ARTILLERY_FIRE_RANGE_UNITS, ARTILLERY_MOVE_CAP, ARTILLERY_STANDOFF_RANGE_UNITS, CANVAS_H, CANVAS_W, COUNTER_CHANCE, COUNTER_DAMAGE, DECOY_LURE_MULT_DAY, DECOY_LURE_MULT_NIGHT, DECOY_MAX_HP, DECOY_MODES, DEPLOYMENT_MODES, DEPLOY_BOX_METERS, DIFFICULTIES, DRONE_DETONATE_DAMAGE, DRONE_DETONATE_RANGE, DRONE_INTRO_STAGE, DRONE_SPEED, ENEMY_FORMATION_BASE_SIZE, ENEMY_FORMATION_NAMES, ENEMY_FORMATION_TEMPLATES, ENEMY_HQ_EXPOSURE, ENEMY_INFANTRY_TOTAL_TARGET, ENEMY_SPAWN_MIN_X, ENGINEER_POS, ESTIMATE_CLAMP_MARGIN, EXPOSURE_DEFAULT, FLANK_OFFSET_RANGE_UNITS, FLIGHT_DURATION, FRIENDLY_HELI_MOVE_UNITS, FRIENDLY_INF_POS, FRIENDLY_KIND_LIST, FRIENDLY_MARK_COLOR, FRIENDLY_SPACING_PUSH, FRIENDLY_SPACING_RADIUS, FUZES, GAME_SPEED_INTERVALS, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GAME_START_DATETIME, GAME_VERSION, HELI_ATTACK_BURST, HELI_ATTACK_DAMAGE, HELI_COOLDOWN_TICKS, HELI_ENGAGE_RANGE, HELI_EXPOSURE, HELI_MAX_RANGE_UNITS, HELI_MOVE_CAP, HELI_WITHDRAW_DIST, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_DEFENSE_ATTACKER_WINDOW_MS, HQ_DEFENSE_DMG_MULT, HQ_DEFENSE_RANGE_UNITS, HQ_DETECT_RANGE_UNITS, HQ_MAX_HP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, HQ_X, HQ_Y, ILLUM_DURATION_TURNS, ILLUM_RADIUS_M, INFANTRY_DRONE_COOLDOWN_TICKS, INFANTRY_DRONE_LAUNCH_CHANCE, INFANTRY_DRONE_SWARM_SIZE, INFANTRY_DUEL_DMG_TO_ENEMY, INFANTRY_MOVE_CAP, INFANTRY_STANDOFF_UNITS, INITIAL_DEPLOY_SPACING_MULT, LAST_STAND_THRESHOLD, LAUNCH_INTERVAL, MAP_SEED_CANDIDATE_COUNT, MARKER_REVEAL_RADIUS_UNITS, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MERGE_HP_THRESHOLD, METERS_PER_UNIT, MINE_DAMAGE, MINE_MAX_ACTIVE, MINE_PLACEMENT_CHANCE, MINE_TRIGGER_RADIUS_UNITS, MORTAR_BEST_LOADOUT, MORTAR_CB_DETECT_BASE, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CB_STRIKE_DMG, MORTAR_CB_WARN_TURNS, MORTAR_CREW_SIZE, MORTAR_DISPERSION_UNITS, MORTAR_MAX_RANGE_M, MORTAR_MAX_RANGE_UNITS, MORTAR_MIN_RANGE_M, MORTAR_MIN_RANGE_UNITS, MORTAR_MOVE_CAP, MORTAR_ORDER_LABEL, MORTAR_RELOAD_MS, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, NUM_ENGINEERS, NUM_MORTARS, NUM_SAMS, NUM_SCOUTS, NUM_SNIPERS, NUM_SQUADS, NUM_TANKS, OP, OP_HOME_X, OP_HOME_Y, ORDER_LABEL, PERSONNEL_ROSTER, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, ROAD_PULL_RADIUS, ROSTER_ENGINEER_TEAMS, ROSTER_MORTAR_CREWS, ROSTER_RESERVE_INITIAL, ROSTER_SCOUT_TEAMS, ROSTER_SNIPER_TEAMS, ROSTER_SQUADS, SAM_DUEL_DMG_TO_ENEMY, SAM_ENGAGE_RANGE, SAM_EXPOSURE, SAM_MAX_HP, SAM_MOVE_CAP, SAM_POS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_ADVANCE_LIMIT_X, SCOUT_EXPOSURE, SCOUT_LOWER_Y, SCOUT_MAX_RANGE_UNITS, SCOUT_MOVE_CAP, SCOUT_SQUAD_SIZE, SCOUT_UPPER_Y, SCOUT_X, SHELLS, SHELL_DISPERSION_MULT, SHELL_KILL_RADIUS_UNITS, SIM_STEP_MAX_CATCHUP, SIM_STEP_MS, SMART_ACTIONS, SMART_UNIT_TYPES, SMOKE_DURATION_TURNS, SMOKE_RADIUS_M, SMOKE_RADIUS_UNITS, SNIPER_AIM_LINE_WIDTH_UNITS, SNIPER_AIM_RANGE_UNITS, SNIPER_DMG, SNIPER_EXECUTE_HP_THRESHOLD, SNIPER_MOVE_CAP, SNIPER_POS, SNIPER_RANGE_UNITS, SQUAD_ADVANCE_LIMIT_X, SQUAD_ANTI_DRONE_DMG, SQUAD_ANTI_DRONE_HIT_CHANCE, SQUAD_ANTI_DRONE_RANGE_UNITS, SQUAD_ASSAULT_LIMIT_X, SQUAD_ENGAGE_RANGE, SQUAD_FORMATION_ADJUST_M, SQUAD_GRID_OFFSETS, SQUAD_RETREAT_LIMIT_X, SQUAD_SIZE, STAGE_COUNT, STEP_RENDER_MIN_INTERVAL_MS, SUPPRESSION_CASUALTY_MULT, SUPPRESSION_COUNTER_MULT, SUPPRESSION_DUEL_DMG_BONUS, SUPPRESSION_MOVE_MULT, SUPPRESSION_NEARMISS_TURNS, SUPPRESSION_RETREAT_CHANCE, SUPPRESSION_TURNS, TANK_DUEL_DMG_TO_ENEMY, TANK_ENGAGE_RANGE, TANK_EXPOSURE, TANK_INCOMING_DMG, TANK_MAX_HP, TANK_MOVE_CAP, TANK_POS, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_GRID_CELL_SIZE, TARGET_GRID_MAX_RINGS, TARGET_TYPES, TERRAIN_TYPE_FOREST, TRENCH_BUILD_COST, VEHICLE_ASSAULT_DAMAGE, VEHICLE_ASSAULT_RANGE, VEHICLE_MOVE_CAP, VET_DMG_BONUS_PER_LEVEL, VET_EXPOSURE_BONUS_PER_LEVEL, VET_MAX_LEVEL, VET_XP_PER_LEVEL, WALL_BUILD_COST, WALL_MAX_HP, WALL_RADIUS, WAVE_CLEAR_EFFECT_WAIT_MS, WAVE_CLEAR_FANFARE_HOLD_MS, WEAPON_FIRE_INTERVAL, WEAPON_FIRE_OFFSET, WEATHER_TYPES, WORLD } from './constants.js';
 import { resetClickCycle } from './input.js';
 import { render } from './main.js';
 import { ROAD_GRAPH, advanceAlongPath, airborneStep, altitudeBonus, applyWallBlock, computeFebaX, damageWall, elevationAt, generateProceduralTerrain, generateSpots, getCachedRoadPath, nearestRoadPoint, nearestWallHit, pickArchetypeForStage, pickTerrainForStage, pickTypesForCount, scoutTerrainAwareStep, terrainAwareStep, terrainCoverTotal, terrainTypeAt, trenchCoverBonusAt, wallBlockingLineOfFire } from './terrain.js';
@@ -1028,6 +1028,23 @@ export function updateHqDetection(){
   }
 }
 
+// per user request: the enemy defends its own HQ -- any friendly unit within
+// HQ_DEFENSE_RANGE_UNITS of it, or one that just hit it with mortar fire from further out
+// (see the _hqDefenseAttacker* tagging in launchMortarVolley's impact handling), becomes the
+// nearby enemy's top priority target. Returns {x,y} to move toward/engage, or null.
+export function findHqDefenseThreat(){
+  const hq = state.targets.find(t=>t.type==='hq');
+  if(!hq || hq.destroyed) return null;
+  if(hq._hqDefenseAttackerKind && performance.now()-hq._hqDefenseAttackedAt <= HQ_DEFENSE_ATTACKER_WINDOW_MS){
+    const kind = hq._hqDefenseAttackerKind, idx = hq._hqDefenseAttackerIdx;
+    const attacker = kind==='mortar' ? state.mortars.find(m=>m.id===idx) : null;
+    if(attacker && attacker.hp>0) return {x:attacker.x, y:attacker.y, kind, idx};
+  }
+  const near = nearestFriendlyAsset(hq.trueX, hq.trueY, true);
+  if(near && near.dist <= HQ_DEFENSE_RANGE_UNITS) return near;
+  return null;
+}
+
 export function resolveOneScoutDecision(scout, idx, dt){
   if(!unitAlive(scout)) return;
   if(scout.resting){ tickUnitRest(scout, `斥候${idx+1}班`, dt); return; }
@@ -1135,6 +1152,7 @@ export function enemyCounterAttack(dt){
   // the AGGREGATE attack-attempt rate equivalent to a single infantry unit's, regardless of
   // formation count, so SCOUT_EXPOSURE's intended survivability isn't eaten by this.
   const infantryGroupCount = remaining.filter(t=>t.type==='infantry').length;
+  const hqThreat = findHqDefenseThreat();
   {
     remaining.forEach(t=>{
       if(t.destroyed) return;
@@ -1148,7 +1166,9 @@ export function enemyCounterAttack(dt){
       // per user request: the enemy HQ is a fixed structure, not a unit with a weapon of its
       // own -- it never counter-attacks (COUNTER_CHANCE/COUNTER_DAMAGE have no 'hq' entry,
       // same as 'heli', whose attacks are instead handled entirely by resolveHeliAssault).
-      if(t.type==='hq') return;
+      // 'aa' is excluded the same way -- it's a dedicated anti-air system handled entirely by
+      // resolveEnemyAntiAir, not a generic ground-engagement roll here.
+      if(t.type==='hq' || t.type==='aa') return;
       if(allScoutsWiped() && allMortarsWiped()) return;
       const suppressionMult = isSuppressed(t) ? SUPPRESSION_COUNTER_MULT : 1;
       const groupCorrection = t.type==='infantry' ? 1/Math.max(1, infantryGroupCount) : 1;
@@ -1181,7 +1201,10 @@ export function enemyCounterAttack(dt){
         const [lo,hi] = COUNTER_DAMAGE[t.type];
         const armorMult = (near.kind==='mortar' && state.equipment.armor) ? 0.75 : 1;
         const altMult = altitudeBonus(t.trueX, t.trueY, near.x, near.y);
-        const dmg = Math.round((rnd(lo,hi) + state.stage*0.4) * DIFFICULTIES[state.difficulty].counterMult * armorMult * altMult);
+        // per user request: hit harder ("全力で攻撃") when the target is whoever's currently
+        // threatening the enemy HQ (see findHqDefenseThreat()).
+        const hqDefenseMult = (hqThreat && near.kind===hqThreat.kind && near.idx===hqThreat.idx) ? HQ_DEFENSE_DMG_MULT : 1;
+        const dmg = Math.round((rnd(lo,hi) + state.stage*0.4) * DIFFICULTIES[state.difficulty].counterMult * armorMult * altMult * hqDefenseMult);
         const sourceLabel = `${t.id}(${t.revealed?t.def.label:'未識別目標'})からの攻撃`;
         anyHit = true;
         const e = estPos(t);
@@ -2644,6 +2667,46 @@ export function resolveVehicleAssault(dt){
   return anyEvent;
 }
 
+// per user request: enemy anti-air -- a stationary, dedicated ground unit that specifically
+// hunts the friendly heli (kept out of the generic ground-engagement roll in
+// enemyCounterAttack, same treatment as the enemy heli itself there).
+export function resolveEnemyAntiAir(dt){
+  const aaUnits = state.targets.filter(t=>!t.destroyed && t.type==='aa');
+  if(aaUnits.length===0) return false;
+  let anyEvent = false;
+  aaUnits.forEach(t=>{
+    if(t._aaCooldown === undefined) t._aaCooldown = 0;
+    if(t._aaCooldown > 0){
+      t._aaCooldown -= dt;
+      return;
+    }
+    const heliIdx = (state.helis||[]).findIndex(h=>h.hp>0);
+    if(heliIdx<0) return;
+    const heli = state.helis[heliIdx];
+    const dist = Math.hypot(t.trueX-heli.x, t.trueY-heli.y);
+    if(dist > AA_ENGAGE_RANGE) return;
+    if(!hasLineOfSight(t.trueX, t.trueY, heli.x, heli.y)) return;
+    // The attack itself is a discrete once-per-turn event, so it only resolves the instant a
+    // whole turn is crossed -- same pattern as every other enemy attack roll in this file.
+    if(!turnJustCrossed()) return;
+    anyEvent = true;
+    const e = estPos(t);
+    if(revealTarget(t)){
+      log('op','斥候', `${t.id} が対空砲火用意、<b>${t.def.label}</b>と識別。`);
+    }
+    if(rollExposureHit(getUnitExposure({kind:'heli', idx:heliIdx}))){
+      const altMult = altitudeBonus(t.trueX, t.trueY, heli.x, heli.y);
+      const dmg = Math.round(rnd(AA_ATTACK_DAMAGE[0], AA_ATTACK_DAMAGE[1]) * altMult);
+      damageFriendlyAsset({kind:'heli', idx:heliIdx}, dmg, `${t.id}(対空)の攻撃`);
+      fireTracer(e.x, e.y, heli.x, heli.y, 260, 'cannon');
+    } else {
+      log('sys','回避', `${t.id}(対空)の攻撃を受けたが、ヘリは掩蔽率により被弾を免れた。`);
+    }
+    t._aaCooldown = AA_COOLDOWN_TICKS;
+  });
+  return anyEvent;
+}
+
 export function resolveHeliAssault(dt){
   const helis = state.targets.filter(t=>!t.destroyed && t.type==='heli');
   if(helis.length===0) return false;
@@ -2856,9 +2919,12 @@ export function advanceEnemyInfantry(dt){
   // stop trying to reach/hold the normal front line and instead beeline straight for the HQ,
   // faster, without stopping to fight squad contact or flinching under suppression.
   const lastStand = lastStandActive();
-  const targetHq = lastStand || !squadsAlive;
-  const goal = targetHq ? state.hq : FRIENDLY_INF_POS;
-  const minX = targetHq ? state.hq.x+20 : FRIENDLY_INF_POS.x+20;
+  // per user request: defending their own HQ takes priority over the normal advance (but not
+  // over an already-desperate last stand) -- see findHqDefenseThreat().
+  const hqThreat = lastStand ? null : findHqDefenseThreat();
+  const targetHq = lastStand || (!hqThreat && !squadsAlive);
+  const goal = hqThreat || (targetHq ? state.hq : FRIENDLY_INF_POS);
+  const minX = hqThreat ? 20 : (targetHq ? state.hq.x+20 : FRIENDLY_INF_POS.x+20);
   let moved = false;
   {
     enemyInfantry.forEach(t=>{
@@ -2876,7 +2942,11 @@ export function advanceEnemyInfantry(dt){
           t._droneCooldown = INFANTRY_DRONE_COOLDOWN_TICKS;
         }
       }
-      const inContact = !lastStand && aliveSquads.some(sq=>Math.hypot(t.trueX-sq.x, t.trueY-sq.y) <= SQUAD_ENGAGE_RANGE);
+      // per user request: when defending the HQ, "in contact" is measured against the threat
+      // itself (whatever unit type it is), not just squads.
+      const inContact = !lastStand && (hqThreat
+        ? Math.hypot(t.trueX-hqThreat.x, t.trueY-hqThreat.y) <= SQUAD_ENGAGE_RANGE
+        : aliveSquads.some(sq=>Math.hypot(t.trueX-sq.x, t.trueY-sq.y) <= SQUAD_ENGAGE_RANGE));
       if(inContact){
         if(!t._contactLogged){
           t._contactLogged = true;
@@ -3016,6 +3086,7 @@ export function resolveEnemyTurn(dt){
   advanceEnemyArtillery(dt);
   resolveVehicleAssault(dt);
   const heliEvent = resolveHeliAssault(dt);
+  const aaEvent = resolveEnemyAntiAir(dt);
   resolveEnemyEvasion(dt);
   const antiDroned = resolveSquadAntiDrone(dt);
   resolveSquadAntiVehicle(dt);
@@ -3051,7 +3122,7 @@ export function resolveEnemyTurn(dt){
   // per user request: 交戦時のサウンド -- looping battlefield-combat ambience plays while
   // squads/snipers are actively engaging this turn, and pauses again once nothing is
   // actively engaging.
-  if(infEvent || sniperEvent || tankEvent || samEvent || antiDroned || heliEvent) playCombatAmbience(); else stopCombatAmbience();
+  if(infEvent || sniperEvent || tankEvent || samEvent || antiDroned || heliEvent || aaEvent) playCombatAmbience(); else stopCombatAmbience();
   state.targets.forEach(t=>{
     if(t.suppressed>0) t.suppressed = Math.max(0, t.suppressed-dt);
   });
@@ -3188,6 +3259,14 @@ export function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarge
             applyDamageToTarget(hitTarget, dmg);
             hitTarget.impacts.push({x:ix,y:iy});
             hitAny = true;
+            // per user request: a mortar strike landing on the enemy HQ marks the firing
+            // mortar as a priority threat (see findHqDefenseThreat()) even if it's well
+            // outside HQ_DEFENSE_RANGE_UNITS -- mortars can hit it from up to 6km away.
+            if(hitTarget.type==='hq'){
+              hitTarget._hqDefenseAttackerKind = 'mortar';
+              hitTarget._hqDefenseAttackerIdx = mortar.id;
+              hitTarget._hqDefenseAttackedAt = performance.now();
+            }
             const wasSuppressed = isSuppressed(hitTarget);
             hitTarget.suppressed = SUPPRESSION_TURNS;
             log('mortar','観測', `弾着${i+1}: <b>命中</b> (${hitTarget.id} 算定効果 ${dmg})${wasSuppressed?'':' ― 制圧'}`);
@@ -3695,4 +3774,4 @@ export function advanceSimulation(){
 }
 
 
-Object.assign(window, { totalSquadCapacity, totalRosterCapacity, roundRobinDistribute, gameClockNow, formatGameClock, mortarTooCloseToFire, setGameSpeedByIndex, unitMayFire, deltaTurns, updateTurnBoundary, currentTurnFloor, turnJustCrossed, isSuppressed, maintainFriendlySpacing, smoothVisualPos, buildEnemyInfantryGroups, effectMultiplier, bestMortarLoadoutFor, applyBestMortarLoadout, makeSoldiers, vetLevelOf, unitAvgVetLevel, unitAliveCount, makeFreshRoster, addNewSquad, addNewScout, unitAlive, initGame, rollMapSeedCandidates, startSetup, buildHeliTarget, buildEnemyHqTarget, deployBoxSize, startStage, buildPlacementQueue, currentPlacementUnit, handlePlacementClick, skipRemainingPlacement, finishPlacement, makeDecoy, randomDecoySpot, applyDecoyPlacementMode, placeDecoyAt, finishDecoyPlacement, retryStage, deployStage, estimatedTargetPos, estPos, computeDispersionAt, estPosFromMortar, hasLineOfSight, lastStandActive, isTargetDetected, clearHqDest, clearTankDest, clearSamDest, setEngineerOrder, armEngineerMoveOrder, clearEngineerDest, armWallBuildOrder, buildWallAt, armTrenchBuildOrder, buildTrenchAt, clearSquadDest, armScoutMoveOrder, clearScoutOrder, revealTarget, updateHqDetection, resolveOneScoutDecision, resolveScoutDecision, resolveFriendlyHeliTurn, allScoutsWiped, allSnipersWiped, allMortarsWiped, setMortarOrder, armMortarTargetOrder, resolveOneMortarDecision, resolveMortarDecision, enemyCounterAttack, totalAliveSoldiers, allSquadsWiped, applyStandingOrder, applyHqMovement, resolveHqMovement, applySquadMovement, applyEngineerMovement, allEngineersWiped, resolveEngineerOrders, resolveSquadOrders, applyTankMovement, allTanksWiped, applySamMovement, allSamsWiped, resolveSamOrders, resolveTankOrders, applySniperMovement, sniperEngageTarget, findTargetOnSniperLine, findAutoSniperTarget, callInMortarHeatStrike, resolveSniperOrders, setSquadOrder, setTankOrder, setSamOrder, setSniperOrder, setStandingOrder, resolveSmartUnitIdxs, randomMoveOffsetCanvasUnits, directedMoveOffsetCanvasUnits, applySmartMortarScatter, applySmartOrder, armSniperMoveOrder, clearSniperDest, armSniperTargetOrder, clearSniperTarget, armSniperAimOrder, clearSniperAim, armMortarMainlineOrder, clearMortarMainline, reinforceUnitLabel, requestReinforcement, restUnitRef, restUnitLabel, startRest, tickUnitRest, buildHqCover, repairHq, friendlyFireCandidateLabel, checkFriendlyFireAt, getUnitExposure, rollExposureHit, getTargetExposure, nearestFriendlyAsset, applyDamageToTarget, damageFriendlyAsset, spawnInfantryDrone, spawnInfantryDroneSwarm, targetGridCellKey, rebuildTargetGrid, nearestOtherAliveTarget, mergeAdjustedGoal, maybePlaceMine, checkMineTrigger, advanceEnemyArtillery, resolveVehicleAssault, resolveHeliAssault, resolveSquadAntiDrone, resolveSquadAntiVehicle, resolveDroneSwarm, resolveEnemyEvasion, advanceEnemyInfantry, resolveMortarCounterBattery, resolveEnemyTurn, launchMortarVolley, isAutoCommitRunning, startRealtimeLoop, toggleAutoCommit, setGameSpeed, renderThrottledForStep, simulationStep, finalizeVolley, checkEnd, triggerWaveClearSequence, computeReward, applyWaveResupply, awardVeteranXp, handleStageClear, assignSquadHunt, clearSquadHunt, assignTankHunt, clearTankHunt, repairTank, assignSamHunt, clearSamHunt, repairSam, assignMortarFire, updateFireConfig, advanceSimulation });
+Object.assign(window, { totalSquadCapacity, totalRosterCapacity, roundRobinDistribute, gameClockNow, formatGameClock, mortarTooCloseToFire, setGameSpeedByIndex, unitMayFire, deltaTurns, updateTurnBoundary, currentTurnFloor, turnJustCrossed, isSuppressed, maintainFriendlySpacing, smoothVisualPos, buildEnemyInfantryGroups, effectMultiplier, bestMortarLoadoutFor, applyBestMortarLoadout, makeSoldiers, vetLevelOf, unitAvgVetLevel, unitAliveCount, makeFreshRoster, addNewSquad, addNewScout, unitAlive, initGame, rollMapSeedCandidates, startSetup, buildHeliTarget, buildEnemyHqTarget, deployBoxSize, startStage, buildPlacementQueue, currentPlacementUnit, handlePlacementClick, skipRemainingPlacement, finishPlacement, makeDecoy, randomDecoySpot, applyDecoyPlacementMode, placeDecoyAt, finishDecoyPlacement, retryStage, deployStage, estimatedTargetPos, estPos, computeDispersionAt, estPosFromMortar, hasLineOfSight, lastStandActive, isTargetDetected, clearHqDest, clearTankDest, clearSamDest, setEngineerOrder, armEngineerMoveOrder, clearEngineerDest, armWallBuildOrder, buildWallAt, armTrenchBuildOrder, buildTrenchAt, clearSquadDest, armScoutMoveOrder, clearScoutOrder, revealTarget, updateHqDetection, findHqDefenseThreat, resolveOneScoutDecision, resolveScoutDecision, resolveFriendlyHeliTurn, allScoutsWiped, allSnipersWiped, allMortarsWiped, setMortarOrder, armMortarTargetOrder, resolveOneMortarDecision, resolveMortarDecision, enemyCounterAttack, totalAliveSoldiers, allSquadsWiped, applyStandingOrder, applyHqMovement, resolveHqMovement, applySquadMovement, applyEngineerMovement, allEngineersWiped, resolveEngineerOrders, resolveSquadOrders, applyTankMovement, allTanksWiped, applySamMovement, allSamsWiped, resolveSamOrders, resolveTankOrders, applySniperMovement, sniperEngageTarget, findTargetOnSniperLine, findAutoSniperTarget, callInMortarHeatStrike, resolveSniperOrders, setSquadOrder, setTankOrder, setSamOrder, setSniperOrder, setStandingOrder, resolveSmartUnitIdxs, randomMoveOffsetCanvasUnits, directedMoveOffsetCanvasUnits, applySmartMortarScatter, applySmartOrder, armSniperMoveOrder, clearSniperDest, armSniperTargetOrder, clearSniperTarget, armSniperAimOrder, clearSniperAim, armMortarMainlineOrder, clearMortarMainline, reinforceUnitLabel, requestReinforcement, restUnitRef, restUnitLabel, startRest, tickUnitRest, buildHqCover, repairHq, friendlyFireCandidateLabel, checkFriendlyFireAt, getUnitExposure, rollExposureHit, getTargetExposure, nearestFriendlyAsset, applyDamageToTarget, damageFriendlyAsset, spawnInfantryDrone, spawnInfantryDroneSwarm, targetGridCellKey, rebuildTargetGrid, nearestOtherAliveTarget, mergeAdjustedGoal, maybePlaceMine, checkMineTrigger, advanceEnemyArtillery, resolveVehicleAssault, resolveHeliAssault, resolveEnemyAntiAir, resolveSquadAntiDrone, resolveSquadAntiVehicle, resolveDroneSwarm, resolveEnemyEvasion, advanceEnemyInfantry, resolveMortarCounterBattery, resolveEnemyTurn, launchMortarVolley, isAutoCommitRunning, startRealtimeLoop, toggleAutoCommit, setGameSpeed, renderThrottledForStep, simulationStep, finalizeVolley, checkEnd, triggerWaveClearSequence, computeReward, applyWaveResupply, awardVeteranXp, handleStageClear, assignSquadHunt, clearSquadHunt, assignTankHunt, clearTankHunt, repairTank, assignSamHunt, clearSamHunt, repairSam, assignMortarFire, updateFireConfig, advanceSimulation });

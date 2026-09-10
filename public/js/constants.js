@@ -117,6 +117,11 @@ export const TARGET_TYPES = {
   vehicle:   {label:'装甲車',       hp:95,  radius:18, mark:ENEMY_MARK_COLOR},
   drone:     {label:'ドローン',     hp:12,  radius:20, mark:ENEMY_MARK_COLOR},
   heli:      {label:'戦闘ヘリ',     hp:150, radius:22, mark:ENEMY_MARK_COLOR},
+  // per user request: enemy anti-air -- a dedicated, stationary ground unit that specifically
+  // hunts the friendly heli (see resolveEnemyAntiAir()) rather than joining the generic
+  // ground-engagement roll in enemyCounterAttack (same treatment as 'heli' itself, which is
+  // excluded there and handled by its own resolveHeliAssault).
+  aa:        {label:'対空',         hp:80,  radius:16, mark:ENEMY_MARK_COLOR},
   // per user request: a fixed, hardened objective placed deep in enemy territory --
   // destroying it clears the wave immediately regardless of how many other enemies remain
   // (see checkEnd()), a high-risk/high-reward alternative to grinding out every target. Its
@@ -171,6 +176,16 @@ export const HELI_ATTACK_BURST = 2;
 export const HELI_COOLDOWN_TICKS = 1;
 
 export const HELI_ATTACK_DAMAGE = [18, 34];
+
+// per user request: enemy anti-air -- engagement range mirrors the friendly SAM's
+// (SAM_ENGAGE_RANGE) for symmetry. Fires often (short cooldown, once-per-turn-crossing gate
+// like every other discrete attack roll in this game) and hits hard -- a dedicated system, not
+// incidental ground fire.
+export const AA_ENGAGE_RANGE = 715;
+
+export const AA_ATTACK_DAMAGE = [16, 30];
+
+export const AA_COOLDOWN_TICKS = 2;
 
 export const MINE_DAMAGE = [16,36];
 
@@ -485,6 +500,23 @@ export const HELI_MAX_RANGE_UNITS = 1000 / METERS_PER_UNIT;
 export const HQ_DETECT_RANGE_M = 300;
 
 export const HQ_DETECT_RANGE_UNITS = HQ_DETECT_RANGE_M / METERS_PER_UNIT;
+
+// per user request: any friendly unit within this range of the enemy HQ (or that just hit it
+// with mortar fire from further out, see findHqDefenseThreat()) becomes the enemy's top
+// priority -- nearby enemy infantry redirect to engage it instead of their normal advance.
+export const HQ_DEFENSE_RANGE_M = 3000;
+
+export const HQ_DEFENSE_RANGE_UNITS = HQ_DEFENSE_RANGE_M / METERS_PER_UNIT;
+
+// per user request: a mortar strike that hits the enemy HQ marks the firing mortar as a
+// priority threat for this long, even if the mortar itself sits well outside
+// HQ_DEFENSE_RANGE_UNITS (mortars can fire from up to MORTAR_MAX_RANGE_UNITS away).
+export const HQ_DEFENSE_ATTACKER_WINDOW_MS = 15000;
+
+// per user request: enemy fire against the current HQ-defense threat hits harder
+// ("全力で攻撃" -- attacking with full force), on top of redirecting nearby infantry to
+// converge on it.
+export const HQ_DEFENSE_DMG_MULT = 1.6;
 
 export const ROAD_SPEED_KMH = {vehicle:60, infantry:10, sniper:5, scout:12, mortar:40, artillery:5};
 

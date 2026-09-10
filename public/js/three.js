@@ -862,7 +862,7 @@ export function syncUnitMarkers3d(){
     if(!isTargetDetected(t)){ place(key, 0, 0, 'sphere', 0, false); return; }
     const eLogical = estPos(t);
     const e = smoothVisualPos(t, eLogical.x, eLogical.y);
-    const shape = t.type==='hq' ? 'hq' : t.type==='vehicle' ? 'tank' : t.type==='artillery' ? 'cylinder' : t.type==='drone' ? 'diamond' : t.type==='heli' ? 'heli' : t.type==='infantry' ? 'infantry' : 'sphere';
+    const shape = t.type==='hq' ? 'hq' : t.type==='vehicle' ? 'tank' : t.type==='artillery' ? 'cylinder' : t.type==='aa' ? 'box' : t.type==='drone' ? 'diamond' : t.type==='heli' ? 'heli' : t.type==='infantry' ? 'infantry' : 'sphere';
     place(key, e.x, e.y, shape, t.revealed ? (TARGET_TYPE_COLOR[t.type]||0xc1453b) : 0x8f9678, true, t.formationOffsets);
     if(shape==='heli') updateHeliHeading3d(unitMarkers3d[key], t, e.x, e.y);
     if(shape==='infantry' && t.troops){

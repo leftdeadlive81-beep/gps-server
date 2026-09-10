@@ -18,7 +18,8 @@ export function pickTerrainForStage(stage){
 export function pickTypesForCount(count, stage){
   // infantry is generated separately now (see buildEnemyInfantryGroups) as several
   // formation groups rather than one slot in this mixed pool
-  const base = ['vehicle','artillery'];
+  // per user request: enemy anti-air, hunting the friendly heli (see resolveEnemyAntiAir())
+  const base = ['vehicle','artillery','aa'];
   if(stage>=DRONE_INTRO_STAGE) base.push('drone');
   for(let i=base.length-1;i>0;i--){
     const j = Math.floor(Math.random()*(i+1));

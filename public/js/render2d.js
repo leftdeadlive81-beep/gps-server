@@ -272,9 +272,7 @@ export function drawBoard(){
       const kind = (state.roadKinds||[])[roadIdx] || 'main';
       const width = kind==='dirt' ? 3 : kind==='branch' ? 5 : 7;
       const base = kind==='dirt' ? 'rgba(139,106,67,0.72)' : kind==='branch' ? 'rgba(123,122,103,0.72)' : 'rgba(145,143,127,0.78)';
-      const center = kind==='dirt' ? 'rgba(196,157,107,0.45)' : 'rgba(218,211,180,0.58)';
       strokePath(proj, base, width, null);
-      strokePath(proj, center, kind==='dirt' ? 1 : 2, kind==='dirt' ? [4,6] : [10,8]);
     });
   }
 
