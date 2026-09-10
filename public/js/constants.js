@@ -629,6 +629,22 @@ export const WAVE_SPAWN_DELAY_MS = 8000;
 
 export const WAVE_SPAWN_WINDOW_MS = 180000;
 
+// per user request: the enemy HQ isn't just a passive objective -- it's armed with 2 mortar
+// tubes (indirect, same MORTAR_MAX_RANGE_UNITS reach as every mortar) and 3 tank guns (direct
+// fire, same TANK_ENGAGE_RANGE as a friendly tank duel), each engaging the nearest friendly
+// asset independently. See resolveEnemyHqAttack() in combat.js.
+export const HQ_MORTAR_COUNT = 2;
+
+export const HQ_MORTAR_DAMAGE = [30, 50];
+
+export const HQ_MORTAR_COOLDOWN_TICKS = 8;
+
+export const HQ_TANKGUN_COUNT = 3;
+
+export const HQ_TANKGUN_DAMAGE = [18, 32];
+
+export const HQ_TANKGUN_COOLDOWN_TICKS = 2;
+
 export const SHELL_DISPERSION_MULT = {heat:0.6};
 
 export const MORTAR_CB_SHOTS_THRESHOLD = 3;
