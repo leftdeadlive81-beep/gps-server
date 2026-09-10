@@ -8,6 +8,40 @@ import { initThree, renderThreeFrame } from './three.js';
 import { anyOverlayShown, renderCommandBox, renderDecisionPanel, renderDecoyCommandBox, renderEnemyCommandBox, renderMultiSelectBox, renderStats, repositionOpenCommandBoxes } from './ui.js';
 import { update3dEffects, updateEnemyTracers, updateImpactLights, updateProjectiles } from './vfx.js';
 
+// per user request: keep the screen from sleeping while a battle is actively running
+// (state.simRunning) -- Screen Wake Lock is released by the browser whenever the tab
+// is hidden, so it's re-requested on visibilitychange rather than assumed to persist.
+let wakeLock = null;
+let wakeLockWanted = false;
+
+async function requestWakeLock(){
+  if(!('wakeLock' in navigator)) return;
+  try{
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', ()=>{ wakeLock = null; });
+  }catch(e){
+    wakeLock = null;
+  }
+}
+
+function releaseWakeLock(){
+  if(wakeLock){
+    wakeLock.release().catch(()=>{});
+    wakeLock = null;
+  }
+}
+
+function syncWakeLock(){
+  const wanted = !!(state && state.simRunning && !state.stageResolved);
+  if(wanted === wakeLockWanted) return;
+  wakeLockWanted = wanted;
+  if(wanted) requestWakeLock(); else releaseWakeLock();
+}
+
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible' && wakeLockWanted && !wakeLock) requestWakeLock();
+});
+
 export function render(){
   renderStats();
   selectNextTarget();
@@ -33,6 +67,7 @@ export function loop(){
     if(state) drawMinimap();
     renderThreeFrame();
   }
+  syncWakeLock();
   requestAnimationFrame(loop);
 }
 
