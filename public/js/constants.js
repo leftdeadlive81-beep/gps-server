@@ -441,6 +441,13 @@ export const SQUAD_ANTI_DRONE_RANGE_M = 200;
 
 export const SQUAD_ANTI_DRONE_RANGE_UNITS = SQUAD_ANTI_DRONE_RANGE_M / METERS_PER_UNIT;
 
+// per user request: infantry closing on infantry (a squad on "assault" order walking straight
+// at the nearest enemy infantry group's exact position) must stop at least this far out --
+// units should never end up standing on top of each other.
+export const INFANTRY_STANDOFF_M = 200;
+
+export const INFANTRY_STANDOFF_UNITS = INFANTRY_STANDOFF_M / METERS_PER_UNIT;
+
 export const SQUAD_ANTI_DRONE_HIT_CHANCE = 0.65;
 
 export const SQUAD_ANTI_DRONE_DMG = [8,16];
