@@ -1825,7 +1825,7 @@ export function findAutoSniperTarget(sn){
   state.targets.forEach(t=>{
     if(t.destroyed) return;
     if(t.type==='heli' || t.type==='drone') return;
-    if(!isTargetDetected(t)) return;
+    if(!t.revealed) return;
     const dist = Math.hypot(t.trueX-sn.x, t.trueY-sn.y);
     if(dist > SNIPER_RANGE_UNITS) return;
     if(!hasLineOfSight(sn.x, sn.y, t.trueX, t.trueY)) return;
@@ -1883,7 +1883,7 @@ export function resolveSniperOrders(dt){
         const t = state.targets.find(x=>x.id===sn.pendingSnipeTargetId);
         if(!t || t.destroyed || t.type==='heli' || t.type==='drone'){
           sn.pendingSnipeTargetId = null;
-        } else if(isTargetDetected(t)){
+        } else if(t.revealed){
           const dist = Math.hypot(t.trueX-sn.x, t.trueY-sn.y);
           if(dist <= SNIPER_RANGE_UNITS && hasLineOfSight(sn.x, sn.y, t.trueX, t.trueY)){
             anyEvent = true;

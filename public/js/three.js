@@ -1,5 +1,5 @@
 // Split out of the former monolithic mortar_fdc_game.js.
-import { estPos, isTargetDetected, smoothVisualPos, state, unitAlive } from './combat.js';
+import { estPos, smoothVisualPos, state, unitAlive } from './combat.js';
 import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, FRIENDLY_MARK_COLOR_3D, GRID_LINES, HELI_FLIGHT_ALTITUDE, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, PROC_CANOPY_CELL, PROC_CANOPY_DARK, PROC_CANOPY_LIGHT, PROC_CLEARING_CELL, PROC_CLEARING_COLOR, PROC_CLEARING_EDGE0, PROC_CLEARING_EDGE1, PROC_COLOR_HIGH, PROC_COLOR_LOW, PROC_COLOR_WATER, PROC_DRY_PATCH_CELL, PROC_DRY_PATCH_COLOR, PROC_DRY_PATCH_EDGE0, PROC_DRY_PATCH_EDGE1, PROC_MESH_SEGMENTS_X, PROC_MESH_SEGMENTS_Z, PROC_OPEN_MOTTLE_AMOUNT, PROC_OPEN_MOTTLE_CELL, PROC_TERRAIN_HEIGHT_SCALE, PROC_TEXTURE_NOISE_COARSE_AMOUNT, PROC_TEXTURE_NOISE_COARSE_CELL, PROC_TEXTURE_NOISE_FINE_AMOUNT, PROC_TEXTURE_NOISE_FINE_CELL, PROC_TEXTURE_SIZE_X, PROC_TEXTURE_SIZE_Z, SCOUT_SQUAD_SIZE, SHADOW_FRUSTUM_HALF, SKY_COLOR, SNIPER_SQUAD_SIZE, SQUAD_GRID_OFFSETS, SUN_OFFSET, TARGET_TYPE_COLOR, TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, WALK_AMP_EASE, WALK_CYCLE_SPEED, WALK_SWING_MAX, WORLD, unitMarkers3d } from './constants.js';
 import { updateMapFocusEase } from './input.js';
 import { buildContourLines, buildProceduralRoads, elevationAt, elevationAtFor, nearestPointOnRoad, terrainTypeAtFor } from './terrain.js';
@@ -859,11 +859,15 @@ export function syncUnitMarkers3d(){
   state.targets.forEach((t,i)=>{
     const key = 'target'+t.id;
     if(t.destroyed){ place(key, t.trueX, t.trueY, 'sphere', 0x5c2a25, false); return; }
-    if(!isTargetDetected(t)){ place(key, 0, 0, 'sphere', 0, false); return; }
+    // per user request: the enemy HQ is the one target type that can still be !revealed (every
+    // other type spawns already revealed -- see buildEnemyHqTarget/updateHqDetection in
+    // combat.js) -- it must not be placed at all until then, not just recolored dim, or its
+    // exact position on the 3D map would give it away regardless of color/label.
+    if(!t.revealed){ place(key, 0, 0, 'sphere', 0, false); return; }
     const eLogical = estPos(t);
     const e = smoothVisualPos(t, eLogical.x, eLogical.y);
     const shape = t.type==='hq' ? 'hq' : t.type==='vehicle' ? 'tank' : t.type==='artillery' ? 'cylinder' : t.type==='aa' ? 'box' : t.type==='drone' ? 'diamond' : t.type==='heli' ? 'heli' : t.type==='infantry' ? 'infantry' : 'sphere';
-    place(key, e.x, e.y, shape, t.revealed ? (TARGET_TYPE_COLOR[t.type]||0xc1453b) : 0x8f9678, true, t.formationOffsets);
+    place(key, e.x, e.y, shape, TARGET_TYPE_COLOR[t.type]||0xc1453b, true, t.formationOffsets);
     if(shape==='heli') updateHeliHeading3d(unitMarkers3d[key], t, e.x, e.y);
     if(shape==='infantry' && t.troops){
       updateSoldierFigures3d(unitMarkers3d[key], t.troops.map(s=>s.alive));

@@ -1,5 +1,5 @@
 // Split out of the former monolithic mortar_fdc_game.js.
-import { computeDispersionAt, currentPlacementUnit, estPos, isSuppressed, isTargetDetected, smoothVisualPos, state, unitAlive, unitAliveCount } from './combat.js';
+import { computeDispersionAt, currentPlacementUnit, estPos, isSuppressed, smoothVisualPos, state, unitAlive, unitAliveCount } from './combat.js';
 import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FRIENDLY_MARK_COLOR, GRID_LINES, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_VIEW, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SNIPER_AIM_RANGE_UNITS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, TRENCH_LINE_WIDTH, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
 import { isMultiSelected } from './input.js';
 import { choppedLineSegments, febaLineSegments } from './terrain.js';
@@ -193,7 +193,9 @@ export function drawMinimap(){
 
   ctx.fillStyle = ENEMY_MARK_COLOR;
   state.targets.forEach(t=>{
-    if(t.destroyed || !isTargetDetected(t)) return;
+    // per user request: the enemy HQ stays hidden (including on the minimap) until revealed --
+    // see the matching fix in the main 3D/2D target-drawing loops above/in three.js.
+    if(t.destroyed || !t.revealed) return;
     const e = estPos(t);
     ctx.beginPath();
     ctx.arc(sx(e.x), sy(e.y), 1.6, 0, Math.PI*2);
@@ -606,7 +608,7 @@ export function drawBoard(){
       drawAttritionBar(ctx, tVis.x+18, tVis.y-2, tank.hp/tank.maxHp);
       if(tank.order==='hunt' && tank.huntTargetId){
         const t = state.targets.find(x=>x.id===tank.huntTargetId);
-        if(t && !t.destroyed && isTargetDetected(t)){
+        if(t && !t.destroyed && t.revealed){
           const eL = estPos(t);
           const e = project(eL.x, eL.y);
           ctx.beginPath();
@@ -643,7 +645,7 @@ export function drawBoard(){
       drawAttritionBar(ctx, samVis.x+18, samVis.y-2, sam.hp/sam.maxHp);
       if(sam.order==='hunt' && sam.huntTargetId){
         const t = state.targets.find(x=>x.id===sam.huntTargetId);
-        if(t && !t.destroyed && isTargetDetected(t)){
+        if(t && !t.destroyed && t.revealed){
           const eL = estPos(t);
           const e = project(eL.x, eL.y);
           ctx.beginPath();
@@ -711,7 +713,7 @@ export function drawBoard(){
       ctx.fillText(`第${sqIdx+1}小隊 ${aliveSoldiers.length}/${sq.soldiers.length} ${sqOrderIcon}`, sqVis.x, sqVis.y+28);
 
       if(aliveSoldiers.length>0){
-        state.targets.filter(t=>!t.destroyed && t.type==='infantry' && isTargetDetected(t)).forEach(t=>{
+        state.targets.filter(t=>!t.destroyed && t.type==='infantry' && t.revealed).forEach(t=>{
           const eL = estPos(t);
           const dist = Math.hypot(eL.x-sq.x, eL.y-sq.y);
           if(dist > SQUAD_ENGAGE_RANGE) return;
@@ -745,7 +747,7 @@ export function drawBoard(){
 
       if(aliveSoldiers.length>0 && sn.pendingSnipeTargetId){
         const t = state.targets.find(x=>x.id===sn.pendingSnipeTargetId);
-        if(t && !t.destroyed && isTargetDetected(t)){
+        if(t && !t.destroyed && t.revealed){
           const eL = estPos(t);
           const e = project(eL.x, eL.y);
           ctx.beginPath();
@@ -781,8 +783,21 @@ export function drawBoard(){
     // per user request: detection/estimation is gone -- every non-destroyed target is always
     // shown at its exact true position, so there's no "undetected" fallback marker and no
     // position-uncertainty ring to draw here anymore (both used to depend on isTargetDetected/
-    // t.posErr, which no longer exist).
-    if(!t.destroyed){
+    // t.posErr, which no longer exist). The one exception is the enemy HQ (see
+    // buildEnemyHqTarget/updateHqDetection in combat.js): it alone can still be !revealed, and
+    // must not be drawn at all -- not even as a dim/unlabeled marker -- until then, or its
+    // exact position would give it away regardless of the missing label.
+    if(t.destroyed){
+      // reveal true position, destroyed mark
+      const dp = project(t.trueX, t.trueY);
+      ctx.strokeStyle = '#c1453b'; ctx.lineWidth=2;
+      ctx.beginPath();
+      ctx.moveTo(dp.x-8,dp.y-8); ctx.lineTo(dp.x+8,dp.y+8);
+      ctx.moveTo(dp.x+8,dp.y-8); ctx.lineTo(dp.x-8,dp.y+8);
+      ctx.stroke();
+      ctx.fillStyle=LABEL_TEXT_COLOR; ctx.font='15px "JetBrains Mono"'; ctx.textAlign='center';
+      ctx.fillText(t.id+' 撃破', dp.x, dp.y-16);
+    } else if(t.revealed){
       const eLogical = estPos(t);
       const eVisL = smoothVisualPos(t, eLogical.x, eLogical.y);
       const e = project(eVisL.x, eVisL.y);
@@ -908,16 +923,6 @@ export function drawBoard(){
         ctx.textAlign = 'center';
         ctx.fillText('[制圧]', e.x, e.y-30);
       }
-    } else {
-      // reveal true position, destroyed mark
-      const dp = project(t.trueX, t.trueY);
-      ctx.strokeStyle = '#c1453b'; ctx.lineWidth=2;
-      ctx.beginPath();
-      ctx.moveTo(dp.x-8,dp.y-8); ctx.lineTo(dp.x+8,dp.y+8);
-      ctx.moveTo(dp.x+8,dp.y-8); ctx.lineTo(dp.x-8,dp.y+8);
-      ctx.stroke();
-      ctx.fillStyle=LABEL_TEXT_COLOR; ctx.font='15px "JetBrains Mono"'; ctx.textAlign='center';
-      ctx.fillText(t.id+' 撃破', dp.x, dp.y-16);
     }
 
     // impact marks

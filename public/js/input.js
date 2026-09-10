@@ -1,5 +1,5 @@
 // Split out of the former monolithic mortar_fdc_game.js.
-import { applyBestMortarLoadout, buildTrenchAt, buildWallAt, estPos, estPosFromMortar, handlePlacementClick, isTargetDetected, mortarNotReadyToFire, mortarTooCloseToFire, mortarTooFarToFire, placeDecoyAt, resolveSmartUnitIdxs, state, unitAlive } from './combat.js';
+import { applyBestMortarLoadout, buildTrenchAt, buildWallAt, estPos, estPosFromMortar, handlePlacementClick, mortarNotReadyToFire, mortarTooCloseToFire, mortarTooFarToFire, placeDecoyAt, resolveSmartUnitIdxs, state, unitAlive } from './combat.js';
 import { CANVAS_H, CANVAS_W, DECOY_LONGPRESS_MOVE_TOLERANCE_PX, DECOY_LONGPRESS_MS, DIRECT_MOVE_KINDS, FRIENDLY_KIND_LIST, MAP_DOUBLETAP_ZOOM_LEVEL, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_MOVE_START_DELAY_MS, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, MULTI_SELECT_KINDS, MULTI_SELECT_ORDER_SETTER, ORDER_LABEL, SCOUT_ADVANCE_LIMIT_X, SMART_UNIT_TYPES, SQUAD_ADVANCE_LIMIT_X, SQUAD_ASSAULT_LIMIT_X, SQUAD_RETREAT_LIMIT_X } from './constants.js';
 import { render } from './main.js';
 import { clampMapView, groundPlaneCanvasUnitAt, project, resizeThree, terrainCanvasUnitAt, threeReady, updateCameraFromView } from './three.js';
@@ -305,7 +305,7 @@ export function handleCanvasClick(evt){
 export function nearestVisibleTargetForScreen(sx, sy, maxPx){
   let best=null, bestD=Infinity;
   state.targets.forEach(t=>{
-    if(t.destroyed || !isTargetDetected(t)) return;
+    if(t.destroyed || !t.revealed) return;
     const vx = t._visX!==undefined ? t._visX : estPos(t).x;
     const vy = t._visY!==undefined ? t._visY : estPos(t).y;
     const p = project(vx, vy);
@@ -356,7 +356,7 @@ export function collectClickCandidates(sx, sy){
     if(dist<=20) candidates.push({ type:'decoy', payload:idx, dist, sig:`decoy:${idx}` });
   });
   state.targets.forEach(t=>{
-    if(t.destroyed || !isTargetDetected(t)) return;
+    if(t.destroyed || !t.revealed) return;
     const vx = t._visX!==undefined ? t._visX : estPos(t).x;
     const vy = t._visY!==undefined ? t._visY : estPos(t).y;
     const p = project(vx, vy);
