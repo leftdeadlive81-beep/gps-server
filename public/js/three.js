@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { estPos, isTargetDetected, smoothVisualPos, state, unitAlive } from './combat.js';
-import { CANVAS_H, CANVAS_W, FRIENDLY_MARK_COLOR_3D, HELI_FLIGHT_ALTITUDE, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, PROC_CANOPY_CELL, PROC_CANOPY_DARK, PROC_CANOPY_LIGHT, PROC_CLEARING_CELL, PROC_CLEARING_COLOR, PROC_CLEARING_EDGE0, PROC_CLEARING_EDGE1, PROC_COLOR_HIGH, PROC_COLOR_LOW, PROC_COLOR_WATER, PROC_DRY_PATCH_CELL, PROC_DRY_PATCH_COLOR, PROC_DRY_PATCH_EDGE0, PROC_DRY_PATCH_EDGE1, PROC_MESH_SEGMENTS_X, PROC_MESH_SEGMENTS_Z, PROC_OPEN_MOTTLE_AMOUNT, PROC_OPEN_MOTTLE_CELL, PROC_TERRAIN_HEIGHT_SCALE, PROC_TEXTURE_NOISE_COARSE_AMOUNT, PROC_TEXTURE_NOISE_COARSE_CELL, PROC_TEXTURE_NOISE_FINE_AMOUNT, PROC_TEXTURE_NOISE_FINE_CELL, PROC_TEXTURE_SIZE_X, PROC_TEXTURE_SIZE_Z, SCOUT_SQUAD_SIZE, SHADOW_FRUSTUM_HALF, SKY_COLOR, SNIPER_SQUAD_SIZE, SQUAD_GRID_OFFSETS, SUN_OFFSET, TARGET_TYPE_COLOR, TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, WALK_AMP_EASE, WALK_CYCLE_SPEED, WALK_SWING_MAX, WORLD, unitMarkers3d } from './constants.js';
+import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, FRIENDLY_MARK_COLOR_3D, GRID_LINES, HELI_FLIGHT_ALTITUDE, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, PROC_CANOPY_CELL, PROC_CANOPY_DARK, PROC_CANOPY_LIGHT, PROC_CLEARING_CELL, PROC_CLEARING_COLOR, PROC_CLEARING_EDGE0, PROC_CLEARING_EDGE1, PROC_COLOR_HIGH, PROC_COLOR_LOW, PROC_COLOR_WATER, PROC_DRY_PATCH_CELL, PROC_DRY_PATCH_COLOR, PROC_DRY_PATCH_EDGE0, PROC_DRY_PATCH_EDGE1, PROC_MESH_SEGMENTS_X, PROC_MESH_SEGMENTS_Z, PROC_OPEN_MOTTLE_AMOUNT, PROC_OPEN_MOTTLE_CELL, PROC_TERRAIN_HEIGHT_SCALE, PROC_TEXTURE_NOISE_COARSE_AMOUNT, PROC_TEXTURE_NOISE_COARSE_CELL, PROC_TEXTURE_NOISE_FINE_AMOUNT, PROC_TEXTURE_NOISE_FINE_CELL, PROC_TEXTURE_SIZE_X, PROC_TEXTURE_SIZE_Z, SCOUT_SQUAD_SIZE, SHADOW_FRUSTUM_HALF, SKY_COLOR, SNIPER_SQUAD_SIZE, SQUAD_GRID_OFFSETS, SUN_OFFSET, TARGET_TYPE_COLOR, TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, WALK_AMP_EASE, WALK_CYCLE_SPEED, WALK_SWING_MAX, WORLD, unitMarkers3d } from './constants.js';
 import { updateMapFocusEase } from './input.js';
 import { buildContourLines, buildProceduralRoads, elevationAt, elevationAtFor, nearestPointOnRoad, terrainTypeAtFor } from './terrain.js';
 import { clamp, smoothstep01, valueNoise2D } from './utils.js';
@@ -289,9 +289,24 @@ export function regenerateTerrain(gen){
   buildContourLines();
   buildProceduralRoads(gen.roadPaths, gen.roadKinds);
   buildTerrainProps(gen);
+  cacheGroundLineHeights();
   threeReady = true;
   cameraNeedsInitialFit = true;
   resizeThree();
+}
+
+// per user request: the coordinate grid and contour lines are static per wave (same x/y
+// positions the whole wave through -- GRID_LINES never changes shape at all, and
+// buildContourLines() above only just rebuilt CONTOUR_LINES_CANVAS for this terrain) but were
+// being reprojected via project()/projectAtHeight() every single frame, which re-runs the
+// (expensive) procedural elevation noise for every segment endpoint on every draw. Caching each
+// endpoint's terrain height here -- once per wave, not once per frame -- lets drawBoard() use
+// projectAtWorldY() with the cached height directly instead, which was most of its cost.
+function cacheGroundLineHeights(){
+  const annotate = seg => { seg.h1 = terrainHeightAt(seg.x1, seg.y1); seg.h2 = terrainHeightAt(seg.x2, seg.y2); };
+  GRID_LINES.minor.forEach(annotate);
+  GRID_LINES.major.forEach(annotate);
+  CONTOUR_LINES_CANVAS.forEach(annotate);
 }
 
 export function disposeTerrainProps(){
@@ -370,10 +385,12 @@ export function projectAtHeight(cx, cy, extraH){
 
 export function projectAtWorldY(cx, cy, worldY){
   if(!threeReady || !camera3d) return { x:cx, y:cy, visible:true };
-  if(!_projForward){ _projForward = new THREE.Vector3(); _projToPoint = new THREE.Vector3(); }
+  // _projForward is kept up to date by updateCameraFromView()'s applyDist(), which is the only
+  // place the camera's orientation actually changes -- see the comment there. Guard against the
+  // (now purely defensive) case this is somehow called before that's ever run once.
+  if(!_projForward){ _projForward = new THREE.Vector3(); _projToPoint = new THREE.Vector3(); camera3d.getWorldDirection(_projForward); }
   const {x,z} = canvasUnitToWorldXZ(cx,cy);
   const worldPt = new THREE.Vector3(x, worldY, z);
-  camera3d.getWorldDirection(_projForward);
   _projToPoint.copy(worldPt).sub(camera3d.position);
   const inFront = _projToPoint.dot(_projForward) > 0.01;
   const v = worldPt.project(camera3d);
@@ -411,6 +428,15 @@ export function updateCameraFromView(){
     camera3d.near = Math.max(1, d*0.02);
     camera3d.far = d + (WORLD.maxY-WORLD.minY) + 8000;
     camera3d.updateProjectionMatrix();
+    // per user request: projectAtWorldY() (the single choke point every on-map label/marker/
+    // detection-circle-point projection goes through) used to call camera3d.getWorldDirection()
+    // itself on EVERY call -- that walks the camera's world matrix chain and recomputes its
+    // inverse from scratch every time, and with hundreds of project() calls in one drawBoard()
+    // pass, that redundant per-call matrix work was most of drawBoard()'s cost. The camera's
+    // orientation only actually changes here (once per camera update, not once per projected
+    // point), so compute it here once and let projectAtWorldY just read the cached vector.
+    if(!_projForward){ _projForward = new THREE.Vector3(); _projToPoint = new THREE.Vector3(); }
+    camera3d.getWorldDirection(_projForward);
     // per user request: fog distance used to be recomputed right here too, but applyDist runs
     // on every touchmove/mousemove while panning (not just once per rendered frame) -- doing
     // the multi-ray scan below on every single input event, on top of everything else already

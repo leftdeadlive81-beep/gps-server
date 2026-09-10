@@ -309,12 +309,19 @@ export function drawBoard(){
   // buildGridLineSegments()), drawn the same way as the contour lines below but as its own
   // base layer underneath them -- minor (100m) lines very faint so they read as a map's grid
   // squares rather than clutter, major (1km) lines a touch more visible.
+  // per user request: uses the per-wave cached seg.h1/h2 (see cacheGroundLineHeights() in
+  // three.js) via projectAtWorldY() instead of project(), which would otherwise re-run the
+  // procedural elevation noise for both endpoints of every segment on every single frame --
+  // by far the most expensive part of drawing this grid. Segments built fresh each call (the
+  // FEBA line below, whose x position moves every step) have no cached height, so fall back
+  // to project() for those -- there are few enough of them that it doesn't matter.
   const strokeGridBucket = (segs, color, width)=>{
     ctx.beginPath();
     ctx.strokeStyle = color;
     ctx.lineWidth = width;
     segs.forEach(seg=>{
-      const p0 = project(seg.x1, seg.y1), p1 = project(seg.x2, seg.y2);
+      const p0 = seg.h1!==undefined ? projectAtWorldY(seg.x1, seg.y1, seg.h1) : project(seg.x1, seg.y1);
+      const p1 = seg.h2!==undefined ? projectAtWorldY(seg.x2, seg.y2, seg.h2) : project(seg.x2, seg.y2);
       if(!p0.visible || !p1.visible) return;
       ctx.moveTo(p0.x, p0.y);
       ctx.lineTo(p1.x, p1.y);
@@ -324,15 +331,18 @@ export function drawBoard(){
   strokeGridBucket(GRID_LINES.minor, 'rgba(220,225,235,0.12)', 1);
   strokeGridBucket(GRID_LINES.major, 'rgba(220,225,235,0.28)', 1);
 
-  // per user request: topographic-map-style contour lines (see buildContourLines()),
-  // drawn the same way roads were above -- reprojected each frame, segments whose
+  // per user request: topographic-map-style contour lines (see buildContourLines()), drawn
+  // the same way roads were above -- endpoints whose height was cached per-wave (see
+  // cacheGroundLineHeights() in three.js) use projectAtWorldY() directly instead of
+  // re-deriving it from project()'s own elevation lookup every frame; segments whose
   // endpoints fall off-screen just aren't drawn rather than being connected through.
   if(CONTOUR_LINES_CANVAS.length){
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(150,110,55,0.55)';
     ctx.lineWidth = 1;
     CONTOUR_LINES_CANVAS.forEach(seg=>{
-      const p0 = project(seg.x1, seg.y1), p1 = project(seg.x2, seg.y2);
+      const p0 = seg.h1!==undefined ? projectAtWorldY(seg.x1, seg.y1, seg.h1) : project(seg.x1, seg.y1);
+      const p1 = seg.h2!==undefined ? projectAtWorldY(seg.x2, seg.y2, seg.h2) : project(seg.x2, seg.y2);
       if(!p0.visible || !p1.visible) return;
       ctx.moveTo(p0.x, p0.y);
       ctx.lineTo(p1.x, p1.y);
