@@ -1024,6 +1024,10 @@ export const MAP_FULL_DETAIL_ZOOM = 1.05;
 
 export const MAP_DETAIL_EFFECT_ZOOM = 0.58;
 
+export const WALK_ANIM_DETAIL_ZOOM = 0.78;
+
+export const WALK_ANIM_MIN_INTERVAL_MS = 140;
+
 export const PROC_TERRAIN_HEIGHT_SCALE = 110 * METERS_PER_UNIT;
 
 export const WORLD = {
