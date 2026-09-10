@@ -1137,7 +1137,10 @@ export function renderStats(){
   document.querySelector('#stat-achievements .value').textContent = unlockedAchievements.size+' / '+Object.keys(ACHIEVEMENTS).length;
   document.querySelector('#stat-turns .value').textContent = `${Math.floor(state.missionMinutes)}分`;
   document.querySelector('#stat-money .value').textContent = '¥'+state.money.toLocaleString();
-  const remainingTargets = state.targets.filter(t=>!t.destroyed).length;
+  // per user request: enemies trickle in over the wave rather than all spawning at once --
+  // still-queued reinforcements (state.pendingSpawns) count as "remaining" too, so this
+  // doesn't read as a near-clear while most of the wave hasn't arrived yet.
+  const remainingTargets = state.targets.filter(t=>!t.destroyed).length + (state.pendingSpawns?state.pendingSpawns.length:0);
   document.getElementById('stat-left').textContent = remainingTargets + ' / ' + state.targetsSpawnedTotal;
   const aliveMortarPersonnel = state.mortars.filter(m=>m.hp>0).length * MORTAR_CREW_SIZE;
   const aliveScoutPersonnel = state.scouts.reduce((s,sc)=>s+unitAliveCount(sc),0);

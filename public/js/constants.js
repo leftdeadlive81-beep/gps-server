@@ -620,6 +620,15 @@ export const MORTAR_MOVE_START_DELAY_MS = 10000;
 
 export const MORTAR_FIRE_READY_DELAY_MS = 10000;
 
+// per user request: nothing spawns in the first 8s of a wave, then the rest of the enemy
+// roster trickles in one at a time (randomized spawnAt within the window) instead of all
+// appearing at once, finishing within 3 minutes of wave start. See startStage()/
+// processSpawnQueue() in combat.js. The enemy HQ is exempt -- it's a fixed structure that
+// already exists, just hidden until detected (see updateHqDetection()), not a spawning unit.
+export const WAVE_SPAWN_DELAY_MS = 8000;
+
+export const WAVE_SPAWN_WINDOW_MS = 180000;
+
 export const SHELL_DISPERSION_MULT = {heat:0.6};
 
 export const MORTAR_CB_SHOTS_THRESHOLD = 3;
