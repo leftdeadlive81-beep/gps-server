@@ -745,6 +745,12 @@ export const ENEMY_FORMATION_BASE_SIZE = 6;
 
 export const ENEMY_INFANTRY_TOTAL_TARGET = 50;
 
+export const ENEMY_INFANTRY_DOCTRINES = [
+  {id:'assault', label:'強襲', speedMult:1.12, flankOffset:0, contactRangeMult:1},
+  {id:'flank', label:'側面', speedMult:0.96, flankOffset:1, contactRangeMult:1},
+  {id:'support', label:'支援', speedMult:0.82, flankOffset:0.45, contactRangeMult:1.45},
+];
+
 export const ORDER_LABEL = {advance:'前進', retreat:'後退', hold:'防御', assault:'突撃', hunt:'追跡攻撃', resting:'大休止'};
 
 export const MORTAR_ORDER_LABEL = {fire:'射撃', standby:'待機', move:'移動'};
@@ -860,6 +866,8 @@ export const TERRAIN_COVER_RELIEF_SATURATION = 0.15;
 export const LAST_STAND_THRESHOLD = 3;
 
 export const MAX_DEBRIS_PARTICLES = 140;
+
+export const MAX_CRATERS = 90;
 
 export const EXPLOSION_SFX_MIN_GAP_MS = 90;
 
@@ -1080,4 +1088,3 @@ export const FRIENDLY_MARK_COLOR_3D = 0x6f9bbf;
 export const HELI_FLIGHT_ALTITUDE = PROC_TERRAIN_HEIGHT_SCALE * 0.35;
 
 export const TARGET_TYPE_COLOR = { infantry:0xc1453b, artillery:0xc1453b, vehicle:0xc1453b, drone:0xc1453b };
-

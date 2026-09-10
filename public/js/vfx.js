@@ -2,7 +2,7 @@
 import { unlockAchievement } from './achievements.js';
 import { playSfx } from './audio.js';
 import { state } from './combat.js';
-import { ARC_HEIGHT, ENEMY_MARK_COLOR, EXPLOSION_SFX_MIN_GAP_MS, MAP_VIEW, MAX_DEBRIS_PARTICLES, MAX_EFFECTS_3D, MAX_IMPACT_LIGHTS, MUZZLE_STYLE } from './constants.js';
+import { ARC_HEIGHT, ENEMY_MARK_COLOR, EXPLOSION_SFX_MIN_GAP_MS, MAP_VIEW, MAX_CRATERS, MAX_DEBRIS_PARTICLES, MAX_EFFECTS_3D, MAX_IMPACT_LIGHTS, MUZZLE_STYLE } from './constants.js';
 import { canvasUnitToWorldXZ, project, scene3d, terrainHeightAt } from './three.js';
 import { clamp, rnd } from './utils.js';
 import { speakRandomAliveUnit } from './voice.js';
@@ -38,6 +38,8 @@ export function fireTracer(startX, startY, endX, endY, duration, weaponType, sol
 export let debrisParticles = [];
 
 export let wreckSmokes = [];
+
+export let craters = [];
 
 export let killBanners = [];
 
@@ -240,6 +242,8 @@ export function spawnDestructionEffect(x, y, label, color){
   flashes.push({x, y, born, life:800, big:true});
   flashes.push({x, y, born: born+130, life:650, big:true});
   shockwaves.push({x, y, born, life:520});
+  craters.push({x, y, radius:rnd(18, 30)});
+  while(craters.length > MAX_CRATERS) craters.shift();
   spawnImpactLight(x, y);
   spawn3dImpactEffect(x, y, 'explosion');
   // screen shake, scaled by how close the impact lands to screen center -- full strength near
@@ -275,6 +279,8 @@ export function updateProjectiles(){
     const prog = (now-p.born)/p.duration;
     if(prog >= 1){
       flashes.push({x:p.endX, y:p.endY, born:now, life:400});
+      craters.push({x:p.endX, y:p.endY, radius:rnd(8, 15)});
+      while(craters.length > MAX_CRATERS) craters.shift();
       spawn3dImpactEffect(p.endX, p.endY, 'impact');
       p.onLand();
       return false;
@@ -300,13 +306,14 @@ export function updateEnemyTracers(){
 
 export function resetAllVfx(){
   ripples = []; projectiles = []; flashes = []; enemyTracers = [];
-  debrisParticles = []; wreckSmokes = []; killBanners = []; shockwaves = [];
+  debrisParticles = []; wreckSmokes = []; craters = []; killBanners = []; shockwaves = [];
   impactLights.forEach(l=>scene3d && scene3d.remove(l.light)); impactLights = [];
 }
 export function setShockwaves(v){ shockwaves = v; }
 export function setDebrisParticles(v){ debrisParticles = v; }
 export function setWreckSmokes(v){ wreckSmokes = v; }
+export function setCraters(v){ craters = v; }
 export function setKillBanners(v){ killBanners = v; }
 export function setRipples(v){ ripples = v; }
 
-Object.assign(window, { fireTracer, ensureWeatherParticles, effectWorldPosition, disposeEffect3d, addEffect3d, spawn3dMuzzleFlash, spawn3dImpactEffect, spawn3dProjectile, update3dEffects, spawnImpactLight, updateImpactLights, triggerShake, currentShakeOffset, projectileArcWorldY, tracerWorldY, onTargetDestroyed, spawnDestructionEffect, updateProjectiles, updateEnemyTracers, resetAllVfx, setShockwaves, setDebrisParticles, setWreckSmokes, setKillBanners, setRipples });
+Object.assign(window, { fireTracer, ensureWeatherParticles, effectWorldPosition, disposeEffect3d, addEffect3d, spawn3dMuzzleFlash, spawn3dImpactEffect, spawn3dProjectile, update3dEffects, spawnImpactLight, updateImpactLights, triggerShake, currentShakeOffset, projectileArcWorldY, tracerWorldY, onTargetDestroyed, spawnDestructionEffect, updateProjectiles, updateEnemyTracers, resetAllVfx, setShockwaves, setDebrisParticles, setWreckSmokes, setCraters, setKillBanners, setRipples });

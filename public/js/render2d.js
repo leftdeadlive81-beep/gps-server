@@ -5,7 +5,7 @@ import { isMultiSelected } from './input.js';
 import { choppedLineSegments, febaLineSegments } from './terrain.js';
 import { project, projectAtWorldY, scaledIconH, threeReady } from './three.js';
 import { bearingToXY, clamp } from './utils.js';
-import { currentShakeOffset, debrisParticles, enemyTracers, ensureWeatherParticles, flashes, killBanners, projectileArcWorldY, projectiles, ripples, setDebrisParticles, setKillBanners, setRipples, setShockwaves, setWreckSmokes, shockwaves, tracerWorldY, weatherParticles, wreckSmokes } from './vfx.js';
+import { craters, currentShakeOffset, debrisParticles, enemyTracers, ensureWeatherParticles, flashes, killBanners, projectileArcWorldY, projectiles, ripples, setDebrisParticles, setKillBanners, setRipples, setShockwaves, setWreckSmokes, shockwaves, tracerWorldY, weatherParticles, wreckSmokes } from './vfx.js';
 import { drawCallouts } from './voice.js';
 
 export function mortarStatusIcon(mortar){
@@ -328,6 +328,51 @@ export function drawBoard(){
   // automatically (computeFebaX(), recomputed every simulationStep) instead of being
   // player-draggable. Drawn thick and blue so it reads clearly against the terrain/units.
   strokeGridBucket(febaLineSegments(state.febaX), FEBA_LINE_COLOR, FEBA_LINE_WIDTH);
+
+  const movingUnits = [
+    {unit:state.hq, label:'指揮所'},
+    ...state.mortars.map((unit,i)=>({unit, label:`迫撃砲${i+1}`})),
+    ...state.scouts.map((unit,i)=>({unit, label:`斥候${i+1}`})),
+    ...state.squads.map((unit,i)=>({unit, label:`第${i+1}小隊`})),
+    ...state.snipers.map((unit,i)=>({unit, label:`狙撃${i+1}班`})),
+    ...state.tanks.map((unit,i)=>({unit, label:`戦車${i+1}`})),
+    ...state.sams.map((unit,i)=>({unit, label:`対空${i+1}`})),
+    ...state.engineers.map((unit,i)=>({unit, label:`工兵${i+1}`})),
+  ];
+  movingUnits.forEach(({unit, label})=>{
+    if(!unit || !unit.pendingDest) return;
+    const from = project(unit.x, unit.y);
+    const to = project(unit.pendingDest.x, unit.pendingDest.y);
+    if(!from.visible || !to.visible) return;
+    ctx.save();
+    ctx.setLineDash([7,5]);
+    ctx.strokeStyle = 'rgba(105,205,240,0.78)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = 'rgba(190,235,255,0.95)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(to.x, to.y, 9, 0, Math.PI*2); ctx.stroke();
+    ctx.fillStyle = 'rgba(190,235,255,0.95)';
+    ctx.font = 'bold 11px "JetBrains Mono"';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, to.x, to.y-13);
+    ctx.restore();
+  });
+
+  craters.forEach(crater=>{
+    const p = project(crater.x, crater.y);
+    if(!p.visible) return;
+    const r = Math.max(3, crater.radius*(MAP_VIEW.zoom||1)*0.12);
+    ctx.save();
+    ctx.fillStyle = 'rgba(28,22,16,0.55)';
+    ctx.strokeStyle = 'rgba(104,76,49,0.65)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y+2, r, Math.max(2, r*0.42), 0, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+  });
 
   // HQ marker (指揮所) ― per user request: now movable (see setUnitMoveDest/applyHqMovement),
   // so it uses smoothVisualPos like every other mobile unit instead of a bare project(hq.x,hq.y).
@@ -825,7 +870,11 @@ export function drawBoard(){
           ctx.fillStyle = LABEL_TEXT_COLOR;
           ctx.font = '14px "JetBrains Mono"';
           ctx.textAlign='center';
-          ctx.fillText(`敵${t.def.label} ${aliveTroops.length}/${t.troops.length}`, e.x, labelY);
+          const doctrine = t.doctrine==='flank' ? '側面' : t.doctrine==='support' ? '支援' : '強襲';
+          ctx.fillText(`敵${t.def.label}(${doctrine}) ${aliveTroops.length}/${t.troops.length}`, e.x, labelY);
+          ctx.font = 'bold 11px "Noto Sans JP"';
+          ctx.fillStyle = t.doctrine==='flank' ? '#e0b84a' : t.doctrine==='support' ? '#b0d3ed' : '#ef927d';
+          ctx.fillText(doctrine==='強襲' ? '▲ 強襲中' : doctrine==='側面' ? '◀ 側面展開' : '■ 支援射撃', e.x, labelY-38);
         }
       } else if(t.type==='drone'){
         // per user request: dropped the rotor-arm satellite dots -- a single diamond
