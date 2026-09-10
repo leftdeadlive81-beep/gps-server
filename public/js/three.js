@@ -230,7 +230,7 @@ export function loadTankModel3d(){
       obj.scale.setScalar(1/maxDim);
       const normalizedBounds = new THREE.Box3().setFromObject(obj);
       obj.position.y -= normalizedBounds.min.y;
-      obj.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+      obj.traverse(o=>{ if(o.isMesh){ o.castShadow = false; o.receiveShadow = true; } });
       tankModelTemplate3d = obj;
       Object.keys(unitMarkers3d).forEach(key=>{
         if(key.indexOf('tank')===0) disposeMarker3d(key);

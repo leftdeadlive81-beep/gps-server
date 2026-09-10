@@ -12,6 +12,14 @@ export function selectNextTarget(){
   if(!live.some(t=>t.id===state.selectedId)) state.selectedId = live[0].id;
 }
 
+function directMoveTargetUnit(kind, idx){
+  if(kind==='squad') return state.squads[idx];
+  if(kind==='tank') return state.tanks[idx];
+  if(kind==='sam') return state.sams[idx];
+  if(kind==='hq') return state.hq;
+  return null;
+}
+
 export function setUnitMoveDest(kind, idx, px, py, silent){
   if(kind==='squad'){
     const sq = state.squads[idx];
@@ -273,7 +281,20 @@ export function handleCanvasClick(evt){
   // sniper/scout/engineer each have other click-based actions that still need their own
   // explicit arm button to stay unambiguous, see DIRECT_MOVE_KINDS above).
   if(!hit && state.commandBox && DIRECT_MOVE_KINDS.includes(state.commandBox.kind)){
-    if(setUnitMoveDest(state.commandBox.kind, state.commandBox.idx, px, py)){
+    // per user request: this used to fire on ANY empty-ground click while the box was open,
+    // including reopening an already-moving unit's box just to check on it -- the very next
+    // click, even one only meant to look elsewhere on the map, silently overwrote its
+    // pendingDest and yanked it off course (reported as the unit "suddenly returning to its
+    // original position"). Now a plain empty-ground click only re-routes a unit that ISN'T
+    // already mid-move; once it has a pendingDest in flight, the same click just closes the
+    // box -- click the unit itself again to arm a fresh move order.
+    const unit = directMoveTargetUnit(state.commandBox.kind, state.commandBox.idx);
+    if(unit && !unit.pendingDest && setUnitMoveDest(state.commandBox.kind, state.commandBox.idx, px, py)){
+      state.commandBox = null;
+      render();
+      return;
+    }
+    if(unit && unit.pendingDest){
       state.commandBox = null;
       render();
       return;
