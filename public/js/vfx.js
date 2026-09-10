@@ -15,13 +15,24 @@ export let flashes = [];
 
 export let enemyTracers = [];
 
-export function fireTracer(startX, startY, endX, endY, duration, weaponType){
+export function fireTracer(startX, startY, endX, endY, duration, weaponType, soldierOffsets){
   const wt = weaponType || 'rifle';
   const now = performance.now();
   enemyTracers.push({startX, startY, endX, endY, born:now, duration, weaponType:wt});
   const st = MUZZLE_STYLE[wt] || MUZZLE_STYLE.rifle;
-  flashes.push({x:startX, y:startY, born:now, life:st.life, muzzle:true, weaponType:wt});
-  spawn3dMuzzleFlash(startX, startY, wt);
+  // per user request: when a multi-figure unit fires as one (a squad's volley, an enemy
+  // infantry group's return fire), every currently-alive stick figure gets its own muzzle
+  // flash at its actual position (soldierOffsets, canvas-unit dx/dy from the unit's aggregate
+  // x/y -- see aliveFigureOffsets() in combat.js) instead of a single flash pretending to come
+  // from the unit's one aggregate marker point. Units that fire as a single shooter (tank, SAM,
+  // sniper, vehicle, heli, drone...) pass no offsets and keep the original single flash.
+  const flashPoints = (soldierOffsets && soldierOffsets.length)
+    ? soldierOffsets.map(o=>({x:startX+o.dx, y:startY+o.dy}))
+    : [{x:startX, y:startY}];
+  flashPoints.forEach(p=>{
+    flashes.push({x:p.x, y:p.y, born:now, life:st.life, muzzle:true, weaponType:wt});
+    spawn3dMuzzleFlash(p.x, p.y, wt);
+  });
 }
 
 export let debrisParticles = [];

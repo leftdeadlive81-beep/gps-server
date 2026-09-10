@@ -165,7 +165,9 @@ export const HELI_WITHDRAW_DIST = 380;
 
 export const HELI_ATTACK_BURST = 2;
 
-export const HELI_COOLDOWN_TICKS = 5;
+// per user request: firing interval lengthened 10x (was 5) to match the slower pace applied
+// to every other weapon's engagement cadence (WEAPON_FIRE_INTERVAL above).
+export const HELI_COOLDOWN_TICKS = 50;
 
 export const HELI_ATTACK_DAMAGE = [18, 34];
 
@@ -598,7 +600,9 @@ export const GAME_SPEED_ORDER = ['slow', 'normal', 'fast'];
 
 export const MORTAR_RELOAD_MS = 650;
 
-export const WEAPON_FIRE_INTERVAL = { squad:3, tank:4, sam:3, sniper:5 };
+// per user request: firing interval for both sides lengthened 10x (was {squad:3, tank:4,
+// sam:3, sniper:5} turns between shots) for a slower, more deliberate pace of engagement.
+export const WEAPON_FIRE_INTERVAL = { squad:30, tank:40, sam:30, sniper:50 };
 
 export const WEAPON_FIRE_OFFSET = { squad:0, tank:1, sam:2, sniper:3 };
 
