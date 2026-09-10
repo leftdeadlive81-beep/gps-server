@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { computeDispersionAt, currentPlacementUnit, estPos, isSuppressed, smoothVisualPos, state, unitAlive, unitAliveCount } from './combat.js';
-import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FRIENDLY_MARK_COLOR, GRID_LINES, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_VIEW, METERS_PER_UNIT, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SNIPER_AIM_RANGE_UNITS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, TRENCH_LINE_WIDTH, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
+import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FRIENDLY_MARK_COLOR, GRID_LINES, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_DETAIL_EFFECT_ZOOM, MAP_DETAIL_LABEL_ZOOM, MAP_FULL_DETAIL_ZOOM, MAP_VIEW, METERS_PER_UNIT, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SNIPER_AIM_RANGE_UNITS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, TRENCH_LINE_WIDTH, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
 import { isMultiSelected } from './input.js';
 import { choppedLineSegments, febaLineSegments } from './terrain.js';
 import { project, projectAtWorldY, scaledIconH, threeReady } from './three.js';
@@ -234,6 +234,9 @@ export function drawBoard(){
   const shakeOff = currentShakeOffset();
   ctx.translate(shakeOff.x, shakeOff.y);
   const nowWander = performance.now();
+  const showDetailLabels = MAP_VIEW.zoom >= MAP_DETAIL_LABEL_ZOOM;
+  const showFullDetail = MAP_VIEW.zoom >= MAP_FULL_DETAIL_ZOOM;
+  const showDetailEffects = MAP_VIEW.zoom >= MAP_DETAIL_EFFECT_ZOOM;
 
   // Roads are drawn over the 3D terrain as a crisp tactical-map overlay. The
   // terrain texture carries the broad road surface; this pass adds lane/edge
@@ -276,7 +279,7 @@ export function drawBoard(){
       const base = kind==='dirt' ? 'rgba(139,106,67,0.72)' : kind==='branch' ? 'rgba(123,122,103,0.72)' : 'rgba(145,143,127,0.78)';
       strokePath(proj, 'rgba(35,29,22,0.62)', width+3, null);
       strokePath(proj, base, width, null);
-      if(kind!=='dirt'){
+      if(showDetailLabels && kind!=='dirt'){
         strokePath(proj, 'rgba(225,218,176,0.42)', 1, kind==='main' ? [10,12] : [5,9]);
       }
       strokePath(proj, 'rgba(20,18,14,0.28)', 1, null);
@@ -393,19 +396,21 @@ export function drawBoard(){
     ctx.restore();
   });
 
-  craters.forEach(crater=>{
-    const p = project(crater.x, crater.y);
-    if(!p.visible) return;
-    const r = Math.max(3, crater.radius*(MAP_VIEW.zoom||1)*0.12);
-    ctx.save();
-    ctx.fillStyle = 'rgba(28,22,16,0.55)';
-    ctx.strokeStyle = 'rgba(104,76,49,0.65)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.ellipse(p.x, p.y+2, r, Math.max(2, r*0.42), 0, 0, Math.PI*2);
-    ctx.fill(); ctx.stroke();
-    ctx.restore();
-  });
+  if(showDetailEffects){
+    craters.forEach(crater=>{
+      const p = project(crater.x, crater.y);
+      if(!p.visible) return;
+      const r = Math.max(3, crater.radius*(MAP_VIEW.zoom||1)*0.12);
+      ctx.save();
+      ctx.fillStyle = 'rgba(28,22,16,0.55)';
+      ctx.strokeStyle = 'rgba(104,76,49,0.65)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y+2, r, Math.max(2, r*0.42), 0, 0, Math.PI*2);
+      ctx.fill(); ctx.stroke();
+      ctx.restore();
+    });
+  }
 
   // HQ marker (指揮所) ― per user request: now movable (see setUnitMoveDest/applyHqMovement),
   // so it uses smoothVisualPos like every other mobile unit instead of a bare project(hq.x,hq.y).
@@ -429,14 +434,14 @@ export function drawBoard(){
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = 'bold 15px "JetBrains Mono"';
     ctx.textAlign = 'center';
-    ctx.fillText(hqAlive?'指揮所':'指揮所(壊滅)', 0, 34);
-    if(hqAlive && hq.pendingDest){
+    if(showDetailLabels) ctx.fillText(hqAlive?'指揮所':'指揮所(壊滅)', 0, 34);
+    if(showDetailLabels && hqAlive && hq.pendingDest){
       ctx.font = 'bold 13px "JetBrains Mono"';
       ctx.fillText('[移転中]', 0, 50);
     }
     ctx.restore();
 
-    if(hqAlive){
+    if(showDetailLabels && hqAlive){
       drawAttritionBar(ctx, hqP.x+20, hqP.y-6, hq.hp/hq.maxHp);
     }
   }
@@ -554,10 +559,10 @@ export function drawBoard(){
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign='center';
-    ctx.fillText(mAlive?`迫撃砲${mortar.id+1} ${mortarStatusIcon(mortar)}`:`迫撃砲${mortar.id+1}(戦闘不能)`, 0, 44);
+    if(showDetailLabels) ctx.fillText(mAlive?`迫撃砲${mortar.id+1} ${mortarStatusIcon(mortar)}`:`迫撃砲${mortar.id+1}(戦闘不能)`, 0, 44);
     ctx.restore();
 
-    if(mAlive){
+    if(showDetailLabels && mAlive){
       drawAttritionBar(ctx, mVis.x+18, mVis.y-2, mortar.hp/mortar.maxHp);
     }
   });
@@ -608,16 +613,18 @@ export function drawBoard(){
     ctx.lineWidth = 1;
     ctx.stroke();
   };
-  state.scouts.forEach(scout=>{
-    const scoutVisL = smoothVisualPos(scout, scout.x, scout.y);
-    const scoutVis = project(scoutVisL.x, scoutVisL.y);
-    if(unitAlive(scout) && scoutVis.visible) drawGroundDetectionCircle(scoutVisL, SCOUT_MAX_RANGE_UNITS);
-  });
-  (state.helis||[]).forEach(heli=>{
-    const heliVisL = smoothVisualPos(heli, heli.x, heli.y);
-    const heliVis = project(heliVisL.x, heliVisL.y);
-    if(heli.hp>0 && heliVis.visible) drawGroundDetectionCircle(heliVisL, HELI_MAX_RANGE_UNITS);
-  });
+  if(showDetailLabels){
+    state.scouts.forEach(scout=>{
+      const scoutVisL = smoothVisualPos(scout, scout.x, scout.y);
+      const scoutVis = project(scoutVisL.x, scoutVisL.y);
+      if(unitAlive(scout) && scoutVis.visible) drawGroundDetectionCircle(scoutVisL, SCOUT_MAX_RANGE_UNITS);
+    });
+    (state.helis||[]).forEach(heli=>{
+      const heliVisL = smoothVisualPos(heli, heli.x, heli.y);
+      const heliVis = project(heliVisL.x, heliVisL.y);
+      if(heli.hp>0 && heliVis.visible) drawGroundDetectionCircle(heliVisL, HELI_MAX_RANGE_UNITS);
+    });
+  }
 
   // scout markers (自軍, left side) ― 斥候, vulnerable to enemy attack
   (state.helis||[]).forEach((heli, heliIdx)=>{
@@ -634,7 +641,7 @@ export function drawBoard(){
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign = 'center';
-    ctx.fillText(`ヘリ${heliIdx+1} [観測]`, 0, -20);
+    if(showDetailLabels) ctx.fillText(`ヘリ${heliIdx+1} [観測]`, 0, -20);
     ctx.restore();
   });
   state.scouts.forEach((scout, scIdx)=>{
@@ -648,8 +655,8 @@ export function drawBoard(){
     ctx.fillStyle = LABEL_TEXT_COLOR;
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign='center';
-    ctx.fillText(scoutAlive?`斥候${scout.id+1} ${aliveCount}/${scout.soldiers.length}`:`斥候${scout.id+1}(戦闘不能)`, 0, -20);
-    if(scoutAlive){
+    if(showDetailLabels) ctx.fillText(scoutAlive?`斥候${scout.id+1} ${aliveCount}/${scout.soldiers.length}`:`斥候${scout.id+1}(戦闘不能)`, 0, -20);
+    if(showDetailLabels && scoutAlive){
       let scoutOrderLabel = '[観測]';
       if(scout.resting) scoutOrderLabel = '[大休止]';
       else if(scout.pendingDest) scoutOrderLabel = '[移動]';
@@ -659,7 +666,7 @@ export function drawBoard(){
     }
     ctx.restore();
 
-    if(scoutAlive){
+    if(showDetailLabels && scoutAlive){
       drawAttritionBar(ctx, scoutVis.x+18, scoutVis.y, aliveCount/scout.soldiers.length);
     }
   });
@@ -679,11 +686,11 @@ export function drawBoard(){
     // bracketed Japanese text, and merged onto the name's own line -- packed friendly deployment
     // areas were an unreadable wall of overlapping two-line labels on small screens.
     const tOrderIcon = ORDER_ICON[tank.order] + (tank.pendingDest ? '→' : '');
-    ctx.fillText(tAlive?`戦車${tank.id+1} ${tOrderIcon}`:`戦車${tank.id+1}(撃破)`, 0, 44);
+    if(showDetailLabels) ctx.fillText(tAlive?`戦車${tank.id+1} ${tOrderIcon}`:`戦車${tank.id+1}(撃破)`, 0, 44);
     ctx.restore();
 
     if(tAlive){
-      drawAttritionBar(ctx, tVis.x+18, tVis.y-2, tank.hp/tank.maxHp);
+      if(showDetailLabels) drawAttritionBar(ctx, tVis.x+18, tVis.y-2, tank.hp/tank.maxHp);
       if(tank.order==='hunt' && tank.huntTargetId){
         const t = state.targets.find(x=>x.id===tank.huntTargetId);
         if(t && !t.destroyed && t.revealed){
@@ -716,11 +723,11 @@ export function drawBoard(){
     ctx.font = '15px "JetBrains Mono"';
     ctx.textAlign='center';
     const samOrderIcon = ORDER_ICON[sam.order] + (sam.pendingDest ? '→' : '');
-    ctx.fillText(samAlive?`対空${sam.id+1} ${samOrderIcon}`:`対空${sam.id+1}(撃破)`, 0, 44);
+    if(showDetailLabels) ctx.fillText(samAlive?`対空${sam.id+1} ${samOrderIcon}`:`対空${sam.id+1}(撃破)`, 0, 44);
     ctx.restore();
 
     if(samAlive){
-      drawAttritionBar(ctx, samVis.x+18, samVis.y-2, sam.hp/sam.maxHp);
+      if(showDetailLabels) drawAttritionBar(ctx, samVis.x+18, samVis.y-2, sam.hp/sam.maxHp);
       if(sam.order==='hunt' && sam.huntTargetId){
         const t = state.targets.find(x=>x.id===sam.huntTargetId);
         if(t && !t.destroyed && t.revealed){
@@ -766,9 +773,9 @@ export function drawBoard(){
     ctx.font = '14px "JetBrains Mono"';
     ctx.textAlign='center';
     const enOrderIcon = aliveSoldiers.length>0 ? ` ${ORDER_ICON[en.order]}${en.pendingDest?'→':''}` : '';
-    ctx.fillText(`工兵 ${aliveSoldiers.length}/${en.soldiers.length}${enOrderIcon}`, 0, 28);
+    if(showDetailLabels) ctx.fillText(`工兵 ${aliveSoldiers.length}/${en.soldiers.length}${enOrderIcon}`, 0, 28);
     ctx.restore();
-    if(aliveSoldiers.length>0) drawAttritionBar(ctx, enVis.x+18, enVis.y, aliveSoldiers.length/en.soldiers.length);
+    if(showDetailLabels && aliveSoldiers.length>0) drawAttritionBar(ctx, enVis.x+18, enVis.y, aliveSoldiers.length/en.soldiers.length);
   });
 
   // friendly infantry squads (自軍) ― orderly formation, moves as a unit per order
@@ -783,12 +790,12 @@ export function drawBoard(){
       // back to the flat icon when 3D isn't available at all.
       if(!threeReady) drawUnitIcon(ctx, infantryIcon, sqVis.x, sqVis.y, scaledIconH(22), aliveSoldiers.length===0);
       drawSelectionRing(ctx, sqVis.x, sqVis.y, (state.commandBox && state.commandBox.kind==='squad' && state.commandBox.idx===sqIdx) || isMultiSelected('squad', sqIdx));
-      if(aliveSoldiers.length>0) drawAttritionBar(ctx, sqVis.x+32, sqVis.y, aliveSoldiers.length/sq.soldiers.length);
+      if(showDetailLabels && aliveSoldiers.length>0) drawAttritionBar(ctx, sqVis.x+32, sqVis.y, aliveSoldiers.length/sq.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
       ctx.textAlign='center';
       const sqOrderIcon = ORDER_ICON[sq.order] + (sq.pendingDest ? '→' : '');
-      ctx.fillText(`第${sqIdx+1}小隊 ${aliveSoldiers.length}/${sq.soldiers.length} ${sqOrderIcon}`, sqVis.x, sqVis.y+28);
+      if(showDetailLabels) ctx.fillText(`第${sqIdx+1}小隊 ${aliveSoldiers.length}/${sq.soldiers.length} ${sqOrderIcon}`, sqVis.x, sqVis.y+28);
 
       if(aliveSoldiers.length>0){
         state.targets.filter(t=>!t.destroyed && t.type==='infantry' && t.revealed).forEach(t=>{
@@ -816,12 +823,12 @@ export function drawBoard(){
       const snVis = project(snVisL.x, snVisL.y);
       const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
       drawSelectionRing(ctx, snVis.x, snVis.y, (state.commandBox && state.commandBox.kind==='sniper' && state.commandBox.idx===snIdx) || isMultiSelected('sniper', snIdx));
-      if(aliveSoldiers.length>0) drawAttritionBar(ctx, snVis.x+20, snVis.y, aliveSoldiers.length/sn.soldiers.length);
+      if(showDetailLabels && aliveSoldiers.length>0) drawAttritionBar(ctx, snVis.x+20, snVis.y, aliveSoldiers.length/sn.soldiers.length);
       ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
       ctx.font = '14px "JetBrains Mono"';
       ctx.textAlign='center';
       const snOrderIcon = ORDER_ICON[sn.order] + (sn.pendingDest ? '→' : '');
-      ctx.fillText(`狙撃${snIdx+1}班 ${aliveSoldiers.length}/${sn.soldiers.length} ${snOrderIcon}`, snVis.x, snVis.y+27);
+      if(showDetailLabels) ctx.fillText(`狙撃${snIdx+1}班 ${aliveSoldiers.length}/${sn.soldiers.length} ${snOrderIcon}`, snVis.x, snVis.y+27);
 
       if(aliveSoldiers.length>0 && sn.pendingSnipeTargetId){
         const t = state.targets.find(x=>x.id===sn.pendingSnipeTargetId);
@@ -897,17 +904,19 @@ export function drawBoard(){
         // formation (see makeMarkerMesh3d's 'infantry' branch) instead of one flat icon --
         // still falls back to the flat icon when 3D isn't available at all.
         if(!threeReady) drawUnitIcon(ctx, enemyInfantryIcon, e.x, e.y, scaledIconH(22), !t.revealed);
-        if(t.revealed) drawAttritionBar(ctx, e.x+14, e.y, t.hp/t.maxHp);
+        if(showDetailLabels && t.revealed) drawAttritionBar(ctx, e.x+14, e.y, t.hp/t.maxHp);
         labelY = e.y+26;
-        if(t.revealed){
+        if(showDetailLabels && t.revealed){
           ctx.fillStyle = LABEL_TEXT_COLOR;
           ctx.font = '14px "JetBrains Mono"';
           ctx.textAlign='center';
           const doctrine = t.doctrine==='flank' ? '側面' : t.doctrine==='support' ? '支援' : '強襲';
           ctx.fillText(`敵${t.def.label}(${doctrine}) ${aliveTroops.length}/${t.troops.length}`, e.x, labelY);
-          ctx.font = 'bold 11px "Noto Sans JP"';
-          ctx.fillStyle = t.doctrine==='flank' ? '#e0b84a' : t.doctrine==='support' ? '#b0d3ed' : '#ef927d';
-          ctx.fillText(doctrine==='強襲' ? '▲ 強襲中' : doctrine==='側面' ? '◀ 側面展開' : '■ 支援射撃', e.x, labelY-38);
+          if(showFullDetail){
+            ctx.font = 'bold 11px "Noto Sans JP"';
+            ctx.fillStyle = t.doctrine==='flank' ? '#e0b84a' : t.doctrine==='support' ? '#b0d3ed' : '#ef927d';
+            ctx.fillText(doctrine==='強襲' ? '▲ 強襲中' : doctrine==='側面' ? '◀ 側面展開' : '■ 支援射撃', e.x, labelY-38);
+          }
         }
       } else if(t.type==='drone'){
         // per user request: dropped the rotor-arm satellite dots -- a single diamond
@@ -922,7 +931,7 @@ export function drawBoard(){
         ctx.lineTo(e.x-6, e.y);
         ctx.closePath();
         ctx.fill();
-        if(t.revealed){
+        if(showDetailLabels && t.revealed){
           ctx.fillStyle = LABEL_TEXT_COLOR;
           ctx.font = '14px "JetBrains Mono"';
           ctx.textAlign='center';
@@ -947,7 +956,7 @@ export function drawBoard(){
         ctx.moveTo(-7,0); ctx.lineTo(-14,-4);
         ctx.stroke();
         ctx.restore();
-        if(t.revealed){
+        if(showDetailLabels && t.revealed){
           ctx.fillStyle = LABEL_TEXT_COLOR;
           ctx.font = '14px "JetBrains Mono"';
           ctx.textAlign='center';
@@ -965,7 +974,7 @@ export function drawBoard(){
         ctx.lineWidth = 1;
         ctx.strokeRect(e.x-8, e.y-8, 16, 16);
         labelY = e.y+26;
-        if(t.revealed){
+        if(showDetailLabels && t.revealed){
           ctx.fillStyle = LABEL_TEXT_COLOR;
           ctx.font = 'bold 14px "JetBrains Mono"';
           ctx.textAlign='center';
@@ -976,7 +985,7 @@ export function drawBoard(){
         ctx.beginPath();
         ctx.arc(e.x,e.y,5,0,Math.PI*2);
         ctx.fill();
-        if(t.revealed){
+        if(showDetailLabels && t.revealed){
           ctx.fillStyle = LABEL_TEXT_COLOR;
           ctx.font = '14px "JetBrains Mono"';
           ctx.textAlign='center';
@@ -985,20 +994,22 @@ export function drawBoard(){
       }
 
       // small HP bar above the marker
-      const hpPct = clamp(t.hp/t.maxHp, 0, 1);
-      const tBarW=32, tBarH=4;
-      const tbx = e.x-tBarW/2, tby = e.y-22;
-      ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.fillRect(tbx-1,tby-1,tBarW+2,tBarH+2);
-      ctx.fillStyle = '#3a4128';
-      ctx.fillRect(tbx,tby,tBarW,tBarH);
-      ctx.fillStyle = hpPct>0.3 ? '#c1453b' : '#f0715f';
-      ctx.fillRect(tbx,tby,tBarW*hpPct,tBarH);
+      if(showDetailLabels){
+        const hpPct = clamp(t.hp/t.maxHp, 0, 1);
+        const tBarW=32, tBarH=4;
+        const tbx = e.x-tBarW/2, tby = e.y-22;
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fillRect(tbx-1,tby-1,tBarW+2,tBarH+2);
+        ctx.fillStyle = '#3a4128';
+        ctx.fillRect(tbx,tby,tBarW,tBarH);
+        ctx.fillStyle = hpPct>0.3 ? '#c1453b' : '#f0715f';
+        ctx.fillRect(tbx,tby,tBarW*hpPct,tBarH);
 
-      ctx.fillStyle = LABEL_TEXT_COLOR;
-      ctx.font = 'bold 17px "JetBrains Mono"';
-      ctx.textAlign='left';
-      ctx.fillText(t.id, e.x+11, e.y-11);
+        ctx.fillStyle = LABEL_TEXT_COLOR;
+        ctx.font = 'bold 17px "JetBrains Mono"';
+        ctx.textAlign='left';
+        ctx.fillText(t.id, e.x+11, e.y-11);
+      }
       if(isSuppressed(t)){
         ctx.fillStyle = LABEL_TEXT_COLOR;
         ctx.font = 'bold 13px "JetBrains Mono"';

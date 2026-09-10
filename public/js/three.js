@@ -31,6 +31,25 @@ export let heliAnimationMixer = null;
 
 export let heliAnimationAction = null;
 
+function blendTerrainColor(r, g, b, color, amount){
+  return [
+    r + (color[0]-r)*amount,
+    g + (color[1]-g)*amount,
+    b + (color[2]-b)*amount,
+  ];
+}
+
+function forestInfluenceAt(gen, x, y){
+  let best = 0;
+  (gen.forestPatches||[]).forEach(f=>{
+    const d = Math.hypot(x-f.x, y-f.y);
+    if(d > f.r+26) return;
+    const t = clamp((f.r+26-d)/38, 0, 1);
+    best = Math.max(best, smoothstep01(t));
+  });
+  return best;
+}
+
 export function paintTerrainColors(ctx, w, h, gen){
   const img = ctx.createImageData(w, h);
   const roadPaths = gen.roadPaths || [];
@@ -52,6 +71,7 @@ export function paintTerrainColors(ctx, w, h, gen){
       const cx = (px/w)*CANVAS_W;
       const e = clamp(elevationAtFor(gen, cx, cy), 0, 1);
       const type = terrainTypeAtFor(gen, cx, cy);
+      const forestAlpha = forestInfluenceAt(gen, cx, cy);
       let r,g,b,noiseMult;
       if(type===TERRAIN_TYPE_WATER){ [r,g,b] = PROC_COLOR_WATER; noiseMult = 0.35; }
       else if(type===TERRAIN_TYPE_FOREST){
@@ -59,6 +79,11 @@ export function paintTerrainColors(ctx, w, h, gen){
         r = PROC_CANOPY_DARK[0] + (PROC_CANOPY_LIGHT[0]-PROC_CANOPY_DARK[0])*canopyN;
         g = PROC_CANOPY_DARK[1] + (PROC_CANOPY_LIGHT[1]-PROC_CANOPY_DARK[1])*canopyN;
         b = PROC_CANOPY_DARK[2] + (PROC_CANOPY_LIGHT[2]-PROC_CANOPY_DARK[2])*canopyN;
+        const crown = smoothstep01(clamp((valueNoise2D(cx/5.5, cy/5.5, gen.seed+41)-0.46)/0.28, 0, 1));
+        const gap = smoothstep01(clamp((valueNoise2D(cx/8, cy/8, gen.seed+43)-0.72)/0.18, 0, 1));
+        r += crown*22 - gap*26;
+        g += crown*30 - gap*30;
+        b += crown*13 - gap*20;
         const clearingN = valueNoise2D(cx/PROC_CLEARING_CELL, cy/PROC_CLEARING_CELL, gen.seed+13);
         const clearingT = smoothstep01(clamp((clearingN-PROC_CLEARING_EDGE0)/(PROC_CLEARING_EDGE1-PROC_CLEARING_EDGE0), 0, 1));
         if(clearingT > 0){
@@ -66,12 +91,22 @@ export function paintTerrainColors(ctx, w, h, gen){
           g += (PROC_CLEARING_COLOR[1]-g)*clearingT;
           b += (PROC_CLEARING_COLOR[2]-b)*clearingT;
         }
+        if(forestAlpha < 0.92){
+          const edgeColor = [0x57,0x62,0x38];
+          const edgeBlend = 1-forestAlpha;
+          [r,g,b] = blendTerrainColor(r, g, b, edgeColor, edgeBlend*0.55);
+        }
         noiseMult = 0.6;
       }
       else {
         r = PROC_COLOR_LOW[0] + (PROC_COLOR_HIGH[0]-PROC_COLOR_LOW[0])*e;
         g = PROC_COLOR_LOW[1] + (PROC_COLOR_HIGH[1]-PROC_COLOR_LOW[1])*e;
         b = PROC_COLOR_LOW[2] + (PROC_COLOR_HIGH[2]-PROC_COLOR_LOW[2])*e;
+        const grassStreak = Math.sin(cx*0.23 + valueNoise2D(cx/38, cy/22, gen.seed+37)*Math.PI*2) * 0.5 + 0.5;
+        const scrub = smoothstep01(clamp((valueNoise2D(cx/18, cy/18, gen.seed+39)-0.58)/0.24, 0, 1));
+        r += grassStreak*8 - scrub*13;
+        g += grassStreak*13 + scrub*12;
+        b += grassStreak*4 - scrub*7;
         const mottleN = (valueNoise2D(cx/PROC_OPEN_MOTTLE_CELL, cy/PROC_OPEN_MOTTLE_CELL, gen.seed+19) - 0.5) * PROC_OPEN_MOTTLE_AMOUNT;
         r += mottleN; g += mottleN*0.85; b += mottleN*0.55;
         const dryN = valueNoise2D(cx/PROC_DRY_PATCH_CELL, cy/PROC_DRY_PATCH_CELL, gen.seed+23);
@@ -80,6 +115,10 @@ export function paintTerrainColors(ctx, w, h, gen){
           r += (PROC_DRY_PATCH_COLOR[0]-r)*dryT;
           g += (PROC_DRY_PATCH_COLOR[1]-g)*dryT;
           b += (PROC_DRY_PATCH_COLOR[2]-b)*dryT;
+        }
+        if(forestAlpha > 0.02){
+          const fringe = Math.min(0.45, forestAlpha*0.5);
+          [r,g,b] = blendTerrainColor(r, g, b, PROC_COLOR_FOREST, fringe);
         }
         noiseMult = 1;
       }
@@ -90,13 +129,29 @@ export function paintTerrainColors(ctx, w, h, gen){
       const eSouth = elevationAtFor(gen, cx, Math.min(CANVAS_H, cy+10));
       const slopeX = eEast-e;
       const slopeY = eSouth-e;
+      const slopeMag = Math.abs(slopeX)+Math.abs(slopeY);
       const hillshade = clamp(0.78 + (-slopeX*1.1 - slopeY*0.55), 0.56, 1.24);
-      const ridge = clamp((Math.abs(slopeX)+Math.abs(slopeY))*2.8, 0, 0.22);
+      const ridge = clamp(slopeMag*2.8, 0, 0.22);
       r = clamp(r*hillshade + 255*ridge, 0, 255);
       g = clamp(g*hillshade + 245*ridge, 0, 255);
       b = clamp(b*hillshade + 220*ridge, 0, 255);
+      if(type!==TERRAIN_TYPE_WATER){
+        const rockBlend = smoothstep01(clamp((slopeMag-0.035)/0.09, 0, 1)) * (type===TERRAIN_TYPE_FOREST ? 0.28 : 0.52);
+        if(rockBlend > 0){
+          const striation = 0.7 + 0.3*Math.sin((cx+cy*0.45)*0.18);
+          [r,g,b] = blendTerrainColor(r, g, b, [0x70,0x68,0x58], rockBlend*striation);
+        }
+      }
       if(type===TERRAIN_TYPE_WATER){
-        const shimmer = Math.sin(cx*0.09 + valueNoise2D(cx/24, cy/18, gen.seed+31)*Math.PI*2) * 10;
+        const rx = gen.river ? riverXAt(gen.river, cy) : cx;
+        const depth = gen.river ? clamp(Math.abs(cx-rx)/(gen.river.width/2), 0, 1) : 0.5;
+        const flow = Math.sin(cy*0.2 + valueNoise2D(cx/24, cy/18, gen.seed+31)*Math.PI*2);
+        const ripple = Math.sin((cy+cx*0.18)*0.62 + gen.seed*0.01);
+        const shimmer = (flow*8 + ripple*4) * (0.35+depth*0.65);
+        const deepColor = [0x19,0x35,0x4d];
+        const shallowColor = [0x5d,0x72,0x6a];
+        [r,g,b] = blendTerrainColor(r, g, b, deepColor, (1-depth)*0.55);
+        [r,g,b] = blendTerrainColor(r, g, b, shallowColor, depth*0.38);
         r = clamp(r + shimmer*0.25, 0, 255);
         g = clamp(g + shimmer*0.55, 0, 255);
         b = clamp(b + shimmer, 0, 255);
@@ -109,6 +164,13 @@ export function paintTerrainColors(ctx, w, h, gen){
         r += (roadColor[0]-r)*roadBlend;
         g += (roadColor[1]-g)*roadBlend;
         b += (roadColor[2]-b)*roadBlend;
+        if(road.dist < road.width){
+          const rut = Math.exp(-Math.pow((road.dist-road.width*0.48)/1.35, 2));
+          const crown = Math.exp(-Math.pow(road.dist/Math.max(1, road.width*0.28), 2));
+          r = clamp(r - rut*32 + crown*10, 0, 255);
+          g = clamp(g - rut*30 + crown*9, 0, 255);
+          b = clamp(b - rut*25 + crown*8, 0, 255);
+        }
         if(road.dist > road.width){
           const shoulderBlend = 1-clamp((road.dist-road.width)/5, 0, 1);
           r += (0x9a-r)*shoulderBlend*0.35;

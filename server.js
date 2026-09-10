@@ -85,16 +85,20 @@ const io = new Server(server, {
     }
 });
 
-// per user request: mortar_fdc_game.js/html/css are iterated on constantly, but plain
-// express.static sends no Cache-Control at all -- browsers (mobile ones especially) then
-// apply their own heuristic caching and can keep serving a stale bundle for a long time after
-// a new deploy, with no way for the page to know it's stale. Forcing no-cache makes every load
-// revalidate with the server (a cheap 304 when nothing changed) instead of trusting a
-// potentially long-lived heuristic cache.
+const STATIC_CACHE_POLICIES = [
+    { test: /\.(?:mp3|png|jpe?g|gif|webp|ico|obj|mtl|fbx)$/i, value: "public, max-age=31536000, immutable" },
+    { test: /socket\.io\.vendor\.js$/i, value: "public, max-age=31536000, immutable" },
+    { test: /\.(?:html|js|css)$/i, value: "no-cache" }
+];
+
+// HTML/app JS/CSS are iterated on constantly, so keep them on no-cache revalidation to avoid
+// stale deployments. Heavy static assets are content-like and rarely change, so cache them
+// aggressively to cut repeat transfer and server work after each Render deploy.
 app.use(express.static("public", {
     setHeaders: (res, filePath) => {
-        if (/\.(js|css|html)$/.test(filePath)) {
-            res.setHeader("Cache-Control", "no-cache");
+        const policy = STATIC_CACHE_POLICIES.find(p => p.test.test(filePath));
+        if (policy) {
+            res.setHeader("Cache-Control", policy.value);
         }
     }
 }));
