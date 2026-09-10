@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
-import { applyBestMortarLoadout, buildTrenchAt, buildWallAt, estPos, estPosFromMortar, handlePlacementClick, isTargetDetected, mortarTooCloseToFire, mortarTooFarToFire, placeDecoyAt, resolveSmartUnitIdxs, state, unitAlive } from './combat.js';
-import { CANVAS_H, CANVAS_W, DECOY_LONGPRESS_MOVE_TOLERANCE_PX, DECOY_LONGPRESS_MS, DIRECT_MOVE_KINDS, FRIENDLY_KIND_LIST, MAP_DOUBLETAP_ZOOM_LEVEL, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, MULTI_SELECT_KINDS, MULTI_SELECT_ORDER_SETTER, ORDER_LABEL, SCOUT_ADVANCE_LIMIT_X, SMART_UNIT_TYPES, SQUAD_ADVANCE_LIMIT_X, SQUAD_ASSAULT_LIMIT_X, SQUAD_RETREAT_LIMIT_X } from './constants.js';
+import { applyBestMortarLoadout, buildTrenchAt, buildWallAt, estPos, estPosFromMortar, handlePlacementClick, isTargetDetected, mortarNotReadyToFire, mortarTooCloseToFire, mortarTooFarToFire, placeDecoyAt, resolveSmartUnitIdxs, state, unitAlive } from './combat.js';
+import { CANVAS_H, CANVAS_W, DECOY_LONGPRESS_MOVE_TOLERANCE_PX, DECOY_LONGPRESS_MS, DIRECT_MOVE_KINDS, FRIENDLY_KIND_LIST, MAP_DOUBLETAP_ZOOM_LEVEL, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_MOVE_START_DELAY_MS, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, MULTI_SELECT_KINDS, MULTI_SELECT_ORDER_SETTER, ORDER_LABEL, SCOUT_ADVANCE_LIMIT_X, SMART_UNIT_TYPES, SQUAD_ADVANCE_LIMIT_X, SQUAD_ASSAULT_LIMIT_X, SQUAD_RETREAT_LIMIT_X } from './constants.js';
 import { render } from './main.js';
 import { clampMapView, groundPlaneCanvasUnitAt, project, resizeThree, terrainCanvasUnitAt, threeReady, updateCameraFromView } from './three.js';
 import { anyOverlayShown, log } from './ui.js';
@@ -73,7 +73,9 @@ export function setUnitMoveDest(kind, idx, px, py, silent){
     const mortar = state.mortars[idx];
     if(!mortar || mortar.hp<=0) return false;
     mortar.pendingDest = { x: clamp(px, MORTAR_ZONE_MIN_X, MORTAR_ZONE_MAX_X), y: clamp(py, 30, CANVAS_H-30) };
-    if(!silent) log('mortar','迫撃砲班', `迫撃砲${idx+1}、陣地転換先を了解。`);
+    // per user request: 10 seconds of packing up before it actually starts moving.
+    mortar.moveDelayUntil = performance.now() + MORTAR_MOVE_START_DELAY_MS;
+    if(!silent) log('mortar','迫撃砲班', `迫撃砲${idx+1}、陣地転換先を了解。撤収準備中(約${Math.round(MORTAR_MOVE_START_DELAY_MS/1000)}秒後に移動開始)。`);
     return true;
   }
   return false;
@@ -232,6 +234,8 @@ export function handleCanvasClick(evt){
           log('fdc','FDC', `迫撃砲${mode.idx+1}、攻撃地点を了解。`);
         } else if(result==='far'){
           log('sys','システム', `迫撃砲${mode.idx+1}、目標が遠すぎます(最大射程${MORTAR_MAX_RANGE_M}m)。攻撃地点を再指定してください。`);
+        } else if(result==='notready'){
+          log('sys','システム', `迫撃砲${mode.idx+1}、陣地転換直後で射撃準備中。攻撃指示を却下。`);
         } else {
           log('sys','システム', `迫撃砲${mode.idx+1}、目標が近すぎます(最低射程${MORTAR_MIN_RANGE_M}m)。攻撃地点を再指定してください。`);
         }
@@ -312,6 +316,7 @@ export function nearestVisibleTargetForScreen(sx, sy, maxPx){
 }
 
 export function setPendingFireAt(px, py, sx, sy, mortar){
+  if(mortarNotReadyToFire(mortar)) return 'notready';
   const best = nearestVisibleTargetForScreen(sx, sy, 42);
   if(best){
     const e = estPosFromMortar(mortar, best);

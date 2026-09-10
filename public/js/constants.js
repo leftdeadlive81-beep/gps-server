@@ -613,6 +613,13 @@ export const MORTAR_MAX_RANGE_M = 6000;
 
 export const MORTAR_MAX_RANGE_UNITS = MORTAR_MAX_RANGE_M / METERS_PER_UNIT;
 
+// per user request: relocating a mortar now takes real time on both ends -- 10s after the
+// move order before it actually breaks position and starts moving (packing up), and another
+// 10s after arriving at the new position before it can fire again (setting up).
+export const MORTAR_MOVE_START_DELAY_MS = 10000;
+
+export const MORTAR_FIRE_READY_DELAY_MS = 10000;
+
 export const SHELL_DISPERSION_MULT = {heat:0.6};
 
 export const MORTAR_CB_SHOTS_THRESHOLD = 3;

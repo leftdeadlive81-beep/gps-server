@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement, unlockedAchievements } from './achievements.js';
-import { addNewScout, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, isAutoCommitRunning, isTargetDetected, mapSeedCandidates, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
+import { addNewScout, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, isAutoCommitRunning, isTargetDetected, mapSeedCandidates, mortarNotReadyToFire, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
 import { ACHIEVEMENTS, AMMO_PACK, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GEMINI_API_KEY_STORAGE, GEMINI_MODEL, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, LOG_MAX_ENTRIES, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_SQUAD_SIZE, SMART_ACTIONS, SMART_UNIT_TYPES, SNIPER_AIM_RANGE_M, SNIPER_RANGE_M, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
 import { canvasToScreen, multiSelectCommonOrders, multiSelectMode, multiSelected, pruneMultiSelected } from './input.js';
 import { render } from './main.js';
@@ -609,7 +609,14 @@ export function mortarBoxHtml(idx){
   } else if(order==='move'){
     let moveStatus = '移動先: 未設定';
     if(armingMove) moveStatus = '地図をクリックして移動先指定…';
-    else if(mortar.pendingDest) moveStatus = '移動先: 設定済み(陣地転換予定)';
+    else if(mortar.pendingDest){
+      // per user request: relocating now takes real time on both ends -- 10s of packing up
+      // before it actually starts moving, then another 10s after arrival before it can fire.
+      const packingUp = mortar.moveDelayUntil!==undefined && performance.now() < mortar.moveDelayUntil;
+      moveStatus = packingUp
+        ? `撤収準備中(あと約${Math.ceil((mortar.moveDelayUntil-performance.now())/1000)}秒で移動開始)`
+        : '陣地転換中…';
+    }
     bodyHtml = `
       <div class="meta">標高: ${elevationLabel(elevationAt(mortar.x,mortar.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(mortar.x,mortar.y))}</div>
       <button class="btn ${armingMove?'active squad-order-btn':''}" onclick="setMortarOrder(${idx},'move')" style="margin:6px 0;">移動先を指定</button>
@@ -641,7 +648,13 @@ export function mortarBoxHtml(idx){
       const isDecoyAim = aim.decoyIdx!==undefined && aim.decoyIdx!==null;
       infoHtml = `<div class="sel-target-info"><div class="row1"><span class="id">${isDecoyAim ? `擬陣地${aim.decoyIdx+1}(座標既知)` : '自由射撃座標'}</span></div><div class="meta">方位約${Math.round(brg)}° / 距離約${unitsToMeters(dist)}m${isDecoyAim ? '' : '(未確認地点)'}</div></div>`;
     }
+    // per user request: 10s of setup time after arriving from a relocation before it can fire.
+    const notReady = mortarNotReadyToFire(mortar);
+    const notReadyHtml = notReady
+      ? `<div class="meta" style="color:var(--red);margin-bottom:6px;">陣地転換直後、射撃準備中(あと約${Math.ceil((mortar.fireReadyAt-performance.now())/1000)}秒)</div>`
+      : '';
     bodyHtml = `
+      ${notReadyHtml}
       <button class="btn ${armingTarget?'active squad-order-btn':''}" onclick="armMortarTargetOrder(${idx})" style="margin-bottom:8px;">攻撃地点設定</button>
       ${infoHtml}
       <div class="field">
