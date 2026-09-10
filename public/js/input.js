@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
-import { applyBestMortarLoadout, buildTrenchAt, buildWallAt, estPos, estPosFromMortar, handlePlacementClick, isTargetDetected, mortarTooCloseToFire, placeDecoyAt, resolveSmartUnitIdxs, state, unitAlive } from './combat.js';
-import { CANVAS_H, CANVAS_W, DECOY_LONGPRESS_MOVE_TOLERANCE_PX, DECOY_LONGPRESS_MS, DIRECT_MOVE_KINDS, FRIENDLY_KIND_LIST, MAP_DOUBLETAP_ZOOM_LEVEL, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, MORTAR_MIN_RANGE_M, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, MULTI_SELECT_KINDS, MULTI_SELECT_ORDER_SETTER, ORDER_LABEL, SCOUT_ADVANCE_LIMIT_X, SMART_UNIT_TYPES, SQUAD_ADVANCE_LIMIT_X, SQUAD_ASSAULT_LIMIT_X, SQUAD_RETREAT_LIMIT_X } from './constants.js';
+import { applyBestMortarLoadout, buildTrenchAt, buildWallAt, estPos, estPosFromMortar, handlePlacementClick, isTargetDetected, mortarTooCloseToFire, mortarTooFarToFire, placeDecoyAt, resolveSmartUnitIdxs, state, unitAlive } from './combat.js';
+import { CANVAS_H, CANVAS_W, DECOY_LONGPRESS_MOVE_TOLERANCE_PX, DECOY_LONGPRESS_MS, DIRECT_MOVE_KINDS, FRIENDLY_KIND_LIST, MAP_DOUBLETAP_ZOOM_LEVEL, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, MULTI_SELECT_KINDS, MULTI_SELECT_ORDER_SETTER, ORDER_LABEL, SCOUT_ADVANCE_LIMIT_X, SMART_UNIT_TYPES, SQUAD_ADVANCE_LIMIT_X, SQUAD_ASSAULT_LIMIT_X, SQUAD_RETREAT_LIMIT_X } from './constants.js';
 import { render } from './main.js';
 import { clampMapView, groundPlaneCanvasUnitAt, project, resizeThree, terrainCanvasUnitAt, threeReady, updateCameraFromView } from './three.js';
 import { anyOverlayShown, log } from './ui.js';
@@ -227,8 +227,11 @@ export function handleCanvasClick(evt){
     } else if(mode.kind==='mortar-target'){
       const mortar = state.mortars[mode.idx];
       if(mortar){
-        if(setPendingFireAt(px, py, sx, sy, mortar)){
+        const result = setPendingFireAt(px, py, sx, sy, mortar);
+        if(result===true){
           log('fdc','FDC', `迫撃砲${mode.idx+1}、攻撃地点を了解。`);
+        } else if(result==='far'){
+          log('sys','システム', `迫撃砲${mode.idx+1}、目標が遠すぎます(最大射程${MORTAR_MAX_RANGE_M}m)。攻撃地点を再指定してください。`);
         } else {
           log('sys','システム', `迫撃砲${mode.idx+1}、目標が近すぎます(最低射程${MORTAR_MIN_RANGE_M}m)。攻撃地点を再指定してください。`);
         }
@@ -312,12 +315,14 @@ export function setPendingFireAt(px, py, sx, sy, mortar){
   const best = nearestVisibleTargetForScreen(sx, sy, 42);
   if(best){
     const e = estPosFromMortar(mortar, best);
-    if(mortarTooCloseToFire(mortar, e.x, e.y)) return false;
+    if(mortarTooCloseToFire(mortar, e.x, e.y)) return 'close';
+    if(mortarTooFarToFire(mortar, e.x, e.y)) return 'far';
     state.selectedId = best.id;
     mortar.pendingFire = {x:e.x, y:e.y, snappedId:best.id};
     applyBestMortarLoadout(mortar, best);
   } else {
-    if(mortarTooCloseToFire(mortar, px, py)) return false;
+    if(mortarTooCloseToFire(mortar, px, py)) return 'close';
+    if(mortarTooFarToFire(mortar, px, py)) return 'far';
     state.selectedId = null;
     mortar.pendingFire = {x:px, y:py, snappedId:null};
   }

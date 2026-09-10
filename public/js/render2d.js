@@ -442,6 +442,11 @@ export function drawBoard(){
       ctx.setLineDash([3,3]);
       ctx.stroke();
       ctx.setLineDash([]);
+      // per user request: mortar max range fixed at 6km -- enforced in setPendingFireAt/
+      // assignMortarFire/applySmartOrder/callInMortarHeatStrike (all reject a shot beyond
+      // MORTAR_MAX_RANGE_UNITS). No matching outer ring drawn here: at 6km radius it would
+      // cover nearly the entire map width and, drawn per mortar, add real per-frame cost for
+      // little practical benefit over the existing "target too far" rejection message.
     }
     ctx.save();
     ctx.translate(mVis.x,mVis.y);

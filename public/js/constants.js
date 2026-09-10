@@ -478,6 +478,14 @@ export const SCOUT_MAX_RANGE_UNITS = 700 / METERS_PER_UNIT;
 
 export const HELI_MAX_RANGE_UNITS = 1000 / METERS_PER_UNIT;
 
+// per user request: the enemy HQ (unlike every other target) starts hidden and is only
+// revealed once a friendly unit gets close enough to spot it -- scouts/helis use their own
+// (longer) SCOUT_MAX_RANGE_UNITS/HELI_MAX_RANGE_UNITS sensor range for this, while every other
+// friendly unit type (not a dedicated recon asset) only spots it at this shorter range.
+export const HQ_DETECT_RANGE_M = 300;
+
+export const HQ_DETECT_RANGE_UNITS = HQ_DETECT_RANGE_M / METERS_PER_UNIT;
+
 export const ROAD_SPEED_KMH = {vehicle:60, infantry:10, sniper:5, scout:12, mortar:40, artillery:5};
 
 export const OFF_ROAD_SPEED_MULT = 0.7;
@@ -508,7 +516,9 @@ export const ARTILLERY_STANDOFF_RANGE_M = 300;
 
 export const ARTILLERY_STANDOFF_RANGE_UNITS = ARTILLERY_STANDOFF_RANGE_M / METERS_PER_UNIT;
 
-export const ARTILLERY_FIRE_RANGE_M = 5000;
+// per user request: matches the friendly mortar's 6km max range (MORTAR_MAX_RANGE_M) -- was
+// 5000m.
+export const ARTILLERY_FIRE_RANGE_M = 6000;
 
 export const ARTILLERY_FIRE_RANGE_UNITS = ARTILLERY_FIRE_RANGE_M / METERS_PER_UNIT;
 
@@ -564,6 +574,12 @@ export const MORTAR_DISPERSION_UNITS = MORTAR_DISPERSION_M / METERS_PER_UNIT;
 export const MORTAR_MIN_RANGE_M = 150;
 
 export const MORTAR_MIN_RANGE_UNITS = MORTAR_MIN_RANGE_M / METERS_PER_UNIT;
+
+// per user request: mortar max range fixed at 6km for both sides (a future arms-dealer
+// "booster shell" purchase is meant to extend this later -- not implemented yet).
+export const MORTAR_MAX_RANGE_M = 6000;
+
+export const MORTAR_MAX_RANGE_UNITS = MORTAR_MAX_RANGE_M / METERS_PER_UNIT;
 
 export const SHELL_DISPERSION_MULT = {heat:0.6};
 
