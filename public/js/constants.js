@@ -518,6 +518,12 @@ export const HQ_DEFENSE_ATTACKER_WINDOW_MS = 15000;
 // converge on it.
 export const HQ_DEFENSE_DMG_MULT = 1.6;
 
+// per user request: enemy AI coordinates fire -- whichever friendly asset one attacker
+// actually lands a hit on becomes the group's shared "focus target" for this long, so other
+// nearby attackers (within their own normal engagement range) pile onto the same target
+// instead of each independently picking their own nearest. See enemyCounterAttack().
+export const ENEMY_FOCUS_FIRE_WINDOW_MS = 10000;
+
 export const ROAD_SPEED_KMH = {vehicle:60, infantry:10, sniper:5, scout:12, mortar:40, artillery:5};
 
 export const OFF_ROAD_SPEED_MULT = 0.7;
