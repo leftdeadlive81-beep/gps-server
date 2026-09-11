@@ -1,0 +1,14 @@
+# per user request: コンシム(ConSim)を、避難誘導アプリと同居する既存のNode/Socket.IOサーバー
+# (server.js)から切り離し、Socket.IOを一切使わない軽量な静的サイトとして別デプロイできるように
+# するためのRender Blueprint。consim/ 以下はビルド不要の純粋な静的ファイル一式(HTML/CSS/JS/
+# 音声/3Dモデル)で、既存サーバーの public/ 配下にある同じファイル群とは独立したコピー。
+#
+# 使い方: RenderダッシュボードでこのリポジトリをBlueprintとして接続する(New > Blueprint)か、
+# 手動でStatic Siteサービスを作成しPublish Directoryを consim に設定する。
+services:
+  - type: web
+    name: consim
+    runtime: static
+    staticPublishPath: ./consim
+    buildCommand: echo "no build step -- consim/ is pre-built static files"
+    pullRequestPreviewsEnabled: false
