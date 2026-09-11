@@ -1151,8 +1151,10 @@ export function resolveOneMortarDecision(mortar, dt){
   // per user request: 10 seconds of packing up before the mortar actually starts moving
   // toward its new position.
   if(mortar.moveDelayUntil!==undefined && now < mortar.moveDelayUntil) return;
+  // per user request: 迫撃砲の移動先を後方の狭いゾーンに縛る制限を撤廃 -- マップ全域を
+  // 移動先にできる(Y方向と同じ余白のみのクランプ)。
   const next = terrainAwareStep(mortar.x, mortar.y, mortar.pendingDest.x, mortar.pendingDest.y, MORTAR_MOVE_CAP*dt);
-  mortar.x = clamp(next.x, MORTAR_ZONE_MIN_X, MORTAR_ZONE_MAX_X);
+  mortar.x = clamp(next.x, 30, CANVAS_W-30);
   mortar.y = clamp(next.y, 30, CANVAS_H-30);
   checkMineTrigger('mortar', mortar.id, mortar.x, mortar.y);
   if(Math.hypot(mortar.x-mortar.pendingDest.x, mortar.y-mortar.pendingDest.y) < 12){
@@ -2000,7 +2002,7 @@ export function applySmartMortarScatter(){
     m.order = 'move';
     m.pendingFire = null;
     m.pendingDest = {
-      x: clamp(m.x+dx, MORTAR_ZONE_MIN_X, MORTAR_ZONE_MAX_X),
+      x: clamp(m.x+dx, 30, CANVAS_W-30),
       y: clamp(m.y+dy, 30, CANVAS_H-30),
     };
   });
