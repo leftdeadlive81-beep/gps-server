@@ -779,6 +779,17 @@ export const MUZZLE_STYLE = {
 
 export const MAX_IMPACT_LIGHTS = 6;
 
+// per user request: every hit (not just a kill) should feel punchier -- a graze under
+// HIT_EFFECT_MIN_DMG only gets a small flash (no shockwave/light/shake, to avoid nonstop
+// background noise from routine small-arms chip damage); anything at or above
+// HIT_EFFECT_HEAVY_DMG (mortar/tank/artillery-caliber) gets the full "heavy" treatment plus a
+// brief hit-stop (HIT_STOP_MS) for extra weight. See spawnHitEffect() in vfx.js.
+export const HIT_EFFECT_MIN_DMG = 6;
+
+export const HIT_EFFECT_HEAVY_DMG = 25;
+
+export const HIT_STOP_MS = 70;
+
 export const MAX_EFFECTS_3D = 80;
 
 export const infantryIcon = new Image();

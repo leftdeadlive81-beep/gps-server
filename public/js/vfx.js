@@ -2,7 +2,7 @@
 import { unlockAchievement } from './achievements.js';
 import { playSfx } from './audio.js';
 import { state } from './combat.js';
-import { ARC_HEIGHT, ENEMY_MARK_COLOR, EXPLOSION_SFX_MIN_GAP_MS, MAP_VIEW, MAX_CRATERS, MAX_DEBRIS_PARTICLES, MAX_EFFECTS_3D, MAX_IMPACT_LIGHTS, MUZZLE_STYLE } from './constants.js';
+import { ARC_HEIGHT, ENEMY_MARK_COLOR, EXPLOSION_SFX_MIN_GAP_MS, HIT_EFFECT_HEAVY_DMG, HIT_EFFECT_MIN_DMG, HIT_STOP_MS, MAP_VIEW, MAX_CRATERS, MAX_DEBRIS_PARTICLES, MAX_EFFECTS_3D, MAX_IMPACT_LIGHTS, MUZZLE_STYLE } from './constants.js';
 import { canvasUnitToWorldXZ, project, scene3d, terrainHeightAt } from './three.js';
 import { clamp, rnd } from './utils.js';
 import { speakRandomAliveUnit } from './voice.js';
@@ -214,6 +214,20 @@ export function currentShakeOffset(){
   return { x:(Math.random()*2-1)*amt, y:(Math.random()*2-1)*amt };
 }
 
+// per user request: a heavy hit briefly freezes the simulation (not the render loop -- see
+// isHitStopped()'s use in advanceSimulation()) for extra impact weight, the same way a fighting
+// game holds a frame on a big hit. Math.max so a second heavy hit during an active hit-stop
+// extends it rather than shortening it.
+export let hitStopUntil = 0;
+
+export function triggerHitStop(ms){
+  hitStopUntil = Math.max(hitStopUntil, performance.now()+ms);
+}
+
+export function isHitStopped(){
+  return performance.now() < hitStopUntil;
+}
+
 export function projectileArcWorldY(startX, startY, endX, endY, prog){
   const h0 = terrainHeightAt(startX, startY), h1 = terrainHeightAt(endX, endY);
   return h0 + (h1-h0)*prog + Math.sin(prog*Math.PI)*ARC_HEIGHT;
@@ -273,6 +287,32 @@ export function spawnDestructionEffect(x, y, label, color){
   if(label) killBanners.push({x, y, born, life:1900, text:label, color});
 }
 
+// per user request: make every hit (not just a kill) feel punchier. Previously only
+// spawnDestructionEffect (a kill) added a shockwave/impact light/screen shake; an ordinary hit
+// only got the small tracer-impact flash already pushed by updateEnemyTracers/updateProjectiles.
+// Scaled by damage: a graze under HIT_EFFECT_MIN_DMG only gets a slightly bigger flash (no
+// shockwave/light/shake -- routine small-arms chip damage would otherwise be a nonstop
+// background rumble), and a heavy (mortar/tank/artillery-caliber) hit gets the full treatment
+// plus a brief hit-stop for weight.
+export function spawnHitEffect(x, y, dmg){
+  if(dmg<=0) return;
+  const born = performance.now();
+  const heavy = dmg >= HIT_EFFECT_HEAVY_DMG;
+  flashes.push({x, y, born, life: heavy?480:260, big: heavy});
+  if(dmg < HIT_EFFECT_MIN_DMG) return;
+  shockwaves.push({x, y, born, life: heavy?420:260});
+  spawnImpactLight(x, y);
+  // per user request: same distance-from-center falloff spawnDestructionEffect uses, so an
+  // off-screen-ish hit doesn't jolt the whole view.
+  const sp = project(x, y);
+  if(sp.visible){
+    const distFromCenter = Math.hypot(sp.x-MAP_VIEW.containerW/2, sp.y-MAP_VIEW.containerH/2);
+    const near = clamp(1 - distFromCenter/420, 0, 1);
+    if(near > 0) triggerShake((heavy?5:2.2)*near, heavy?220:120);
+  }
+  if(heavy) triggerHitStop(HIT_STOP_MS);
+}
+
 export function updateProjectiles(){
   const now = performance.now();
   projectiles = projectiles.filter(p=>{
@@ -316,4 +356,4 @@ export function setCraters(v){ craters = v; }
 export function setKillBanners(v){ killBanners = v; }
 export function setRipples(v){ ripples = v; }
 
-Object.assign(window, { fireTracer, ensureWeatherParticles, effectWorldPosition, disposeEffect3d, addEffect3d, spawn3dMuzzleFlash, spawn3dImpactEffect, spawn3dProjectile, update3dEffects, spawnImpactLight, updateImpactLights, triggerShake, currentShakeOffset, projectileArcWorldY, tracerWorldY, onTargetDestroyed, spawnDestructionEffect, updateProjectiles, updateEnemyTracers, resetAllVfx, setShockwaves, setDebrisParticles, setWreckSmokes, setCraters, setKillBanners, setRipples });
+Object.assign(window, { fireTracer, ensureWeatherParticles, effectWorldPosition, disposeEffect3d, addEffect3d, spawn3dMuzzleFlash, spawn3dImpactEffect, spawn3dProjectile, update3dEffects, spawnImpactLight, updateImpactLights, triggerShake, currentShakeOffset, triggerHitStop, isHitStopped, projectileArcWorldY, tracerWorldY, onTargetDestroyed, spawnDestructionEffect, spawnHitEffect, updateProjectiles, updateEnemyTracers, resetAllVfx, setShockwaves, setDebrisParticles, setWreckSmokes, setCraters, setKillBanners, setRipples });

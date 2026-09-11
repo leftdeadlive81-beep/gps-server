@@ -8,7 +8,7 @@ import { ROAD_GRAPH, advanceAlongPath, airborneStep, altitudeBonus, applyWallBlo
 import { disposeMarker3d, regenerateTerrain } from './three.js';
 import { announceTicker, closeSmartOrder, log, renderMapSelectOverlay, showGameClear, showStageClear, showStageFailed, showWaveRewardChoice, smartWizard } from './ui.js';
 import { bearingBetween, choice, clamp, exposureNormalizedMult, gauss, hitChanceFromExposure, rnd, smoothstep01, unitsToMeters, visualTweenDurationMs } from './utils.js';
-import { fireTracer, onTargetDestroyed, projectiles, resetAllVfx, ripples, spawn3dImpactEffect, spawn3dProjectile, spawnDestructionEffect } from './vfx.js';
+import { fireTracer, isHitStopped, onTargetDestroyed, projectiles, resetAllVfx, ripples, spawn3dImpactEffect, spawn3dProjectile, spawnDestructionEffect, spawnHitEffect } from './vfx.js';
 import { speakCoordination, speakRandomAliveUnit, unitSpeak, unitSpeakInjury, unitSpeakOrder } from './voice.js';
 
 export function totalSquadCapacity(){ return state.squads.reduce((s,sq)=>s+sq.soldiers.length, 0); }
@@ -2382,6 +2382,7 @@ export function nearestFriendlyAsset(x, y, includeSquads){
 
 export function applyDamageToTarget(t, dmg){
   if(dmg<=0) return;
+  spawnHitEffect(t.trueX, t.trueY, dmg);
   if(t.type==='infantry' && t.troops){
     let remaining = dmg;
     const order = t.troops.map((s,i)=>i).filter(i=>t.troops[i].alive);
@@ -2400,7 +2401,24 @@ export function applyDamageToTarget(t, dmg){
   }
 }
 
+// per user request: resolves a {kind,idx} friendly-asset reference (the same shape
+// nearestFriendlyAsset()/getUnitExposure() use) to its current position, purely so
+// damageFriendlyAsset() can spawn a hit effect at the right spot regardless of which kind of
+// unit got hit -- mirrors friendlyFireCandidateLabel()'s kind dispatch just above.
+function friendlyAssetXY(target){
+  if(target.kind==='decoy'){
+    const d = state.decoys[target.idx];
+    return d ? {x:d.x, y:d.y} : null;
+  }
+  if(target.kind==='hq') return {x:state.hq.x, y:state.hq.y};
+  const entry = FRIENDLY_KIND_LIST.find(e=>e.kind===target.kind);
+  const u = entry ? entry.list()[target.idx] : null;
+  return u ? {x:u.x, y:u.y} : null;
+}
+
 export function damageFriendlyAsset(target, dmg, sourceLabel){
+  const pos = friendlyAssetXY(target);
+  if(pos) spawnHitEffect(pos.x, pos.y, dmg);
   if(target.kind==='decoy'){
     const d = state.decoys[target.idx];
     if(!d || d.destroyed) return;
@@ -3930,6 +3948,12 @@ export function advanceSimulation(){
   if(lastSimFrameAt===null){ lastSimFrameAt = now; return; }
   const elapsed = now - lastSimFrameAt;
   lastSimFrameAt = now;
+  // per user request: a heavy hit briefly freezes the simulation for extra weight (see
+  // spawnHitEffect/triggerHitStop in vfx.js) -- rendering keeps running (main.js's loop() calls
+  // drawBoard/renderThreeFrame independently of this), only game-state advancement pauses. The
+  // elapsed time during the freeze is simply dropped, not banked into simAccumMs, so play
+  // resumes at normal pace afterward rather than catching up in a burst.
+  if(isHitStopped()) return;
   if(!state || !state.simRunning || state.stageResolved || state.commandBox || state.enemyCommandBox || state.decoyCommandBox || state.placementPending || state.decoyPlacementPending){
     simAccumMs = 0;
     return;
