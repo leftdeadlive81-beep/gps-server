@@ -35,7 +35,6 @@
       <span class="statbar-mini" id="statbar-mini" onclick="toggleStatbar()">-- </span>
       <span class="statbar-caret" id="statbar-caret" onclick="toggleStatbar()">▸</span>
       <button class="hud-icon-btn" onclick="toggleDrawer('status')" title="部隊稼働状況">👥<span class="hud-icon-badge" id="force-list-badge"></span></button>
-      <button class="hud-icon-btn" onclick="toggleDrawer('gemini')" title="Gemini参謀">✦</button>
       <button class="hud-icon-btn" onclick="toggleBoardNote()" title="使い方">?</button>
       <button class="hud-icon-btn" id="multiSelectBtn" onclick="toggleMultiSelectMode()" title="複数選択">☑</button>
       <button class="hud-icon-btn" id="mapFullscreenBtn" onclick="toggleMapFullscreen()" title="全画面表示にする">⛶</button>
@@ -84,24 +83,6 @@
   <div class="force-list" id="force-list"></div>
   <div class="self-ammo-line" id="self-ammo-line">弾薬: --</div>
   <div class="audio-settings-panel" id="audio-settings-panel"></div>
-</div>
-
-<div class="drawer gemini-drawer" id="gemini-drawer">
-  <div class="drawer-header">
-    <span>Gemini参謀</span>
-    <button class="drawer-close" onclick="toggleDrawer('gemini')">✕</button>
-  </div>
-  <div class="gemini-notice">APIキーはこのブラウザのlocalStorageにのみ保存されます。共有端末では使用後に削除してください。</div>
-  <div class="gemini-settings">
-    <input id="gemini-api-key" type="password" autocomplete="off" placeholder="Google AI Studio APIキー">
-    <button class="btn" onclick="saveGeminiApiKey()">保存</button>
-    <button class="btn" onclick="clearGeminiApiKey()">削除</button>
-  </div>
-  <div class="gemini-messages" id="gemini-messages"></div>
-  <form class="gemini-form" onsubmit="sendGeminiMessage(event)">
-    <input id="gemini-input" type="text" maxlength="1000" autocomplete="off" placeholder="作戦について質問…">
-    <button class="btn primary" type="submit">送信</button>
-  </form>
 </div>
 
 <div class="drawer-backdrop" id="drawer-backdrop" onclick="closeAllDrawers()"></div>

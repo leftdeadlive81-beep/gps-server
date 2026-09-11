@@ -882,10 +882,6 @@ export const MAX_CRATERS = 90;
 
 export const EXPLOSION_SFX_MIN_GAP_MS = 90;
 
-export const GEMINI_API_KEY_STORAGE = 'mortar-fdc-gemini-api-key';
-
-export const GEMINI_MODEL = 'gemini-2.5-flash';
-
 // per user request: the Radio Log drawer (and its LOG_MAX_ENTRIES cap) is gone -- replaced by
 // a ticker of important events (see announceTicker() in ui.js), capped at this many entries.
 export const TICKER_MAX_ENTRIES = 12;
