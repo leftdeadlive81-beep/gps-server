@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement, unlockedAchievements } from './achievements.js';
-import { addNewScout, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, isAutoCommitRunning, mapSeedCandidates, mortarNotReadyToFire, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
+import { abandonSavedCampaign, addNewScout, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, isAutoCommitRunning, mapSeedCandidates, mortarNotReadyToFire, resumedFromSave, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
 import { ACHIEVEMENTS, AMMO_PACK, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_SQUAD_SIZE, SMART_ACTIONS, SMART_UNIT_TYPES, SNIPER_AIM_RANGE_M, SNIPER_RANGE_M, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
 import { canvasToScreen, multiSelectCommonOrders, multiSelectMode, multiSelected, pruneMultiSelected } from './input.js';
 import { render } from './main.js';
@@ -24,7 +24,29 @@ function drawCachedTerrainThumb(canvas, gen){
   canvas.getContext('2d').drawImage(thumb, 0, 0);
 }
 
+// per user request: shown at the top of the setup overlay when a saved campaign was found and
+// applied (see initGame()/savegame.js) -- confirms what's being resumed and offers a way to
+// discard it and start fresh instead.
+export function renderResumeBanner(){
+  const el = document.getElementById('resume-banner');
+  if(!el) return;
+  if(!resumedFromSave){
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = `
+    <div class="shop-row selected" style="margin-bottom:10px;">
+      <div>
+        <div class="label">セーブデータから再開</div>
+        <div class="sub">WAVE ${state.stage} ・ 所持金 ¥${state.money.toLocaleString()}</div>
+      </div>
+      <div class="actions"><button class="btn" onclick="if(confirm('セーブデータを削除して新規に開始しますか？この操作は取り消せません。')) abandonSavedCampaign();">新規に開始</button></div>
+    </div>
+  `;
+}
+
 export function renderMapSelectOverlay(){
+  renderResumeBanner();
   renderMapSelectBody();
   renderDeploymentSelectBody();
   renderDecoySelectBody();
