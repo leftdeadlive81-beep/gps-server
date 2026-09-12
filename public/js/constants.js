@@ -1029,6 +1029,15 @@ export const MAP_VIEW = {
 
 export const MAP_ZOOM_MIN = 0.35, MAP_ZOOM_MAX = 9;
 
+// per user request: virtual joystick (next to the minimap) for panning the main combat map
+// without dragging the board itself. Base pan speed in canvas units/sec at zoom 1, scaled by
+// sqrt(zoom) (same relationship cameraHeightForZoom uses) so screen-space pan speed stays
+// roughly constant across zoom levels rather than crawling when zoomed out.
+export const JOYSTICK_PAN_SPEED = 500;
+
+// max knob travel from the base's center, in CSS px -- see renderJoystickKnob() in input.js.
+export const JOYSTICK_MAX_KNOB_PX = 24;
+
 export const MAP_POLAR_MIN = 0.12, MAP_POLAR_MAX = 1.45;
 
 export const MAP_DETAIL_LABEL_ZOOM = 0.72;

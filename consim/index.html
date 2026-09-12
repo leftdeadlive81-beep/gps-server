@@ -24,6 +24,12 @@
        地点をホットスポットとして表示。クリックするとその地点へカメラがフォーカスする。 -->
   <canvas id="minimap" class="minimap" width="160" height="57"></canvas>
 
+  <!-- per user request: ミニマップの左に、メイン戦闘マップの表示範囲を上下左右に動かす
+       擬似ジョイスティックを配置(see setupJoystickControls() in input.js)。 -->
+  <div class="map-joystick" id="map-joystick">
+    <div class="map-joystick-knob" id="map-joystick-knob"></div>
+  </div>
+
   <!-- per user request: full-screen map UI for the mobile-first game -- every other panel
        (stats/log/force-status/decision) now floats over the map instead of sharing page
        space with it. The top bar holds the always-visible brand/summary row plus drawer/

@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { applyBestMortarLoadout, buildTrenchAt, buildWallAt, estPos, estPosFromMortar, handlePlacementClick, mortarNotReadyToFire, mortarTooCloseToFire, mortarTooFarToFire, placeDecoyAt, resolveSmartUnitIdxs, state, unitAlive } from './combat.js';
-import { CANVAS_H, CANVAS_W, DECOY_LONGPRESS_MOVE_TOLERANCE_PX, DECOY_LONGPRESS_MS, DIRECT_MOVE_KINDS, FRIENDLY_KIND_LIST, MAP_DOUBLETAP_ZOOM_LEVEL, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_MOVE_START_DELAY_MS, MULTI_SELECT_KINDS, MULTI_SELECT_ORDER_SETTER, ORDER_LABEL, SCOUT_ADVANCE_LIMIT_X, SMART_UNIT_TYPES, SQUAD_ADVANCE_LIMIT_X, SQUAD_ASSAULT_LIMIT_X, SQUAD_RETREAT_LIMIT_X } from './constants.js';
+import { CANVAS_H, CANVAS_W, DECOY_LONGPRESS_MOVE_TOLERANCE_PX, DECOY_LONGPRESS_MS, DIRECT_MOVE_KINDS, FRIENDLY_KIND_LIST, JOYSTICK_MAX_KNOB_PX, JOYSTICK_PAN_SPEED, MAP_DOUBLETAP_ZOOM_LEVEL, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_MOVE_START_DELAY_MS, MULTI_SELECT_KINDS, MULTI_SELECT_ORDER_SETTER, ORDER_LABEL, SCOUT_ADVANCE_LIMIT_X, SMART_UNIT_TYPES, SQUAD_ADVANCE_LIMIT_X, SQUAD_ASSAULT_LIMIT_X, SQUAD_RETREAT_LIMIT_X } from './constants.js';
 import { render } from './main.js';
 import { clampMapView, groundPlaneCanvasUnitAt, project, resizeThree, terrainCanvasUnitAt, threeReady, updateCameraFromView } from './three.js';
 import { anyOverlayShown, log } from './ui.js';
@@ -653,6 +653,84 @@ export function setupMapControls(){
     }
   });
   window.addEventListener('resize', resizeThree);
+}
+
+// per user request: 擬似ジョイスティック(ミニマップの左隣)でメイン戦闘マップの表示範囲
+// (MAP_VIEW.cx/cy)を上下左右にパンする。ドラッグでのマップ操作(setupMapControls内)は
+// 「地図そのものを掴んで動かす」感覚(指を右に動かすと地図が右へ、視点は左へ)だが、こちらは
+// 「視点を右に押す」感覚(スティックを右に倒すと視点そのものが右へ移動)が自然なため、符号を
+// 反転させていない。
+export let joystickVector = {x:0, y:0};
+
+let joystickLastFrameAt = null;
+
+export function setupJoystickControls(){
+  const base = document.getElementById('map-joystick');
+  const knob = document.getElementById('map-joystick-knob');
+  if(!base || !knob) return;
+  const maxR = JOYSTICK_MAX_KNOB_PX;
+  let active = false;
+
+  const setFromPointer = (clientX, clientY)=>{
+    const rect = base.getBoundingClientRect();
+    const cx = rect.left+rect.width/2, cy = rect.top+rect.height/2;
+    let dx = clientX-cx, dy = clientY-cy;
+    const dist = Math.hypot(dx, dy);
+    if(dist > maxR){ dx = dx/dist*maxR; dy = dy/dist*maxR; }
+    knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+    joystickVector = { x: dx/maxR, y: dy/maxR };
+  };
+  const reset = ()=>{
+    active = false;
+    base.classList.remove('active');
+    knob.style.transform = 'translate(-50%,-50%)';
+    joystickVector = {x:0, y:0};
+  };
+
+  base.addEventListener('mousedown', e=>{
+    active = true;
+    base.classList.add('active');
+    setFromPointer(e.clientX, e.clientY);
+  });
+  window.addEventListener('mousemove', e=>{
+    if(!active) return;
+    setFromPointer(e.clientX, e.clientY);
+  });
+  window.addEventListener('mouseup', ()=>{ if(active) reset(); });
+
+  base.addEventListener('touchstart', e=>{
+    e.preventDefault();
+    active = true;
+    base.classList.add('active');
+    const t = e.touches[0];
+    if(t) setFromPointer(t.clientX, t.clientY);
+  }, {passive:false});
+  window.addEventListener('touchmove', e=>{
+    if(!active) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    if(t) setFromPointer(t.clientX, t.clientY);
+  }, {passive:false});
+  window.addEventListener('touchend', ()=>{ if(active) reset(); });
+  window.addEventListener('touchcancel', ()=>{ if(active) reset(); });
+}
+
+// per user request: called every animation frame (see loop() in main.js) -- pans MAP_VIEW
+// continuously while the joystick is held, scaled by real elapsed time so it's frame-rate
+// independent, and by sqrt(zoom) (the same relationship cameraHeightForZoom uses) so
+// screen-space pan speed stays roughly constant across zoom levels.
+export function updateJoystickPan(){
+  const now = performance.now();
+  if(joystickLastFrameAt===null){ joystickLastFrameAt = now; return; }
+  const dt = now-joystickLastFrameAt;
+  joystickLastFrameAt = now;
+  if(joystickVector.x===0 && joystickVector.y===0) return;
+  const zoom = clamp(MAP_VIEW.zoom, MAP_ZOOM_MIN, MAP_ZOOM_MAX);
+  const speed = JOYSTICK_PAN_SPEED * Math.sqrt(zoom);
+  MAP_VIEW.cx += joystickVector.x * speed * (dt/1000);
+  MAP_VIEW.cy += joystickVector.y * speed * (dt/1000);
+  clampMapView();
+  updateCameraFromView();
 }
 
 export function assignMortarFireAtDecoy(idx){

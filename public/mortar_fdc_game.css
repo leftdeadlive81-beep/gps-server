@@ -90,6 +90,24 @@
     cursor:pointer; touch-action:none;
   }
 
+  /* per user request: 擬似ジョイスティック -- ミニマップの左隣に配置し、メイン戦闘マップの
+     表示範囲(MAP_VIEW.cx/cy)を上下左右にパンする。ミニマップの右オフセット(84px)+幅
+     (160px)+10pxの隙間を左端とする。 */
+  .map-joystick{
+    position:absolute; bottom:calc(59px + env(safe-area-inset-bottom)); right:254px; z-index:43;
+    width:70px; height:70px; border-radius:50%;
+    background:rgba(9,15,12,.72); border:1px solid var(--amber-dim);
+    box-shadow:0 6px 20px rgba(0,0,0,.3), inset 0 0 0 1px rgba(240,189,85,.08);
+    touch-action:none; cursor:pointer;
+  }
+  .map-joystick-knob{
+    position:absolute; left:50%; top:50%; width:30px; height:30px; border-radius:50%;
+    background:var(--amber-dim); border:2px solid var(--amber);
+    transform:translate(-50%,-50%); pointer-events:none;
+    transition:transform .08s ease-out;
+  }
+  .map-joystick.active .map-joystick-knob{ transition:none; }
+
   /* --- top HUD bar: brand + condensed stat summary + drawer/utility icons, always
      visible; tapping it expands the full stat grid beneath it. --- */
   .hud-top{
