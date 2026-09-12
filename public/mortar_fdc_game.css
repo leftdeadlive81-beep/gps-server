@@ -80,21 +80,23 @@
   .eo-count{font-family:var(--font-mono);font-size:17px;font-weight:700;color:var(--ink);margin-bottom:3px;}
 
   .minimap{
-    /* per user request: moved from top-left to the bottom bar, just left of the
-       "指示"(smart-order-fab)button -- right offset = fab's own right(14px) + fab width
-       (60px) + a 10px gap; bottom matches the fab's bottom so they sit level with each other. */
-    position:absolute; bottom:calc(64px + env(safe-area-inset-bottom)); right:84px; z-index:43;
+    /* per user request: order along the bottom row (right to left) is 指示(fab, right:14,
+       width60) → 擬似ジョイスティック(right:84, width70) → ミニマップ(right:164, width160),
+       swapped from the joystick/minimap's previous order. bottom trimmed down (64->48) to
+       shrink the empty gap above .hud-bottom as much as possible while still clearing it. */
+    position:absolute; bottom:calc(48px + env(safe-area-inset-bottom)); right:164px; z-index:43;
     width:160px; height:57px;
     background:rgba(9,15,12,.88); border:1px solid var(--amber-dim); border-radius:6px;
     box-shadow:0 6px 20px rgba(0,0,0,.3), 0 0 0 1px rgba(240,189,85,.08);
     cursor:pointer; touch-action:none;
   }
 
-  /* per user request: 擬似ジョイスティック -- ミニマップの左隣に配置し、メイン戦闘マップの
-     表示範囲(MAP_VIEW.cx/cy)を上下左右にパンする。ミニマップの右オフセット(84px)+幅
-     (160px)+10pxの隙間を左端とする。 */
+  /* per user request: 擬似ジョイスティック -- ミニマップと指示ボタンの間に配置し、メイン
+     戦闘マップの表示範囲(MAP_VIEW.cx/cy)を上下左右にパンする。指示ボタンの右オフセット
+     (14px)+幅(60px)+10pxの隙間を右端とする。bottomはfab/ミニマップと同じ48pxを基準に、
+     高さの差分(70pxと60px)だけ引いて中心を揃えている。 */
   .map-joystick{
-    position:absolute; bottom:calc(59px + env(safe-area-inset-bottom)); right:254px; z-index:43;
+    position:absolute; bottom:calc(43px + env(safe-area-inset-bottom)); right:84px; z-index:43;
     width:70px; height:70px; border-radius:50%;
     background:rgba(9,15,12,.72); border:1px solid var(--amber-dim);
     box-shadow:0 6px 20px rgba(0,0,0,.3), inset 0 0 0 1px rgba(240,189,85,.08);
@@ -243,7 +245,9 @@
      reach on most phones. */
   .smart-order-fab{
     position:fixed; right:14px; z-index:43;
-    bottom:calc(64px + env(safe-area-inset-bottom));
+    /* per user request: trimmed down (64->48) along with the minimap/joystick to shrink the
+       empty gap above .hud-bottom as much as possible while still clearing it. */
+    bottom:calc(48px + env(safe-area-inset-bottom));
     width:60px; height:60px; padding:0; border-radius:50%;
     background:var(--amber-dim); border:2px solid var(--amber); color:#1a1608;
     font-family:var(--font-body); font-size:13px; font-weight:700; letter-spacing:1px;

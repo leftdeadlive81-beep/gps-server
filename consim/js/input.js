@@ -725,10 +725,28 @@ export function updateJoystickPan(){
   const dt = now-joystickLastFrameAt;
   joystickLastFrameAt = now;
   if(joystickVector.x===0 && joystickVector.y===0) return;
+  // per user request: the joystick's up/down/left/right must match what's visually up/down/
+  // left/right on screen, including on narrow/mobile screens where MAP_INITIAL_AZIMUTH starts
+  // the camera rotated a quarter turn -- a fixed world-space (cx,cy) mapping would then feel
+  // rotated (pushing "right" wouldn't pan screen-right). Instead of hand-deriving the azimuth
+  // trig, reuse the same ground-plane raycast the mouse-drag pan uses: probe two nearby SCREEN
+  // points through the actual current camera and take their world-space difference as the pan
+  // direction -- this is automatically correct for whatever azimuth/polar/zoom is active.
+  if(!threeReady) return;
+  const cxPx = MAP_VIEW.containerW/2, cyPx = MAP_VIEW.containerH/2;
+  const probePx = 40; // arbitrary small screen-px probe distance -- only its direction matters
+  const base = groundPlaneCanvasUnitAt(cxPx, cyPx);
+  const probe = groundPlaneCanvasUnitAt(cxPx + joystickVector.x*probePx, cyPx + joystickVector.y*probePx);
+  if(!base || !probe) return;
+  const rawDx = probe.x-base.x, rawDy = probe.y-base.y;
+  const rawMag = Math.hypot(rawDx, rawDy);
+  if(rawMag < 1e-6) return;
+  const intensity = clamp(Math.hypot(joystickVector.x, joystickVector.y), 0, 1);
   const zoom = clamp(MAP_VIEW.zoom, MAP_ZOOM_MIN, MAP_ZOOM_MAX);
-  const speed = JOYSTICK_PAN_SPEED * Math.sqrt(zoom);
-  MAP_VIEW.cx += joystickVector.x * speed * (dt/1000);
-  MAP_VIEW.cy += joystickVector.y * speed * (dt/1000);
+  const speed = JOYSTICK_PAN_SPEED * Math.sqrt(zoom) * intensity;
+  const travel = speed * (dt/1000);
+  MAP_VIEW.cx += (rawDx/rawMag) * travel;
+  MAP_VIEW.cy += (rawDy/rawMag) * travel;
   clampMapView();
   updateCameraFromView();
 }
