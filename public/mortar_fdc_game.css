@@ -80,7 +80,10 @@
   .eo-count{font-family:var(--font-mono);font-size:17px;font-weight:700;color:var(--ink);margin-bottom:3px;}
 
   .minimap{
-    position:absolute; top:calc(46px + env(safe-area-inset-top)); left:8px; z-index:41;
+    /* per user request: moved from top-left to the bottom bar, just left of the
+       "指示"(smart-order-fab)button -- right offset = fab's own right(14px) + fab width
+       (60px) + a 10px gap; bottom matches the fab's bottom so they sit level with each other. */
+    position:absolute; bottom:calc(64px + env(safe-area-inset-bottom)); right:84px; z-index:43;
     width:160px; height:57px;
     background:rgba(9,15,12,.88); border:1px solid var(--amber-dim); border-radius:6px;
     box-shadow:0 6px 20px rgba(0,0,0,.3), 0 0 0 1px rgba(240,189,85,.08);
