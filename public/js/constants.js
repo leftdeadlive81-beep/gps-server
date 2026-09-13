@@ -513,6 +513,38 @@ export const HQ_DEFENSE_RANGE_UNITS = HQ_DEFENSE_RANGE_M / METERS_PER_UNIT;
 // HQ_DEFENSE_RANGE_UNITS (mortars can fire from up to MORTAR_MAX_RANGE_UNITS away).
 export const HQ_DEFENSE_ATTACKER_WINDOW_MS = 15000;
 
+// per user request: a "supply zone" around the (friendly) HQ -- any damaged friendly unit
+// that has real HP (mortar/tank/sam; HQ itself keeps its own paid repairHq() instead, and
+// squad/sniper/scout soldiers are permanent one-hit casualties with no partial HP to heal)
+// slowly regenerates while sitting inside this radius, and squads/snipers also regenerate
+// their new per-unit ammo (see UNIT_AMMO_MAX below) here. Kept tight (barely more than
+// HQ_DETECT_RANGE_M) so it's a deliberate "fall back to base" spot, not just anywhere in the
+// wide initial deployment box.
+export const HQ_SUPPLY_ZONE_RADIUS_M = 350;
+
+export const HQ_SUPPLY_ZONE_RADIUS_UNITS = HQ_SUPPLY_ZONE_RADIUS_M / METERS_PER_UNIT;
+
+// fraction of max HP restored per TURN (not real second) to mortars/tanks/sams inside the
+// zone, consistent with how every other rate in this file scales with the game-speed slider --
+// ~6%/turn fills an empty unit in ~17 turns (~33s of real time at the default 1x speed).
+export const HQ_SUPPLY_HEAL_PCT_PER_TURN = 0.06;
+
+// per user request: squads/snipers now track a per-unit ammo count instead of firing forever.
+// Scoped to just these two types for now (see UNIT_AMMO_EMPTY_DMG_MULT) since every other
+// friendly weapon already has its own resource limit (mortars: state.ammo; tanks/sams: cooldown
+// timers modeling a slower-firing main gun).
+export const UNIT_AMMO_MAX = 20;
+
+// ammo restored per TURN while inside the HQ supply zone -- fills an empty unit in 2.5 turns
+// (~5s of real time at 1x speed), fast enough that a supply run is a brief tactical pause
+// rather than a long detour.
+export const UNIT_AMMO_RESUPPLY_PER_TURN = 8;
+
+// per user request: running dry degrades outgoing damage rather than silencing the unit
+// outright (still fires, just far less effectively) -- less confusing than a unit that
+// suddenly stops responding to engagement orders for no visible reason.
+export const UNIT_AMMO_EMPTY_DMG_MULT = 0.35;
+
 // per user request: enemy fire against the current HQ-defense threat hits harder
 // ("全力で攻撃" -- attacking with full force), on top of redirecting nearby infantry to
 // converge on it.

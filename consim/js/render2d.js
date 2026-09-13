@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { computeDispersionAt, currentPlacementUnit, estPos, isSuppressed, smoothVisualPos, state, unitAlive, unitAliveCount } from './combat.js';
-import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FRIENDLY_MARK_COLOR, GRID_LINES, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_DETAIL_EFFECT_ZOOM, MAP_DETAIL_LABEL_ZOOM, MAP_FULL_DETAIL_ZOOM, MAP_INITIAL_AZIMUTH, MAP_VIEW, METERS_PER_UNIT, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SNIPER_AIM_RANGE_UNITS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, TRENCH_LINE_WIDTH, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
+import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FRIENDLY_MARK_COLOR, GRID_LINES, HQ_SUPPLY_ZONE_RADIUS_UNITS, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_DETAIL_EFFECT_ZOOM, MAP_DETAIL_LABEL_ZOOM, MAP_FULL_DETAIL_ZOOM, MAP_INITIAL_AZIMUTH, MAP_VIEW, METERS_PER_UNIT, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SNIPER_AIM_RANGE_UNITS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, UNIT_AMMO_MAX, TRENCH_LINE_WIDTH, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
 import { isMultiSelected } from './input.js';
 import { choppedLineSegments, febaLineSegments } from './terrain.js';
 import { project, projectAtWorldY, scaledIconH, threeReady } from './three.js';
@@ -609,7 +609,7 @@ export function drawBoard(){
   // in real-world meters. The remaining direction-dependent foreshortening once the tilted
   // camera renders that true circle is normal, correct 3D perspective (the same reason distant
   // objects look smaller) -- not something to eliminate.
-  const drawGroundDetectionCircle = (centerL, radius)=>{
+  const drawGroundDetectionCircle = (centerL, radius, color, fill)=>{
     const steps = 48;
     const aniso = (WORLD.scaleZ>0.0001) ? (WORLD.scaleX/WORLD.scaleZ) : 1;
     const boundary = [];
@@ -630,10 +630,17 @@ export function drawBoard(){
       else ctx.lineTo(p.x, p.y);
     });
     ctx.closePath();
-    ctx.strokeStyle = 'rgba(111,155,191,0.55)';
+    if(fill){ ctx.fillStyle = fill; ctx.fill(); }
+    ctx.strokeStyle = color || 'rgba(111,155,191,0.55)';
     ctx.lineWidth = 1;
     ctx.stroke();
   };
+  // per user request: HQ本部の周りの補給ゾーン -- 中に入っている損傷ユニット(迫撃砲/戦車/SAM)は
+  // 徐々に回復し、歩兵小隊/狙撃班は弾薬を再補給する(see applyHqSupplyZone() in combat.js)。
+  // 常時表示(showDetailLabels条件なし)にして、遠くから見てもゾーンの存在に気付けるようにした。
+  if(state.hq && state.hq.hp>0){
+    drawGroundDetectionCircle(state.hq, HQ_SUPPLY_ZONE_RADIUS_UNITS, 'rgba(122,201,138,0.55)', 'rgba(122,201,138,0.07)');
+  }
   if(showDetailLabels){
     state.scouts.forEach(scout=>{
       const scoutVisL = smoothVisualPos(scout, scout.x, scout.y);
@@ -816,7 +823,10 @@ export function drawBoard(){
       ctx.font = '14px "JetBrains Mono"';
       ctx.textAlign='center';
       const sqOrderIcon = ORDER_ICON[sq.order] + (sq.pendingDest ? '→' : '');
-      if(showDetailLabels) ctx.fillText(`第${sqIdx+1}小隊 ${aliveSoldiers.length}/${sq.soldiers.length} ${sqOrderIcon}`, sqVis.x, sqVis.y+28);
+      // per user request: 弾薬残数の表示 -- 0になった場合は視認しやすいよう明示的に「弾切れ」
+      // と表示する(see applyHqSupplyZone()/UNIT_AMMO_EMPTY_DMG_MULT in combat.js)。
+      const sqAmmoLabel = (sq.ammo===undefined || sq.ammo>0) ? ` 弾${Math.ceil(sq.ammo ?? UNIT_AMMO_MAX)}` : ' 弾切れ';
+      if(showDetailLabels) ctx.fillText(`第${sqIdx+1}小隊 ${aliveSoldiers.length}/${sq.soldiers.length} ${sqOrderIcon}${sqAmmoLabel}`, sqVis.x, sqVis.y+28);
 
       if(aliveSoldiers.length>0){
         state.targets.filter(t=>!t.destroyed && t.type==='infantry' && t.revealed).forEach(t=>{
@@ -849,7 +859,8 @@ export function drawBoard(){
       ctx.font = '14px "JetBrains Mono"';
       ctx.textAlign='center';
       const snOrderIcon = ORDER_ICON[sn.order] + (sn.pendingDest ? '→' : '');
-      if(showDetailLabels) ctx.fillText(`狙撃${snIdx+1}班 ${aliveSoldiers.length}/${sn.soldiers.length} ${snOrderIcon}`, snVis.x, snVis.y+27);
+      const snAmmoLabel = (sn.ammo===undefined || sn.ammo>0) ? ` 弾${Math.ceil(sn.ammo ?? UNIT_AMMO_MAX)}` : ' 弾切れ';
+      if(showDetailLabels) ctx.fillText(`狙撃${snIdx+1}班 ${aliveSoldiers.length}/${sn.soldiers.length} ${snOrderIcon}${snAmmoLabel}`, snVis.x, snVis.y+27);
 
       if(aliveSoldiers.length>0 && sn.pendingSnipeTargetId){
         const t = state.targets.find(x=>x.id===sn.pendingSnipeTargetId);
