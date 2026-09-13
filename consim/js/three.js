@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { estPos, smoothVisualPos, state, unitAlive } from './combat.js';
-import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, FRIENDLY_MARK_COLOR_3D, GRID_LINES, HELI_FLIGHT_ALTITUDE, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, PROC_CANOPY_CELL, PROC_CANOPY_DARK, PROC_CANOPY_LIGHT, PROC_CLEARING_CELL, PROC_CLEARING_COLOR, PROC_CLEARING_EDGE0, PROC_CLEARING_EDGE1, PROC_COLOR_FOREST, PROC_COLOR_HIGH, PROC_COLOR_LOW, PROC_COLOR_WATER, PROC_DRY_PATCH_CELL, PROC_DRY_PATCH_COLOR, PROC_DRY_PATCH_EDGE0, PROC_DRY_PATCH_EDGE1, PROC_MESH_SEGMENTS_X, PROC_MESH_SEGMENTS_Z, PROC_OPEN_MOTTLE_AMOUNT, PROC_OPEN_MOTTLE_CELL, PROC_TERRAIN_HEIGHT_SCALE, PROC_TEXTURE_NOISE_COARSE_AMOUNT, PROC_TEXTURE_NOISE_COARSE_CELL, PROC_TEXTURE_NOISE_FINE_AMOUNT, PROC_TEXTURE_NOISE_FINE_CELL, PROC_TEXTURE_SIZE_X, PROC_TEXTURE_SIZE_Z, SCOUT_SQUAD_SIZE, SHADOW_FRUSTUM_HALF, SKY_COLOR, SNIPER_SQUAD_SIZE, SQUAD_GRID_OFFSETS, SUN_OFFSET, TARGET_TYPE_COLOR, TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, WALK_AMP_EASE, WALK_ANIM_DETAIL_ZOOM, WALK_ANIM_MIN_INTERVAL_MS, WALK_CYCLE_SPEED, WALK_SWING_MAX, WORLD, unitMarkers3d } from './constants.js';
+import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, FRIENDLY_MARK_COLOR_3D, GRID_LINES, HELI_FLIGHT_ALTITUDE, MAP_INITIAL_AZIMUTH, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, PROC_CANOPY_CELL, PROC_CANOPY_DARK, PROC_CANOPY_LIGHT, PROC_CLEARING_CELL, PROC_CLEARING_COLOR, PROC_CLEARING_EDGE0, PROC_CLEARING_EDGE1, PROC_COLOR_FOREST, PROC_COLOR_HIGH, PROC_COLOR_LOW, PROC_COLOR_WATER, PROC_DRY_PATCH_CELL, PROC_DRY_PATCH_COLOR, PROC_DRY_PATCH_EDGE0, PROC_DRY_PATCH_EDGE1, PROC_MESH_SEGMENTS_X, PROC_MESH_SEGMENTS_Z, PROC_OPEN_MOTTLE_AMOUNT, PROC_OPEN_MOTTLE_CELL, PROC_TERRAIN_HEIGHT_SCALE, PROC_TEXTURE_NOISE_COARSE_AMOUNT, PROC_TEXTURE_NOISE_COARSE_CELL, PROC_TEXTURE_NOISE_FINE_AMOUNT, PROC_TEXTURE_NOISE_FINE_CELL, PROC_TEXTURE_SIZE_X, PROC_TEXTURE_SIZE_Z, SCOUT_SQUAD_SIZE, SHADOW_FRUSTUM_HALF, SKY_COLOR, SNIPER_SQUAD_SIZE, SQUAD_GRID_OFFSETS, SUN_OFFSET, TARGET_TYPE_COLOR, TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, WALK_AMP_EASE, WALK_ANIM_DETAIL_ZOOM, WALK_ANIM_MIN_INTERVAL_MS, WALK_CYCLE_SPEED, WALK_SWING_MAX, WORLD, unitMarkers3d } from './constants.js';
 import { updateMapFocusEase } from './input.js';
 import { buildContourLines, buildProceduralRoads, elevationAt, elevationAtFor, nearestPointOnRoad, riverXAt, terrainTypeAtFor } from './terrain.js';
 import { clamp, smoothstep01, valueNoise2D } from './utils.js';
@@ -489,7 +489,8 @@ export function projectAtWorldY(cx, cy, worldY){
 
 export function updateCameraFromView(){
   if(!camera3d) return;
-  const viewCx = MAP_VIEW.cx, viewCy = MAP_VIEW.cy, viewZoom = MAP_VIEW.zoom;
+  const viewCx = MAP_VIEW.cx, viewCy = MAP_VIEW.cy;
+  let viewZoom = MAP_VIEW.zoom;
   const look = canvasUnitToWorldXZ(viewCx, viewCy);
   const lookY = terrainHeightAt(viewCx, viewCy);
   // per user request: the sun's shadow camera is a small fixed-size box (SHADOW_FRUSTUM_HALF)
@@ -558,7 +559,36 @@ export function updateCameraFromView(){
       fitDist *= 1.15;
       applyDist(fitDist);
     }
+
+    // per user request: on narrow/mobile-portrait screens (MAP_INITIAL_AZIMUTH rotates the
+    // camera 90° there), the "keep every corner on screen" pass above ends up dominated by the
+    // map's now-sideways-running long edge, leaving large empty bands above/below the map that
+    // its vertical extent never reaches. Zoom in further, specifically until the map's vertical
+    // span fills the container's height, accepting that the map's sides may now run off-screen
+    // (still reachable by panning) since only the vertical gap was ever wasted space.
+    if(MAP_INITIAL_AZIMUTH !== 0){
+      const vCorners = [[0,0],[CANVAS_W,0],[0,CANVAS_H],[CANVAS_W,CANVAS_H]];
+      const verticalSpanAt = (d)=>{
+        applyDist(d);
+        const ys = vCorners.map(([cx,cy])=>project(cx,cy).y);
+        return Math.max(...ys) - Math.min(...ys);
+      };
+      const targetSpan = MAP_VIEW.containerH * 0.97;
+      const maxFitDist = (diag*0.9)/MAP_ZOOM_MAX;
+      let i = 0;
+      while(i<40 && fitDist>maxFitDist && verticalSpanAt(fitDist)<targetSpan){
+        fitDist /= 1.06;
+        i++;
+      }
+      if(fitDist < maxFitDist) fitDist = maxFitDist;
+    }
+
     MAP_VIEW.zoom = clamp((diag*0.9)/fitDist, MAP_ZOOM_MIN, MAP_ZOOM_MAX);
+    // the fitted zoom must also drive the applyDist call below on this very first pass --
+    // otherwise this call would render one frame at the pre-fit distance and only pick up the
+    // fit on whatever later call happens to run next (a pan, a zoom, a resize), which may not
+    // happen before the player already sees the unfit frame.
+    viewZoom = MAP_VIEW.zoom;
     cameraNeedsInitialFit = false;
   }
 
