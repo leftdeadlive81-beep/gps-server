@@ -155,6 +155,60 @@ export function drawSelectionRing(ctx, x, y, active, r){
   ctx.stroke();
 }
 
+// per user request: friendly units packed close together used to each draw their own label,
+// overlapping into an unreadable block of text. Units whose screen anchors fall within this
+// many px of each other are now treated as one cluster by drawPendingFriendlyLabels() below.
+const FRIENDLY_LABEL_CLUSTER_PX = 60;
+
+// per user request: units within a crowded cluster collapse into one "by type" summary line
+// instead of each drawing their own label -- EXCEPT any unit that's currently selected (via
+// commandBox or multi-select), which still shows its own full label. Tapping/selecting a unit
+// inside a cluster is how it "expands" back out of the summary.
+export function drawPendingFriendlyLabels(ctx, labels){
+  if(!labels.length) return;
+  const n = labels.length;
+  const parent = Array.from({length:n}, (_,i)=>i);
+  const find = i => { while(parent[i]!==i){ parent[i]=parent[parent[i]]; i=parent[i]; } return i; };
+  for(let i=0;i<n;i++){
+    for(let j=i+1;j<n;j++){
+      if(Math.hypot(labels[i].x-labels[j].x, labels[i].y-labels[j].y) < FRIENDLY_LABEL_CLUSTER_PX){
+        const ri = find(i), rj = find(j);
+        if(ri!==rj) parent[ri] = rj;
+      }
+    }
+  }
+  const groups = new Map();
+  for(let i=0;i<n;i++){
+    const root = find(i);
+    if(!groups.has(root)) groups.set(root, []);
+    groups.get(root).push(labels[i]);
+  }
+  groups.forEach(group=>{
+    const drawFull = g=>{
+      g.lines.forEach(line=>{
+        ctx.fillStyle = line.color || LABEL_TEXT_COLOR;
+        ctx.font = line.font;
+        ctx.textAlign = 'center';
+        ctx.fillText(line.text, g.x, g.y+line.dy);
+      });
+    };
+    if(group.length===1){ drawFull(group[0]); return; }
+    const selected = group.filter(g=>g.selected);
+    const rest = group.filter(g=>!g.selected);
+    selected.forEach(drawFull);
+    if(!rest.length) return;
+    const counts = new Map();
+    rest.forEach(g=>{ counts.set(g.kind, (counts.get(g.kind)||0)+1); });
+    const summary = Array.from(counts.entries()).map(([kind,count])=>`${kind}x${count}`).join(' ');
+    const cx = rest.reduce((s,g)=>s+g.x,0)/rest.length;
+    const cy = rest.reduce((s,g)=>s+g.y,0)/rest.length;
+    ctx.fillStyle = 'rgba(217,164,65,0.95)';
+    ctx.font = 'bold 13px "JetBrains Mono"';
+    ctx.textAlign = 'center';
+    ctx.fillText(summary, cx, cy+38);
+  });
+}
+
 export function drawMinimap(){
   const cv = document.getElementById('minimap');
   if(!cv || !state) return;
@@ -258,6 +312,16 @@ export function drawBoard(){
   const showDetailLabels = MAP_VIEW.zoom >= MAP_DETAIL_LABEL_ZOOM;
   const showFullDetail = MAP_VIEW.zoom >= MAP_FULL_DETAIL_ZOOM;
   const showDetailEffects = MAP_VIEW.zoom >= MAP_DETAIL_EFFECT_ZOOM;
+
+  // per user request: when several friendly units end up close together on screen, their
+  // labels used to all draw individually and overlap into an unreadable block of text. Each
+  // friendly unit's label is now queued here (instead of drawn immediately) and resolved by
+  // drawPendingFriendlyLabels() near the end of this function: units within
+  // LABEL_CLUSTER_PX of each other collapse into one "by type" summary line UNLESS one of them
+  // is currently selected, in which case that unit's own full label still shows (selecting a
+  // unit inside a cluster is the way to "expand" it back to a full label).
+  const pendingFriendlyLabels = [];
+  const queueFriendlyLabel = (x, y, lines, selected, kind)=> pendingFriendlyLabels.push({x, y, lines, selected, kind});
 
   // per user request: roads used to be drawn here as a 2D overlay pass, but this whole `#board`
   // canvas sits compositely ABOVE the 3D `#three` WebGL canvas -- so a road always rendered on
@@ -412,13 +476,10 @@ export function drawBoard(){
     ctx.moveTo(0,-22); ctx.lineTo(14,-17); ctx.lineTo(0,-12); ctx.closePath();
     ctx.fillStyle = hqAlive ? FRIENDLY_MARK_COLOR : '#5c2a25';
     ctx.fill();
-    ctx.fillStyle = LABEL_TEXT_COLOR;
-    ctx.font = 'bold 15px "JetBrains Mono"';
-    ctx.textAlign = 'center';
-    if(showDetailLabels) ctx.fillText(hqAlive?'指揮所':'指揮所(壊滅)', 0, 34);
-    if(showDetailLabels && hqAlive && hq.pendingDest){
-      ctx.font = 'bold 13px "JetBrains Mono"';
-      ctx.fillText('[移転中]', 0, 50);
+    if(showDetailLabels){
+      const hqLines = [{text: hqAlive?'指揮所':'指揮所(壊滅)', dy:34, font:'bold 15px "JetBrains Mono"'}];
+      if(hqAlive && hq.pendingDest) hqLines.push({text:'[移転中]', dy:50, font:'bold 13px "JetBrains Mono"'});
+      queueFriendlyLabel(hqP.x, hqP.y, hqLines, state.commandBox && state.commandBox.kind==='hq', '指揮所');
     }
     ctx.restore();
 
@@ -537,10 +598,8 @@ export function drawBoard(){
       ctx.arc(0, 0, 16, -Math.PI/2, -Math.PI/2 + Math.PI*2*(1-reloadLeft));
       ctx.stroke();
     }
-    ctx.fillStyle = LABEL_TEXT_COLOR;
-    ctx.font = '15px "JetBrains Mono"';
-    ctx.textAlign='center';
-    if(showDetailLabels) ctx.fillText(mAlive?`迫撃砲${mortar.id+1} ${mortarStatusIcon(mortar)}`:`迫撃砲${mortar.id+1}(戦闘不能)`, 0, 44);
+    if(showDetailLabels) queueFriendlyLabel(mVis.x, mVis.y, [{text: mAlive?`迫撃砲${mortar.id+1} ${mortarStatusIcon(mortar)}`:`迫撃砲${mortar.id+1}(戦闘不能)`, dy:44, font:'15px "JetBrains Mono"'}],
+      state.commandBox && state.commandBox.kind==='mortar' && state.commandBox.idx===mIdx, '迫撃砲');
     ctx.restore();
 
     if(showDetailLabels && mAlive){
@@ -626,10 +685,7 @@ export function drawBoard(){
     ctx.beginPath();
     ctx.moveTo(0,-12); ctx.lineTo(16,0); ctx.lineTo(0,12); ctx.lineTo(-16,0); ctx.closePath();
     ctx.fill(); ctx.stroke();
-    ctx.fillStyle = LABEL_TEXT_COLOR;
-    ctx.font = '15px "JetBrains Mono"';
-    ctx.textAlign = 'center';
-    if(showDetailLabels) ctx.fillText(`ヘリ${heliIdx+1} [観測]`, 0, -20);
+    if(showDetailLabels) queueFriendlyLabel(p.x, p.y, [{text:`ヘリ${heliIdx+1} [観測]`, dy:-20, font:'15px "JetBrains Mono"'}], false, 'ヘリ');
     ctx.restore();
   });
   state.scouts.forEach((scout, scIdx)=>{
@@ -640,17 +696,15 @@ export function drawBoard(){
     ctx.save();
     ctx.translate(scoutVis.x, scoutVis.y);
     drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='scout' && state.commandBox.idx===scIdx);
-    ctx.fillStyle = LABEL_TEXT_COLOR;
-    ctx.font = '15px "JetBrains Mono"';
-    ctx.textAlign='center';
-    if(showDetailLabels) ctx.fillText(scoutAlive?`斥候${scout.id+1} ${aliveCount}/${scout.soldiers.length}`:`斥候${scout.id+1}(戦闘不能)`, 0, -20);
-    if(showDetailLabels && scoutAlive){
-      let scoutOrderLabel = '[観測]';
-      if(scout.resting) scoutOrderLabel = '[大休止]';
-      else if(scout.pendingDest) scoutOrderLabel = '[移動]';
-      ctx.fillStyle = LABEL_TEXT_COLOR;
-      ctx.font = 'bold 13px "JetBrains Mono"';
-      ctx.fillText(scoutOrderLabel, 0, 28);
+    if(showDetailLabels){
+      const scoutLines = [{text: scoutAlive?`斥候${scout.id+1} ${aliveCount}/${scout.soldiers.length}`:`斥候${scout.id+1}(戦闘不能)`, dy:-20, font:'15px "JetBrains Mono"'}];
+      if(scoutAlive){
+        let scoutOrderLabel = '[観測]';
+        if(scout.resting) scoutOrderLabel = '[大休止]';
+        else if(scout.pendingDest) scoutOrderLabel = '[移動]';
+        scoutLines.push({text: scoutOrderLabel, dy:28, font:'bold 13px "JetBrains Mono"'});
+      }
+      queueFriendlyLabel(scoutVis.x, scoutVis.y, scoutLines, state.commandBox && state.commandBox.kind==='scout' && state.commandBox.idx===scIdx, '斥候');
     }
     ctx.restore();
 
@@ -667,14 +721,12 @@ export function drawBoard(){
     ctx.save();
     ctx.translate(tVis.x, tVis.y);
     drawSelectionRing(ctx, 0, 0, (state.commandBox && state.commandBox.kind==='tank' && state.commandBox.idx===tIdx) || isMultiSelected('tank', tIdx));
-    ctx.fillStyle = LABEL_TEXT_COLOR;
-    ctx.font = '15px "JetBrains Mono"';
-    ctx.textAlign='center';
     // per user request: order status shown as a single icon glyph (see ORDER_ICON) instead of
     // bracketed Japanese text, and merged onto the name's own line -- packed friendly deployment
     // areas were an unreadable wall of overlapping two-line labels on small screens.
     const tOrderIcon = ORDER_ICON[tank.order] + (tank.pendingDest ? '→' : '');
-    if(showDetailLabels) ctx.fillText(tAlive?`戦車${tank.id+1} ${tOrderIcon}`:`戦車${tank.id+1}(撃破)`, 0, 44);
+    if(showDetailLabels) queueFriendlyLabel(tVis.x, tVis.y, [{text: tAlive?`戦車${tank.id+1} ${tOrderIcon}`:`戦車${tank.id+1}(撃破)`, dy:44, font:'15px "JetBrains Mono"'}],
+      (state.commandBox && state.commandBox.kind==='tank' && state.commandBox.idx===tIdx) || isMultiSelected('tank', tIdx), '戦車');
     ctx.restore();
 
     if(tAlive){
@@ -707,11 +759,9 @@ export function drawBoard(){
     ctx.translate(samVis.x, samVis.y);
     drawSamIcon(ctx, 0, 0, scaledIconH(22), !samAlive);
     drawSelectionRing(ctx, 0, 0, (state.commandBox && state.commandBox.kind==='sam' && state.commandBox.idx===samIdx) || isMultiSelected('sam', samIdx));
-    ctx.fillStyle = LABEL_TEXT_COLOR;
-    ctx.font = '15px "JetBrains Mono"';
-    ctx.textAlign='center';
     const samOrderIcon = ORDER_ICON[sam.order] + (sam.pendingDest ? '→' : '');
-    if(showDetailLabels) ctx.fillText(samAlive?`対空${sam.id+1} ${samOrderIcon}`:`対空${sam.id+1}(撃破)`, 0, 44);
+    if(showDetailLabels) queueFriendlyLabel(samVis.x, samVis.y, [{text: samAlive?`対空${sam.id+1} ${samOrderIcon}`:`対空${sam.id+1}(撃破)`, dy:44, font:'15px "JetBrains Mono"'}],
+      (state.commandBox && state.commandBox.kind==='sam' && state.commandBox.idx===samIdx) || isMultiSelected('sam', samIdx), '対空');
     ctx.restore();
 
     if(samAlive){
@@ -757,11 +807,9 @@ export function drawBoard(){
     ctx.translate(enVis.x, enVis.y);
     drawEngineerIcon(ctx, 0, 0, scaledIconH(22), aliveSoldiers.length===0);
     drawSelectionRing(ctx, 0, 0, (state.commandBox && state.commandBox.kind==='engineer' && state.commandBox.idx===enIdx) || isMultiSelected('engineer', enIdx));
-    ctx.fillStyle = LABEL_TEXT_COLOR;
-    ctx.font = '14px "JetBrains Mono"';
-    ctx.textAlign='center';
     const enOrderIcon = aliveSoldiers.length>0 ? ` ${ORDER_ICON[en.order]}${en.pendingDest?'→':''}` : '';
-    if(showDetailLabels) ctx.fillText(`工兵 ${aliveSoldiers.length}/${en.soldiers.length}${enOrderIcon}`, 0, 28);
+    if(showDetailLabels) queueFriendlyLabel(enVis.x, enVis.y, [{text:`工兵 ${aliveSoldiers.length}/${en.soldiers.length}${enOrderIcon}`, dy:28, font:'14px "JetBrains Mono"'}],
+      (state.commandBox && state.commandBox.kind==='engineer' && state.commandBox.idx===enIdx) || isMultiSelected('engineer', enIdx), '工兵');
     ctx.restore();
     if(showDetailLabels && aliveSoldiers.length>0) drawAttritionBar(ctx, enVis.x+18, enVis.y, aliveSoldiers.length/en.soldiers.length);
   });
@@ -779,14 +827,12 @@ export function drawBoard(){
       if(!threeReady) drawUnitIcon(ctx, infantryIcon, sqVis.x, sqVis.y, scaledIconH(22), aliveSoldiers.length===0);
       drawSelectionRing(ctx, sqVis.x, sqVis.y, (state.commandBox && state.commandBox.kind==='squad' && state.commandBox.idx===sqIdx) || isMultiSelected('squad', sqIdx));
       if(showDetailLabels && aliveSoldiers.length>0) drawAttritionBar(ctx, sqVis.x+32, sqVis.y, aliveSoldiers.length/sq.soldiers.length);
-      ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
-      ctx.font = '14px "JetBrains Mono"';
-      ctx.textAlign='center';
       const sqOrderIcon = ORDER_ICON[sq.order] + (sq.pendingDest ? '→' : '');
       // per user request: 弾薬残数の表示 -- 0になった場合は視認しやすいよう明示的に「弾切れ」
       // と表示する(see applyHqSupplyZone()/UNIT_AMMO_EMPTY_DMG_MULT in combat.js)。
       const sqAmmoLabel = (sq.ammo===undefined || sq.ammo>0) ? ` 弾${Math.ceil(sq.ammo ?? UNIT_AMMO_MAX)}` : ' 弾切れ';
-      if(showDetailLabels) ctx.fillText(`第${sqIdx+1}小隊 ${aliveSoldiers.length}/${sq.soldiers.length} ${sqOrderIcon}${sqAmmoLabel}`, sqVis.x, sqVis.y+28);
+      if(showDetailLabels) queueFriendlyLabel(sqVis.x, sqVis.y, [{text:`第${sqIdx+1}小隊 ${aliveSoldiers.length}/${sq.soldiers.length} ${sqOrderIcon}${sqAmmoLabel}`, dy:28, font:'14px "JetBrains Mono"', color: aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25'}],
+        (state.commandBox && state.commandBox.kind==='squad' && state.commandBox.idx===sqIdx) || isMultiSelected('squad', sqIdx), '小隊');
 
       if(aliveSoldiers.length>0){
         state.targets.filter(t=>!t.destroyed && t.type==='infantry' && t.revealed).forEach(t=>{
@@ -815,12 +861,10 @@ export function drawBoard(){
       const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
       drawSelectionRing(ctx, snVis.x, snVis.y, (state.commandBox && state.commandBox.kind==='sniper' && state.commandBox.idx===snIdx) || isMultiSelected('sniper', snIdx));
       if(showDetailLabels && aliveSoldiers.length>0) drawAttritionBar(ctx, snVis.x+20, snVis.y, aliveSoldiers.length/sn.soldiers.length);
-      ctx.fillStyle = aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25';
-      ctx.font = '14px "JetBrains Mono"';
-      ctx.textAlign='center';
       const snOrderIcon = ORDER_ICON[sn.order] + (sn.pendingDest ? '→' : '');
       const snAmmoLabel = (sn.ammo===undefined || sn.ammo>0) ? ` 弾${Math.ceil(sn.ammo ?? UNIT_AMMO_MAX)}` : ' 弾切れ';
-      if(showDetailLabels) ctx.fillText(`狙撃${snIdx+1}班 ${aliveSoldiers.length}/${sn.soldiers.length} ${snOrderIcon}${snAmmoLabel}`, snVis.x, snVis.y+27);
+      if(showDetailLabels) queueFriendlyLabel(snVis.x, snVis.y, [{text:`狙撃${snIdx+1}班 ${aliveSoldiers.length}/${sn.soldiers.length} ${snOrderIcon}${snAmmoLabel}`, dy:27, font:'14px "JetBrains Mono"', color: aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25'}],
+        (state.commandBox && state.commandBox.kind==='sniper' && state.commandBox.idx===snIdx) || isMultiSelected('sniper', snIdx), '狙撃');
 
       if(aliveSoldiers.length>0 && sn.pendingSnipeTargetId){
         const t = state.targets.find(x=>x.id===sn.pendingSnipeTargetId);
@@ -855,6 +899,8 @@ export function drawBoard(){
       }
     });
   }
+
+  drawPendingFriendlyLabels(ctx, pendingFriendlyLabels);
 
   state.targets.forEach(t=>{
     // per user request: detection/estimation is gone -- every non-destroyed target is always

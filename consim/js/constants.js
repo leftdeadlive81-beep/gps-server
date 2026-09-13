@@ -38,7 +38,11 @@ export const SCOUT_UPPER_Y = 55;
 
 export const SCOUT_LOWER_Y = 405;
 
-export const INITIAL_DEPLOY_SPACING_MULT = 1.4;
+// per user request: increased (1.4->2.0) so friendly units don't start the wave already
+// clustered close enough for their labels to overlap -- a complementary measure alongside
+// drawPendingFriendlyLabels()'s label-clustering in render2d.js, since deployment spacing alone
+// doesn't help once units regroup mid-battle.
+export const INITIAL_DEPLOY_SPACING_MULT = 2.0;
 
 export const PRICE_EQUIP = {armor:1200, optics:1000, extMag:800};
 
