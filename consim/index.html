@@ -57,16 +57,18 @@
       <div class="stat" id="stat-money" style="cursor:pointer;" onclick="openShop()"><div class="label">所持金</div><div class="value">--</div></div>
       <div class="stat" id="stat-roster"><div class="label">総兵力</div><div class="value">--</div></div>
     </div>
-    <!-- per user request: 通信記録(Radio Log)ドロワーを廃止し、代わりに戦況の重要情報を
-         流すテロップに置き換え -->
-    <div class="ticker-bar" id="ticker-bar">
-      <div class="ticker-track" id="ticker-track"></div>
-    </div>
   </div>
 
   <div class="board-note" id="board-note">自軍は左側、敵軍は右側遠方に展開。ドラッグでパン・ホイールでズーム。目標をクリックして選択</div>
 
+  <!-- per user request: 戦闘開始/戦闘中ボタンを半分の横幅に縮小して右詰にし、空いた左半分に
+       テロップ(隊員の殉職などの戦況通知)を移設。ticker-bar/ticker-trackはstatic HTML
+       (renderTicker()がIDで直接更新、renderDecisionPanel()が書き換えるdecision-panel-holder
+       とは独立)のままなので、ここに置いても既存のアニメーション/更新ロジックはそのまま動く。 -->
   <div class="hud-bottom">
+    <div class="ticker-bar" id="ticker-bar">
+      <div class="ticker-track" id="ticker-track"></div>
+    </div>
     <div class="decision-panel-holder"></div>
   </div>
 </div>

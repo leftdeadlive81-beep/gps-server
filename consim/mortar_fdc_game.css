@@ -179,13 +179,20 @@
   .board-note.expanded{display:block;}
 
   /* --- bottom HUD bar: the 進行速度/状況開始 controls, always visible over the map. --- */
+  /* per user request: 戦闘開始/戦闘中ボタン(元は行の残り幅いっぱい)を半分の横幅に縮小して
+     右詰にし、空いた左半分にテロップを配置 -- hud-bottomをflex行にして、テロップと
+     decision-panel-holder(進行速度+ボタン)を左右均等(flex:1ずつ)に割り振るだけで実現。
+     decision-controls-row内のボタン自体は元々flex:1のまま(=自分の行の残り幅いっぱい)なので、
+     行そのものが半分になった結果としてボタンも自動的に半分の幅・右詰になる。 */
   .hud-bottom{
     position:fixed; left:0; right:0; bottom:0; z-index:42;
+    display:flex; align-items:center; gap:8px;
     background:linear-gradient(0deg,rgba(7,11,10,.98),rgba(14,23,18,.88));
     border-top:1px solid rgba(240,189,85,.28);
     backdrop-filter:blur(12px);
     padding:8px 8px; padding-bottom:calc(8px + env(safe-area-inset-bottom));
   }
+  .hud-bottom .decision-panel-holder{ flex:1 1 0; min-width:0; }
   /* per user request: 決心/自動 merged into a single 状況開始/状況中 toggle button, with the
      進行速度 switcher sitting directly to its left instead of its own row underneath. */
   .hud-bottom .decision-box{
@@ -198,9 +205,11 @@
   .map-fullscreen-btn{width:32px;height:32px;}
 
   /* per user request: 通信記録(Radio Log)ドロワーの代わりに、戦況の重要情報(隊員の
-     殉職など)を流すテロップ。hud-topの一部として常時表示。 */
+     殉職など)を流すテロップ。以前はhud-topの一部だったが、hud-bottomの決心開始ボタンの
+     左隣(空いた半分)に移設した。 */
   .ticker-bar{
-    margin-top:6px; height:20px; overflow:hidden; position:relative;
+    flex:1 1 0; min-width:0;
+    height:20px; overflow:hidden; position:relative;
     background:rgba(0,0,0,.35); border:1px solid var(--edge-dim); border-radius:4px;
   }
   .ticker-bar.empty{display:none;}
