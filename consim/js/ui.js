@@ -2,7 +2,7 @@
 import { unlockAchievement, unlockedAchievements } from './achievements.js';
 import { abandonSavedCampaign, addNewScout, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, isAutoCommitRunning, mapSeedCandidates, mortarNotReadyToFire, resumedFromSave, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
 import { ACHIEVEMENTS, AMMO_PACK, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_SQUAD_SIZE, SMART_ACTIONS, SMART_UNIT_TYPES, SNIPER_AIM_RANGE_M, SNIPER_RANGE_M, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
-import { canvasToScreen, multiSelectCommonOrders, multiSelectMode, multiSelected, pruneMultiSelected } from './input.js';
+import { canvasToScreen, multiSelectCommonOrders, multiSelectMode, multiSelected, pruneMultiSelected, unitGroups } from './input.js';
 import { render } from './main.js';
 import { elevationAt, elevationLabel, terrainTypeAt, terrainTypeLabel } from './terrain.js';
 import { paintTerrainColors } from './three.js';
@@ -561,6 +561,15 @@ export function renderMultiSelectBox(){
   const btns = orders.map(o=>
     `<button class="btn squad-order-btn" ${multiSelected.length?'':'disabled'} onclick="multiSelectSetOrder('${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
+  // per user request: 部隊のグループ化 -- 現在の選択を1〜9のスロットに保存/呼び出しできる
+  // (classic RTS control groups)。保存は空でないスロットも上書き可能、呼び出しは空スロット
+  // なら無反応(disabled)にしてある。
+  const groupSaveBtns = unitGroups.map((g,i)=>
+    `<button class="btn" ${multiSelected.length?'':'disabled'} onclick="saveUnitGroup(${i+1})" title="現在の選択をグループ${i+1}に保存">${i+1}</button>`
+  ).join('');
+  const groupRecallBtns = unitGroups.map((g,i)=>
+    `<button class="btn" ${g.length?'':'disabled'} onclick="recallUnitGroup(${i+1})" title="グループ${i+1}を呼び出し">${i+1}${g.length?`(${g.length})`:''}</button>`
+  ).join('');
   box.style.display = 'block';
   box.innerHTML = `
     <div class="cb-head">
@@ -568,7 +577,11 @@ export function renderMultiSelectBox(){
       <button class="cb-close" onclick="toggleMultiSelectMode()">×</button>
     </div>
     <div class="meta" style="margin-bottom:6px;">${multiSelected.length ? '地図をクリックで選択中の全隊に移動先を指示。ユニットを再タップで選択解除。' : '小隊/戦車/対空/狙撃/工兵をタップして選択してください。'}</div>
-    <div class="squad-orders" style="grid-template-columns:repeat(${orders.length},1fr);margin-bottom:4px;">${btns}</div>
+    <div class="squad-orders" style="grid-template-columns:repeat(${orders.length},1fr);margin-bottom:8px;">${btns}</div>
+    <div class="meta" style="margin-bottom:4px;">グループとして保存:</div>
+    <div class="squad-orders" style="grid-template-columns:repeat(9,1fr);margin-bottom:8px;">${groupSaveBtns}</div>
+    <div class="meta" style="margin-bottom:4px;">グループを呼び出し:</div>
+    <div class="squad-orders" style="grid-template-columns:repeat(9,1fr);">${groupRecallBtns}</div>
   `;
 }
 
@@ -838,6 +851,13 @@ export function tankBoxHtml(idx){
   const repairAmount = Math.min(TANK_REPAIR_HP_PER_CALL, tank.maxHp-tank.hp);
   const repairCost = Math.round(TANK_REPAIR_COST_PER_HP*repairAmount);
   const canRepair = tank.hp<tank.maxHp && state.money>=repairCost;
+  // per user request: 工兵による無償の野戦修理 -- 対象は既にこの戦車の修理に向かっている工兵か、
+  // 待機中で修理可能な工兵のみ。応急修復(有償・即時)とは別の選択肢として併記する。
+  const engineerBtns = tank.hp<tank.maxHp ? state.engineers.map((en,enIdx)=>{
+    if(unitAliveCount(en)<=0 || en.resting) return '';
+    const active = en.order==='repair' && en.repairTargetId===tank.id;
+    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignEngineerRepair(${enIdx},${idx})">工兵${enIdx+1}に修理させる(無償)${active?'(修理中)':''}</button>`;
+  }).filter(Boolean).join('') : '';
   return `
     <div class="meta">HP: ${tank.hp} / ${tank.maxHp}</div>
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,tank.hp/tank.maxHp*100)}%"></div></div>
@@ -847,6 +867,7 @@ export function tankBoxHtml(idx){
     ${tank.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearTankDest(${idx})">移動先を解除</button>` : ''}
     ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearTankHunt(${idx})">攻撃目標を解除</button>` : ''}
     <button class="btn" ${canRepair?'':'disabled'} onclick="repairTank(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${tank.hp>=tank.maxHp?' ・ HP満タン':''}</button>
+    ${engineerBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">${engineerBtns}</div>` : ''}
   `;
 }
 
@@ -904,6 +925,18 @@ export function engineerBoxHtml(idx){
     : trenchCapReached ? `塹壕は上限(${MAX_TRENCHES}本)に達しています`
     : trenchMoneyShort ? `資金不足(建設費 ¥${TRENCH_BUILD_COST})`
     : `現在の塹壕: ${state.trenches.length}/${MAX_TRENCHES}本`;
+  // per user request: 工兵による戦車の野戦修理(無償・近接が必要) -- 応急修復(有償・即時、
+  // 戦車側パネル)とは別の手段として工兵側にも導線を用意する。
+  const repairTarget = en.repairTargetId!=null ? state.tanks.find(t=>t.id===en.repairTargetId) : null;
+  const repairableTanks = state.tanks.filter(t=>t.hp>0 && t.hp<t.maxHp);
+  const repairBtns = repairableTanks.map(t=>{
+    const tIdx = state.tanks.indexOf(t);
+    const active = en.order==='repair' && en.repairTargetId===t.id;
+    return `<button class="btn ${active?'active squad-order-btn':''}" ${resting?'disabled':''} onclick="assignEngineerRepair(${idx},${tIdx})">戦車${t.id+1}を修理${active?'(修理中)':''}</button>`;
+  }).join('');
+  const repairStatus = repairTarget
+    ? `修理対象: 戦車${repairTarget.id+1} (HP ${Math.round(repairTarget.hp)}/${repairTarget.maxHp}) ・ 近接すると自動で回復`
+    : (repairableTanks.length ? '損傷した戦車を選んで無償で修理を指示できます(近接が必要)' : '損傷した戦車はありません');
   return `
     <div class="meta">${alive}/${en.soldiers.length}名</div>
     ${exposureMetaHtml(getUnitExposure({kind:'engineer', idx}))}
@@ -919,6 +952,9 @@ export function engineerBoxHtml(idx){
     <div class="meta" style="margin-bottom:8px;">${wallStatus}</div>
     <button class="btn ${armingTrench?'active squad-order-btn':''}" ${resting||trenchCapReached||trenchMoneyShort?'disabled':''} style="width:100%;margin-bottom:4px;" onclick="armTrenchBuildOrder(${idx})">塹壕を構築(¥${TRENCH_BUILD_COST}・地図で始点→終点指定)</button>
     <div class="meta" style="margin-bottom:8px;">${trenchStatus}</div>
+    ${repairBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">${repairBtns}</div>` : ''}
+    <div class="meta" style="margin-bottom:8px;">${repairStatus}</div>
+    ${repairTarget ? `<button class="btn" style="margin-bottom:8px;" onclick="clearEngineerRepair(${idx})">修理を解除</button>` : ''}
     ${soldierRosterHtml(en.soldiers)}
   `;
 }

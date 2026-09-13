@@ -107,15 +107,50 @@ export function isMultiSelected(kind, idx){
   return multiSelectMode && multiSelected.some(e=>e.kind===kind && e.idx===idx);
 }
 
+// shared by pruneMultiSelected() and the saved unit-groups below, so a group's roster and the
+// live multi-selection always agree on what counts as "still a valid unit reference".
+function unitRefAlive({kind, idx}){
+  if(kind==='squad') return state.squads[idx] && state.squads[idx].soldiers.some(s=>s.alive);
+  if(kind==='tank') return state.tanks[idx] && state.tanks[idx].hp>0;
+  if(kind==='sam') return state.sams[idx] && state.sams[idx].hp>0;
+  if(kind==='sniper') return state.snipers[idx] && state.snipers[idx].soldiers.some(s=>s.alive);
+  if(kind==='engineer') return state.engineers[idx] && unitAlive(state.engineers[idx]);
+  return false;
+}
+
 export function pruneMultiSelected(){
-  multiSelected = multiSelected.filter(({kind, idx})=>{
-    if(kind==='squad') return state.squads[idx] && state.squads[idx].soldiers.some(s=>s.alive);
-    if(kind==='tank') return state.tanks[idx] && state.tanks[idx].hp>0;
-    if(kind==='sam') return state.sams[idx] && state.sams[idx].hp>0;
-    if(kind==='sniper') return state.snipers[idx] && state.snipers[idx].soldiers.some(s=>s.alive);
-    if(kind==='engineer') return state.engineers[idx] && unitAlive(state.engineers[idx]);
-    return false;
-  });
+  multiSelected = multiSelected.filter(unitRefAlive);
+}
+
+// per user request: 部隊のグループ化 -- 1〜9のスロットに現在の複数選択を保存し、後で
+// ワンタップで呼び出せる(古典的なRTSのコントロールグループと同じ発想)。既存の複数選択の
+// 仕組み(multiSelected/isMultiSelected/multiSelectSetOrder)をそのまま再利用する。
+export let unitGroups = Array.from({length:9}, ()=>[]);
+
+export function saveUnitGroup(groupNum){
+  if(!multiSelected.length) return;
+  unitGroups[groupNum-1] = multiSelected.map(e=>({...e}));
+  log('sys','司令部', `選択中の${multiSelected.length}隊をグループ${groupNum}に保存。`);
+  render();
+}
+
+export function recallUnitGroup(groupNum){
+  unitGroups[groupNum-1] = unitGroups[groupNum-1].filter(unitRefAlive);
+  const group = unitGroups[groupNum-1];
+  if(!group.length) return;
+  if(!multiSelectMode){
+    multiSelectMode = true;
+    const btn = document.getElementById('multiSelectBtn');
+    if(btn) btn.classList.add('active');
+    state.commandBox = null;
+    state.enemyCommandBox = null;
+    state.decoyCommandBox = null;
+    state.orderMode = null;
+    state.smartOrderMode = null;
+  }
+  multiSelected = group.map(e=>({...e}));
+  log('sys','司令部', `グループ${groupNum}(${multiSelected.length}隊)を選択。`);
+  render();
 }
 
 export function multiSelectCommonOrders(){
@@ -792,4 +827,4 @@ export function assignMortarFireAtDecoy(idx){
 
 export function resetClickCycle(){ clickCycleState = null; }
 
-Object.assign(window, { selectNextTarget, setUnitMoveDest, toggleMultiSelectMode, isMultiSelected, pruneMultiSelected, multiSelectCommonOrders, multiSelectSetOrder, handleMultiSelectClick, handleCanvasClick, nearestVisibleTargetForScreen, setPendingFireAt, canvasToScreen, collectClickCandidates, resolveClickHit, selectForceUnit, handleMinimapClick, focusMapOn, updateMapFocusEase, toggleDoubleTapZoom, decoyLongPressStart, decoyLongPressMove, decoyLongPressEnd, setupMapControls, assignMortarFireAtDecoy, resetClickCycle });
+Object.assign(window, { selectNextTarget, setUnitMoveDest, toggleMultiSelectMode, isMultiSelected, pruneMultiSelected, saveUnitGroup, recallUnitGroup, multiSelectCommonOrders, multiSelectSetOrder, handleMultiSelectClick, handleCanvasClick, nearestVisibleTargetForScreen, setPendingFireAt, canvasToScreen, collectClickCandidates, resolveClickHit, selectForceUnit, handleMinimapClick, focusMapOn, updateMapFocusEase, toggleDoubleTapZoom, decoyLongPressStart, decoyLongPressMove, decoyLongPressEnd, setupMapControls, assignMortarFireAtDecoy, resetClickCycle });

@@ -239,6 +239,13 @@ export const TANK_REPAIR_HP_PER_CALL = 30;
 
 export const TANK_REPAIR_COST_PER_HP = 40;
 
+// per user request: 工兵による戦車の野戦修理 -- 上の即時・有償の応急修復(repairTank)とは
+// 別の無償(労力のみ)の手段。工兵を戦車に近接させて修理を指示すると、この射程内にいる間
+// 緩やかに回復し続ける。指定先に自ら移動する点、資金を消費しない点が既存の修復と異なる。
+export const ENGINEER_REPAIR_RANGE_UNITS = 40;
+
+export const ENGINEER_REPAIR_HP_PER_TURN = 6;
+
 export const NUM_SAMS = 1;
 
 export const SAM_MAX_HP = 70;
@@ -797,11 +804,11 @@ export const ENEMY_INFANTRY_DOCTRINES = [
   {id:'support', label:'支援', speedMult:0.82, flankOffset:0.45, contactRangeMult:1.45},
 ];
 
-export const ORDER_LABEL = {advance:'前進', retreat:'後退', hold:'防御', assault:'突撃', hunt:'追跡攻撃', resting:'大休止'};
+export const ORDER_LABEL = {advance:'前進', retreat:'後退', hold:'防御', assault:'突撃', hunt:'追跡攻撃', resting:'大休止', repair:'修理'};
 
 export const MORTAR_ORDER_LABEL = {fire:'射撃', standby:'待機', move:'移動'};
 
-export const ORDER_ICON = {advance:'▲', retreat:'▼', hold:'■', assault:'◆', hunt:'◎', resting:'Z'};
+export const ORDER_ICON = {advance:'▲', retreat:'▼', hold:'■', assault:'◆', hunt:'◎', resting:'Z', repair:'⚒'};
 
 export const MORTAR_ORDER_ICON = {fire:'●', standby:'■', move:'✦'};
 
