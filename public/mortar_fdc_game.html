@@ -24,15 +24,13 @@
        地点をホットスポットとして表示。クリックするとその地点へカメラがフォーカスする。 -->
   <canvas id="minimap" class="minimap" width="130" height="130"></canvas>
 
-  <!-- per user request: ミニマップの左に、メイン戦闘マップの表示範囲を上下左右に動かす
-       擬似ジョイスティックを配置(see setupJoystickControls() in input.js)。 -->
-  <div class="map-joystick" id="map-joystick">
-    <div class="map-joystick-knob" id="map-joystick-knob"></div>
-  </div>
-
-  <!-- per user request: ジョイスティックの右に、俯瞰/標準/低角の3パターンをタップで
-       巡回切替するカメラ視点ボタンを配置(see setupCameraPresetButton() in input.js)。 -->
+  <!-- per user request: 俯瞰/標準/低角の3パターンをタップで巡回切替するカメラ視点ボタン
+       (see setupCameraPresetButton() in input.js)。 -->
   <button class="camera-preset-btn" id="camera-preset-btn"></button>
+
+  <!-- per user request: 擬似ジョイスティックは削除。代わりに、自軍全体の中心へ一発で視点を
+       戻すボタンを設置(see focusOnOwnForces()/setupFocusOwnForcesButton() in input.js)。 -->
+  <button class="focus-own-forces-btn" id="focus-own-forces-btn" title="自軍へ">自軍へ</button>
 
   <!-- per user request: full-screen map UI for the mobile-first game -- every other panel
        (stats/log/force-status/decision) now floats over the map instead of sharing page

@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { applyBestMortarLoadout, buildTrenchAt, buildWallAt, estPos, estPosFromMortar, handlePlacementClick, mortarNotReadyToFire, mortarTooCloseToFire, mortarTooFarToFire, placeDecoyAt, resolveSmartUnitIdxs, state, unitAlive } from './combat.js';
-import { CAMERA_PRESETS, CANVAS_H, CANVAS_W, DECOY_LONGPRESS_MOVE_TOLERANCE_PX, DECOY_LONGPRESS_MS, DIRECT_MOVE_KINDS, FRIENDLY_KIND_LIST, JOYSTICK_MAX_KNOB_PX, JOYSTICK_PAN_SPEED, MAP_DOUBLETAP_ZOOM_LEVEL, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_MOVE_START_DELAY_MS, MULTI_SELECT_KINDS, MULTI_SELECT_ORDER_SETTER, ORDER_LABEL, SCOUT_ADVANCE_LIMIT_X, SMART_UNIT_TYPES, SQUAD_ADVANCE_LIMIT_X, SQUAD_ASSAULT_LIMIT_X, SQUAD_RETREAT_LIMIT_X } from './constants.js';
+import { CAMERA_PRESETS, CANVAS_H, CANVAS_W, DECOY_LONGPRESS_MOVE_TOLERANCE_PX, DECOY_LONGPRESS_MS, DIRECT_MOVE_KINDS, FRIENDLY_KIND_LIST, MAP_DOUBLETAP_ZOOM_LEVEL, MAP_INITIAL_AZIMUTH, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_MOVE_START_DELAY_MS, MULTI_SELECT_KINDS, MULTI_SELECT_ORDER_SETTER, ORDER_LABEL, SCOUT_ADVANCE_LIMIT_X, SMART_UNIT_TYPES, SQUAD_ADVANCE_LIMIT_X, SQUAD_ASSAULT_LIMIT_X, SQUAD_RETREAT_LIMIT_X } from './constants.js';
 import { render } from './main.js';
 import { clampMapView, groundPlaneCanvasUnitAt, project, resizeThree, terrainCanvasUnitAt, threeReady, updateCameraFromView } from './three.js';
 import { anyOverlayShown, log } from './ui.js';
@@ -438,14 +438,32 @@ export function selectForceUnit(kind, idx){
   render();
 }
 
+// per user request: inverse of drawMinimap()'s proj() in render2d.js -- the minimap is a fixed
+// square that (on narrow/mobile screens) draws rotated to match the main map's own
+// MAP_INITIAL_AZIMUTH rotation, with x/y scaled independently to fill the square. Tapping the
+// minimap used to assume a plain unrotated CANVAS_W:CANVAS_H mapping, which silently stopped
+// matching what was actually drawn once the minimap became rotated+square -- a tap on, say, the
+// friendly cluster no longer panned there at all. This mirrors proj() exactly, just inverted.
+function minimapScreenToWorld(px, py, rectW, rectH){
+  const az = MAP_INITIAL_AZIMUTH, cosA = Math.cos(az), sinA = Math.sin(az);
+  const rotated = az !== 0;
+  const scaleX = rotated ? rectW/CANVAS_H : rectW/CANVAS_W;
+  const scaleY = rotated ? rectH/CANVAS_W : rectH/CANVAS_H;
+  const rx = (px-rectW/2)/scaleX, ry = (py-rectH/2)/scaleY;
+  const dx = rx*cosA + ry*sinA, dy = -rx*sinA + ry*cosA;
+  return {
+    x: clamp(dx+CANVAS_W/2, 0, CANVAS_W),
+    y: clamp(dy+CANVAS_H/2, 0, CANVAS_H),
+  };
+}
+
 export function handleMinimapClick(e){
   if(!state || anyOverlayShown()) return;
   const cv = document.getElementById('minimap');
   const rect = cv.getBoundingClientRect();
   const clientX = e.touches && e.touches.length ? e.touches[0].clientX : e.clientX;
   const clientY = e.touches && e.touches.length ? e.touches[0].clientY : e.clientY;
-  const wx = clamp(((clientX-rect.left)/rect.width)*CANVAS_W, 0, CANVAS_W);
-  const wy = clamp(((clientY-rect.top)/rect.height)*CANVAS_H, 0, CANVAS_H);
+  const { x: wx, y: wy } = minimapScreenToWorld(clientX-rect.left, clientY-rect.top, rect.width, rect.height);
   focusMapOn(wx, wy);
 }
 
@@ -690,69 +708,9 @@ export function setupMapControls(){
   window.addEventListener('resize', resizeThree);
 }
 
-// per user request: 擬似ジョイスティック(ミニマップの左隣)でメイン戦闘マップの表示範囲
-// (MAP_VIEW.cx/cy)を上下左右にパンする。ドラッグでのマップ操作(setupMapControls内)は
-// 「地図そのものを掴んで動かす」感覚(指を右に動かすと地図が右へ、視点は左へ)だが、こちらは
-// 「視点を右に押す」感覚(スティックを右に倒すと視点そのものが右へ移動)が自然なため、符号を
-// 反転させていない。
-export let joystickVector = {x:0, y:0};
-
-let joystickLastFrameAt = null;
-
-export function setupJoystickControls(){
-  const base = document.getElementById('map-joystick');
-  const knob = document.getElementById('map-joystick-knob');
-  if(!base || !knob) return;
-  const maxR = JOYSTICK_MAX_KNOB_PX;
-  let active = false;
-
-  const setFromPointer = (clientX, clientY)=>{
-    const rect = base.getBoundingClientRect();
-    const cx = rect.left+rect.width/2, cy = rect.top+rect.height/2;
-    let dx = clientX-cx, dy = clientY-cy;
-    const dist = Math.hypot(dx, dy);
-    if(dist > maxR){ dx = dx/dist*maxR; dy = dy/dist*maxR; }
-    knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-    joystickVector = { x: dx/maxR, y: dy/maxR };
-  };
-  const reset = ()=>{
-    active = false;
-    base.classList.remove('active');
-    knob.style.transform = 'translate(-50%,-50%)';
-    joystickVector = {x:0, y:0};
-  };
-
-  base.addEventListener('mousedown', e=>{
-    active = true;
-    base.classList.add('active');
-    setFromPointer(e.clientX, e.clientY);
-  });
-  window.addEventListener('mousemove', e=>{
-    if(!active) return;
-    setFromPointer(e.clientX, e.clientY);
-  });
-  window.addEventListener('mouseup', ()=>{ if(active) reset(); });
-
-  base.addEventListener('touchstart', e=>{
-    e.preventDefault();
-    active = true;
-    base.classList.add('active');
-    const t = e.touches[0];
-    if(t) setFromPointer(t.clientX, t.clientY);
-  }, {passive:false});
-  window.addEventListener('touchmove', e=>{
-    if(!active) return;
-    e.preventDefault();
-    const t = e.touches[0];
-    if(t) setFromPointer(t.clientX, t.clientY);
-  }, {passive:false});
-  window.addEventListener('touchend', ()=>{ if(active) reset(); });
-  window.addEventListener('touchcancel', ()=>{ if(active) reset(); });
-}
-
-// per user request: cycle through 3 fixed camera-angle presets (俯瞰/標準/低角) via a button
-// next to the joystick, instead of only free polar/zoom dragging. Index starts at 1 (標準),
-// matching MAP_VIEW's own default polar/zoom so the button's label is correct before any tap.
+// per user request: cycle through 3 fixed camera-angle presets (俯瞰/標準/低角) via a button,
+// instead of only free polar/zoom dragging. Index starts at 1 (標準), matching MAP_VIEW's own
+// default polar/zoom so the button's label is correct before any tap.
 let cameraPresetIdx = 1;
 
 export function setupCameraPresetButton(){
@@ -769,40 +727,35 @@ export function setupCameraPresetButton(){
   });
 }
 
-// per user request: called every animation frame (see loop() in main.js) -- pans MAP_VIEW
-// continuously while the joystick is held, scaled by real elapsed time so it's frame-rate
-// independent, and by sqrt(zoom) (the same relationship cameraHeightForZoom uses) so
-// screen-space pan speed stays roughly constant across zoom levels.
-export function updateJoystickPan(){
-  const now = performance.now();
-  if(joystickLastFrameAt===null){ joystickLastFrameAt = now; return; }
-  const dt = now-joystickLastFrameAt;
-  joystickLastFrameAt = now;
-  if(joystickVector.x===0 && joystickVector.y===0) return;
-  // per user request: the joystick's up/down/left/right must match what's visually up/down/
-  // left/right on screen, including on narrow/mobile screens where MAP_INITIAL_AZIMUTH starts
-  // the camera rotated a quarter turn -- a fixed world-space (cx,cy) mapping would then feel
-  // rotated (pushing "right" wouldn't pan screen-right). Instead of hand-deriving the azimuth
-  // trig, reuse the same ground-plane raycast the mouse-drag pan uses: probe two nearby SCREEN
-  // points through the actual current camera and take their world-space difference as the pan
-  // direction -- this is automatically correct for whatever azimuth/polar/zoom is active.
-  if(!threeReady) return;
-  const cxPx = MAP_VIEW.containerW/2, cyPx = MAP_VIEW.containerH/2;
-  const probePx = 40; // arbitrary small screen-px probe distance -- only its direction matters
-  const base = groundPlaneCanvasUnitAt(cxPx, cyPx);
-  const probe = groundPlaneCanvasUnitAt(cxPx + joystickVector.x*probePx, cyPx + joystickVector.y*probePx);
-  if(!base || !probe) return;
-  const rawDx = probe.x-base.x, rawDy = probe.y-base.y;
-  const rawMag = Math.hypot(rawDx, rawDy);
-  if(rawMag < 1e-6) return;
-  const intensity = clamp(Math.hypot(joystickVector.x, joystickVector.y), 0, 1);
-  const zoom = clamp(MAP_VIEW.zoom, MAP_ZOOM_MIN, MAP_ZOOM_MAX);
-  const speed = JOYSTICK_PAN_SPEED * Math.sqrt(zoom) * intensity;
-  const travel = speed * (dt/1000);
-  MAP_VIEW.cx += (rawDx/rawMag) * travel;
-  MAP_VIEW.cy += (rawDy/rawMag) * travel;
-  clampMapView();
-  updateCameraFromView();
+// per user request: one-tap "自軍へ" button -- centers the view on the centroid of every alive
+// friendly unit (HQ included), so the player can get back to their own force without precisely
+// tapping the small minimap or dragging/panning manually. Falls back to HQ alone if somehow
+// nothing else is alive, and to the map center if even HQ is gone (shouldn't happen -- HQ
+// reaching 0 HP is an immediate game over -- but keeps this from silently no-op-ing).
+export function focusOnOwnForces(){
+  const pts = [];
+  if(state.hq && state.hq.hp>0) pts.push({x:state.hq.x, y:state.hq.y});
+  state.mortars.forEach(m=>{ if(m.hp>0) pts.push({x:m.x, y:m.y}); });
+  state.tanks.forEach(t=>{ if(t.hp>0) pts.push({x:t.x, y:t.y}); });
+  state.sams.forEach(s=>{ if(s.hp>0) pts.push({x:s.x, y:s.y}); });
+  state.squads.forEach(sq=>{ if(sq.soldiers.some(s=>s.alive)) pts.push({x:sq.x, y:sq.y}); });
+  state.snipers.forEach(sn=>{ if(sn.soldiers.some(s=>s.alive)) pts.push({x:sn.x, y:sn.y}); });
+  state.engineers.forEach(en=>{ if(unitAlive(en)) pts.push({x:en.x, y:en.y}); });
+  state.scouts.forEach(sc=>{ if(unitAlive(sc)) pts.push({x:sc.x, y:sc.y}); });
+  (state.helis||[]).forEach(h=>{ if(h.hp>0) pts.push({x:h.x, y:h.y}); });
+  if(!pts.length){
+    if(state.hq) focusMapOn(state.hq.x, state.hq.y);
+    return;
+  }
+  const cx = pts.reduce((s,p)=>s+p.x, 0)/pts.length;
+  const cy = pts.reduce((s,p)=>s+p.y, 0)/pts.length;
+  focusMapOn(cx, cy);
+}
+
+export function setupFocusOwnForcesButton(){
+  const btn = document.getElementById('focus-own-forces-btn');
+  if(!btn) return;
+  btn.addEventListener('click', focusOnOwnForces);
 }
 
 export function assignMortarFireAtDecoy(idx){

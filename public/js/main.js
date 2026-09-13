@@ -2,7 +2,7 @@
 import { loadAchievements } from './achievements.js';
 import { renderAudioSettingsPanel } from './audio.js';
 import { advanceSimulation, initGame, state } from './combat.js';
-import { handleCanvasClick, handleMinimapClick, selectNextTarget, setupCameraPresetButton, setupJoystickControls, setupMapControls, updateJoystickPan } from './input.js';
+import { handleCanvasClick, handleMinimapClick, selectNextTarget, setupCameraPresetButton, setupFocusOwnForcesButton, setupMapControls } from './input.js';
 import { drawBoard, drawMinimap } from './render2d.js';
 import { initThree, renderThreeFrame } from './three.js';
 import { anyOverlayShown, renderCommandBox, renderDecisionPanel, renderDecoyCommandBox, renderEnemyCommandBox, renderMultiSelectBox, renderStats, repositionOpenCommandBoxes } from './ui.js';
@@ -67,7 +67,6 @@ export function loop(){
     if(state) drawMinimap();
     renderThreeFrame();
   }
-  updateJoystickPan();
   syncWakeLock();
   requestAnimationFrame(loop);
 }
@@ -88,9 +87,9 @@ initGame();
 
 setupMapControls();
 
-setupJoystickControls();
-
 setupCameraPresetButton();
+
+setupFocusOwnForcesButton();
 
 loop();
 

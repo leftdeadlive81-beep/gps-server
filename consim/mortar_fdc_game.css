@@ -91,27 +91,10 @@
     cursor:pointer; touch-action:none;
   }
 
-  /* per user request: 擬似ジョイスティック -- カメラ視点ボタンの左に配置し、
-     メイン戦闘マップの表示範囲(MAP_VIEW.cx/cy)を上下左右にパンする。bottomはfab
-     と同じ48pxを基準に、高さの差分(70pxと60px)だけ引いて中心を揃えている。 */
-  .map-joystick{
-    position:absolute; bottom:calc(43px + env(safe-area-inset-bottom)); right:140px; z-index:43;
-    width:70px; height:70px; border-radius:50%;
-    background:rgba(9,15,12,.72); border:1px solid var(--amber-dim);
-    box-shadow:0 6px 20px rgba(0,0,0,.3), inset 0 0 0 1px rgba(240,189,85,.08);
-    touch-action:none; cursor:pointer;
-  }
-  .map-joystick-knob{
-    position:absolute; left:50%; top:50%; width:30px; height:30px; border-radius:50%;
-    background:var(--amber-dim); border:2px solid var(--amber);
-    transform:translate(-50%,-50%); pointer-events:none;
-    transition:transform .08s ease-out;
-  }
-  .map-joystick.active .map-joystick-knob{ transition:none; }
-
-  /* per user request: ジョイスティックの右、指示ボタンの左に、俯瞰/標準/低角の3パターンを
-     タップで巡回切替するカメラ視点ボタンを配置(see setupCameraPresetButton() in input.js)。
-     高さ50pxはfab/ジョイスティックと同じ中心線(bottomから78px)に揃えている。 */
+  /* per user request: 俯瞰/標準/低角の3パターンをタップで巡回切替するカメラ視点ボタン
+     (see setupCameraPresetButton() in input.js)。高さ50pxはfabと同じ中心線
+     (bottomから78px)に揃えている。擬似ジョイスティックは削除済み(ミニマップタップの
+     座標変換修正+下の自軍へボタンで代替)。 */
   .camera-preset-btn{
     position:absolute; bottom:calc(53px + env(safe-area-inset-bottom)); right:82px; z-index:43;
     width:50px; height:50px; border-radius:50%; padding:0;
@@ -121,6 +104,19 @@
     cursor:pointer;
   }
   .camera-preset-btn:hover, .camera-preset-btn:active{ background:rgba(9,15,12,.9); }
+
+  /* per user request: 視点切替ボタンの並びに「自軍へ」ワンタップボタンを追加 -- 自軍全体の
+     重心へ視点を戻す(see focusOnOwnForces() in input.js)。ミニマップタップでの移動(修正済み)
+     より確実に自軍へ戻れる専用の導線。同じ50px/中心線でカメラ視点ボタンの右隣に配置。 */
+  .focus-own-forces-btn{
+    position:absolute; bottom:calc(53px + env(safe-area-inset-bottom)); right:140px; z-index:43;
+    width:50px; height:50px; border-radius:50%; padding:0;
+    background:rgba(9,15,12,.72); border:1px solid var(--amber-dim); color:var(--amber);
+    font-family:var(--font-mono,inherit); font-size:11px; font-weight:700; letter-spacing:.5px;
+    box-shadow:0 6px 20px rgba(0,0,0,.3), inset 0 0 0 1px rgba(240,189,85,.08);
+    cursor:pointer;
+  }
+  .focus-own-forces-btn:hover, .focus-own-forces-btn:active{ background:rgba(9,15,12,.9); }
 
   /* --- top HUD bar: brand + condensed stat summary + drawer/utility icons, always
      visible; tapping it expands the full stat grid beneath it. --- */
