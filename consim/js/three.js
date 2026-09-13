@@ -19,6 +19,8 @@ export let lastCameraDist = 0;
 
 export let treeTrunkMesh3d = null, treeFoliageMesh3d = null, rockMesh3d = null;
 
+export let roadMeshes3d = [];
+
 export let tankModelTemplate3d = null;
 
 export let tankModelLoadStarted = false;
@@ -374,6 +376,7 @@ export function regenerateTerrain(gen){
 
   buildContourLines();
   buildProceduralRoads(gen.roadPaths, gen.roadKinds);
+  buildRoadMeshes3d(gen.roadPaths, gen.roadKinds);
   buildTerrainProps(gen);
   cacheGroundLineHeights();
   threeReady = true;
@@ -449,6 +452,103 @@ export function buildTerrainProps(gen){
     rockMesh3d.castShadow = rockMesh3d.receiveShadow = true;
     scene3d.add(rockMesh3d);
   }
+}
+
+// per user request: roads used to be drawn as a flat pass on the 2D `#board` overlay canvas,
+// which sits compositely ABOVE the 3D WebGL canvas -- so a road always rendered on top of every
+// unit, regardless of which was actually nearer the camera. Building them as real ground-
+// following ribbon meshes IN the 3D scene instead lets the normal depth buffer sort them against
+// unit meshes correctly, the same way it already sorts terrain against units.
+const ROAD_KIND_STYLE = {
+  main: { color: 0xb9b59b, borderColor: 0x231d16, width: 26, opacity: 0.92 },
+  branch: { color: 0x93917a, borderColor: 0x231d16, width: 18, opacity: 0.88 },
+  dirt: { color: 0x8b6a43, borderColor: 0x231d16, width: 13, opacity: 0.82 },
+};
+
+const ROAD_SAMPLE_STEP_UNITS = 18;
+const ROAD_SURFACE_Y_OFFSET = 1.1;
+const ROAD_BORDER_Y_OFFSET = 0.7;
+const ROAD_BORDER_WIDTH_EXTRA = 6;
+
+function densifyRoadPoints(road){
+  const pts = [];
+  for(let i=0;i<road.length-1;i++){
+    const a = road[i], b = road[i+1];
+    const steps = Math.max(1, Math.ceil(Math.hypot(b.x-a.x, b.y-a.y)/ROAD_SAMPLE_STEP_UNITS));
+    for(let j=0;j<steps;j++){
+      const t = j/steps;
+      pts.push({x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t});
+    }
+  }
+  const last = road[road.length-1];
+  if(last) pts.push(last);
+  return pts;
+}
+
+function buildRoadRibbonGeometry(canvasPts, widthUnits, yOffset){
+  const n = canvasPts.length;
+  if(n<2) return null;
+  const worldPts = canvasPts.map(p=>{
+    const {x,z} = canvasUnitToWorldXZ(p.x, p.y);
+    return { x, z, y: terrainHeightAt(p.x, p.y)+yOffset };
+  });
+  const halfW = widthUnits*WORLD.scaleX/2;
+  const positions = new Float32Array(n*2*3);
+  for(let i=0;i<n;i++){
+    const prev = worldPts[Math.max(0,i-1)], next = worldPts[Math.min(n-1,i+1)];
+    let dx = next.x-prev.x, dz = next.z-prev.z;
+    const len = Math.hypot(dx,dz) || 1;
+    dx/=len; dz/=len;
+    const px = -dz, pz = dx;
+    const w = worldPts[i];
+    positions[i*6+0] = w.x+px*halfW; positions[i*6+1] = w.y; positions[i*6+2] = w.z+pz*halfW;
+    positions[i*6+3] = w.x-px*halfW; positions[i*6+4] = w.y; positions[i*6+5] = w.z-pz*halfW;
+  }
+  const indices = [];
+  for(let i=0;i<n-1;i++){
+    const a=i*2, b=i*2+1, c=(i+1)*2, d=(i+1)*2+1;
+    indices.push(a,b,c, b,d,c);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+export function disposeRoadMeshes3d(){
+  roadMeshes3d.forEach(mesh=>{
+    scene3d.remove(mesh);
+    mesh.geometry.dispose();
+    mesh.material.dispose();
+  });
+  roadMeshes3d = [];
+}
+
+export function buildRoadMeshes3d(roadPaths, roadKinds){
+  disposeRoadMeshes3d();
+  (roadPaths||[]).forEach((road, idx)=>{
+    const style = ROAD_KIND_STYLE[(roadKinds||[])[idx]] || ROAD_KIND_STYLE.main;
+    const pts = densifyRoadPoints(road);
+    const borderGeo = buildRoadRibbonGeometry(pts, style.width+ROAD_BORDER_WIDTH_EXTRA, ROAD_BORDER_Y_OFFSET);
+    const surfaceGeo = buildRoadRibbonGeometry(pts, style.width, ROAD_SURFACE_Y_OFFSET);
+    if(borderGeo){
+      const borderMesh = new THREE.Mesh(borderGeo, new THREE.MeshStandardMaterial({
+        color: style.borderColor, roughness: 1, transparent:true, opacity: style.opacity*0.85,
+      }));
+      borderMesh.receiveShadow = true;
+      scene3d.add(borderMesh);
+      roadMeshes3d.push(borderMesh);
+    }
+    if(surfaceGeo){
+      const surfaceMesh = new THREE.Mesh(surfaceGeo, new THREE.MeshStandardMaterial({
+        color: style.color, roughness: 0.95, transparent:true, opacity: style.opacity,
+      }));
+      surfaceMesh.receiveShadow = true;
+      scene3d.add(surfaceMesh);
+      roadMeshes3d.push(surfaceMesh);
+    }
+  });
 }
 
 export function canvasUnitToWorldXZ(cx, cy){

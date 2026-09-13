@@ -341,37 +341,53 @@ export function generateProceduralTerrain(seed, archetypeKey){
     });
   }
 
+  // per user request: noticeably more irregular road angles than before -- jitter is now
+  // expressed as CANVAS_W/CANVAS_H fractions (so it stays proportionally irregular regardless of
+  // map size) and, unlike before, also perturbs waypoints' X position (previously locked to
+  // exact fractions of CANVAS_W, which made every road's bends line up at the same few X
+  // positions and read as a rigid grid). An extra bend point per main road adds more distinct
+  // segment angles instead of one long gentle sweep.
   const roadY1 = CANVAS_H*0.3;
   const roadY2 = CANVAS_H*0.7;
   const roadX = [CANVAS_W*0.27, CANVAS_W*0.5, CANVAS_W*0.73];
-  const mainRoad1 = [
-    {x:20, y:roadY1+rngRange(rng,-8,8)},
-    {x:CANVAS_W*0.25, y:roadY1+rngRange(rng,-18,18)},
-    {x:CANVAS_W*0.5, y:roadY1+rngRange(rng,-20,20)},
-    {x:CANVAS_W*0.75, y:roadY1+rngRange(rng,-18,18)},
-    {x:CANVAS_W-20, y:roadY1+rngRange(rng,-8,8)},
+  const endJitterY = CANVAS_H*0.012, endJitterX = CANVAS_W*0.015;
+  const midJitterY = CANVAS_H*0.07, midJitterX = CANVAS_W*0.035;
+  const mkMainRoad = (roadY)=> [
+    {x:20, y:roadY+rngRange(rng,-endJitterY,endJitterY)},
+    {x:CANVAS_W*0.2+rngRange(rng,-midJitterX,midJitterX), y:roadY+rngRange(rng,-midJitterY,midJitterY)},
+    {x:CANVAS_W*0.38+rngRange(rng,-midJitterX,midJitterX), y:roadY+rngRange(rng,-midJitterY,midJitterY)},
+    {x:CANVAS_W*0.5+rngRange(rng,-endJitterX,endJitterX), y:roadY+rngRange(rng,-midJitterY,midJitterY)},
+    {x:CANVAS_W*0.62+rngRange(rng,-midJitterX,midJitterX), y:roadY+rngRange(rng,-midJitterY,midJitterY)},
+    {x:CANVAS_W*0.8+rngRange(rng,-midJitterX,midJitterX), y:roadY+rngRange(rng,-midJitterY,midJitterY)},
+    {x:CANVAS_W-20, y:roadY+rngRange(rng,-endJitterY,endJitterY)},
   ];
-  const mainRoad2 = [
-    {x:20, y:roadY2+rngRange(rng,-8,8)},
-    {x:CANVAS_W*0.25, y:roadY2+rngRange(rng,-18,18)},
-    {x:CANVAS_W*0.5, y:roadY2+rngRange(rng,-20,20)},
-    {x:CANVAS_W*0.75, y:roadY2+rngRange(rng,-18,18)},
-    {x:CANVAS_W-20, y:roadY2+rngRange(rng,-8,8)},
-  ];
+  const mainRoad1 = mkMainRoad(roadY1);
+  const mainRoad2 = mkMainRoad(roadY2);
+  const fordIdx = 3; // the CANVAS_W*0.5 waypoint above, kept as the one both roads share for the crossing
   if(river){
     const fordX = riverXAt(river, river.fordY);
-    mainRoad1[2] = {x:fordX, y:river.fordY};
-    mainRoad2[2] = {x:fordX, y:river.fordY};
+    mainRoad1[fordIdx] = {x:fordX, y:river.fordY};
+    mainRoad2[fordIdx] = {x:fordX, y:river.fordY};
   }
-  const branchRoads = roadX.map((x, i)=>[
-    {x, y:mainRoad1[i+1].y},
-    {x:x+rngRange(rng,-18,18), y:CANVAS_H*0.5+rngRange(rng,-16,16)},
-    {x, y:mainRoad2[i+1].y},
-  ]);
+  // nearest mainRoad waypoint to a given road-x fraction, used so branch/dirt roads still hand
+  // off close to where the (now-jittered) main road actually passes rather than a fixed fraction.
+  const nearestWaypoint = (mainRoad, xFrac)=>{
+    const targetX = CANVAS_W*xFrac;
+    return mainRoad.reduce((best,p)=> Math.abs(p.x-targetX)<Math.abs(best.x-targetX) ? p : best);
+  };
+  const branchRoads = roadX.map((x, i)=>{
+    const topY = nearestWaypoint(mainRoad1, [0.27,0.5,0.73][i]).y;
+    const botY = nearestWaypoint(mainRoad2, [0.27,0.5,0.73][i]).y;
+    return [
+      {x:x+rngRange(rng,-endJitterX,endJitterX), y:topY},
+      {x:x+rngRange(rng,-midJitterX*1.4,midJitterX*1.4), y:CANVAS_H*0.5+rngRange(rng,-midJitterY*0.9,midJitterY*0.9)},
+      {x:x+rngRange(rng,-endJitterX,endJitterX), y:botY},
+    ];
+  });
   const dirtRoads = [
-    [{x:20, y:CANVAS_H*0.9}, {x:CANVAS_W*0.18, y:CANVAS_H*0.78}, {x:roadX[0], y:mainRoad2[1].y}],
-    [{x:CANVAS_W-20, y:CANVAS_H*0.1}, {x:CANVAS_W*0.82, y:CANVAS_H*0.22}, {x:roadX[2], y:mainRoad1[3].y}],
-    [{x:CANVAS_W*0.5, y:CANVAS_H-20}, {x:CANVAS_W*0.54, y:CANVAS_H*0.82}, {x:roadX[1], y:mainRoad2[2].y}],
+    [{x:20, y:CANVAS_H*0.9}, {x:CANVAS_W*0.18+rngRange(rng,-midJitterX,midJitterX), y:CANVAS_H*0.78+rngRange(rng,-midJitterY,midJitterY)}, {x:roadX[0], y:nearestWaypoint(mainRoad2,0.27).y}],
+    [{x:CANVAS_W-20, y:CANVAS_H*0.1}, {x:CANVAS_W*0.82+rngRange(rng,-midJitterX,midJitterX), y:CANVAS_H*0.22+rngRange(rng,-midJitterY,midJitterY)}, {x:roadX[2], y:nearestWaypoint(mainRoad1,0.73).y}],
+    [{x:CANVAS_W*0.5, y:CANVAS_H-20}, {x:CANVAS_W*0.54+rngRange(rng,-midJitterX,midJitterX), y:CANVAS_H*0.82+rngRange(rng,-midJitterY,midJitterY)}, {x:roadX[1], y:nearestWaypoint(mainRoad2,0.5).y}],
   ];
   const roadPaths = [mainRoad1, mainRoad2, ...branchRoads, ...dirtRoads];
   const roadKinds = ['main', 'main', 'branch', 'branch', 'branch', 'dirt', 'dirt', 'dirt'];

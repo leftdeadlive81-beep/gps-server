@@ -80,21 +80,19 @@
   .eo-count{font-family:var(--font-mono);font-size:17px;font-weight:700;color:var(--ink);margin-bottom:3px;}
 
   .minimap{
-    /* per user request: order along the bottom row (right to left) is 指示(fab, right:14,
-       width60) → カメラ視点切替(right:82, width50) → 擬似ジョイスティック(right:140,
-       width70) → ミニマップ(right:218, width160), each separated by an 8px gap. bottom
-       trimmed down (64->48) to shrink the empty gap above .hud-bottom as much as possible
-       while still clearing it. Background made more see-through (.88->.4) per user request
-       so it reads as an overlay on the battlefield rather than an opaque panel. */
-    position:absolute; bottom:calc(48px + env(safe-area-inset-bottom)); right:218px; z-index:43;
-    width:160px; height:57px;
+    /* per user request: 縦横比を1:1(正方形)にして画面左端に移動 -- 従来はジョイスティック/
+       カメラ視点ボタン/指示ボタンと同じ下部の行に右寄せで並んでいたが、独立して画面左端・
+       下部に固定した。他の3つのボタンのright/bottomオフセットはそのまま(空いた分の
+       レイアウト再調整は不要)。 */
+    position:absolute; bottom:calc(48px + env(safe-area-inset-bottom)); left:14px; z-index:43;
+    width:110px; height:110px;
     background:rgba(9,15,12,.4); border:1px solid var(--amber-dim); border-radius:6px;
     box-shadow:0 6px 20px rgba(0,0,0,.3), 0 0 0 1px rgba(240,189,85,.08);
     cursor:pointer; touch-action:none;
   }
 
-  /* per user request: 擬似ジョイスティック -- ミニマップとカメラ視点ボタンの間に配置し、
-     メイン戦闘マップの表示範囲(MAP_VIEW.cx/cy)を上下左右にパンする。bottomはfab/ミニマップ
+  /* per user request: 擬似ジョイスティック -- カメラ視点ボタンの左に配置し、
+     メイン戦闘マップの表示範囲(MAP_VIEW.cx/cy)を上下左右にパンする。bottomはfab
      と同じ48pxを基準に、高さの差分(70pxと60px)だけ引いて中心を揃えている。 */
   .map-joystick{
     position:absolute; bottom:calc(43px + env(safe-area-inset-bottom)); right:140px; z-index:43;
@@ -528,11 +526,4 @@
     .squad-orders{grid-template-columns:repeat(2,1fr);}
     .scout-controls{grid-template-columns:repeat(2,1fr);}
     .command-box{padding:9px 10px;}
-
-    /* per user request: ミニマップは本マップの縦横比に合わせる -- この画面幅では
-       MAP_INITIAL_AZIMUTH(constants.js)がカメラを90度回転させ、本マップが縦長に見える
-       ため、ミニマップも同じCANVAS_H:CANVAS_W比の縦長に切り替える(実ピクセルの割り当ては
-       drawMinimap()側、see render2d.js)。左端は右アンカーのまま(right:218px)で、幅が
-       160->64pxに縮む分だけ左に隙間が広がり、高さは57->160pxでbottomから上に伸びる。 */
-    .minimap{ width:64px; height:160px; }
   }

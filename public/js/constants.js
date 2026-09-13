@@ -6,7 +6,11 @@ import { kmhToUnitsPerTurn } from './utils.js';
 
 export const GAME_VERSION = '0.2';
 
-export const CANVAS_W = 2600, CANVAS_H = 1040;
+// per user request: メインマップの縦(CANVAS_H)の長さを従来の倍に -- 横幅(CANVAS_W)は
+// 変更しない。CANVAS_H/2やCANVAS_H*fractionを使う既存の座標式はすべて相対値なので、
+// この定数だけ変えれば地形/道路/配置ボックス/カメラのフィット計算は自動的に追従する
+// (直接依存するのはPROC_TEXTURE_SIZE_Z/PROC_MESH_SEGMENTS_Zのみ、下記参照)。
+export const CANVAS_W = 2600, CANVAS_H = 2080;
 
 export const OP_HOME_X = 180, OP_HOME_Y = CANVAS_H/2;
 
@@ -1103,7 +1107,11 @@ export const unitMarkers3d = {};
 
 export const TERRAIN_TEXTURE_BRIGHTNESS = 0.55;
 
-export const PROC_TEXTURE_SIZE_X = 1040, PROC_TEXTURE_SIZE_Z = 416;
+// per user request: CANVAS_H doubled above -- PROC_TEXTURE_SIZE_Z/PROC_MESH_SEGMENTS_Z scale
+// with it (both were exactly proportional to the old CANVAS_H=1040) so the ground texture's
+// texel density and the mesh's subdivision density per canvas-unit stay the same as before,
+// instead of the terrain looking blockier/coarser along the now-longer axis.
+export const PROC_TEXTURE_SIZE_X = 1040, PROC_TEXTURE_SIZE_Z = 832;
 
 export const PROC_COLOR_LOW = [0x4a,0x52,0x36], PROC_COLOR_HIGH = [0x9a,0x8f,0x66];
 
@@ -1121,7 +1129,7 @@ export const PROC_TEXTURE_NOISE_COARSE_CELL = 55, PROC_TEXTURE_NOISE_COARSE_AMOU
 
 export const PROC_TEXTURE_NOISE_FINE_CELL = 12, PROC_TEXTURE_NOISE_FINE_AMOUNT = 12;
 
-export const PROC_MESH_SEGMENTS_X = 90, PROC_MESH_SEGMENTS_Z = 72;
+export const PROC_MESH_SEGMENTS_X = 90, PROC_MESH_SEGMENTS_Z = 144;
 
 export const SKY_COLOR = 0x2b3440;
 

@@ -158,26 +158,26 @@ export function drawSelectionRing(ctx, x, y, active, r){
 export function drawMinimap(){
   const cv = document.getElementById('minimap');
   if(!cv || !state) return;
-  // On narrow/mobile screens the main 3D camera starts rotated 90° (see MAP_INITIAL_AZIMUTH)
-  // so the enemy side reads as "up" on a portrait screen; rotate the minimap's drawing to
-  // match, and per user request also resize its pixel buffer to the same rotated aspect ratio
-  // as the main map (CANVAS_H:CANVAS_W instead of CANVAS_W:CANVAS_H) so a single uniform scale
-  // reproduces it with no stretch distortion, rather than squeezing rotated content into the
-  // fixed wide canvas used when unrotated. The on-screen box itself is resized to match via the
-  // .minimap mobile media-query rule in mortar_fdc_game.css.
+  // per user request: the minimap is now a fixed 1:1 square regardless of screen size/rotation
+  // (previously it matched the main map's aspect ratio, rotated or not) -- since a square box
+  // generally can't match the world's own aspect ratio exactly, x/y are scaled independently to
+  // fill it, same as the very first version of this function did.
+  //
+  // On narrow/mobile screens the main 3D camera starts rotated 90° (see MAP_INITIAL_AZIMUTH) so
+  // the enemy side reads as "up" on a portrait screen; rotate the minimap's drawing to match.
   const az = MAP_INITIAL_AZIMUTH, cosA = Math.cos(az), sinA = Math.sin(az);
   const rotated = az !== 0;
-  const targetW = rotated ? 64 : 160, targetH = rotated ? 160 : 57;
-  if(cv.width!==targetW || cv.height!==targetH){ cv.width = targetW; cv.height = targetH; }
+  const targetSize = 130;
+  if(cv.width!==targetSize || cv.height!==targetSize){ cv.width = targetSize; cv.height = targetSize; }
   const ctx = cv.getContext('2d');
   const w = cv.width, h = cv.height;
   ctx.clearRect(0,0,w,h);
-  const rotatedScale = w/CANVAS_H; // == h/CANVAS_W when rotated, since targetW/targetH are set to that exact aspect
+  const scaleX = rotated ? w/CANVAS_H : w/CANVAS_W;
+  const scaleY = rotated ? h/CANVAS_W : h/CANVAS_H;
   const proj = (wx, wy) => {
     const dx = wx-CANVAS_W/2, dy = wy-CANVAS_H/2;
     const rx = dx*cosA - dy*sinA, ry = dx*sinA + dy*cosA;
-    if(rotated) return { x: w/2 + rx*rotatedScale, y: h/2 + ry*rotatedScale };
-    return { x: w/2 + (rx/CANVAS_W)*w, y: h/2 + (ry/CANVAS_H)*h };
+    return { x: w/2 + rx*scaleX, y: h/2 + ry*scaleY };
   };
   (state.roads||[]).forEach((road, roadIdx)=>{
     const kind = (state.roadKinds||[])[roadIdx] || 'main';
@@ -259,53 +259,13 @@ export function drawBoard(){
   const showFullDetail = MAP_VIEW.zoom >= MAP_FULL_DETAIL_ZOOM;
   const showDetailEffects = MAP_VIEW.zoom >= MAP_DETAIL_EFFECT_ZOOM;
 
-  // Roads are drawn over the 3D terrain as a crisp tactical-map overlay. The
-  // terrain texture carries the broad road surface; this pass adds lane/edge
-  // definition without making distant segments connect through the camera.
-  if(state.roads){
-    const projectRoad = road=>{
-      const points = [];
-      for(let i=0;i<road.length-1;i++){
-        const a = road[i], b = road[i+1];
-        const steps = Math.max(1, Math.ceil(Math.hypot(b.x-a.x, b.y-a.y)/18));
-        for(let j=0;j<steps;j++){
-          const t = j/steps;
-          points.push(project(a.x+(b.x-a.x)*t, a.y+(b.y-a.y)*t));
-        }
-      }
-      const last = road[road.length-1];
-      if(last) points.push(project(last.x,last.y));
-      return points;
-    };
-    const strokePath = (proj, color, width, dash)=>{
-      ctx.beginPath();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = width;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      if(dash) ctx.setLineDash(dash);
-      let started = false;
-      proj.forEach(p=>{
-        if(!p.visible){ started = false; return; }
-        if(!started){ ctx.moveTo(p.x,p.y); started = true; }
-        else ctx.lineTo(p.x,p.y);
-      });
-      ctx.stroke();
-      if(dash) ctx.setLineDash([]);
-    };
-    state.roads.forEach((road, roadIdx)=>{
-      const proj = projectRoad(road);
-      const kind = (state.roadKinds||[])[roadIdx] || 'main';
-      const width = kind==='dirt' ? 3 : kind==='branch' ? 5 : 7;
-      const base = kind==='dirt' ? 'rgba(139,106,67,0.72)' : kind==='branch' ? 'rgba(123,122,103,0.72)' : 'rgba(145,143,127,0.78)';
-      strokePath(proj, 'rgba(35,29,22,0.62)', width+3, null);
-      strokePath(proj, base, width, null);
-      if(showDetailLabels && kind!=='dirt'){
-        strokePath(proj, 'rgba(225,218,176,0.42)', 1, kind==='main' ? [10,12] : [5,9]);
-      }
-      strokePath(proj, 'rgba(20,18,14,0.28)', 1, null);
-    });
-  }
+  // per user request: roads used to be drawn here as a 2D overlay pass, but this whole `#board`
+  // canvas sits compositely ABOVE the 3D `#three` WebGL canvas -- so a road always rendered on
+  // top of every unit regardless of actual depth, which read as a bug. Roads are now real
+  // ground-following ribbon meshes built directly into the 3D scene (see buildRoadMeshes3d() in
+  // three.js, called from regenerateTerrain()), so the normal depth buffer sorts them against
+  // unit meshes correctly. state.roads/state.roadKinds are unchanged and still drive pathfinding
+  // (see terrain.js) and the minimap's road drawing -- only this on-map visual pass is gone.
 
   // per user request: a terrain-conforming 100m/1km coordinate grid (see
   // buildGridLineSegments()), drawn the same way as the contour lines below but as its own
