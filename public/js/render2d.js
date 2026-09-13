@@ -158,20 +158,26 @@ export function drawSelectionRing(ctx, x, y, active, r){
 export function drawMinimap(){
   const cv = document.getElementById('minimap');
   if(!cv || !state) return;
+  // On narrow/mobile screens the main 3D camera starts rotated 90° (see MAP_INITIAL_AZIMUTH)
+  // so the enemy side reads as "up" on a portrait screen; rotate the minimap's drawing to
+  // match, and per user request also resize its pixel buffer to the same rotated aspect ratio
+  // as the main map (CANVAS_H:CANVAS_W instead of CANVAS_W:CANVAS_H) so a single uniform scale
+  // reproduces it with no stretch distortion, rather than squeezing rotated content into the
+  // fixed wide canvas used when unrotated. The on-screen box itself is resized to match via the
+  // .minimap mobile media-query rule in mortar_fdc_game.css.
+  const az = MAP_INITIAL_AZIMUTH, cosA = Math.cos(az), sinA = Math.sin(az);
+  const rotated = az !== 0;
+  const targetW = rotated ? 64 : 160, targetH = rotated ? 160 : 57;
+  if(cv.width!==targetW || cv.height!==targetH){ cv.width = targetW; cv.height = targetH; }
   const ctx = cv.getContext('2d');
   const w = cv.width, h = cv.height;
   ctx.clearRect(0,0,w,h);
-  // On narrow/mobile screens the main 3D camera starts rotated 90° (see MAP_INITIAL_AZIMUTH)
-  // so the enemy side reads as "up" on a portrait screen; apply the same rotation here so the
-  // minimap's up/down orientation always matches what the main map is already showing, instead
-  // of staying a fixed unrotated top-down layout.
-  const az = MAP_INITIAL_AZIMUTH, cosA = Math.cos(az), sinA = Math.sin(az);
-  const rotated = az !== 0;
-  const scaleX = rotated ? CANVAS_H : CANVAS_W, scaleY = rotated ? CANVAS_W : CANVAS_H;
+  const rotatedScale = w/CANVAS_H; // == h/CANVAS_W when rotated, since targetW/targetH are set to that exact aspect
   const proj = (wx, wy) => {
     const dx = wx-CANVAS_W/2, dy = wy-CANVAS_H/2;
     const rx = dx*cosA - dy*sinA, ry = dx*sinA + dy*cosA;
-    return { x: w/2 + (rx/scaleX)*w, y: h/2 + (ry/scaleY)*h };
+    if(rotated) return { x: w/2 + rx*rotatedScale, y: h/2 + ry*rotatedScale };
+    return { x: w/2 + (rx/CANVAS_W)*w, y: h/2 + (ry/CANVAS_H)*h };
   };
   (state.roads||[]).forEach((road, roadIdx)=>{
     const kind = (state.roadKinds||[])[roadIdx] || 'main';

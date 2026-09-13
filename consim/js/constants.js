@@ -1040,6 +1040,16 @@ export const JOYSTICK_MAX_KNOB_PX = 24;
 
 export const MAP_POLAR_MIN = 0.12, MAP_POLAR_MAX = 1.45;
 
+// per user request: 3 fixed camera-angle presets, cycled via a button next to the joystick,
+// instead of leaving polar/zoom fully freeform. polar is counter-intuitive: a SMALL polar is
+// near-vertical/top-down (needs a wider zoomed-out view to stay useful), a LARGE polar is
+// near-horizontal/low-angle (needs to zoom in closer since the horizon eats most of the frame).
+export const CAMERA_PRESETS = [
+  { name: '俯瞰', polar: 0.22, zoom: 0.7 },
+  { name: '標準', polar: 0.82, zoom: 1 },
+  { name: '低角', polar: 1.3, zoom: 1.6 },
+];
+
 export const MAP_DETAIL_LABEL_ZOOM = 0.72;
 
 export const MAP_FULL_DETAIL_ZOOM = 1.05;

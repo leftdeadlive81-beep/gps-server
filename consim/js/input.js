@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { applyBestMortarLoadout, buildTrenchAt, buildWallAt, estPos, estPosFromMortar, handlePlacementClick, mortarNotReadyToFire, mortarTooCloseToFire, mortarTooFarToFire, placeDecoyAt, resolveSmartUnitIdxs, state, unitAlive } from './combat.js';
-import { CANVAS_H, CANVAS_W, DECOY_LONGPRESS_MOVE_TOLERANCE_PX, DECOY_LONGPRESS_MS, DIRECT_MOVE_KINDS, FRIENDLY_KIND_LIST, JOYSTICK_MAX_KNOB_PX, JOYSTICK_PAN_SPEED, MAP_DOUBLETAP_ZOOM_LEVEL, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_MOVE_START_DELAY_MS, MULTI_SELECT_KINDS, MULTI_SELECT_ORDER_SETTER, ORDER_LABEL, SCOUT_ADVANCE_LIMIT_X, SMART_UNIT_TYPES, SQUAD_ADVANCE_LIMIT_X, SQUAD_ASSAULT_LIMIT_X, SQUAD_RETREAT_LIMIT_X } from './constants.js';
+import { CAMERA_PRESETS, CANVAS_H, CANVAS_W, DECOY_LONGPRESS_MOVE_TOLERANCE_PX, DECOY_LONGPRESS_MS, DIRECT_MOVE_KINDS, FRIENDLY_KIND_LIST, JOYSTICK_MAX_KNOB_PX, JOYSTICK_PAN_SPEED, MAP_DOUBLETAP_ZOOM_LEVEL, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_MOVE_START_DELAY_MS, MULTI_SELECT_KINDS, MULTI_SELECT_ORDER_SETTER, ORDER_LABEL, SCOUT_ADVANCE_LIMIT_X, SMART_UNIT_TYPES, SQUAD_ADVANCE_LIMIT_X, SQUAD_ASSAULT_LIMIT_X, SQUAD_RETREAT_LIMIT_X } from './constants.js';
 import { render } from './main.js';
 import { clampMapView, groundPlaneCanvasUnitAt, project, resizeThree, terrainCanvasUnitAt, threeReady, updateCameraFromView } from './three.js';
 import { anyOverlayShown, log } from './ui.js';
@@ -713,6 +713,25 @@ export function setupJoystickControls(){
   }, {passive:false});
   window.addEventListener('touchend', ()=>{ if(active) reset(); });
   window.addEventListener('touchcancel', ()=>{ if(active) reset(); });
+}
+
+// per user request: cycle through 3 fixed camera-angle presets (俯瞰/標準/低角) via a button
+// next to the joystick, instead of only free polar/zoom dragging. Index starts at 1 (標準),
+// matching MAP_VIEW's own default polar/zoom so the button's label is correct before any tap.
+let cameraPresetIdx = 1;
+
+export function setupCameraPresetButton(){
+  const btn = document.getElementById('camera-preset-btn');
+  if(!btn) return;
+  btn.textContent = CAMERA_PRESETS[cameraPresetIdx].name;
+  btn.addEventListener('click', ()=>{
+    cameraPresetIdx = (cameraPresetIdx+1) % CAMERA_PRESETS.length;
+    const preset = CAMERA_PRESETS[cameraPresetIdx];
+    MAP_VIEW.polar = preset.polar;
+    MAP_VIEW.zoom = clamp(preset.zoom, MAP_ZOOM_MIN, MAP_ZOOM_MAX);
+    updateCameraFromView();
+    btn.textContent = preset.name;
+  });
 }
 
 // per user request: called every animation frame (see loop() in main.js) -- pans MAP_VIEW
