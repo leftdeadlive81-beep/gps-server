@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { computeDispersionAt, currentPlacementUnit, estPos, isSuppressed, smoothVisualPos, state, unitAlive, unitAliveCount } from './combat.js';
-import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FRIENDLY_MARK_COLOR, GRID_LINES, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_DETAIL_EFFECT_ZOOM, MAP_DETAIL_LABEL_ZOOM, MAP_FULL_DETAIL_ZOOM, MAP_VIEW, METERS_PER_UNIT, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SNIPER_AIM_RANGE_UNITS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, TRENCH_LINE_WIDTH, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
+import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FRIENDLY_MARK_COLOR, GRID_LINES, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_DETAIL_EFFECT_ZOOM, MAP_DETAIL_LABEL_ZOOM, MAP_FULL_DETAIL_ZOOM, MAP_INITIAL_AZIMUTH, MAP_VIEW, METERS_PER_UNIT, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SNIPER_AIM_RANGE_UNITS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, TRENCH_LINE_WIDTH, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
 import { isMultiSelected } from './input.js';
 import { choppedLineSegments, febaLineSegments } from './terrain.js';
 import { project, projectAtWorldY, scaledIconH, threeReady } from './three.js';
@@ -161,14 +161,25 @@ export function drawMinimap(){
   const ctx = cv.getContext('2d');
   const w = cv.width, h = cv.height;
   ctx.clearRect(0,0,w,h);
-  const sx = wx => (wx/CANVAS_W)*w;
-  const sy = wy => (wy/CANVAS_H)*h;
+  // On narrow/mobile screens the main 3D camera starts rotated 90° (see MAP_INITIAL_AZIMUTH)
+  // so the enemy side reads as "up" on a portrait screen; apply the same rotation here so the
+  // minimap's up/down orientation always matches what the main map is already showing, instead
+  // of staying a fixed unrotated top-down layout.
+  const az = MAP_INITIAL_AZIMUTH, cosA = Math.cos(az), sinA = Math.sin(az);
+  const rotated = az !== 0;
+  const scaleX = rotated ? CANVAS_H : CANVAS_W, scaleY = rotated ? CANVAS_W : CANVAS_H;
+  const proj = (wx, wy) => {
+    const dx = wx-CANVAS_W/2, dy = wy-CANVAS_H/2;
+    const rx = dx*cosA - dy*sinA, ry = dx*sinA + dy*cosA;
+    return { x: w/2 + (rx/scaleX)*w, y: h/2 + (ry/scaleY)*h };
+  };
   (state.roads||[]).forEach((road, roadIdx)=>{
     const kind = (state.roadKinds||[])[roadIdx] || 'main';
     ctx.beginPath();
     road.forEach((p, i)=>{
-      if(i===0) ctx.moveTo(sx(p.x), sy(p.y));
-      else ctx.lineTo(sx(p.x), sy(p.y));
+      const pt = proj(p.x, p.y);
+      if(i===0) ctx.moveTo(pt.x, pt.y);
+      else ctx.lineTo(pt.x, pt.y);
     });
     ctx.strokeStyle = kind==='dirt' ? 'rgba(150,110,70,0.8)' : kind==='branch' ? 'rgba(145,145,120,0.85)' : 'rgba(185,181,155,0.9)';
     ctx.lineWidth = kind==='dirt' ? 1 : 1.5;
@@ -186,8 +197,9 @@ export function drawMinimap(){
   state.snipers.forEach(sn=>{ if(sn.soldiers.some(s=>s.alive)) friendlyPts.push([sn.x, sn.y]); });
   ctx.fillStyle = FRIENDLY_MARK_COLOR;
   friendlyPts.forEach(([x,y])=>{
+    const pt = proj(x,y);
     ctx.beginPath();
-    ctx.arc(sx(x), sy(y), 1.6, 0, Math.PI*2);
+    ctx.arc(pt.x, pt.y, 1.6, 0, Math.PI*2);
     ctx.fill();
   });
 
@@ -197,8 +209,9 @@ export function drawMinimap(){
     // see the matching fix in the main 3D/2D target-drawing loops above/in three.js.
     if(t.destroyed || !t.revealed) return;
     const e = estPos(t);
+    const pt = proj(e.x, e.y);
     ctx.beginPath();
-    ctx.arc(sx(e.x), sy(e.y), 1.6, 0, Math.PI*2);
+    ctx.arc(pt.x, pt.y, 1.6, 0, Math.PI*2);
     ctx.fill();
   });
 
@@ -209,9 +222,10 @@ export function drawMinimap(){
     const age = now-f.born;
     if(age>f.life) return;
     const frac = 1-(age/f.life);
+    const pt = proj(f.x, f.y);
     ctx.beginPath();
     ctx.fillStyle = `rgba(240,113,95,${(0.25+0.55*frac).toFixed(2)})`;
-    ctx.arc(sx(f.x), sy(f.y), (f.big?4.5:3)*(0.6+0.6*frac), 0, Math.PI*2);
+    ctx.arc(pt.x, pt.y, (f.big?4.5:3)*(0.6+0.6*frac), 0, Math.PI*2);
     ctx.fill();
   });
 
@@ -219,9 +233,10 @@ export function drawMinimap(){
   // currently looking, not just where units/combat are.
   const viewW = clamp(w/MAP_VIEW.zoom, 8, w);
   const viewH = clamp(h/MAP_VIEW.zoom, 6, h);
+  const viewCenter = proj(MAP_VIEW.cx, MAP_VIEW.cy);
   ctx.strokeStyle = 'rgba(217,164,65,0.8)';
   ctx.lineWidth = 1;
-  ctx.strokeRect(sx(MAP_VIEW.cx)-viewW/2, sy(MAP_VIEW.cy)-viewH/2, viewW, viewH);
+  ctx.strokeRect(viewCenter.x-viewW/2, viewCenter.y-viewH/2, viewW, viewH);
 }
 
 export function drawBoard(){
