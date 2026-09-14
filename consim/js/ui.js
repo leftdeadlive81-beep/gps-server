@@ -618,6 +618,52 @@ export function closeEnemyCommandBox(){
   render();
 }
 
+// per user request: 部隊自身の指令ボックスから直接、目標を選んで攻撃を指示できるように --
+// 従来は一度このボックスを閉じて敵側のパネル(renderEnemyCommandBox)を開き直す必要が
+// あった。距離/射程の表示・並び替え(射程内を先、距離が近い順)は敵パネルと同じロジック。
+// 小隊/戦車/対戦車/対空へのhunt指示は射程外でも受け付ける(接敵まで前進する)ので、
+// 射程外の行はボタン自体は押せるまま薄く表示するだけに留める。
+function huntTargetListHtml(idx, unit, engageRangeUnits, assignFnName, targetTypeGate, activeTargetId){
+  const candidates = state.targets.filter(t=>!t.destroyed && t.revealed && targetTypeGate(t));
+  if(!candidates.length) return '<div class="empty-hint" style="padding:4px 0;">捕捉中の目標がありません</div>';
+  const rows = candidates.map(t=>{
+    const dist = Math.hypot(t.trueX-unit.x, t.trueY-unit.y);
+    const outOfRange = dist > engageRangeUnits;
+    const distM = unitsToMeters(dist), rangeM = unitsToMeters(engageRangeUnits);
+    const active = activeTargetId===t.id;
+    return {
+      outOfRange, dist,
+      html: `<button class="btn ${active?'active squad-order-btn':''} ${outOfRange?'range-out':''}" onclick="${assignFnName}(${idx},'${t.id}')">${t.id} ― ${t.revealed?t.def.label:'識別不能'}${active?'(攻撃中)':''}<span class="range-note">距離${distM}m ／ 射程${rangeM}m${outOfRange?' ・ 要接近':''}</span></button>`,
+    };
+  });
+  const sorted = rows.slice().sort((a,b)=>(a.outOfRange-b.outOfRange)||(a.dist-b.dist));
+  return `<div style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;">${sorted.map(r=>r.html).join('')}</div>`;
+}
+
+// per user request: 迫撃砲は「陣地から動かず、射程外だと発射自体ができない」既存仕様
+// (mortarTooCloseToFire/mortarTooFarToFire)があるため、hunt系ユニットと違い射程外の
+// 行はボタンを押せなくする(assignMortarFireの既存の却下ロジックと表示を揃える)。
+function mortarTargetListHtml(idx, mortar){
+  const candidates = state.targets.filter(t=>!t.destroyed && t.revealed);
+  if(!candidates.length) return '<div class="empty-hint" style="padding:4px 0;">捕捉中の目標がありません</div>';
+  const active = mortar.order==='fire' && mortar.pendingFire && mortar.pendingFire.snappedId;
+  const rows = candidates.map(t=>{
+    const dist = Math.hypot(t.trueX-mortar.x, t.trueY-mortar.y);
+    const tooClose = mortarTooCloseToFire(mortar, t.trueX, t.trueY);
+    const tooFar = mortarTooFarToFire(mortar, t.trueX, t.trueY);
+    const disabled = mortarNotReadyToFire(mortar) || tooClose || tooFar;
+    const distM = unitsToMeters(dist);
+    const reason = tooClose ? '近すぎ' : tooFar ? '射程外' : null;
+    const isActive = active===t.id;
+    return {
+      outOfRange: disabled, dist,
+      html: `<button class="btn ${isActive?'active squad-order-btn':''} ${disabled?'range-out':''}" ${disabled?'disabled':''} onclick="assignMortarFire(${idx},'${t.id}')">${t.id} ― ${t.revealed?t.def.label:'識別不能'}${isActive?'(照準中)':''}<span class="range-note">距離${distM}m ／ 射程${MORTAR_MIN_RANGE_M}-${MORTAR_MAX_RANGE_M}m${reason?` ・ ${reason}`:''}</span></button>`,
+    };
+  });
+  const sorted = rows.slice().sort((a,b)=>(a.outOfRange-b.outOfRange)||(a.dist-b.dist));
+  return `<div style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;">${sorted.map(r=>r.html).join('')}</div>`;
+}
+
 export function mortarBoxHtml(idx){
   const mortar = state.mortars[idx];
   const dead = mortar.hp<=0;
@@ -685,6 +731,7 @@ export function mortarBoxHtml(idx){
       ${notReadyHtml}
       <button class="btn ${armingTarget?'active squad-order-btn':''}" onclick="armMortarTargetOrder(${idx})" style="margin-bottom:8px;">攻撃地点設定</button>
       ${infoHtml}
+      ${notReady ? '' : `<div class="meta" style="margin:8px 0 4px;">捕捉中の目標から選択:</div>${mortarTargetListHtml(idx, mortar)}`}
       <div class="field">
         <label>弾種</label>
         <select onchange="updateFireConfig(${idx},'fireShell', this.value)">
@@ -854,6 +901,7 @@ export function squadBoxHtml(idx){
     <div class="meta" style="margin-bottom:6px;">${wiped ? '移動先: 指定不可' : (sq.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます')}</div>
     ${sq.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearSquadDest(${idx})">移動先を解除</button>` : ''}
     ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearSquadHunt(${idx})">攻撃目標を解除</button>` : ''}
+    ${wiped ? '' : `<div class="meta" style="margin:8px 0 4px;">攻撃目標を選択:</div>${huntTargetListHtml(idx, sq, SQUAD_ENGAGE_RANGE, 'assignSquadHunt', tt=>tt.type!=='heli'&&tt.type!=='drone', sq.huntTargetId)}`}
     ${standingOrderSelectHtml('squad', idx, sq, true)}
     ${soldierRosterHtml(sq.soldiers)}
     ${reinforceButtonHtml('squad', idx, sq)}
@@ -889,7 +937,9 @@ export function tankBoxHtml(idx){
     <div class="meta" style="margin-bottom:6px;">${tank.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
     ${tank.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearTankDest(${idx})">移動先を解除</button>` : ''}
     ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearTankHunt(${idx})">攻撃目標を解除</button>` : ''}
-    <button class="btn" ${canRepair?'':'disabled'} onclick="repairTank(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${tank.hp>=tank.maxHp?' ・ HP満タン':''}</button>
+    <div class="meta" style="margin:8px 0 4px;">攻撃目標を選択:</div>
+    ${huntTargetListHtml(idx, tank, TANK_ENGAGE_RANGE, 'assignTankHunt', tt=>tt.type!=='heli'&&tt.type!=='drone', tank.huntTargetId)}
+    <button class="btn" style="margin-top:8px;" ${canRepair?'':'disabled'} onclick="repairTank(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${tank.hp>=tank.maxHp?' ・ HP満タン':''}</button>
     ${engineerBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">${engineerBtns}</div>` : ''}
   `;
 }
@@ -917,7 +967,9 @@ export function samBoxHtml(idx){
     <div class="meta" style="margin-bottom:6px;">${sam.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
     ${sam.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearSamDest(${idx})">移動先を解除</button>` : ''}
     ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearSamHunt(${idx})">攻撃目標を解除</button>` : ''}
-    <button class="btn" ${canRepair?'':'disabled'} onclick="repairSam(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${sam.hp>=sam.maxHp?' ・ HP満タン':''}</button>
+    <div class="meta" style="margin:8px 0 4px;">攻撃目標を選択:</div>
+    ${huntTargetListHtml(idx, sam, SAM_ENGAGE_RANGE, 'assignSamHunt', tt=>tt.type==='heli'||tt.type==='drone', sam.huntTargetId)}
+    <button class="btn" style="margin-top:8px;" ${canRepair?'':'disabled'} onclick="repairSam(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${sam.hp>=sam.maxHp?' ・ HP満タン':''}</button>
   `;
 }
 
@@ -1010,7 +1062,9 @@ export function antitankBoxHtml(idx){
     <div class="meta" style="margin-bottom:6px;">${at.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
     ${at.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearAntitankDest(${idx})">移動先を解除</button>` : ''}
     ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearAntitankHunt(${idx})">攻撃目標を解除</button>` : ''}
-    <button class="btn" ${canRepair?'':'disabled'} onclick="repairAntitank(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${at.hp>=at.maxHp?' ・ HP満タン':''}</button>
+    <div class="meta" style="margin:8px 0 4px;">攻撃目標を選択:</div>
+    ${huntTargetListHtml(idx, at, ANTITANK_ENGAGE_RANGE, 'assignAntitankHunt', tt=>tt.type==='vehicle', at.huntTargetId)}
+    <button class="btn" style="margin-top:8px;" ${canRepair?'':'disabled'} onclick="repairAntitank(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${at.hp>=at.maxHp?' ・ HP満タン':''}</button>
     ${engineerBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">${engineerBtns}</div>` : ''}
   `;
 }

@@ -4094,10 +4094,10 @@ export function handleStageClear(){
   }
 }
 
-export function assignSquadHunt(idx){
+export function assignSquadHunt(idx, explicitTargetId){
   const sq = state.squads[idx];
   if(!sq || !sq.soldiers.some(s=>s.alive) || sq.resting) return;
-  const targetId = state.enemyCommandBox;
+  const targetId = explicitTargetId || state.enemyCommandBox;
   const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
   if(!target || target.type==='heli' || target.type==='drone') return;
   if(sq.order==='hunt' && sq.huntTargetId===target.id){
@@ -4121,10 +4121,10 @@ export function clearSquadHunt(idx){
   render();
 }
 
-export function assignTankHunt(idx){
+export function assignTankHunt(idx, explicitTargetId){
   const tank = state.tanks[idx];
   if(!tank || tank.hp<=0) return;
-  const targetId = state.enemyCommandBox;
+  const targetId = explicitTargetId || state.enemyCommandBox;
   const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
   if(!target || target.type==='heli' || target.type==='drone') return;
   if(tank.order==='hunt' && tank.huntTargetId===target.id){
@@ -4163,10 +4163,10 @@ export function repairTank(idx){
   render();
 }
 
-export function assignAntitankHunt(idx){
+export function assignAntitankHunt(idx, explicitTargetId){
   const at = state.antitanks[idx];
   if(!at || at.hp<=0) return;
-  const targetId = state.enemyCommandBox;
+  const targetId = explicitTargetId || state.enemyCommandBox;
   const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
   if(!target || target.type!=='vehicle') return;
   if(at.order==='hunt' && at.huntTargetId===target.id){
@@ -4195,10 +4195,10 @@ export function repairAntitank(idx){
   render();
 }
 
-export function assignSamHunt(idx){
+export function assignSamHunt(idx, explicitTargetId){
   const sam = state.sams[idx];
   if(!sam || sam.hp<=0) return;
-  const targetId = state.enemyCommandBox;
+  const targetId = explicitTargetId || state.enemyCommandBox;
   const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
   if(!target || (target.type!=='heli' && target.type!=='drone')) return;
   if(sam.order==='hunt' && sam.huntTargetId===target.id){
@@ -4237,10 +4237,10 @@ export function repairSam(idx){
   render();
 }
 
-export function assignMortarFire(idx){
+export function assignMortarFire(idx, explicitTargetId){
   const mortar = state.mortars[idx];
   if(!mortar || mortar.hp<=0) return;
-  const targetId = state.enemyCommandBox;
+  const targetId = explicitTargetId || state.enemyCommandBox;
   const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
   if(!target) return;
   if(mortar.order==='fire' && mortar.pendingFire && mortar.pendingFire.snappedId===target.id){
