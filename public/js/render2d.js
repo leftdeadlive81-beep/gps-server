@@ -8,6 +8,17 @@ import { bearingToXY, clamp } from './utils.js';
 import { craters, currentShakeOffset, debrisParticles, enemyTracers, ensureWeatherParticles, flashes, killBanners, projectileArcWorldY, projectiles, ripples, setDebrisParticles, setKillBanners, setRipples, setShockwaves, setWreckSmokes, shockwaves, tracerWorldY, weatherParticles, wreckSmokes } from './vfx.js';
 import { drawCallouts } from './voice.js';
 
+// per user request: スマホプレイ時、地図上のラベル文字が全体的に小さいという指摘への対応 --
+// three.js側のscaledIconH()/makeMarkerMesh3d()と同じ600pxブレークポイントでctx.fontの
+// px数値部分だけを底上げする(既存のフォント文字列リテラルはそのまま、代入時にこの
+// ヘルパーを通すだけで済む)。
+const MOBILE_LABEL_BREAKPOINT = 600;
+const MOBILE_LABEL_MULT = 1.2;
+function mfont(fontStr){
+  if((window.innerWidth||0) > MOBILE_LABEL_BREAKPOINT) return fontStr;
+  return fontStr.replace(/(\d+(?:\.\d+)?)px/, (_, n) => `${Math.round(parseFloat(n)*MOBILE_LABEL_MULT)}px`);
+}
+
 export function mortarStatusIcon(mortar){
   if(mortar.reloadingUntil && performance.now() < mortar.reloadingUntil) return '⟳';
   if(mortar.order==='move') return mortar.pendingDest ? '➤' : '✦';
@@ -212,7 +223,7 @@ export function drawPendingFriendlyLabels(ctx, labels){
     const drawFull = g=>{
       g.lines.forEach(line=>{
         ctx.fillStyle = line.color || LABEL_TEXT_COLOR;
-        ctx.font = line.font;
+        ctx.font = mfont(line.font);
         ctx.textAlign = 'center';
         ctx.fillText(line.text, g.x, g.y+line.dy);
       });
@@ -228,7 +239,7 @@ export function drawPendingFriendlyLabels(ctx, labels){
     const cx = rest.reduce((s,g)=>s+g.x,0)/rest.length;
     const cy = rest.reduce((s,g)=>s+g.y,0)/rest.length;
     ctx.fillStyle = 'rgba(217,164,65,0.95)';
-    ctx.font = 'bold 13px "JetBrains Mono"';
+    ctx.font = mfont('bold 13px "JetBrains Mono"');
     ctx.textAlign = 'center';
     ctx.fillText(summary, cx, cy+38);
   });
@@ -438,7 +449,7 @@ export function drawBoard(){
   // wargame-map feel without adding new controls.
   ctx.save();
   ctx.fillStyle = 'rgba(232,227,206,0.44)';
-  ctx.font = 'bold 10px "JetBrains Mono"';
+  ctx.font = mfont('bold 10px "JetBrains Mono"');
   ctx.textAlign = 'center';
   for(let x=0; x<=CANVAS_W+0.001; x+=1000/METERS_PER_UNIT){
     const p = project(x, 18);
@@ -482,7 +493,7 @@ export function drawBoard(){
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(to.x, to.y, 9, 0, Math.PI*2); ctx.stroke();
     ctx.fillStyle = 'rgba(190,235,255,0.95)';
-    ctx.font = 'bold 11px "JetBrains Mono"';
+    ctx.font = mfont('bold 11px "JetBrains Mono"');
     ctx.textAlign = 'center';
     ctx.fillText(label, to.x, to.y-13);
     ctx.restore();
@@ -578,7 +589,7 @@ export function drawBoard(){
     ctx.setLineDash([]);
     drawSelectionRing(ctx, 0, 0, state.decoyCommandBox===idx, 16);
     ctx.fillStyle = LABEL_TEXT_COLOR;
-    ctx.font = '12px "JetBrains Mono"';
+    ctx.font = mfont('12px "JetBrains Mono"');
     ctx.textAlign = 'center';
     ctx.fillText(`擬陣地${idx+1}`, 0, 24);
     ctx.restore();
@@ -849,7 +860,7 @@ export function drawBoard(){
     if(showDetailLabels){
       const ownerLabel = f.owner==='friendly' ? '要塞(自軍)' : f.owner==='enemy' ? '要塞(敵)' : '要塞(無人)';
       ctx.save();
-      ctx.font = '13px "JetBrains Mono"';
+      ctx.font = mfont('13px "JetBrains Mono"');
       ctx.textAlign = 'center';
       ctx.fillStyle = f.owner==='friendly' ? FRIENDLY_MARK_COLOR : f.owner==='enemy' ? ENEMY_MARK_COLOR : FORTRESS_NEUTRAL_COLOR;
       ctx.fillText(ownerLabel, fVis.x, fVis.y+38);
@@ -969,7 +980,7 @@ export function drawBoard(){
       ctx.moveTo(dp.x-8,dp.y-8); ctx.lineTo(dp.x+8,dp.y+8);
       ctx.moveTo(dp.x+8,dp.y-8); ctx.lineTo(dp.x-8,dp.y+8);
       ctx.stroke();
-      ctx.fillStyle=LABEL_TEXT_COLOR; ctx.font='15px "JetBrains Mono"'; ctx.textAlign='center';
+      ctx.fillStyle=LABEL_TEXT_COLOR; ctx.font = mfont('15px "JetBrains Mono"'); ctx.textAlign='center';
       ctx.fillText(t.id+' 撃破', dp.x, dp.y-16);
     } else if(t.revealed){
       const eLogical = estPos(t);
@@ -997,12 +1008,12 @@ export function drawBoard(){
         labelY = e.y+26;
         if(showDetailLabels && t.revealed){
           ctx.fillStyle = LABEL_TEXT_COLOR;
-          ctx.font = '14px "JetBrains Mono"';
+          ctx.font = mfont('14px "JetBrains Mono"');
           ctx.textAlign='center';
           const doctrine = t.doctrine==='flank' ? '側面' : t.doctrine==='support' ? '支援' : '強襲';
           ctx.fillText(`敵${t.def.label}(${doctrine}) ${aliveTroops.length}/${t.troops.length}`, e.x, labelY);
           if(showFullDetail){
-            ctx.font = 'bold 11px "Noto Sans JP"';
+            ctx.font = mfont('bold 11px "Noto Sans JP"');
             ctx.fillStyle = t.doctrine==='flank' ? '#e0b84a' : t.doctrine==='support' ? '#b0d3ed' : '#ef927d';
             ctx.fillText(doctrine==='強襲' ? '▲ 強襲中' : doctrine==='側面' ? '◀ 側面展開' : '■ 支援射撃', e.x, labelY-38);
           }
@@ -1022,7 +1033,7 @@ export function drawBoard(){
         ctx.fill();
         if(showDetailLabels && t.revealed){
           ctx.fillStyle = LABEL_TEXT_COLOR;
-          ctx.font = '14px "JetBrains Mono"';
+          ctx.font = mfont('14px "JetBrains Mono"');
           ctx.textAlign='center';
           ctx.fillText(t.def.label, e.x, labelY);
         }
@@ -1047,7 +1058,7 @@ export function drawBoard(){
         ctx.restore();
         if(showDetailLabels && t.revealed){
           ctx.fillStyle = LABEL_TEXT_COLOR;
-          ctx.font = '14px "JetBrains Mono"';
+          ctx.font = mfont('14px "JetBrains Mono"');
           ctx.textAlign='center';
           ctx.fillText(t.def.label, e.x, labelY);
         }
@@ -1065,7 +1076,7 @@ export function drawBoard(){
         labelY = e.y+26;
         if(showDetailLabels && t.revealed){
           ctx.fillStyle = LABEL_TEXT_COLOR;
-          ctx.font = 'bold 14px "JetBrains Mono"';
+          ctx.font = mfont('bold 14px "JetBrains Mono"');
           ctx.textAlign='center';
           ctx.fillText(t.def.label, e.x, labelY);
         }
@@ -1076,7 +1087,7 @@ export function drawBoard(){
         ctx.fill();
         if(showDetailLabels && t.revealed){
           ctx.fillStyle = LABEL_TEXT_COLOR;
-          ctx.font = '14px "JetBrains Mono"';
+          ctx.font = mfont('14px "JetBrains Mono"');
           ctx.textAlign='center';
           ctx.fillText(t.def.label, e.x, labelY);
         }
@@ -1095,13 +1106,13 @@ export function drawBoard(){
         ctx.fillRect(tbx,tby,tBarW*hpPct,tBarH);
 
         ctx.fillStyle = LABEL_TEXT_COLOR;
-        ctx.font = 'bold 17px "JetBrains Mono"';
+        ctx.font = mfont('bold 17px "JetBrains Mono"');
         ctx.textAlign='left';
         ctx.fillText(t.id, e.x+11, e.y-11);
       }
       if(isSuppressed(t)){
         ctx.fillStyle = LABEL_TEXT_COLOR;
-        ctx.font = 'bold 13px "JetBrains Mono"';
+        ctx.font = mfont('bold 13px "JetBrains Mono"');
         ctx.textAlign = 'center';
         ctx.fillText('[制圧]', e.x, e.y-30);
       }
@@ -1391,7 +1402,7 @@ export function drawBoard(){
     ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
     ctx.translate(bp.x, bp.y);
     ctx.scale(popScale, popScale);
-    ctx.font = 'bold 20px "JetBrains Mono"';
+    ctx.font = mfont('bold 20px "JetBrains Mono"');
     ctx.textAlign = 'center';
     ctx.strokeStyle = 'rgba(0,0,0,0.6)';
     ctx.lineWidth = 3;
@@ -1526,7 +1537,7 @@ export function drawBoard(){
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.fillStyle = '#d9a441';
-      ctx.font = 'bold 13px "JetBrains Mono"';
+      ctx.font = mfont('bold 13px "JetBrains Mono"');
       ctx.textAlign = 'center';
       ctx.fillText(`▼ ${item.label} を配置`, up.x, up.y-30-pulse);
     }

@@ -530,12 +530,53 @@
   .shop-row.reward-heal{border-left:3px solid var(--gray-id);}
   .shop-row.reward-ammo{border-left:3px solid var(--amber);}
 
+  /* per user request: スマホプレイ時、全体的にシンボルや文字が小さいという指摘への対応 --
+     以前のこのブロックはHUDブランド/アイコンボタンを「さらに縮小」していて逆効果だった
+     ので、縮小をやめて主要なテキスト・タップ対象を底上げする方向に作り直した。地図上の
+     ユニット記号(3Dメッシュ/2Dキャンバスアイコン)側は three.js の scaledIconH()/
+     makeMarkerMesh3d() 内の同じ600px判定で別途底上げ済み(見た目の基準を揃えるため
+     同じブレークポイントを使用)。 */
   @media (max-width:600px){
-    .hud-brand{font-size:12px;}
-    .hud-icon-btn{width:28px;height:28px;font-size:12px;}
-    .enemy-overlay{width:auto; max-width:34vw;}
-    .eo-count{font-size:15px;}
+    .hud-brand{font-size:16px;}
+    .hud-version{font-size:12px;}
+    .statbar-mini{font-size:12.5px;}
+    .hud-icon-btn{width:36px;height:36px;font-size:16px;}
+    .hud-icon-badge{min-width:16px;height:16px;font-size:10px;line-height:16px;}
+    .enemy-overlay{width:auto; max-width:40vw;}
+    .eo-head{font-size:10.5px;}
+    .eo-count{font-size:19px;}
+    .enemy-breakdown .eb-type{font-size:12px;}
+    .enemy-breakdown .eb-scale, .enemy-breakdown .eb-empty{font-size:11px;}
+    .stat .label{font-size:11px;}
+    .stat .value{font-size:19px;}
+    .board-note{font-size:12.5px;}
+    .ticker-item{font-size:13px;}
+    .command-box{padding:11px 12px;width:250px;}
+    .command-box .cb-title{font-size:14px;}
+    select, .btn{font-size:15px;padding:9px 11px;}
+    .btn .range-note{font-size:11.5px;}
     .squad-orders{grid-template-columns:repeat(2,1fr);}
+    .squad-orders button{font-size:13px;padding:8px 4px;}
     .scout-controls{grid-template-columns:repeat(2,1fr);}
-    .command-box{padding:9px 10px;}
+    .scout-controls button{font-size:13px;padding:8px 4px;}
+    .scout-label, .squad-name{font-size:14px;}
+    .squad-count, .squad-current-order{font-size:12.5px;}
+    .roster-row{font-size:12px;}
+    .sel-target-info .meta{font-size:12.5px;}
+    .sel-target-info .type{font-size:13.5px;}
+    .force-row .force-label{width:54px;font-size:12px;}
+    .force-row .force-pct{width:40px;font-size:12px;}
+    .drawer-header{font-size:14.5px;}
+    .log{font-size:14px;}
+    .empty-hint{font-size:14.5px;}
+    .audio-settings-label{font-size:12.5px;}
+    .audio-toggle-btn{font-size:13.5px;}
+    .shop-row .label{font-size:14.5px;}
+    .shop-row .sub{font-size:12.5px;}
+    .shop-row .actions button{font-size:13.5px;padding:8px 13px;}
+    .overlay-kicker{font-size:11.5px;}
+    .overlay .card h2{font-size:28px;}
+    .overlay .card p{font-size:14.5px;}
+    .shop-money{font-size:28px;}
+    .achievements-progress{font-size:13.5px;}
   }

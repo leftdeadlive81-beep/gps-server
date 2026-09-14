@@ -5,8 +5,17 @@ import { updateMapFocusEase } from './input.js';
 import { buildContourLines, buildProceduralRoads, elevationAt, elevationAtFor, nearestPointOnRoad, riverXAt, terrainTypeAtFor } from './terrain.js';
 import { clamp, smoothstep01, valueNoise2D } from './utils.js';
 
+// per user request: スマホプレイ時、地図上のユニット記号が全体的に小さいという指摘への
+// 対応 -- 狭い(≒スマホ)ビューポートでは記号の基準サイズを底上げする。mortar_fdc_game.css
+// 側のモバイル向けテキスト底上げと同じ600pxのブレークポイントを使い、見た目の基準を揃える。
+const MOBILE_ICON_BREAKPOINT = 600;
+const MOBILE_ICON_MULT = 1.35;
+function mobileIconMult(){
+  return (window.innerWidth||0) <= MOBILE_ICON_BREAKPOINT ? MOBILE_ICON_MULT : 1;
+}
+
 export function scaledIconH(baseH){
-  return baseH * clamp(Math.sqrt(MAP_VIEW.zoom), 0.6, 2.2);
+  return baseH * mobileIconMult() * clamp(Math.sqrt(MAP_VIEW.zoom), 0.6, 2.2);
 }
 
 export let threeReady = false;
@@ -813,7 +822,7 @@ export function buildHumanoidFigures(group, matFn, s, colorHex, offsets, opts){
 
 export function makeMarkerMesh3d(shape, colorHex, formationOffsets){
   const group = new THREE.Group();
-  const s = Math.max(0.6, (WORLD.scaleX+WORLD.scaleZ)/2*7.5);
+  const s = Math.max(0.6, (WORLD.scaleX+WORLD.scaleZ)/2*7.5) * mobileIconMult();
   const mat = color=>new THREE.MeshStandardMaterial({color, roughness:0.7, metalness:0.05});
   const add = (geometry, material, y=0, z=0)=>{
     const mesh = new THREE.Mesh(geometry, material);
