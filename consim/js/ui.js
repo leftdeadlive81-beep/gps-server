@@ -1280,7 +1280,12 @@ export function renderStats(){
     const pct = totalMax>0 ? Math.round(totalHp/totalMax*100) : 0;
     return `<div class="eb-row"><span class="eb-dot" style="background:${TARGET_TYPES[type].mark}"></span><span class="eb-type">${TARGET_TYPES[type].label}</span><span class="eb-scale">×${group.length} 戦力${pct}%</span></div>`;
   });
-  document.getElementById('enemy-breakdown').innerHTML = ebRows.length ? ebRows.join('') : '<div class="eb-empty">敵情報なし</div>';
+  // per user request: 敵が攻めてくる際のバリエーション(WAVE_ARCHETYPES)の表示 -- ログの
+  // 警告だけだと見落とされうるので、常時表示の敵状パネルにも編成名を出す。「混成部隊」
+  // (balanced)は目立たせる情報が無いので表示しない。
+  const archetypeBadge = (state.waveArchetype && state.waveArchetype!=='balanced' && state.waveArchetypeLabel)
+    ? `<div class="eb-archetype">敵編成: ${state.waveArchetypeLabel}</div>` : '';
+  document.getElementById('enemy-breakdown').innerHTML = archetypeBadge + (ebRows.length ? ebRows.join('') : '<div class="eb-empty">敵情報なし</div>');
 
   function forceRow(label, frac, pctText, barColor, kind, idx){
     const dead = frac<=0;

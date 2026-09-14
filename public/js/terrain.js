@@ -2,7 +2,7 @@
 import { state, turnJustCrossed, unitAlive } from './combat.js';
 import { CANVAS_H, CANVAS_W, CONTOUR_CELL, CONTOUR_LEVELS, CONTOUR_LINES_CANVAS, DRONE_INTRO_STAGE, ENEMY_SPAWN_MAX_X, ENEMY_SPAWN_MIN_X, FEBA_MAX_X, FEBA_MIN_X, FRIENDLY_MARK_COLOR, GRID_LINE_SEGMENT, GRID_MAJOR_EVERY, GRID_MINOR_SPACING_UNITS, OFF_ROAD_SPEED_MULT, REAL_ROADS_CANVAS, RIVER_VALLEY_DEPTH, ROAD_NODE_SNAP_RADIUS_UNITS, ROAD_PULL_RADIUS, SCOUT_TERRAIN_MIN_SPEED_MULT, SCOUT_TERRAIN_SPEED_PENALTY, SQUAD_ADVANCE_LIMIT_X, STEP_ANGLE_OFFSETS, TERRAIN_ARCHETYPES, TERRAIN_COVER_RANGE, TERRAIN_COVER_RELIEF_SATURATION, TERRAIN_COVER_SAMPLE_COUNT, TERRAIN_COVER_SAMPLE_RADIUS, TERRAIN_SLOPE_PENALTY, TERRAIN_TYPE_COVER_BONUS, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_OPEN, TERRAIN_TYPE_SPEED_MULT, TERRAIN_TYPE_WATER, TRENCH_COVER_BONUS, TRENCH_RADIUS, WALL_AVOID_PENALTY, WALL_RADIUS } from './constants.js';
 import { log } from './ui.js';
-import { choice, clamp, distanceToSegment, mulberry32, rnd, rngRange, rngRangeArr } from './utils.js';
+import { choice, clamp, distanceToSegment, mulberry32, rnd, rngRange, rngRangeArr, weightedChoice } from './utils.js';
 import { spawnDestructionEffect } from './vfx.js';
 
 export function pickTerrainForStage(stage){
@@ -15,7 +15,7 @@ export function pickTerrainForStage(stage){
   return generateProceduralTerrain(seed, pickArchetypeForStage(stage, Math.random));
 }
 
-export function pickTypesForCount(count, stage){
+export function pickTypesForCount(count, stage, typeWeights){
   // infantry is generated separately now (see buildEnemyInfantryGroups) as several
   // formation groups rather than one slot in this mixed pool
   // per user request: enemy anti-air, hunting the friendly heli (see resolveEnemyAntiAir())
@@ -25,8 +25,13 @@ export function pickTypesForCount(count, stage){
     const j = Math.floor(Math.random()*(i+1));
     [base[i],base[j]] = [base[j],base[i]];
   }
+  // guarantee at least one of each currently-available type, regardless of archetype weighting
   const types = base.slice(0, Math.min(count,base.length));
-  while(types.length < count) types.push(choice(base));
+  // per user request: WAVEの攻撃アーキタイプ(WAVE_ARCHETYPES)による内訳の偏りを反映 --
+  // 残りの枠はtypeWeightsが与えられていれば重み付き抽選、無ければ従来どおり一様抽選。
+  while(types.length < count){
+    types.push(typeWeights ? weightedChoice(base, t=>typeWeights[t]!==undefined ? typeWeights[t] : 1) : choice(base));
+  }
   return types;
 }
 

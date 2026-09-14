@@ -883,6 +883,54 @@ export const ENEMY_INFANTRY_DOCTRINES = [
   {id:'support', label:'支援', speedMult:0.82, flankOffset:0.45, contactRangeMult:1.45},
 ];
 
+// per user request: 敵が攻めてくる際のバリエーションが欲しい、という要望に対応 -- WAVE
+// 開始時にこの中から一つを重み付き抽選(weightedChoice、weightが相対重み)し、その内訳
+// (otherTypeWeights: 迫撃砲で言う歩兵以外の敵ターゲットプール='vehicle'/'artillery'/'aa'/
+// 'drone'の抽選重み)・歩兵ドクトリン比率(doctrineWeights)・歩兵編成パス数
+// (infantryPasses、1パスあたり約50名)を変化させる(startStage()参照)。'balanced'の
+// weightを他より高くして「いつもの混成」を基本としつつ、時々はっきりした偏りのある
+// 攻撃パターンが来るようにしている。
+export const WAVE_ARCHETYPES = [
+  {
+    id:'balanced', label:'混成部隊',
+    weight:3,
+    otherTypeWeights:{vehicle:1, artillery:1, aa:1, drone:1},
+    infantryPasses:2,
+    doctrineWeights:{assault:1, flank:1, support:1},
+    extraHeli:0,
+  },
+  {
+    id:'armor', label:'装甲強襲',
+    weight:1,
+    otherTypeWeights:{vehicle:5, artillery:0.5, aa:0.5, drone:0.3},
+    infantryPasses:1,
+    doctrineWeights:{assault:3, flank:1.5, support:0.5},
+    extraHeli:0,
+  },
+  {
+    id:'artillery', label:'砲兵制圧',
+    weight:1,
+    otherTypeWeights:{vehicle:0.5, artillery:5, aa:0.5, drone:0.3},
+    infantryPasses:2,
+    doctrineWeights:{support:3, flank:1, assault:0.5},
+    // per user request: 先に榴弾攻撃、その後歩兵前進 -- 歩兵の出現をWAVE_SPAWN_WINDOW_MS内で
+    // 通常より後ろ寄りにずらし(startStage()のspawnAt計算参照)、砲兵の制圧射撃が先行する
+    // ように見せる。
+    infantryDelayMult:1.7,
+    extraHeli:0,
+  },
+  {
+    id:'air', label:'航空襲撃',
+    weight:1,
+    otherTypeWeights:{vehicle:0.4, artillery:0.4, aa:1.5, drone:4},
+    infantryPasses:1,
+    doctrineWeights:{flank:2, assault:1, support:1},
+    // per user request: 航空襲撃らしさを出すため、通常は必ず1機の戦闘ヘリ(buildHeliTarget)
+    // に加えてもう1機を追加スポーンする。
+    extraHeli:1,
+  },
+];
+
 export const ORDER_LABEL = {advance:'前進', retreat:'後退', hold:'防御', assault:'突撃', hunt:'追跡攻撃', resting:'大休止', repair:'修理'};
 
 export const MORTAR_ORDER_LABEL = {fire:'射撃', standby:'待機', move:'移動'};

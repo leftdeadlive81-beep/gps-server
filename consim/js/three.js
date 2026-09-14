@@ -899,13 +899,14 @@ export function makeMarkerMesh3d(shape, colorHex, formationOffsets){
     addFlag(colorHex);
   } else if(shape==='antitank'){
     // per user request: 狙撃部隊を置き換えた対戦車部隊 -- 戦車(tank)/対空(sam)と同じ装軌+
-    // 箱型車体パターンを、軽車両らしく一回り小さく・track間隔を狭くし、前方へ斜めに据え
-    // 付けたロケットランチャーの発射管で兵科を識別できるようにする。
-    addTrack(-s*0.45);
-    addTrack(s*0.45);
-    add(new THREE.BoxGeometry(s*1.0, s*0.24, s*1.0), mat(colorHex), s*0.14);
-    add(new THREE.BoxGeometry(s*0.5, s*0.3, s*0.5), mat(0x39454d), s*0.4);
-    const launcher = add(new THREE.CylinderGeometry(s*0.09, s*0.09, s*0.85, 8), mat(0x2c3436), s*0.55);
+    // 箱型車体パターンを踏襲しつつ、前方へ斜めに据え付けたロケットランチャーの発射管で
+    // 兵科を識別できるようにする。当初は軽車両らしく一回り小さく作っていたが、地図上で
+    // シンボルが小さすぎるという指摘を受け、SAMとほぼ同等のサイズまで底上げした。
+    addTrack(-s*0.55);
+    addTrack(s*0.55);
+    add(new THREE.BoxGeometry(s*1.15, s*0.28, s*1.15), mat(colorHex), s*0.16);
+    add(new THREE.BoxGeometry(s*0.62, s*0.34, s*0.62), mat(0x39454d), s*0.44);
+    const launcher = add(new THREE.CylinderGeometry(s*0.12, s*0.12, s*0.95, 8), mat(0x2c3436), s*0.58);
     launcher.rotation.z = -Math.PI*0.12;
     addFlag(colorHex);
   } else if(shape==='engineer'){

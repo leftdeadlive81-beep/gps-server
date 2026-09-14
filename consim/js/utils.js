@@ -26,6 +26,21 @@ export function rnd(a,b){ return a + Math.random()*(b-a); }
 
 export function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 
+// per user request: 重み付き抽選の汎用ヘルパー -- 敵WAVEの攻撃アーキタイプ抽選や、
+// アーキタイプごとに偏らせた敵編成の内訳抽選に使う。getWeightを省略するとitems各要素の
+// .weightプロパティを使う。重み合計が0以下ならchoice()にフォールバック。
+export function weightedChoice(items, getWeight){
+  const weights = items.map(it => Math.max(0, getWeight ? getWeight(it) : it.weight));
+  const total = weights.reduce((s,w)=>s+w, 0);
+  if(total<=0) return choice(items);
+  let r = Math.random()*total;
+  for(let i=0;i<items.length;i++){
+    r -= weights[i];
+    if(r<=0) return items[i];
+  }
+  return items[items.length-1];
+}
+
 export function gauss(){
   let u=1-Math.random(), v=Math.random();
   return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
@@ -100,4 +115,4 @@ export function rngRange(rng, lo, hi){ return lo + (hi-lo)*rng(); }
 export function rngRangeArr(rng, [lo,hi]){ return lo + (hi-lo)*rng(); }
 
 
-Object.assign(window, { hitChanceFromExposure, exposureNormalizedMult, kmhToUnitsPerTurn, visualTweenDurationMs, smoothstep01, unitsToMeters, rnd, choice, gauss, clamp, wanderPos, bearingBetween, angleDiff, bearingToXY, distanceToSegment, hash2, valueNoise2D, mulberry32, rngRange, rngRangeArr });
+Object.assign(window, { hitChanceFromExposure, exposureNormalizedMult, kmhToUnitsPerTurn, visualTweenDurationMs, smoothstep01, unitsToMeters, rnd, choice, weightedChoice, gauss, clamp, wanderPos, bearingBetween, angleDiff, bearingToXY, distanceToSegment, hash2, valueNoise2D, mulberry32, rngRange, rngRangeArr });

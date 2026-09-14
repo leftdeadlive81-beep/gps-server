@@ -1,14 +1,14 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement } from './achievements.js';
 import { pickWaveBgm, playCombatAmbience, playSfx, startBgm, stopCombatAmbience } from './audio.js';
-import { AA_ATTACK_DAMAGE, AA_COOLDOWN_TICKS, AA_ENGAGE_RANGE, ANOMALOUS_JUMP_UNITS, ANTITANK_AA_DMG, ANTITANK_AA_RANGE, ANTITANK_DUEL_DMG_TO_ENEMY, ANTITANK_ENGAGE_RANGE, ANTITANK_EXPOSURE, ANTITANK_INCOMING_DMG, ANTITANK_MAX_HP, ANTITANK_MOVE_CAP, ANTITANK_POS, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, ARTILLERY_FIRE_RANGE_UNITS, ARTILLERY_MOVE_CAP, ARTILLERY_STANDOFF_RANGE_UNITS, BURST_COOLDOWN_MS_MAX, BURST_COOLDOWN_MS_MIN, BURST_DMG_COMPENSATION, BURST_SHOTS_MAX, BURST_SHOTS_MIN, BURST_SHOT_INTERVAL_MS_MAX, BURST_SHOT_INTERVAL_MS_MIN, CANVAS_H, CANVAS_W, COUNTER_CHANCE, COUNTER_DAMAGE, DECOY_LURE_MULT_DAY, DECOY_LURE_MULT_NIGHT, DECOY_MAX_HP, DECOY_MODES, DEPLOYMENT_MODES, DEPLOY_BOX_METERS, DIFFICULTIES, DRONE_DETONATE_DAMAGE, DRONE_DETONATE_RANGE, DRONE_INTRO_STAGE, DRONE_SPEED, ENEMY_FORMATION_BASE_SIZE, ENEMY_FORMATION_NAMES, ENEMY_FORMATION_TEMPLATES, ENEMY_FOCUS_FIRE_WINDOW_MS, ENEMY_HQ_EXPOSURE, ENEMY_INFANTRY_DOCTRINES, ENEMY_INFANTRY_TOTAL_TARGET, ENEMY_SPAWN_MIN_X, ENGINEER_POS, ENGINEER_REPAIR_HP_PER_TURN, ENGINEER_REPAIR_RANGE_UNITS, ESTIMATE_CLAMP_MARGIN, EXPOSURE_DEFAULT, FLANK_OFFSET_RANGE_UNITS, FLIGHT_DURATION, FORTRESS_CAPTURE_RANGE_UNITS, FORTRESS_COUNT, FORTRESS_MAX_HP, FORTRESS_MG_COOLDOWN_MS_MAX, FORTRESS_MG_COOLDOWN_MS_MIN, FORTRESS_MG_DMG, FORTRESS_MG_RANGE_UNITS, FORTRESS_MG_SHOTS_MAX, FORTRESS_MG_SHOTS_MIN, FORTRESS_MG_SHOT_INTERVAL_MS_MAX, FORTRESS_MG_SHOT_INTERVAL_MS_MIN, FORTRESS_MISSILE_COOLDOWN_MS_MAX, FORTRESS_MISSILE_COOLDOWN_MS_MIN, FORTRESS_MISSILE_DMG, FORTRESS_MISSILE_RANGE_UNITS, FORTRESS_NEUTRAL_COLOR, FORTRESS_SIEGE_DMG, FORTRESS_ZONE_ENEMY_X, FORTRESS_ZONE_FRIENDLY_X, FORTRESS_ZONE_MID_X, FORTRESS_ZONE_Y, FRIENDLY_HELI_MOVE_UNITS, FRIENDLY_INF_POS, FRIENDLY_KIND_LIST, FRIENDLY_MARK_COLOR, FRIENDLY_SPACING_PUSH, FRIENDLY_SPACING_RADIUS, FUZES, GAME_SPEED_INTERVALS, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GAME_START_DATETIME, GAME_VERSION, HELI_ATTACK_BURST, HELI_ATTACK_DAMAGE, HELI_COOLDOWN_TICKS, HELI_ENGAGE_RANGE, HELI_EXPOSURE, HELI_MAX_RANGE_UNITS, HELI_MOVE_CAP, HELI_WITHDRAW_DIST, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_DEFENSE_ATTACKER_WINDOW_MS, HQ_DEFENSE_DMG_MULT, HQ_DEFENSE_RANGE_UNITS, HQ_DETECT_RANGE_UNITS, HQ_MAX_HP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, HQ_SUPPLY_HEAL_PCT_PER_TURN, HQ_SUPPLY_ZONE_RADIUS_UNITS, HQ_X, HQ_Y, ILLUM_DURATION_TURNS, ILLUM_RADIUS_M, INFANTRY_DRONE_COOLDOWN_TICKS, INFANTRY_DRONE_LAUNCH_CHANCE, INFANTRY_DRONE_SWARM_SIZE, INFANTRY_DUEL_DMG_TO_ENEMY, INFANTRY_MOVE_CAP, INFANTRY_STANDOFF_UNITS, INITIAL_DEPLOY_SPACING_MULT, LAST_STAND_THRESHOLD, LAUNCH_INTERVAL, MAP_SEED_CANDIDATE_COUNT, MARKER_REVEAL_RADIUS_UNITS, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MERGE_HP_THRESHOLD, METERS_PER_UNIT, MINE_DAMAGE, MINE_MAX_ACTIVE, MINE_PLACEMENT_CHANCE, MINE_TRIGGER_RADIUS_UNITS, MORTAR_BEST_LOADOUT, MORTAR_CB_DETECT_BASE, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CB_STRIKE_DMG, MORTAR_CB_WARN_TURNS, MORTAR_CREW_SIZE, MORTAR_DISPERSION_UNITS, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MAX_RANGE_UNITS, MORTAR_MIN_RANGE_M, MORTAR_MIN_RANGE_UNITS, MORTAR_MOVE_CAP, MORTAR_ORDER_LABEL, MORTAR_RELOAD_MS, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, NUM_ANTITANKS, NUM_ENGINEERS, NUM_MORTARS, NUM_SAMS, NUM_SCOUTS, NUM_SQUADS, NUM_TANKS, OP, OP_HOME_X, OP_HOME_Y, ORDER_LABEL, PERSONNEL_ROSTER, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, ROAD_PULL_RADIUS, ROSTER_ENGINEER_TEAMS, ROSTER_MORTAR_CREWS, ROSTER_RESERVE_INITIAL, ROSTER_SCOUT_TEAMS, ROSTER_SQUADS, SAM_DUEL_DMG_TO_ENEMY, SAM_ENGAGE_RANGE, SAM_EXPOSURE, SAM_MAX_HP, SAM_MOVE_CAP, SAM_POS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_ADVANCE_LIMIT_X, SCOUT_EXPOSURE, SCOUT_LOWER_Y, SCOUT_MAX_RANGE_UNITS, SCOUT_MOVE_CAP, SCOUT_SQUAD_SIZE, SCOUT_UPPER_Y, SCOUT_X, SHELLS, SHELL_DISPERSION_MULT, SHELL_KILL_RADIUS_UNITS, SIM_STEP_MAX_CATCHUP, SIM_STEP_MS, SMART_ACTIONS, SMART_UNIT_TYPES, SMOKE_DURATION_TURNS, SMOKE_RADIUS_M, SMOKE_RADIUS_UNITS, SQUAD_ADVANCE_LIMIT_X, SQUAD_ANTI_DRONE_DMG, SQUAD_ANTI_DRONE_HIT_CHANCE, SQUAD_ANTI_DRONE_RANGE_UNITS, SQUAD_ASSAULT_LIMIT_X, SQUAD_ENGAGE_RANGE, SQUAD_FORMATION_ADJUST_M, SQUAD_GRID_OFFSETS, SQUAD_RETREAT_LIMIT_X, SQUAD_SIZE, STAGE_COUNT, STEP_RENDER_MIN_INTERVAL_MS, SUPPRESSION_CASUALTY_MULT, SUPPRESSION_COUNTER_MULT, SUPPRESSION_DUEL_DMG_BONUS, SUPPRESSION_MOVE_MULT, SUPPRESSION_NEARMISS_TURNS, SUPPRESSION_RETREAT_CHANCE, SUPPRESSION_TURNS, TANK_DUEL_DMG_TO_ENEMY, TANK_ENGAGE_RANGE, TANK_EXPOSURE, TANK_INCOMING_DMG, TANK_MAX_HP, TANK_MOVE_CAP, TANK_POS, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_GRID_CELL_SIZE, TARGET_GRID_MAX_RINGS, TARGET_TYPES, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, TRENCH_BUILD_COST, UNIT_AMMO_EMPTY_DMG_MULT, UNIT_AMMO_MAX, UNIT_AMMO_RESUPPLY_PER_TURN, VEHICLE_ASSAULT_DAMAGE, VEHICLE_ASSAULT_RANGE, VEHICLE_MOVE_CAP, VET_DMG_BONUS_PER_LEVEL, VET_EXPOSURE_BONUS_PER_LEVEL, VET_MAX_LEVEL, VET_XP_PER_LEVEL, HQ_MORTAR_COOLDOWN_TICKS, HQ_MORTAR_COUNT, HQ_MORTAR_DAMAGE, HQ_TANKGUN_COOLDOWN_TICKS, HQ_TANKGUN_COUNT, HQ_TANKGUN_DAMAGE, WALL_BUILD_COST, WALL_MAX_HP, WALL_RADIUS, WAVE_CLEAR_EFFECT_WAIT_MS, WAVE_CLEAR_FANFARE_HOLD_MS, WAVE_SPAWN_DELAY_MS, WAVE_SPAWN_WINDOW_MS, WEAPON_FIRE_INTERVAL, WEAPON_FIRE_OFFSET, WEATHER_TYPES, WORLD } from './constants.js';
+import { AA_ATTACK_DAMAGE, AA_COOLDOWN_TICKS, AA_ENGAGE_RANGE, ANOMALOUS_JUMP_UNITS, ANTITANK_AA_DMG, ANTITANK_AA_RANGE, ANTITANK_DUEL_DMG_TO_ENEMY, ANTITANK_ENGAGE_RANGE, ANTITANK_EXPOSURE, ANTITANK_INCOMING_DMG, ANTITANK_MAX_HP, ANTITANK_MOVE_CAP, ANTITANK_POS, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, ARTILLERY_FIRE_RANGE_UNITS, ARTILLERY_MOVE_CAP, ARTILLERY_STANDOFF_RANGE_UNITS, BURST_COOLDOWN_MS_MAX, BURST_COOLDOWN_MS_MIN, BURST_DMG_COMPENSATION, BURST_SHOTS_MAX, BURST_SHOTS_MIN, BURST_SHOT_INTERVAL_MS_MAX, BURST_SHOT_INTERVAL_MS_MIN, CANVAS_H, CANVAS_W, COUNTER_CHANCE, COUNTER_DAMAGE, DECOY_LURE_MULT_DAY, DECOY_LURE_MULT_NIGHT, DECOY_MAX_HP, DECOY_MODES, DEPLOYMENT_MODES, DEPLOY_BOX_METERS, DIFFICULTIES, DRONE_DETONATE_DAMAGE, DRONE_DETONATE_RANGE, DRONE_INTRO_STAGE, DRONE_SPEED, ENEMY_FORMATION_BASE_SIZE, ENEMY_FORMATION_NAMES, ENEMY_FORMATION_TEMPLATES, ENEMY_FOCUS_FIRE_WINDOW_MS, ENEMY_HQ_EXPOSURE, ENEMY_INFANTRY_DOCTRINES, ENEMY_INFANTRY_TOTAL_TARGET, ENEMY_SPAWN_MIN_X, ENGINEER_POS, ENGINEER_REPAIR_HP_PER_TURN, ENGINEER_REPAIR_RANGE_UNITS, ESTIMATE_CLAMP_MARGIN, EXPOSURE_DEFAULT, FLANK_OFFSET_RANGE_UNITS, FLIGHT_DURATION, FORTRESS_CAPTURE_RANGE_UNITS, FORTRESS_COUNT, FORTRESS_MAX_HP, FORTRESS_MG_COOLDOWN_MS_MAX, FORTRESS_MG_COOLDOWN_MS_MIN, FORTRESS_MG_DMG, FORTRESS_MG_RANGE_UNITS, FORTRESS_MG_SHOTS_MAX, FORTRESS_MG_SHOTS_MIN, FORTRESS_MG_SHOT_INTERVAL_MS_MAX, FORTRESS_MG_SHOT_INTERVAL_MS_MIN, FORTRESS_MISSILE_COOLDOWN_MS_MAX, FORTRESS_MISSILE_COOLDOWN_MS_MIN, FORTRESS_MISSILE_DMG, FORTRESS_MISSILE_RANGE_UNITS, FORTRESS_NEUTRAL_COLOR, FORTRESS_SIEGE_DMG, FORTRESS_ZONE_ENEMY_X, FORTRESS_ZONE_FRIENDLY_X, FORTRESS_ZONE_MID_X, FORTRESS_ZONE_Y, FRIENDLY_HELI_MOVE_UNITS, FRIENDLY_INF_POS, FRIENDLY_KIND_LIST, FRIENDLY_MARK_COLOR, FRIENDLY_SPACING_PUSH, FRIENDLY_SPACING_RADIUS, FUZES, GAME_SPEED_INTERVALS, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GAME_START_DATETIME, GAME_VERSION, HELI_ATTACK_BURST, HELI_ATTACK_DAMAGE, HELI_COOLDOWN_TICKS, HELI_ENGAGE_RANGE, HELI_EXPOSURE, HELI_MAX_RANGE_UNITS, HELI_MOVE_CAP, HELI_WITHDRAW_DIST, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_DEFENSE_ATTACKER_WINDOW_MS, HQ_DEFENSE_DMG_MULT, HQ_DEFENSE_RANGE_UNITS, HQ_DETECT_RANGE_UNITS, HQ_MAX_HP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, HQ_SUPPLY_HEAL_PCT_PER_TURN, HQ_SUPPLY_ZONE_RADIUS_UNITS, HQ_X, HQ_Y, ILLUM_DURATION_TURNS, ILLUM_RADIUS_M, INFANTRY_DRONE_COOLDOWN_TICKS, INFANTRY_DRONE_LAUNCH_CHANCE, INFANTRY_DRONE_SWARM_SIZE, INFANTRY_DUEL_DMG_TO_ENEMY, INFANTRY_MOVE_CAP, INFANTRY_STANDOFF_UNITS, INITIAL_DEPLOY_SPACING_MULT, LAST_STAND_THRESHOLD, LAUNCH_INTERVAL, MAP_SEED_CANDIDATE_COUNT, MARKER_REVEAL_RADIUS_UNITS, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MERGE_HP_THRESHOLD, METERS_PER_UNIT, MINE_DAMAGE, MINE_MAX_ACTIVE, MINE_PLACEMENT_CHANCE, MINE_TRIGGER_RADIUS_UNITS, MORTAR_BEST_LOADOUT, MORTAR_CB_DETECT_BASE, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CB_STRIKE_DMG, MORTAR_CB_WARN_TURNS, MORTAR_CREW_SIZE, MORTAR_DISPERSION_UNITS, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MAX_RANGE_UNITS, MORTAR_MIN_RANGE_M, MORTAR_MIN_RANGE_UNITS, MORTAR_MOVE_CAP, MORTAR_ORDER_LABEL, MORTAR_RELOAD_MS, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, NUM_ANTITANKS, NUM_ENGINEERS, NUM_MORTARS, NUM_SAMS, NUM_SCOUTS, NUM_SQUADS, NUM_TANKS, OP, OP_HOME_X, OP_HOME_Y, ORDER_LABEL, PERSONNEL_ROSTER, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, ROAD_PULL_RADIUS, ROSTER_ENGINEER_TEAMS, ROSTER_MORTAR_CREWS, ROSTER_RESERVE_INITIAL, ROSTER_SCOUT_TEAMS, ROSTER_SQUADS, SAM_DUEL_DMG_TO_ENEMY, SAM_ENGAGE_RANGE, SAM_EXPOSURE, SAM_MAX_HP, SAM_MOVE_CAP, SAM_POS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_ADVANCE_LIMIT_X, SCOUT_EXPOSURE, SCOUT_LOWER_Y, SCOUT_MAX_RANGE_UNITS, SCOUT_MOVE_CAP, SCOUT_SQUAD_SIZE, SCOUT_UPPER_Y, SCOUT_X, SHELLS, SHELL_DISPERSION_MULT, SHELL_KILL_RADIUS_UNITS, SIM_STEP_MAX_CATCHUP, SIM_STEP_MS, SMART_ACTIONS, SMART_UNIT_TYPES, SMOKE_DURATION_TURNS, SMOKE_RADIUS_M, SMOKE_RADIUS_UNITS, SQUAD_ADVANCE_LIMIT_X, SQUAD_ANTI_DRONE_DMG, SQUAD_ANTI_DRONE_HIT_CHANCE, SQUAD_ANTI_DRONE_RANGE_UNITS, SQUAD_ASSAULT_LIMIT_X, SQUAD_ENGAGE_RANGE, SQUAD_FORMATION_ADJUST_M, SQUAD_GRID_OFFSETS, SQUAD_RETREAT_LIMIT_X, SQUAD_SIZE, STAGE_COUNT, STEP_RENDER_MIN_INTERVAL_MS, SUPPRESSION_CASUALTY_MULT, SUPPRESSION_COUNTER_MULT, SUPPRESSION_DUEL_DMG_BONUS, SUPPRESSION_MOVE_MULT, SUPPRESSION_NEARMISS_TURNS, SUPPRESSION_RETREAT_CHANCE, SUPPRESSION_TURNS, TANK_DUEL_DMG_TO_ENEMY, TANK_ENGAGE_RANGE, TANK_EXPOSURE, TANK_INCOMING_DMG, TANK_MAX_HP, TANK_MOVE_CAP, TANK_POS, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_GRID_CELL_SIZE, TARGET_GRID_MAX_RINGS, TARGET_TYPES, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, TRENCH_BUILD_COST, UNIT_AMMO_EMPTY_DMG_MULT, UNIT_AMMO_MAX, UNIT_AMMO_RESUPPLY_PER_TURN, VEHICLE_ASSAULT_DAMAGE, VEHICLE_ASSAULT_RANGE, VEHICLE_MOVE_CAP, VET_DMG_BONUS_PER_LEVEL, VET_EXPOSURE_BONUS_PER_LEVEL, VET_MAX_LEVEL, VET_XP_PER_LEVEL, HQ_MORTAR_COOLDOWN_TICKS, HQ_MORTAR_COUNT, HQ_MORTAR_DAMAGE, HQ_TANKGUN_COOLDOWN_TICKS, HQ_TANKGUN_COUNT, HQ_TANKGUN_DAMAGE, WALL_BUILD_COST, WALL_MAX_HP, WALL_RADIUS, WAVE_ARCHETYPES, WAVE_CLEAR_EFFECT_WAIT_MS, WAVE_CLEAR_FANFARE_HOLD_MS, WAVE_SPAWN_DELAY_MS, WAVE_SPAWN_WINDOW_MS, WEAPON_FIRE_INTERVAL, WEAPON_FIRE_OFFSET, WEATHER_TYPES, WORLD } from './constants.js';
 import { resetClickCycle } from './input.js';
 import { render } from './main.js';
 import { applySavedCampaign, clearCampaignSave, loadCampaign, saveCampaign } from './savegame.js';
 import { ROAD_GRAPH, advanceAlongPath, airborneStep, altitudeBonus, applyWallBlock, computeFebaX, damageWall, elevationAt, generateProceduralTerrain, generateSpots, getCachedRoadPath, nearestRoadPoint, nearestWallHit, pickArchetypeForStage, pickTerrainForStage, pickTypesForCount, scoutTerrainAwareStep, terrainAwareStep, terrainCoverTotal, terrainTypeAt, trenchCoverBonusAt, wallBlockingLineOfFire } from './terrain.js';
 import { disposeMarker3d, regenerateTerrain } from './three.js';
 import { announceTicker, closeSmartOrder, log, renderMapSelectOverlay, showGameClear, showStageClear, showStageFailed, showWaveRewardChoice, smartWizard } from './ui.js';
-import { bearingBetween, choice, clamp, exposureNormalizedMult, gauss, hitChanceFromExposure, rnd, smoothstep01, unitsToMeters, visualTweenDurationMs } from './utils.js';
+import { bearingBetween, choice, clamp, exposureNormalizedMult, gauss, hitChanceFromExposure, rnd, smoothstep01, unitsToMeters, visualTweenDurationMs, weightedChoice } from './utils.js';
 import { fireTracer, isHitStopped, onTargetDestroyed, projectiles, resetAllVfx, ripples, spawn3dImpactEffect, spawn3dProjectile, spawnDestructionEffect, spawnHitEffect } from './vfx.js';
 import { speakCoordination, speakRandomAliveUnit, unitSpeak, unitSpeakInjury, unitSpeakOrder } from './voice.js';
 
@@ -475,7 +475,7 @@ export function startSetup(){
   deployStage();
 }
 
-export function buildHeliTarget(hpMult){
+export function buildHeliTarget(hpMult, id){
   const spot = generateSpots(1)[0];
   const def = TARGET_TYPES.heli;
   const hp = Math.round(def.hp*hpMult);
@@ -483,7 +483,7 @@ export function buildHeliTarget(hpMult){
   const trueBearing = (Math.atan2(dx,-dy)*180/Math.PI+360)%360;
   const trueDistance = Math.sqrt(dx*dx+dy*dy);
   return {
-    id:'HELI', type:'heli', def,
+    id: id || 'HELI', type:'heli', def,
     trueX:spot.x, trueY:spot.y,
     trueBearing, trueDistance,
     hp, maxHp:hp,
@@ -539,13 +539,20 @@ export function startStage(){
   // ENEMY_FOCUS_FIRE_WINDOW_MS/enemyCounterAttack).
   state.enemyFocusTarget = null;
   state.enemyFocusTargetAt = 0;
+  // per user request: 敵が攻めてくる際のバリエーションが欲しい、という要望に対応 -- WAVE
+  // ごとに攻撃アーキタイプ(WAVE_ARCHETYPES)を重み付き抽選し、歩兵編成パス数・内訳(vehicle/
+  // artillery/aa/drone)・歩兵ドクトリン比率・歩兵出現タイミング・追加ヘリの有無を左右する。
+  const archetype = weightedChoice(WAVE_ARCHETYPES, a=>a.weight);
+  state.waveArchetype = archetype.id;
+  state.waveArchetypeLabel = archetype.label;
   // per user request: no more flat "3 units per wave" cap -- infantry now spawns as
   // several formation groups (buildEnemyInfantryGroups) totalling ~50 soldiers, generated
   // independently from the small mixed pool of artillery/vehicle/drone below.
   // per user request: doubled simultaneous enemy count -- two independent group-building
   // passes (each already reaching its own ~50-soldier target) roughly doubles the number of
-  // infantry groups, and otherCount (artillery/vehicle/drone) is doubled outright.
-  const infantryGroups = [...buildEnemyInfantryGroups(stage), ...buildEnemyInfantryGroups(stage)];
+  // infantry groups, and otherCount (artillery/vehicle/drone) is doubled outright. The exact
+  // number of passes now varies by archetype.infantryPasses (装甲強襲/航空襲撃 use fewer).
+  const infantryGroups = Array.from({length: archetype.infantryPasses}, ()=>buildEnemyInfantryGroups(stage)).flat();
   const otherCount = Math.min(2+Math.floor((stage-1)/3), 6) * 2;
   const diff = DIFFICULTIES[state.difficulty];
   const hpMult = (1 + (stage-1)*0.08) * diff.hpMult * 2; // per user request: enemy defense doubled
@@ -553,7 +560,8 @@ export function startStage(){
   const weather = WEATHER_TYPES[state.weather];
   const totalCount = infantryGroups.length + otherCount;
   const spots = generateSpots(totalCount);
-  const otherTypes = pickTypesForCount(otherCount, stage);
+  const otherTypes = pickTypesForCount(otherCount, stage, archetype.otherTypeWeights);
+  const doctrinePool = ENEMY_INFANTRY_DOCTRINES.map(d=>({d, w: archetype.doctrineWeights[d.id] ?? 1}));
 
   const centroidX = spots.reduce((s,p)=>s+p.x,0)/spots.length;
   const centroidY = spots.reduce((s,p)=>s+p.y,0)/spots.length;
@@ -563,7 +571,7 @@ export function startStage(){
     const type = isInfantry ? 'infantry' : otherTypes[i-infantryGroups.length];
     const def = TARGET_TYPES[type];
     const group = isInfantry ? infantryGroups[i] : null;
-    const doctrine = isInfantry ? ENEMY_INFANTRY_DOCTRINES[i%ENEMY_INFANTRY_DOCTRINES.length] : null;
+    const doctrine = isInfantry ? weightedChoice(doctrinePool, p=>p.w).d : null;
     const squadSize = isInfantry ? group.offsets.length : 0;
     // per user request: each soldier in an infantry group is now tracked (and rendered)
     // individually rather than the group sharing one HP pool -- soldierMaxHp is the same
@@ -602,6 +610,11 @@ export function startStage(){
   });
 
   targets.push(buildHeliTarget(hpMult));
+  // per user request: 航空襲撃アーキタイプらしさを出すため、通常の1機に加えて
+  // archetype.extraHeli機を追加スポーンする。
+  for(let i=0;i<(archetype.extraHeli||0);i++){
+    targets.push(buildHeliTarget(hpMult, 'HELI'+(i+2)));
+  }
   // per user request: an alternate win condition -- see checkEnd()/computeReward() -- always
   // present, every wave, placed deep in enemy territory rather than drawn from the spots pool.
   const enemyHqTarget = buildEnemyHqTarget(hpMult);
@@ -621,8 +634,12 @@ export function startStage(){
   const stageStartAt = performance.now();
   state.stageStartAt = stageStartAt;
   targets.forEach(t=>{
-    t.spawnAt = t.type==='hq' ? stageStartAt
-      : stageStartAt + WAVE_SPAWN_DELAY_MS + Math.random()*(WAVE_SPAWN_WINDOW_MS-WAVE_SPAWN_DELAY_MS);
+    if(t.type==='hq'){ t.spawnAt = stageStartAt; return; }
+    // per user request(砲兵制圧アーキタイプ): 先に榴弾攻撃、その後歩兵前進 -- 歩兵の出現を
+    // 出現ウィンドウ内で通常より後ろ寄りにずらし、砲兵の制圧射撃が先行するように見せる。
+    const delayMult = (t.type==='infantry' && archetype.infantryDelayMult) ? archetype.infantryDelayMult : 1;
+    const windowFrac = clamp(Math.random()*delayMult, 0, 1);
+    t.spawnAt = stageStartAt + WAVE_SPAWN_DELAY_MS + windowFrac*(WAVE_SPAWN_WINDOW_MS-WAVE_SPAWN_DELAY_MS);
   });
   state.targets = targets.filter(t=>t.spawnAt<=stageStartAt);
   state.pendingSpawns = targets.filter(t=>t.spawnAt>stageStartAt);
@@ -805,9 +822,18 @@ export function startStage(){
   resetAllVfx();
 
   document.getElementById('overlay').classList.remove('show');
-  log('sys','システム', `WAVE ${stage} / ${STAGE_COUNT} ― 目標${state.targets.length}件を確認。天候: ${weather.label}(${weather.desc})。`);
+  log('sys','システム', `WAVE ${stage} / ${STAGE_COUNT} ― 目標${state.targets.length}件を確認。天候: ${weather.label}(${weather.desc})。敵編成: ${archetype.label}。`);
   log('sys','敵AI', '敵歩兵は強襲・側面・支援の各ドクトリンで行動する。支援部隊は距離を保って援護射撃を行う。');
-  log('sys','警報', '戦闘ヘリ1機を確認。ヒットアンドアウェイ戦術(接近→攻撃→離脱)に警戒せよ。');
+  // per user request: WAVEの攻撃アーキタイプに応じた具体的な警告 -- プレイヤーが編成を
+  // その場で調整する判断材料になるようにする。
+  const archetypeWarning = {
+    armor: '警報: 敵編成は装甲部隊中心(装甲強襲)。対戦車部隊・戦車を増強せよ。',
+    artillery: '警報: 敵編成は砲兵中心(砲兵制圧)。先制の榴弾攻撃に備え、部隊を分散配置せよ。歩兵の到達はやや遅れる見込み。',
+    air: '警報: 敵編成は航空戦力中心(航空襲撃)。対空部隊(SAM)・対戦車の対空火器を増強せよ。',
+  }[archetype.id];
+  if(archetypeWarning) log('sys','警報', archetypeWarning);
+  const heliCount = 1 + (archetype.extraHeli||0);
+  log('sys','警報', `戦闘ヘリ${heliCount}機を確認。ヒットアンドアウェイ戦術(接近→攻撃→離脱)に警戒せよ。`);
   // per user request (idea 3): flags the HQ's existence without giving away its position --
   // bearing/distance still need the normal recon flow (revealTarget) like any other target.
   log('sys','情報部', '偵察情報: 敵展開域の奥深くに指揮系統の中枢と思われる陣地を確認。優先撃破に成功すれば残存兵力を問わずWAVEを制圧できる可能性がある(要偵察)。');
