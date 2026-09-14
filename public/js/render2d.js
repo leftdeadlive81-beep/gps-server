@@ -1012,7 +1012,15 @@ export function drawBoard(){
           ctx.textAlign='center';
           const doctrine = t.doctrine==='flank' ? '側面' : t.doctrine==='support' ? '支援' : '強襲';
           ctx.fillText(`敵${t.def.label}(${doctrine}) ${aliveTroops.length}/${t.troops.length}`, e.x, labelY);
-          if(showFullDetail){
+          // per user request: 空挺強襲アーキタイプ -- 着陸直後で行動不能な間は、通常の
+          // ドクトリン表示の代わりに一目で分かる警告色のラベルを出す(反撃してこない理由が
+          // 分かるように)。
+          const landingImmune = t.landingUntil && performance.now() < t.landingUntil;
+          if(landingImmune){
+            ctx.font = mfont('bold 11px "Noto Sans JP"');
+            ctx.fillStyle = '#f0bd55';
+            ctx.fillText('▼ 降下直後(無防備)', e.x, labelY-38);
+          } else if(showFullDetail){
             ctx.font = mfont('bold 11px "Noto Sans JP"');
             ctx.fillStyle = t.doctrine==='flank' ? '#e0b84a' : t.doctrine==='support' ? '#b0d3ed' : '#ef927d';
             ctx.fillText(doctrine==='強襲' ? '▲ 強襲中' : doctrine==='側面' ? '◀ 側面展開' : '■ 支援射撃', e.x, labelY-38);

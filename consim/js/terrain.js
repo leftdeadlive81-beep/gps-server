@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { state, turnJustCrossed, unitAlive } from './combat.js';
-import { CANVAS_H, CANVAS_W, CONTOUR_CELL, CONTOUR_LEVELS, CONTOUR_LINES_CANVAS, DRONE_INTRO_STAGE, ENEMY_SPAWN_MAX_X, ENEMY_SPAWN_MIN_X, FEBA_MAX_X, FEBA_MIN_X, FRIENDLY_MARK_COLOR, GRID_LINE_SEGMENT, GRID_MAJOR_EVERY, GRID_MINOR_SPACING_UNITS, OFF_ROAD_SPEED_MULT, REAL_ROADS_CANVAS, RIVER_VALLEY_DEPTH, ROAD_NODE_SNAP_RADIUS_UNITS, ROAD_PULL_RADIUS, SCOUT_TERRAIN_MIN_SPEED_MULT, SCOUT_TERRAIN_SPEED_PENALTY, SQUAD_ADVANCE_LIMIT_X, STEP_ANGLE_OFFSETS, TERRAIN_ARCHETYPES, TERRAIN_COVER_RANGE, TERRAIN_COVER_RELIEF_SATURATION, TERRAIN_COVER_SAMPLE_COUNT, TERRAIN_COVER_SAMPLE_RADIUS, TERRAIN_SLOPE_PENALTY, TERRAIN_TYPE_COVER_BONUS, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_OPEN, TERRAIN_TYPE_SPEED_MULT, TERRAIN_TYPE_WATER, TRENCH_COVER_BONUS, TRENCH_RADIUS, WALL_AVOID_PENALTY, WALL_RADIUS } from './constants.js';
+import { AIRBORNE_ZONE_MAX_X, AIRBORNE_ZONE_MIN_X, CANVAS_H, CANVAS_W, CONTOUR_CELL, CONTOUR_LEVELS, CONTOUR_LINES_CANVAS, DRONE_INTRO_STAGE, ENEMY_SPAWN_MAX_X, ENEMY_SPAWN_MIN_X, FEBA_MAX_X, FEBA_MIN_X, FRIENDLY_MARK_COLOR, GRID_LINE_SEGMENT, GRID_MAJOR_EVERY, GRID_MINOR_SPACING_UNITS, OFF_ROAD_SPEED_MULT, REAL_ROADS_CANVAS, RIVER_VALLEY_DEPTH, ROAD_NODE_SNAP_RADIUS_UNITS, ROAD_PULL_RADIUS, SCOUT_TERRAIN_MIN_SPEED_MULT, SCOUT_TERRAIN_SPEED_PENALTY, SQUAD_ADVANCE_LIMIT_X, STEP_ANGLE_OFFSETS, TERRAIN_ARCHETYPES, TERRAIN_COVER_RANGE, TERRAIN_COVER_RELIEF_SATURATION, TERRAIN_COVER_SAMPLE_COUNT, TERRAIN_COVER_SAMPLE_RADIUS, TERRAIN_SLOPE_PENALTY, TERRAIN_TYPE_COVER_BONUS, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_OPEN, TERRAIN_TYPE_SPEED_MULT, TERRAIN_TYPE_WATER, TRENCH_COVER_BONUS, TRENCH_RADIUS, WALL_AVOID_PENALTY, WALL_RADIUS } from './constants.js';
 import { log } from './ui.js';
 import { choice, clamp, distanceToSegment, mulberry32, rnd, rngRange, rngRangeArr, weightedChoice } from './utils.js';
 import { spawnDestructionEffect } from './vfx.js';
@@ -45,6 +45,22 @@ export function generateSpots(n){
     if(!tooClose) spots.push(p);
   }
   while(spots.length < n) spots.push({x: rnd(ENEMY_SPAWN_MIN_X, ENEMY_SPAWN_MAX_X), y: rnd(60, CANVAS_H-60)});
+  return spots;
+}
+
+// per user request: 空挺強襲アーキタイプ向け -- 敵側スポーン範囲(generateSpots)ではなく、
+// 自軍後方(AIRBORNE_ZONE_MIN_X-MAX_X、迫撃砲/指揮所クラスタ付近)に着陸地点をまとめて
+// 生成する。ロジック自体はgenerateSpotsと同じ(近すぎる地点を避ける)。
+export function generateAirborneLandingSpots(n){
+  const spots = [];
+  let attempts = 0;
+  while(spots.length < n && attempts < 500){
+    attempts++;
+    const p = {x: rnd(AIRBORNE_ZONE_MIN_X, AIRBORNE_ZONE_MAX_X), y: rnd(60, CANVAS_H-60)};
+    const tooClose = spots.some(s => Math.hypot(s.x-p.x, s.y-p.y) < 110);
+    if(!tooClose) spots.push(p);
+  }
+  while(spots.length < n) spots.push({x: rnd(AIRBORNE_ZONE_MIN_X, AIRBORNE_ZONE_MAX_X), y: rnd(60, CANVAS_H-60)});
   return spots;
 }
 
@@ -609,4 +625,4 @@ export function advanceAlongPath(fromX, fromY, path, stepLen){
 }
 
 
-Object.assign(window, { pickTerrainForStage, pickTypesForCount, generateSpots, nearestPointOnRoad, nearestRoadPoint, nearestWallHit, applyWallBlock, wallBlockingLineOfFire, damageWall, terrainAwareStep, airborneStep, scoutTerrainAwareStep, elevationAtFor, elevationAt, elevationLabel, altitudeBonus, terrainCoverBonus, terrainTypeCoverBonus, terrainCoverTotal, trenchCoverBonusAt, computeFebaX, buildGridLineSegments, febaLineSegments, choppedLineSegments, pickArchetypeForStage, riverXAt, generateProceduralTerrain, terrainTypeAtFor, terrainTypeAt, terrainTypeLabel, buildProceduralRoads, buildContourLines, buildRoadGraph, nearestRoadNodeIdx, getCachedRoadPath, findRoadPath, advanceAlongPath });
+Object.assign(window, { pickTerrainForStage, pickTypesForCount, generateSpots, generateAirborneLandingSpots, nearestPointOnRoad, nearestRoadPoint, nearestWallHit, applyWallBlock, wallBlockingLineOfFire, damageWall, terrainAwareStep, airborneStep, scoutTerrainAwareStep, elevationAtFor, elevationAt, elevationLabel, altitudeBonus, terrainCoverBonus, terrainTypeCoverBonus, terrainCoverTotal, trenchCoverBonusAt, computeFebaX, buildGridLineSegments, febaLineSegments, choppedLineSegments, pickArchetypeForStage, riverXAt, generateProceduralTerrain, terrainTypeAtFor, terrainTypeAt, terrainTypeLabel, buildProceduralRoads, buildContourLines, buildRoadGraph, nearestRoadNodeIdx, getCachedRoadPath, findRoadPath, advanceAlongPath });

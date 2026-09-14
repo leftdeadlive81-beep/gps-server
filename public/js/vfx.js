@@ -287,6 +287,22 @@ export function spawnDestructionEffect(x, y, label, color){
   if(label) killBanners.push({x, y, born, life:1900, text:label, color});
 }
 
+// per user request: 空挺強襲アーキタイプの着陸前警告 -- 「派手に出して」の要望どおり、
+// killBannersのポップイン大文字表示(spawnDestructionEffectと同じ描画経路を流用)+軽い
+// 画面シェイク+効果音で目立たせる。ただしまだ何も着弾/爆発していないので、
+// spawnDestructionEffectと違いフラッシュ/クレーター/デブリ/黒煙は出さない。
+export function spawnWarningBanner(x, y, text, color){
+  const born = performance.now();
+  playSfx('identify', 0.7);
+  killBanners.push({x, y, born, life:2800, text, color});
+  const sp = project(x, y);
+  if(sp.visible){
+    const distFromCenter = Math.hypot(sp.x-MAP_VIEW.containerW/2, sp.y-MAP_VIEW.containerH/2);
+    const near = clamp(1 - distFromCenter/420, 0, 1);
+    if(near > 0) triggerShake(4*near, 380);
+  }
+}
+
 // per user request: make every hit (not just a kill) feel punchier. Previously only
 // spawnDestructionEffect (a kill) added a shockwave/impact light/screen shake; an ordinary hit
 // only got the small tracer-impact flash already pushed by updateEnemyTracers/updateProjectiles.
@@ -356,4 +372,4 @@ export function setCraters(v){ craters = v; }
 export function setKillBanners(v){ killBanners = v; }
 export function setRipples(v){ ripples = v; }
 
-Object.assign(window, { fireTracer, ensureWeatherParticles, effectWorldPosition, disposeEffect3d, addEffect3d, spawn3dMuzzleFlash, spawn3dImpactEffect, spawn3dProjectile, update3dEffects, spawnImpactLight, updateImpactLights, triggerShake, currentShakeOffset, triggerHitStop, isHitStopped, projectileArcWorldY, tracerWorldY, onTargetDestroyed, spawnDestructionEffect, spawnHitEffect, updateProjectiles, updateEnemyTracers, resetAllVfx, setShockwaves, setDebrisParticles, setWreckSmokes, setCraters, setKillBanners, setRipples });
+Object.assign(window, { fireTracer, ensureWeatherParticles, effectWorldPosition, disposeEffect3d, addEffect3d, spawn3dMuzzleFlash, spawn3dImpactEffect, spawn3dProjectile, update3dEffects, spawnImpactLight, updateImpactLights, triggerShake, currentShakeOffset, triggerHitStop, isHitStopped, projectileArcWorldY, tracerWorldY, onTargetDestroyed, spawnDestructionEffect, spawnWarningBanner, spawnHitEffect, updateProjectiles, updateEnemyTracers, resetAllVfx, setShockwaves, setDebrisParticles, setWreckSmokes, setCraters, setKillBanners, setRipples });

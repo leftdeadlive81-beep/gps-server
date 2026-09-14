@@ -929,7 +929,33 @@ export const WAVE_ARCHETYPES = [
     // に加えてもう1機を追加スポーンする。
     extraHeli:1,
   },
+  {
+    id:'airborne', label:'空挺強襲',
+    weight:1,
+    otherTypeWeights:{vehicle:0.5, artillery:0.5, aa:0.7, drone:0.7},
+    // per user request: 前線本体の歩兵は少なめにして、代わりに空挺降下部隊(下の
+    // AIRBORNE_*定数、startStage()参照)が自軍後方(迫撃砲/指揮所付近)へ直接着陸する --
+    // 前線を突破しなくても後方が脅かされる、という新しい脅威軸を作る。
+    infantryPasses:1,
+    doctrineWeights:{assault:2, flank:1, support:1},
+    extraHeli:0,
+    airborneDrop:true,
+  },
 ];
+
+// per user request: 空挺強襲アーキタイプの降下パラメータ -- 自軍後方(迫撃砲/指揮所
+// クラスタ付近、HQ_X=60・MORTAR_ZONE=40-380・TANK_POS.x=320等)を狙って着陸させる
+// (前線のSQUAD/ENEMY側スポーン範囲とは別のX帯)。着陸の一定時間前に派手な警告(画面
+// シェイク・大きなバナー・効果音)を出し、着陸直後もAIRBORNE_LANDING_IMMUNE_MSの間は
+// 行動不能(移動も反撃射撃もしない、ただし通常どおり被弾・撃破は可能)にすることで、
+// 「奇襲だが理不尽ではない」バランスを狙う(見て→反応する猶予を与える)。
+export const AIRBORNE_ZONE_MIN_X = 150, AIRBORNE_ZONE_MAX_X = 550;
+
+export const AIRBORNE_DROP_AT_MS = 18000;
+
+export const AIRBORNE_WARNING_LEAD_MS = 6000;
+
+export const AIRBORNE_LANDING_IMMUNE_MS = 4000;
 
 export const ORDER_LABEL = {advance:'前進', retreat:'後退', hold:'防御', assault:'突撃', hunt:'追跡攻撃', resting:'大休止', repair:'修理'};
 
