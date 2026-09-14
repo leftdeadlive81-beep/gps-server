@@ -85,7 +85,7 @@ export const EQUIP_LABEL = {armor:'強化装甲', optics:'精密照準器', extM
 
 export const FRIENDLY_INF_POS = {x: 700, y: CANVAS_H/2};
 
-export const SNIPER_POS = {x: 290, y: CANVAS_H/2};
+export const ANTITANK_POS = {x: 290, y: CANVAS_H/2};
 
 export const STAGE_COUNT = 50;
 
@@ -215,9 +215,7 @@ export const SCOUT_SQUAD_SIZE = 5;
 
 export const NUM_SCOUTS = 3;
 
-export const SNIPER_SQUAD_SIZE = 5;
-
-export const NUM_SNIPERS = 3;
+export const NUM_ANTITANKS = 3;
 
 export const MORTAR_CREW_SIZE = 5;
 
@@ -241,6 +239,26 @@ export const TANK_INCOMING_DMG = [8, 20];
 export const TANK_REPAIR_HP_PER_CALL = 30;
 
 export const TANK_REPAIR_COST_PER_HP = 40;
+
+// per user request: 狙撃部隊を対戦車部隊(戦車に対して有効なロケットランチャーを装備する
+// 軽車両部隊)に変更。戦車と同じ単一HP制の車両ユニットとして扱い(歩兵のような兵員ロスター
+// は持たない)、対空(SAM)と同じ「専任・他目標には交戦不可」の設計にする -- ただし対空の
+// 空目標の代わりにvehicleタイプ限定、かつ1発あたりの威力を高く設定して「戦車を狩る」役割を
+// 明確にする。装甲が薄い軽車両という設定上、HPは低め・被弾時のダメージは大きめ、その分
+// 機動力(ANTITANK_MOVE_CAP)は戦車より高く設定した。
+export const ANTITANK_MAX_HP = 90;
+
+export const ANTITANK_EXPOSURE = 75;
+
+export const ANTITANK_ENGAGE_RANGE = 380;
+
+export const ANTITANK_DUEL_DMG_TO_ENEMY = [10, 18];
+
+export const ANTITANK_INCOMING_DMG = [12, 26];
+
+export const ANTITANK_REPAIR_HP_PER_CALL = 20;
+
+export const ANTITANK_REPAIR_COST_PER_HP = 30;
 
 // per user request: 工兵による戦車の野戦修理 -- 上の即時・有償の応急修復(repairTank)とは
 // 別の無償(労力のみ)の手段。工兵を戦車に近接させて修理を指示すると、この射程内にいる間
@@ -474,17 +492,15 @@ export const PERSONNEL_ROSTER = [
   {rank:'陸士長', name:'柴田'},
 ];
 
-export const [ROSTER_MORTAR_POOL, ROSTER_SCOUT_POOL, ROSTER_SNIPER_POOL, ROSTER_SQUAD_POOL, ROSTER_ENGINEER_POOL, ROSTER_RESERVE_INITIAL] =
+export const [ROSTER_MORTAR_POOL, ROSTER_SCOUT_POOL, ROSTER_SQUAD_POOL, ROSTER_ENGINEER_POOL, ROSTER_RESERVE_INITIAL] =
   roundRobinDistribute(PERSONNEL_ROSTER, [
-    MORTAR_CREW_SIZE*NUM_MORTARS, SCOUT_SQUAD_SIZE*NUM_SCOUTS, SNIPER_SQUAD_SIZE*NUM_SNIPERS,
+    MORTAR_CREW_SIZE*NUM_MORTARS, SCOUT_SQUAD_SIZE*NUM_SCOUTS,
     SQUAD_SIZE*NUM_SQUADS, ENGINEER_SQUAD_SIZE*NUM_ENGINEERS, RESERVE_SIZE,
   ]);
 
 export const ROSTER_MORTAR_CREWS = roundRobinDistribute(ROSTER_MORTAR_POOL, Array(NUM_MORTARS).fill(MORTAR_CREW_SIZE));
 
 export const ROSTER_SCOUT_TEAMS  = roundRobinDistribute(ROSTER_SCOUT_POOL, Array(NUM_SCOUTS).fill(SCOUT_SQUAD_SIZE));
-
-export const ROSTER_SNIPER_TEAMS = roundRobinDistribute(ROSTER_SNIPER_POOL, Array(NUM_SNIPERS).fill(SNIPER_SQUAD_SIZE));
 
 export const ROSTER_ENGINEER_TEAMS = roundRobinDistribute(ROSTER_ENGINEER_POOL, Array(NUM_ENGINEERS).fill(ENGINEER_SQUAD_SIZE));
 
@@ -496,10 +512,6 @@ export const FORMATION_OFFSETS = [
 ];
 
 export const SCOUT_FORMATION_OFFSETS = [
-  {dx:-14,dy:-8},{dx:0,dy:-12},{dx:14,dy:-8},{dx:-8,dy:9},{dx:8,dy:9},
-];
-
-export const SNIPER_FORMATION_OFFSETS = [
   {dx:-14,dy:-8},{dx:0,dy:-12},{dx:14,dy:-8},{dx:-8,dy:9},{dx:8,dy:9},
 ];
 
@@ -540,22 +552,6 @@ export const SQUAD_ANTI_DRONE_HIT_CHANCE = 0.65;
 
 export const SQUAD_ANTI_DRONE_DMG = [8,16];
 
-export const SNIPER_RANGE_UNITS = SQUAD_ENGAGE_RANGE * 3;
-
-export const SNIPER_RANGE_M = Math.round(SNIPER_RANGE_UNITS * METERS_PER_UNIT);
-
-export const SNIPER_AIM_RANGE_M = 2000;
-
-export const SNIPER_AIM_RANGE_UNITS = SNIPER_AIM_RANGE_M / METERS_PER_UNIT;
-
-export const SNIPER_AIM_LINE_WIDTH_M = 20;
-
-export const SNIPER_AIM_LINE_WIDTH_UNITS = SNIPER_AIM_LINE_WIDTH_M / METERS_PER_UNIT;
-
-// per user request: バースト連射化に合わせ威力を約3.5分の1に引き下げ(旧値 [20,32])。
-export const SNIPER_DMG = [6, 9];
-
-export const SNIPER_EXECUTE_HP_THRESHOLD = 0.3;
 
 export const MORTAR_MAINLINE_RANGE_M = 6000;
 
@@ -588,9 +584,9 @@ export const HQ_DEFENSE_RANGE_UNITS = HQ_DEFENSE_RANGE_M / METERS_PER_UNIT;
 export const HQ_DEFENSE_ATTACKER_WINDOW_MS = 15000;
 
 // per user request: a "supply zone" around the (friendly) HQ -- any damaged friendly unit
-// that has real HP (mortar/tank/sam; HQ itself keeps its own paid repairHq() instead, and
-// squad/sniper/scout soldiers are permanent one-hit casualties with no partial HP to heal)
-// slowly regenerates while sitting inside this radius, and squads/snipers also regenerate
+// that has real HP (mortar/tank/antitank/sam; HQ itself keeps its own paid repairHq() instead,
+// and squad/scout soldiers are permanent one-hit casualties with no partial HP to heal)
+// slowly regenerates while sitting inside this radius, and squads also regenerate
 // their new per-unit ammo (see UNIT_AMMO_MAX below) here. Kept tight (barely more than
 // HQ_DETECT_RANGE_M) so it's a deliberate "fall back to base" spot, not just anywhere in the
 // wide initial deployment box.
@@ -603,10 +599,10 @@ export const HQ_SUPPLY_ZONE_RADIUS_UNITS = HQ_SUPPLY_ZONE_RADIUS_M / METERS_PER_
 // ~6%/turn fills an empty unit in ~17 turns (~33s of real time at the default 1x speed).
 export const HQ_SUPPLY_HEAL_PCT_PER_TURN = 0.06;
 
-// per user request: squads/snipers now track a per-unit ammo count instead of firing forever.
-// Scoped to just these two types for now (see UNIT_AMMO_EMPTY_DMG_MULT) since every other
-// friendly weapon already has its own resource limit (mortars: state.ammo; tanks/sams: cooldown
-// timers modeling a slower-firing main gun).
+// per user request: squads track a per-unit ammo count instead of firing forever.
+// Scoped to just this type for now (see UNIT_AMMO_EMPTY_DMG_MULT) since every other
+// friendly weapon already has its own resource limit (mortars: state.ammo; tanks/antitanks/sams:
+// cooldown timers modeling a slower-firing main gun).
 export const UNIT_AMMO_MAX = 20;
 
 // ammo restored per TURN while inside the HQ supply zone -- fills an empty unit in 2.5 turns
@@ -630,7 +626,7 @@ export const HQ_DEFENSE_DMG_MULT = 1.6;
 // instead of each independently picking their own nearest. See enemyCounterAttack().
 export const ENEMY_FOCUS_FIRE_WINDOW_MS = 10000;
 
-export const ROAD_SPEED_KMH = {vehicle:60, infantry:10, sniper:5, scout:12, mortar:40, artillery:5};
+export const ROAD_SPEED_KMH = {vehicle:60, infantry:10, scout:12, mortar:40, artillery:5};
 
 export const OFF_ROAD_SPEED_MULT = 0.7;
 
@@ -640,13 +636,14 @@ export const VEHICLE_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.vehicle);
 
 export const INFANTRY_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.infantry);
 
-export const SNIPER_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.sniper);
-
 export const SCOUT_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.scout);
 
 export const MORTAR_MOVE_CAP = kmhToUnitsPerTurn(ROAD_SPEED_KMH.mortar) * 0.25;
 
 export const TANK_MOVE_CAP = VEHICLE_MOVE_CAP * 0.6;
+
+// per user request: 軽車両なので戦車より機動力を高く。
+export const ANTITANK_MOVE_CAP = VEHICLE_MOVE_CAP * 0.85;
 
 export const SAM_MOVE_CAP = VEHICLE_MOVE_CAP * 0.4;
 
@@ -778,16 +775,15 @@ export const GAME_SPEED_ORDER = ['slow', 'normal', 'fast'];
 export const MORTAR_RELOAD_MS = 650;
 
 // per user request (correction of an earlier request that had the direction backwards):
-// firing interval shortened, not lengthened -- was {squad:3, tank:4, sam:3, sniper:5} turns
-// between shots. Every value here divided by 10 rounds below 1, and 1 (fire every eligible
-// turn) is the fastest rate the turn-based unitMayFire() modulo can express, so that's the
-// floor for all four -- this is "as fast as the simulation's turn granularity allows".
-export const WEAPON_FIRE_INTERVAL = { squad:1, tank:1, sam:1, sniper:1 };
+// firing interval shortened, not lengthened. Every value here divided by 10 rounds below 1,
+// and 1 (fire every eligible turn) is the fastest rate the turn-based unitMayFire() modulo can
+// express, so that's the floor -- this is "as fast as the simulation's turn granularity allows".
+export const WEAPON_FIRE_INTERVAL = { squad:1, tank:1, sam:1 };
 
-export const WEAPON_FIRE_OFFSET = { squad:0, tank:1, sam:2, sniper:3 };
+export const WEAPON_FIRE_OFFSET = { squad:0, tank:1, sam:2 };
 
 // per user request: 発砲頻度を上げ、かつ「パパパン」という連射→小休止のリズムにする -- 小隊/
-// 戦車/対空/狙撃の主戦闘ループは、この単位ごとの実時間バーストサイクル(unitMayBurstFire系、
+// 戦車/対空/対戦車の主戦闘ループは、この単位ごとの実時間バーストサイクル(unitMayBurstFire系、
 // combat.js)に置き換えた。WEAPON_FIRE_INTERVAL/OFFSETとunitMayFire自体は、対戦車肉薄射撃
 // (resolveSquadAntiVehicle)など、あえて低頻度のままにする副次的な交戦にのみ残す。
 export const BURST_SHOTS_MIN = 2;
@@ -1019,7 +1015,7 @@ export const SMART_UNIT_TYPES = {
   // 受け付けないため)。
   scout:  {label:'斥候',   list:()=>state.scouts,  isAlive:s=>unitAliveCount(s)>0 && !s.resting, nameOf:i=>`斥候${i+1}`},
   squad:  {label:'小隊',   list:()=>state.squads,  isAlive:sq=>sq.soldiers.some(s=>s.alive) && !sq.resting, nameOf:i=>`第${i+1}小隊`},
-  sniper: {label:'狙撃',   list:()=>state.snipers, isAlive:sn=>sn.soldiers.some(s=>s.alive) && !sn.resting, nameOf:i=>`狙撃${i+1}班`},
+  antitank: {label:'対戦車', list:()=>state.antitanks, isAlive:at=>at.hp>0, nameOf:i=>`対戦車${i+1}`},
   tank:   {label:'戦車',   list:()=>state.tanks,   isAlive:tk=>tk.hp>0, nameOf:i=>`戦車${i+1}`},
   sam:    {label:'対空',   list:()=>state.sams,    isAlive:sam=>sam.hp>0, nameOf:i=>`対空${i+1}`},
 };
@@ -1043,12 +1039,12 @@ export const SMART_ACTIONS = {
     {key:'spread', label:'間隔をとれ', kind:'instant'},
     {key:'mass', label:'密集せよ', kind:'instant'},
   ],
-  sniper: [
+  antitank: [
     {key:'advance', label:'前進', kind:'instant'},
     {key:'hold', label:'防御', kind:'instant'},
     {key:'retreat', label:'後退', kind:'instant'},
     {key:'move', label:'移動(精密指定)', kind:'map'},
-    {key:'snipe_target', label:'狙撃目標指定', kind:'target'},
+    {key:'hunt_target', label:'攻撃目標指定', kind:'target'},
   ],
   tank: [
     {key:'advance', label:'前進', kind:'instant'},
@@ -1075,7 +1071,7 @@ export const FRIENDLY_KIND_LIST = [
   { kind:'tank',     list:()=>state.tanks,     alive:u=>u.hp>0,                       label:i=>`戦車${i+1}` },
   { kind:'sam',      list:()=>state.sams,      alive:u=>u.hp>0,                       label:i=>`対空${i+1}` },
   { kind:'squad',    list:()=>state.squads,    alive:u=>u.soldiers.some(s=>s.alive),  label:i=>`第${i+1}小隊` },
-  { kind:'sniper',   list:()=>state.snipers,   alive:u=>u.soldiers.some(s=>s.alive),  label:i=>`狙撃${i+1}班` },
+  { kind:'antitank', list:()=>state.antitanks, alive:u=>u.hp>0,                       label:i=>`対戦車${i+1}` },
   { kind:'engineer', list:()=>state.engineers, alive:u=>u.soldiers.some(s=>s.alive),  label:()=>'工兵小隊' },
 ];
 
@@ -1089,15 +1085,15 @@ export const WAVE_CLEAR_EFFECT_WAIT_MS = 1900;
 
 export const WAVE_CLEAR_FANFARE_HOLD_MS = 2000;
 
-export const DIRECT_MOVE_KINDS = ['squad','tank','sam','hq'];
+export const DIRECT_MOVE_KINDS = ['squad','tank','sam','antitank','hq'];
 
-export const MULTI_SELECT_KINDS = ['squad','tank','sam','sniper','engineer'];
+export const MULTI_SELECT_KINDS = ['squad','tank','sam','antitank','engineer'];
 
 export const MULTI_SELECT_ORDER_SETTER = {
   squad: (idx, order)=>{ if(state.squads[idx] && !state.squads[idx].resting) state.squads[idx].order = order; },
   tank: (idx, order)=>{ if(state.tanks[idx]) state.tanks[idx].order = order; },
   sam: (idx, order)=>{ if(state.sams[idx]) state.sams[idx].order = order; },
-  sniper: (idx, order)=>{ if(state.snipers[idx] && !state.snipers[idx].resting) state.snipers[idx].order = order; },
+  antitank: (idx, order)=>{ if(state.antitanks[idx]) state.antitanks[idx].order = order; },
   engineer: (idx, order)=>{ if(state.engineers[idx] && !state.engineers[idx].resting) state.engineers[idx].order = order; },
 };
 

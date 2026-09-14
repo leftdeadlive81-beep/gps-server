@@ -1,7 +1,7 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement } from './achievements.js';
 import { pickWaveBgm, playCombatAmbience, playSfx, startBgm, stopCombatAmbience } from './audio.js';
-import { AA_ATTACK_DAMAGE, AA_COOLDOWN_TICKS, AA_ENGAGE_RANGE, ANOMALOUS_JUMP_UNITS, ARTILLERY_FIRE_RANGE_UNITS, ARTILLERY_MOVE_CAP, ARTILLERY_STANDOFF_RANGE_UNITS, BURST_COOLDOWN_MS_MAX, BURST_COOLDOWN_MS_MIN, BURST_DMG_COMPENSATION, BURST_SHOTS_MAX, BURST_SHOTS_MIN, BURST_SHOT_INTERVAL_MS_MAX, BURST_SHOT_INTERVAL_MS_MIN, CANVAS_H, CANVAS_W, COUNTER_CHANCE, COUNTER_DAMAGE, DECOY_LURE_MULT_DAY, DECOY_LURE_MULT_NIGHT, DECOY_MAX_HP, DECOY_MODES, DEPLOYMENT_MODES, DEPLOY_BOX_METERS, DIFFICULTIES, DRONE_DETONATE_DAMAGE, DRONE_DETONATE_RANGE, DRONE_INTRO_STAGE, DRONE_SPEED, ENEMY_FORMATION_BASE_SIZE, ENEMY_FORMATION_NAMES, ENEMY_FORMATION_TEMPLATES, ENEMY_FOCUS_FIRE_WINDOW_MS, ENEMY_HQ_EXPOSURE, ENEMY_INFANTRY_DOCTRINES, ENEMY_INFANTRY_TOTAL_TARGET, ENEMY_SPAWN_MIN_X, ENGINEER_POS, ENGINEER_REPAIR_HP_PER_TURN, ENGINEER_REPAIR_RANGE_UNITS, ESTIMATE_CLAMP_MARGIN, EXPOSURE_DEFAULT, FLANK_OFFSET_RANGE_UNITS, FLIGHT_DURATION, FORTRESS_CAPTURE_RANGE_UNITS, FORTRESS_COUNT, FORTRESS_MAX_HP, FORTRESS_MG_COOLDOWN_MS_MAX, FORTRESS_MG_COOLDOWN_MS_MIN, FORTRESS_MG_DMG, FORTRESS_MG_RANGE_UNITS, FORTRESS_MG_SHOTS_MAX, FORTRESS_MG_SHOTS_MIN, FORTRESS_MG_SHOT_INTERVAL_MS_MAX, FORTRESS_MG_SHOT_INTERVAL_MS_MIN, FORTRESS_MISSILE_COOLDOWN_MS_MAX, FORTRESS_MISSILE_COOLDOWN_MS_MIN, FORTRESS_MISSILE_DMG, FORTRESS_MISSILE_RANGE_UNITS, FORTRESS_NEUTRAL_COLOR, FORTRESS_SIEGE_DMG, FORTRESS_ZONE_ENEMY_X, FORTRESS_ZONE_FRIENDLY_X, FORTRESS_ZONE_MID_X, FORTRESS_ZONE_Y, FRIENDLY_HELI_MOVE_UNITS, FRIENDLY_INF_POS, FRIENDLY_KIND_LIST, FRIENDLY_MARK_COLOR, FRIENDLY_SPACING_PUSH, FRIENDLY_SPACING_RADIUS, FUZES, GAME_SPEED_INTERVALS, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GAME_START_DATETIME, GAME_VERSION, HELI_ATTACK_BURST, HELI_ATTACK_DAMAGE, HELI_COOLDOWN_TICKS, HELI_ENGAGE_RANGE, HELI_EXPOSURE, HELI_MAX_RANGE_UNITS, HELI_MOVE_CAP, HELI_WITHDRAW_DIST, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_DEFENSE_ATTACKER_WINDOW_MS, HQ_DEFENSE_DMG_MULT, HQ_DEFENSE_RANGE_UNITS, HQ_DETECT_RANGE_UNITS, HQ_MAX_HP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, HQ_SUPPLY_HEAL_PCT_PER_TURN, HQ_SUPPLY_ZONE_RADIUS_UNITS, HQ_X, HQ_Y, ILLUM_DURATION_TURNS, ILLUM_RADIUS_M, INFANTRY_DRONE_COOLDOWN_TICKS, INFANTRY_DRONE_LAUNCH_CHANCE, INFANTRY_DRONE_SWARM_SIZE, INFANTRY_DUEL_DMG_TO_ENEMY, INFANTRY_MOVE_CAP, INFANTRY_STANDOFF_UNITS, INITIAL_DEPLOY_SPACING_MULT, LAST_STAND_THRESHOLD, LAUNCH_INTERVAL, MAP_SEED_CANDIDATE_COUNT, MARKER_REVEAL_RADIUS_UNITS, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MERGE_HP_THRESHOLD, METERS_PER_UNIT, MINE_DAMAGE, MINE_MAX_ACTIVE, MINE_PLACEMENT_CHANCE, MINE_TRIGGER_RADIUS_UNITS, MORTAR_BEST_LOADOUT, MORTAR_CB_DETECT_BASE, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CB_STRIKE_DMG, MORTAR_CB_WARN_TURNS, MORTAR_CREW_SIZE, MORTAR_DISPERSION_UNITS, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MAX_RANGE_UNITS, MORTAR_MIN_RANGE_M, MORTAR_MIN_RANGE_UNITS, MORTAR_MOVE_CAP, MORTAR_ORDER_LABEL, MORTAR_RELOAD_MS, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, NUM_ENGINEERS, NUM_MORTARS, NUM_SAMS, NUM_SCOUTS, NUM_SNIPERS, NUM_SQUADS, NUM_TANKS, OP, OP_HOME_X, OP_HOME_Y, ORDER_LABEL, PERSONNEL_ROSTER, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, ROAD_PULL_RADIUS, ROSTER_ENGINEER_TEAMS, ROSTER_MORTAR_CREWS, ROSTER_RESERVE_INITIAL, ROSTER_SCOUT_TEAMS, ROSTER_SNIPER_TEAMS, ROSTER_SQUADS, SAM_DUEL_DMG_TO_ENEMY, SAM_ENGAGE_RANGE, SAM_EXPOSURE, SAM_MAX_HP, SAM_MOVE_CAP, SAM_POS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_ADVANCE_LIMIT_X, SCOUT_EXPOSURE, SCOUT_LOWER_Y, SCOUT_MAX_RANGE_UNITS, SCOUT_MOVE_CAP, SCOUT_SQUAD_SIZE, SCOUT_UPPER_Y, SCOUT_X, SHELLS, SHELL_DISPERSION_MULT, SHELL_KILL_RADIUS_UNITS, SIM_STEP_MAX_CATCHUP, SIM_STEP_MS, SMART_ACTIONS, SMART_UNIT_TYPES, SMOKE_DURATION_TURNS, SMOKE_RADIUS_M, SMOKE_RADIUS_UNITS, SNIPER_AIM_LINE_WIDTH_UNITS, SNIPER_AIM_RANGE_UNITS, SNIPER_DMG, SNIPER_EXECUTE_HP_THRESHOLD, SNIPER_MOVE_CAP, SNIPER_POS, SNIPER_RANGE_UNITS, SQUAD_ADVANCE_LIMIT_X, SQUAD_ANTI_DRONE_DMG, SQUAD_ANTI_DRONE_HIT_CHANCE, SQUAD_ANTI_DRONE_RANGE_UNITS, SQUAD_ASSAULT_LIMIT_X, SQUAD_ENGAGE_RANGE, SQUAD_FORMATION_ADJUST_M, SQUAD_GRID_OFFSETS, SQUAD_RETREAT_LIMIT_X, SQUAD_SIZE, STAGE_COUNT, STEP_RENDER_MIN_INTERVAL_MS, SUPPRESSION_CASUALTY_MULT, SUPPRESSION_COUNTER_MULT, SUPPRESSION_DUEL_DMG_BONUS, SUPPRESSION_MOVE_MULT, SUPPRESSION_NEARMISS_TURNS, SUPPRESSION_RETREAT_CHANCE, SUPPRESSION_TURNS, TANK_DUEL_DMG_TO_ENEMY, TANK_ENGAGE_RANGE, TANK_EXPOSURE, TANK_INCOMING_DMG, TANK_MAX_HP, TANK_MOVE_CAP, TANK_POS, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_GRID_CELL_SIZE, TARGET_GRID_MAX_RINGS, TARGET_TYPES, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, TRENCH_BUILD_COST, UNIT_AMMO_EMPTY_DMG_MULT, UNIT_AMMO_MAX, UNIT_AMMO_RESUPPLY_PER_TURN, VEHICLE_ASSAULT_DAMAGE, VEHICLE_ASSAULT_RANGE, VEHICLE_MOVE_CAP, VET_DMG_BONUS_PER_LEVEL, VET_EXPOSURE_BONUS_PER_LEVEL, VET_MAX_LEVEL, VET_XP_PER_LEVEL, HQ_MORTAR_COOLDOWN_TICKS, HQ_MORTAR_COUNT, HQ_MORTAR_DAMAGE, HQ_TANKGUN_COOLDOWN_TICKS, HQ_TANKGUN_COUNT, HQ_TANKGUN_DAMAGE, WALL_BUILD_COST, WALL_MAX_HP, WALL_RADIUS, WAVE_CLEAR_EFFECT_WAIT_MS, WAVE_CLEAR_FANFARE_HOLD_MS, WAVE_SPAWN_DELAY_MS, WAVE_SPAWN_WINDOW_MS, WEAPON_FIRE_INTERVAL, WEAPON_FIRE_OFFSET, WEATHER_TYPES, WORLD } from './constants.js';
+import { AA_ATTACK_DAMAGE, AA_COOLDOWN_TICKS, AA_ENGAGE_RANGE, ANOMALOUS_JUMP_UNITS, ANTITANK_DUEL_DMG_TO_ENEMY, ANTITANK_ENGAGE_RANGE, ANTITANK_EXPOSURE, ANTITANK_INCOMING_DMG, ANTITANK_MAX_HP, ANTITANK_MOVE_CAP, ANTITANK_POS, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, ARTILLERY_FIRE_RANGE_UNITS, ARTILLERY_MOVE_CAP, ARTILLERY_STANDOFF_RANGE_UNITS, BURST_COOLDOWN_MS_MAX, BURST_COOLDOWN_MS_MIN, BURST_DMG_COMPENSATION, BURST_SHOTS_MAX, BURST_SHOTS_MIN, BURST_SHOT_INTERVAL_MS_MAX, BURST_SHOT_INTERVAL_MS_MIN, CANVAS_H, CANVAS_W, COUNTER_CHANCE, COUNTER_DAMAGE, DECOY_LURE_MULT_DAY, DECOY_LURE_MULT_NIGHT, DECOY_MAX_HP, DECOY_MODES, DEPLOYMENT_MODES, DEPLOY_BOX_METERS, DIFFICULTIES, DRONE_DETONATE_DAMAGE, DRONE_DETONATE_RANGE, DRONE_INTRO_STAGE, DRONE_SPEED, ENEMY_FORMATION_BASE_SIZE, ENEMY_FORMATION_NAMES, ENEMY_FORMATION_TEMPLATES, ENEMY_FOCUS_FIRE_WINDOW_MS, ENEMY_HQ_EXPOSURE, ENEMY_INFANTRY_DOCTRINES, ENEMY_INFANTRY_TOTAL_TARGET, ENEMY_SPAWN_MIN_X, ENGINEER_POS, ENGINEER_REPAIR_HP_PER_TURN, ENGINEER_REPAIR_RANGE_UNITS, ESTIMATE_CLAMP_MARGIN, EXPOSURE_DEFAULT, FLANK_OFFSET_RANGE_UNITS, FLIGHT_DURATION, FORTRESS_CAPTURE_RANGE_UNITS, FORTRESS_COUNT, FORTRESS_MAX_HP, FORTRESS_MG_COOLDOWN_MS_MAX, FORTRESS_MG_COOLDOWN_MS_MIN, FORTRESS_MG_DMG, FORTRESS_MG_RANGE_UNITS, FORTRESS_MG_SHOTS_MAX, FORTRESS_MG_SHOTS_MIN, FORTRESS_MG_SHOT_INTERVAL_MS_MAX, FORTRESS_MG_SHOT_INTERVAL_MS_MIN, FORTRESS_MISSILE_COOLDOWN_MS_MAX, FORTRESS_MISSILE_COOLDOWN_MS_MIN, FORTRESS_MISSILE_DMG, FORTRESS_MISSILE_RANGE_UNITS, FORTRESS_NEUTRAL_COLOR, FORTRESS_SIEGE_DMG, FORTRESS_ZONE_ENEMY_X, FORTRESS_ZONE_FRIENDLY_X, FORTRESS_ZONE_MID_X, FORTRESS_ZONE_Y, FRIENDLY_HELI_MOVE_UNITS, FRIENDLY_INF_POS, FRIENDLY_KIND_LIST, FRIENDLY_MARK_COLOR, FRIENDLY_SPACING_PUSH, FRIENDLY_SPACING_RADIUS, FUZES, GAME_SPEED_INTERVALS, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GAME_START_DATETIME, GAME_VERSION, HELI_ATTACK_BURST, HELI_ATTACK_DAMAGE, HELI_COOLDOWN_TICKS, HELI_ENGAGE_RANGE, HELI_EXPOSURE, HELI_MAX_RANGE_UNITS, HELI_MOVE_CAP, HELI_WITHDRAW_DIST, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_DEFENSE_ATTACKER_WINDOW_MS, HQ_DEFENSE_DMG_MULT, HQ_DEFENSE_RANGE_UNITS, HQ_DETECT_RANGE_UNITS, HQ_MAX_HP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, HQ_SUPPLY_HEAL_PCT_PER_TURN, HQ_SUPPLY_ZONE_RADIUS_UNITS, HQ_X, HQ_Y, ILLUM_DURATION_TURNS, ILLUM_RADIUS_M, INFANTRY_DRONE_COOLDOWN_TICKS, INFANTRY_DRONE_LAUNCH_CHANCE, INFANTRY_DRONE_SWARM_SIZE, INFANTRY_DUEL_DMG_TO_ENEMY, INFANTRY_MOVE_CAP, INFANTRY_STANDOFF_UNITS, INITIAL_DEPLOY_SPACING_MULT, LAST_STAND_THRESHOLD, LAUNCH_INTERVAL, MAP_SEED_CANDIDATE_COUNT, MARKER_REVEAL_RADIUS_UNITS, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MERGE_HP_THRESHOLD, METERS_PER_UNIT, MINE_DAMAGE, MINE_MAX_ACTIVE, MINE_PLACEMENT_CHANCE, MINE_TRIGGER_RADIUS_UNITS, MORTAR_BEST_LOADOUT, MORTAR_CB_DETECT_BASE, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CB_STRIKE_DMG, MORTAR_CB_WARN_TURNS, MORTAR_CREW_SIZE, MORTAR_DISPERSION_UNITS, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MAX_RANGE_UNITS, MORTAR_MIN_RANGE_M, MORTAR_MIN_RANGE_UNITS, MORTAR_MOVE_CAP, MORTAR_ORDER_LABEL, MORTAR_RELOAD_MS, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, NUM_ANTITANKS, NUM_ENGINEERS, NUM_MORTARS, NUM_SAMS, NUM_SCOUTS, NUM_SQUADS, NUM_TANKS, OP, OP_HOME_X, OP_HOME_Y, ORDER_LABEL, PERSONNEL_ROSTER, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, ROAD_PULL_RADIUS, ROSTER_ENGINEER_TEAMS, ROSTER_MORTAR_CREWS, ROSTER_RESERVE_INITIAL, ROSTER_SCOUT_TEAMS, ROSTER_SQUADS, SAM_DUEL_DMG_TO_ENEMY, SAM_ENGAGE_RANGE, SAM_EXPOSURE, SAM_MAX_HP, SAM_MOVE_CAP, SAM_POS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_ADVANCE_LIMIT_X, SCOUT_EXPOSURE, SCOUT_LOWER_Y, SCOUT_MAX_RANGE_UNITS, SCOUT_MOVE_CAP, SCOUT_SQUAD_SIZE, SCOUT_UPPER_Y, SCOUT_X, SHELLS, SHELL_DISPERSION_MULT, SHELL_KILL_RADIUS_UNITS, SIM_STEP_MAX_CATCHUP, SIM_STEP_MS, SMART_ACTIONS, SMART_UNIT_TYPES, SMOKE_DURATION_TURNS, SMOKE_RADIUS_M, SMOKE_RADIUS_UNITS, SQUAD_ADVANCE_LIMIT_X, SQUAD_ANTI_DRONE_DMG, SQUAD_ANTI_DRONE_HIT_CHANCE, SQUAD_ANTI_DRONE_RANGE_UNITS, SQUAD_ASSAULT_LIMIT_X, SQUAD_ENGAGE_RANGE, SQUAD_FORMATION_ADJUST_M, SQUAD_GRID_OFFSETS, SQUAD_RETREAT_LIMIT_X, SQUAD_SIZE, STAGE_COUNT, STEP_RENDER_MIN_INTERVAL_MS, SUPPRESSION_CASUALTY_MULT, SUPPRESSION_COUNTER_MULT, SUPPRESSION_DUEL_DMG_BONUS, SUPPRESSION_MOVE_MULT, SUPPRESSION_NEARMISS_TURNS, SUPPRESSION_RETREAT_CHANCE, SUPPRESSION_TURNS, TANK_DUEL_DMG_TO_ENEMY, TANK_ENGAGE_RANGE, TANK_EXPOSURE, TANK_INCOMING_DMG, TANK_MAX_HP, TANK_MOVE_CAP, TANK_POS, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_GRID_CELL_SIZE, TARGET_GRID_MAX_RINGS, TARGET_TYPES, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, TRENCH_BUILD_COST, UNIT_AMMO_EMPTY_DMG_MULT, UNIT_AMMO_MAX, UNIT_AMMO_RESUPPLY_PER_TURN, VEHICLE_ASSAULT_DAMAGE, VEHICLE_ASSAULT_RANGE, VEHICLE_MOVE_CAP, VET_DMG_BONUS_PER_LEVEL, VET_EXPOSURE_BONUS_PER_LEVEL, VET_MAX_LEVEL, VET_XP_PER_LEVEL, HQ_MORTAR_COOLDOWN_TICKS, HQ_MORTAR_COUNT, HQ_MORTAR_DAMAGE, HQ_TANKGUN_COOLDOWN_TICKS, HQ_TANKGUN_COUNT, HQ_TANKGUN_DAMAGE, WALL_BUILD_COST, WALL_MAX_HP, WALL_RADIUS, WAVE_CLEAR_EFFECT_WAIT_MS, WAVE_CLEAR_FANFARE_HOLD_MS, WAVE_SPAWN_DELAY_MS, WAVE_SPAWN_WINDOW_MS, WEAPON_FIRE_INTERVAL, WEAPON_FIRE_OFFSET, WEATHER_TYPES, WORLD } from './constants.js';
 import { resetClickCycle } from './input.js';
 import { render } from './main.js';
 import { applySavedCampaign, clearCampaignSave, loadCampaign, saveCampaign } from './savegame.js';
@@ -17,7 +17,6 @@ export function totalSquadCapacity(){ return state.squads.reduce((s,sq)=>s+sq.so
 export function totalRosterCapacity(){
   return totalSquadCapacity()
     + state.scouts.reduce((s,sc)=>s+sc.soldiers.length, 0)
-    + state.snipers.reduce((s,sn)=>s+sn.soldiers.length, 0)
     + state.engineers.reduce((s,en)=>s+en.soldiers.length, 0)
     + state.mortars.length*MORTAR_CREW_SIZE
     + state.reserve;
@@ -123,7 +122,7 @@ export function isSuppressed(t){ return (t.suppressed||0) > 0; }
 export function maintainFriendlySpacing(){
   const units = [
     ...state.squads.map((u,i)=>({u, kind:'squad', idx:i})),
-    ...state.snipers.map((u,i)=>({u, kind:'sniper', idx:i})),
+    ...state.antitanks.map((u,i)=>({u, kind:'antitank', idx:i})),
     ...state.tanks.map((u,i)=>({u, kind:'tank', idx:i})),
     ...state.sams.map((u,i)=>({u, kind:'sam', idx:i})),
     ...state.engineers.map((u,i)=>({u, kind:'engineer', idx:i})),
@@ -322,7 +321,7 @@ export function initGame(){
       exposure: SCOUT_EXPOSURE,
     })),
     helis: [],
-    snipers: [],
+    antitanks: [],
     hq: {x:HQ_X, y:HQ_Y, hp:HQ_MAX_HP, maxHp:HQ_MAX_HP, exposure:EXPOSURE_DEFAULT},
     reserve: RESERVE_SIZE,
     reserveRoster: ROSTER_RESERVE_INITIAL.slice(),
@@ -349,7 +348,6 @@ export function initGame(){
     selectedId: null,
     commandBox: null,
     enemyCommandBox: null,
-    snipeMortarStrikesPending: 0,
     animating: false,
     inFlightVolleys: 0,
     simRunning: false,
@@ -367,7 +365,7 @@ export function initGame(){
     pendingTerrainGen: null,
     // per user request: FEBA (主戦闘地域前縁) line -- the player-adjustable X the "前進"
     // standing order advances to and the "後退" standing order falls back to (see
-    // applySquadMovement/applyEngineerMovement/applyTankMovement/applySniperMovement).
+    // applySquadMovement/applyEngineerMovement/applyTankMovement/applyAntitankMovement).
     // Persists across waves (not reset in startStage()) since it's a player-set control.
     febaX: SQUAD_ADVANCE_LIMIT_X,
   };
@@ -536,7 +534,7 @@ export function startStage(){
       impacts:[],
       // per-soldier state for this infantry group -- named "troops" (not "soldiers") to stay
       // visually distinct from the friendly-unit .soldiers shape ({alive,rank,name}) used on
-      // state.squads/scouts/snipers/mortars, since this shape carries hp/maxHp instead.
+      // state.squads/scouts/mortars, since this shape carries hp/maxHp instead.
       troops: isInfantry ? Array.from({length:squadSize},()=>({
         alive:true, hp:soldierMaxHp, maxHp:soldierMaxHp, seed:Math.random()*1000,
       })) : null,
@@ -584,14 +582,14 @@ export function startStage(){
   state.targetsSpawnedTotal = targets.length;
   state.selectedId = state.targets[0].id;
 
-  // per user request: a fully wiped-out unit (squad/scout/sniper/mortar) no longer lingers
+  // per user request: a fully wiped-out unit (squad/scout/antitank/mortar) no longer lingers
   // on the map as an inert "destroyed" marker into future waves -- discard it from the
   // roster entirely at wave transition. HQ isn't included here: HQ reaching 0 HP is an
   // immediate game-over (see checkEnd), so it can never still be at 0 HP by the time a new
   // wave starts. No-op on the very first call (stage 1), since these arrays don't exist yet.
   if(state.squads) state.squads = state.squads.filter(sq=>unitAlive(sq));
   if(state.scouts) state.scouts = state.scouts.filter(s=>unitAlive(s));
-  if(state.snipers) state.snipers = state.snipers.filter(sn=>unitAlive(sn));
+  if(state.antitanks) state.antitanks = state.antitanks.filter(at=>at.hp>0);
   if(state.mortars) state.mortars = state.mortars.filter(m=>m.hp>0);
   if(state.tanks) state.tanks = state.tanks.filter(tk=>tk.hp>0);
   if(state.sams) state.sams = state.sams.filter(sam=>sam.hp>0);
@@ -603,7 +601,7 @@ export function startStage(){
   if(stage===1){
     // first wave ― fresh deployment at full roster strength, confined to a real 1km x 1km
     // box on the map's west edge (see deployBoxSize()). Reuses the original constants'
-    // relative left-to-right ordering (HQ, mortars, scouts, snipers, squads) and vertical
+    // relative left-to-right ordering (HQ, mortars, scouts, antitanks, squads) and vertical
     // spread pattern, rescaled to fit inside the box for whatever map is currently loaded.
     const {w: deployBoxW, h: deployBoxH} = deployBoxSize();
     const origSpanX = FRIENDLY_INF_POS.x - HQ_X;
@@ -650,19 +648,15 @@ export function startStage(){
       exposure: EXPOSURE_DEFAULT,
       ammo: UNIT_AMMO_MAX, maxAmmo: UNIT_AMMO_MAX,
     }));
-    state.snipers = Array.from({length:NUM_SNIPERS}, (_,si)=>({
-      id: si,
+    state.antitanks = Array.from({length:NUM_ANTITANKS}, (_,ati)=>({
+      id: ati,
       order: 'hold',
       pendingDest: null,
-      pendingSnipeTargetId: null,
-      aimAngle: null,
-      standingOrder: null,
-      x: deployX(SNIPER_POS.x),
-      y: clamp(deployYMid + (si-(NUM_SNIPERS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax),
-      soldiers: makeSoldiers(ROSTER_SNIPER_TEAMS[si]),
-      reinforceUsed: false,
-      exposure: EXPOSURE_DEFAULT,
-      ammo: UNIT_AMMO_MAX, maxAmmo: UNIT_AMMO_MAX,
+      huntTargetId: null,
+      x: deployX(ANTITANK_POS.x),
+      y: clamp(deployYMid + (ati-(NUM_ANTITANKS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax),
+      hp: ANTITANK_MAX_HP, maxHp: ANTITANK_MAX_HP,
+      exposure: ANTITANK_EXPOSURE,
     }));
     state.tanks = Array.from({length:NUM_TANKS}, (_,i)=>({
       id: i,
@@ -718,9 +712,8 @@ export function startStage(){
       if(sq.resting) return;
       sq.order = 'hold'; sq.pendingDest = null; sq.huntTargetId = null; sq.reinforceUsed = false;
     });
-    state.snipers.forEach(sn=>{
-      if(sn.resting) return;
-      sn.order = 'hold'; sn.pendingDest = null; sn.pendingSnipeTargetId = null; sn.aimAngle = null; sn.reinforceUsed = false;
+    state.antitanks.forEach(at=>{
+      at.order = 'hold'; at.pendingDest = null; at.huntTargetId = null;
     });
     state.tanks.forEach(tk=>{
       tk.order = 'hold'; tk.pendingDest = null; tk.huntTargetId = null;
@@ -745,13 +738,12 @@ export function startStage(){
   state.orderMode = null;
   state.commandBox = null;
   state.enemyCommandBox = null;
-  state.snipeMortarStrikesPending = 0;
   // per user request: tanks/engineers/walls weren't captured here (a gap dating from when
   // each was added), so retryStage() left their HP/existence from the failed attempt in
   // place instead of resetting to how this wave actually started, unlike every other roster.
   state.stageStartSnapshot = JSON.parse(JSON.stringify({
     ammo: state.ammo, turns: state.turns, reserve: state.reserve, reserveRoster: state.reserveRoster, hq: state.hq,
-    mortars: state.mortars, squads: state.squads, scouts: state.scouts, snipers: state.snipers,
+    mortars: state.mortars, squads: state.squads, scouts: state.scouts, antitanks: state.antitanks,
     tanks: state.tanks, sams: state.sams, helis: state.helis, engineers: state.engineers, walls: state.walls, trenches: state.trenches,
   }));
   // per user request: auto-save campaign progress at the start of every wave (including a
@@ -794,7 +786,6 @@ export function buildPlacementQueue(){
   state.mortars.forEach((m,idx)=>queue.push({kind:'mortar', idx, label:`迫撃砲${idx+1}`}));
   state.scouts.forEach((s,idx)=>queue.push({kind:'scout', idx, label:`斥候${idx+1}`}));
   state.squads.forEach((sq,idx)=>queue.push({kind:'squad', idx, label:`第${idx+1}小隊`}));
-  state.snipers.forEach((sn,idx)=>queue.push({kind:'sniper', idx, label:`狙撃${idx+1}班`}));
   return queue;
 }
 
@@ -802,8 +793,7 @@ export function currentPlacementUnit(item){
   if(!item) return null;
   if(item.kind==='mortar') return state.mortars[item.idx];
   if(item.kind==='scout') return state.scouts[item.idx];
-  if(item.kind==='squad') return state.squads[item.idx];
-  return state.snipers[item.idx];
+  return state.squads[item.idx];
 }
 
 export function handlePlacementClick(px, py){
@@ -900,7 +890,7 @@ export function spawnFortresses(){
 // per user request: 要塞の占領/包囲戦 -- 無人の要塞は近くにいる方の歩兵(自軍=小隊、敵=歩兵
 // 目標)がそのまま占領する。既に占領されている要塞は、占領していない側の歩兵がその場に居座る
 // ことで包囲戦(burst間隔のHP削り)を行い、HPが尽きると無人状態に戻る(全回復し、再び占領権
-// が発生する)。歩兵以外(戦車/対空/工兵/斥候/狙撃)は占領/包囲戦に参加できない。
+// が発生する)。歩兵以外(戦車/対空/工兵/斥候/対戦車)は占領/包囲戦に参加できない。
 export function resolveFortressSiege(dt){
   if(!state.fortresses || !state.fortresses.length) return false;
   let anyEvent = false;
@@ -945,7 +935,6 @@ function nearestFriendlyInfantryLike(x, y, range){
   };
   consider('squad', state.squads, unitAlive);
   consider('scout', state.scouts, unitAlive);
-  consider('sniper', state.snipers, unitAlive);
   consider('engineer', state.engineers, unitAlive);
   return best;
 }
@@ -956,6 +945,11 @@ function nearestFriendlyVehicleLike(x, y, range){
     if(tk.hp<=0) return;
     const d = Math.hypot(tk.x-x, tk.y-y);
     if(d<=range && d<bestDist){ bestDist=d; best={kind:'tank', idx, x:tk.x, y:tk.y}; }
+  });
+  state.antitanks.forEach((at,idx)=>{
+    if(at.hp<=0) return;
+    const d = Math.hypot(at.x-x, at.y-y);
+    if(d<=range && d<bestDist){ bestDist=d; best={kind:'antitank', idx, x:at.x, y:at.y}; }
   });
   (state.helis||[]).forEach((h,idx)=>{
     if(h.hp<=0) return;
@@ -1076,7 +1070,7 @@ export function retryStage(){
   state.mortars = snap.mortars;
   state.squads = snap.squads;
   state.scouts = snap.scouts;
-  state.snipers = snap.snipers;
+  state.antitanks = snap.antitanks;
   state.tanks = snap.tanks;
   state.sams = snap.sams;
   state.helis = snap.helis || [];
@@ -1295,7 +1289,7 @@ export function updateHqDetection(){
     within(state.scouts.filter(unitAlive), SCOUT_MAX_RANGE_UNITS) ||
     within((state.helis||[]).filter(h=>h.hp>0), HELI_MAX_RANGE_UNITS) ||
     within(state.squads.filter(sq=>sq.soldiers.some(s=>s.alive)), HQ_DETECT_RANGE_UNITS) ||
-    within(state.snipers.filter(sn=>sn.soldiers.some(s=>s.alive)), HQ_DETECT_RANGE_UNITS) ||
+    within(state.antitanks.filter(at=>at.hp>0), HQ_DETECT_RANGE_UNITS) ||
     within(state.tanks.filter(tk=>tk.hp>0), HQ_DETECT_RANGE_UNITS) ||
     within(state.sams.filter(sam=>sam.hp>0), HQ_DETECT_RANGE_UNITS) ||
     within(state.mortars.filter(m=>m.hp>0), HQ_DETECT_RANGE_UNITS);
@@ -1356,8 +1350,8 @@ export function allScoutsWiped(){
   return state.scouts.every(s=>!unitAlive(s));
 }
 
-export function allSnipersWiped(){
-  return state.snipers.every(sn=>!unitAlive(sn));
+export function allAntitanksWiped(){
+  return !state.antitanks.length || state.antitanks.every(at=>at.hp<=0);
 }
 
 export function allMortarsWiped(){
@@ -1802,7 +1796,7 @@ export function resolveSquadOrders(dt){
         const e = estPos(t);
         const dist = Math.hypot(e.x-sq.x, e.y-sq.y);
         if(dist > SQUAD_ENGAGE_RANGE) return;
-        // per user request: 丘などの地形に完全に遮蔽された目標とは交戦できない -- 狙撃兵は
+        // per user request: 丘などの地形に完全に遮蔽された目標とは交戦できない -- 対戦車部隊は
         // 既にhasLineOfSightでこれを判定しているが、歩兵小隊にはこのチェックが漏れていて、
         // 丘の向こうの敵も普通に撃ち抜けてしまっていた。
         if(!hasLineOfSight(sq.x, sq.y, t.trueX, t.trueY)) return;
@@ -2031,7 +2025,7 @@ export function resolveTankOrders(dt){
         const e = estPos(t);
         const dist = Math.hypot(e.x-tank.x, e.y-tank.y);
         if(dist > TANK_ENGAGE_RANGE) return;
-        // per user request: 丘に完全に遮蔽された目標とは交戦できない(狙撃兵と同じ扱い -- 詳細は
+        // per user request: 丘に完全に遮蔽された目標とは交戦できない(対戦車部隊と同じ扱い -- 詳細は
         // resolveSquadOrdersの同様のhasLineOfSightチェックのコメントを参照)。
         if(!hasLineOfSight(tank.x, tank.y, t.trueX, t.trueY)) return;
         const blockWall = wallBlockingLineOfFire(tank.x, tank.y, t.trueX, t.trueY);
@@ -2080,195 +2074,117 @@ export function resolveTankOrders(dt){
   return anyEvent;
 }
 
-export function applySniperMovement(sn, dt){
-  if(sn.pendingDest){
-    const next = terrainAwareStep(sn.x, sn.y, sn.pendingDest.x, sn.pendingDest.y, SNIPER_MOVE_CAP*dt);
-    sn.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
-    sn.y = clamp(next.y, 30, CANVAS_H-30);
-    checkMineTrigger('sniper', sn.id, sn.x, sn.y);
-    if(Math.hypot(sn.x-sn.pendingDest.x, sn.y-sn.pendingDest.y) < 12){
-      sn.pendingDest = null;
-      log('sys','前線', `狙撃${sn.id+1}班、指定地点に到着。`);
+export function applyAntitankMovement(at, idx, dt){
+  if(at.pendingDest){
+    const next = terrainAwareStep(at.x, at.y, at.pendingDest.x, at.pendingDest.y, ANTITANK_MOVE_CAP*dt);
+    at.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+    at.y = clamp(next.y, 30, CANVAS_H-30);
+    checkMineTrigger('antitank', idx, at.x, at.y);
+    if(Math.hypot(at.x-at.pendingDest.x, at.y-at.pendingDest.y) < 12){
+      at.pendingDest = null;
+      log('sys','前線', `対戦車${idx+1}、指定地点に到着。`);
     }
     return;
   }
-  if(sn.order==='advance'){
-    const next = terrainAwareStep(sn.x, sn.y, SQUAD_ADVANCE_LIMIT_X, sn.y, SNIPER_MOVE_CAP*dt);
-    sn.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
-    sn.y = clamp(next.y, 30, CANVAS_H-30);
-  } else if(sn.order==='retreat'){
-    const next = terrainAwareStep(sn.x, sn.y, SQUAD_ADVANCE_LIMIT_X, sn.y, SNIPER_MOVE_CAP*dt);
-    sn.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
-    sn.y = clamp(next.y, 30, CANVAS_H-30);
+  if(at.order==='advance'){
+    const next = terrainAwareStep(at.x, at.y, SQUAD_ADVANCE_LIMIT_X, at.y, ANTITANK_MOVE_CAP*dt);
+    at.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
+    at.y = clamp(next.y, 30, CANVAS_H-30);
+  } else if(at.order==='retreat'){
+    const next = terrainAwareStep(at.x, at.y, SQUAD_ADVANCE_LIMIT_X, at.y, ANTITANK_MOVE_CAP*dt);
+    at.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
+    at.y = clamp(next.y, 30, CANVAS_H-30);
+  } else if(at.order==='hunt' && at.huntTargetId){
+    const target = state.targets.find(t=>t.id===at.huntTargetId);
+    if(!target || target.destroyed){
+      at.huntTargetId = null;
+      at.order = 'hold';
+      log('sys','前線', `対戦車${idx+1}、攻撃目標を喪失(撃破/消失)。待機に移行。`);
+    } else {
+      const e = estPos(target);
+      const dist = Math.hypot(e.x-at.x, e.y-at.y);
+      if(dist > ANTITANK_ENGAGE_RANGE*0.8){
+        const next = terrainAwareStep(at.x, at.y, e.x, e.y, ANTITANK_MOVE_CAP*dt);
+        at.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+        at.y = clamp(next.y, 30, CANVAS_H-30);
+      }
+    }
   }
-  checkMineTrigger('sniper', sn.id, sn.x, sn.y);
+  checkMineTrigger('antitank', idx, at.x, at.y);
 }
 
-export function sniperEngageTarget(sn, t){
-  if(revealTarget(t)){
-    log('op','斥候', `狙撃${sn.id+1}班が${t.id}を捕捉、<b>${t.def.label}</b>と識別。`);
-  }
-  if(!rollExposureHit(getTargetExposure(t))){
-    log('mortar','狙撃', `狙撃${sn.id+1}班、${t.id}へ発砲するも掩蔽率により外す。`);
-    return;
-  }
-  const curAlive = sn.soldiers.filter(s=>s.alive);
-  const strengthFrac = curAlive.length/sn.soldiers.length;
-  const altMult = altitudeBonus(sn.x, sn.y, t.trueX, t.trueY);
-  const suppressionDmgMult = isSuppressed(t) ? SUPPRESSION_DUEL_DMG_BONUS : 1;
-  const vetDmgMult = 1 + unitAvgVetLevel(sn.soldiers)*VET_DMG_BONUS_PER_LEVEL;
-  // per user request: per-unit ammo -- a dry sniper team's ordinary shots are degraded, but a
-  // called finishing shot on an already-critical target (isExecute below) isn't, since that's
-  // a called shot with whatever rounds remain rather than a normal duel exchange.
-  if(sn.ammo===undefined){ sn.ammo = UNIT_AMMO_MAX; sn.maxAmmo = UNIT_AMMO_MAX; }
-  const ammoDmgMult = sn.ammo>0 ? 1 : UNIT_AMMO_EMPTY_DMG_MULT;
-  const dmg = Math.round(rnd(SNIPER_DMG[0], SNIPER_DMG[1]) * strengthFrac * altMult * suppressionDmgMult * vetDmgMult * ammoDmgMult);
-  sn.ammo = Math.max(0, sn.ammo-1);
-  // per user request: 処刑(execute) -- a target already worn down to
-  // SNIPER_EXECUTE_HP_THRESHOLD or below is finished off outright on a connecting hit,
-  // regardless of remaining HP. Makes snipers the dedicated finisher once mortars/squads
-  // have softened a target up, rather than just another (weaker) damage source.
-  const isExecute = t.maxHp>0 && (t.hp/t.maxHp) <= SNIPER_EXECUTE_HP_THRESHOLD;
-  applyDamageToTarget(t, isExecute ? t.hp : dmg);
-  log('mortar','狙撃', isExecute
-    ? `狙撃${sn.id+1}班、${t.id}へ<b>止めの一撃</b>。撃破を確認。`
-    : `狙撃${sn.id+1}班、${t.id}に精密射撃(効果 ${dmg})。`);
-  fireTracer(sn.x, sn.y, t.trueX, t.trueY, 180, 'rifle');
-  if(t.hp<=0 && !t.destroyed){
-    t.destroyed = true; t.hp = 0;
-    log('fdc','FDC', `${t.id} 狙撃により<b>撃破を確認</b>。`);
-    onTargetDestroyed(t);
-    if(sn.pendingSnipeTargetId===t.id) sn.pendingSnipeTargetId = null;
-  }
-}
-
-export function findTargetOnSniperLine(sn){
-  if(sn.aimAngle===null || sn.aimAngle===undefined) return null;
-  const rad = sn.aimAngle*Math.PI/180;
-  const dirX = Math.sin(rad), dirY = -Math.cos(rad);
-  let best=null, bestProj=Infinity;
-  state.targets.forEach(t=>{
-    if(t.destroyed) return;
-    // per user request: small arms can't effectively engage aircraft -- anti-air is the SAM's
-    // job now (see resolveSamOrders).
-    if(t.type==='heli' || t.type==='drone') return;
-    const vx = t.trueX-sn.x, vy = t.trueY-sn.y;
-    const proj = vx*dirX + vy*dirY;
-    if(proj<0 || proj>SNIPER_AIM_RANGE_UNITS) return;
-    const perp = Math.abs(vx*dirY - vy*dirX);
-    if(perp > SNIPER_AIM_LINE_WIDTH_UNITS/2) return;
-    if(proj<bestProj){ bestProj=proj; best=t; }
-  });
-  // per user request: 工兵の防壁もこの射撃ラインを遮る -- ビーム上の的より手前に壁があれば
-  // そちらが優先され(的には届かない)、狙撃班はその壁を撃つ。
-  const wallHit = nearestWallHit(sn.x, sn.y, sn.x+dirX*SNIPER_AIM_RANGE_UNITS, sn.y+dirY*SNIPER_AIM_RANGE_UNITS);
-  if(wallHit && wallHit.t*SNIPER_AIM_RANGE_UNITS < bestProj){
-    return {wall: wallHit.wall};
-  }
-  return best;
-}
-
-export function findAutoSniperTarget(sn){
-  let best=null, bd=Infinity;
-  state.targets.forEach(t=>{
-    if(t.destroyed) return;
-    if(t.type==='heli' || t.type==='drone') return;
-    if(!t.revealed) return;
-    const dist = Math.hypot(t.trueX-sn.x, t.trueY-sn.y);
-    if(dist > SNIPER_RANGE_UNITS) return;
-    if(!hasLineOfSight(sn.x, sn.y, t.trueX, t.trueY)) return;
-    if(dist<bd){ bd=dist; best=t; }
-  });
-  return best;
-}
-
-export function callInMortarHeatStrike(target, sn){
-  const aliveMortars = state.mortars.filter(m=>m.hp>0);
-  if(!aliveMortars.length) return;
-  let nearest=null, nd=Infinity;
-  aliveMortars.forEach(m=>{
-    const d = Math.hypot(m.x-target.trueX, m.y-target.trueY);
-    if(d<nd){ nd=d; nearest=m; }
-  });
-  if(!nearest) return;
-  if(mortarTooFarToFire(nearest, target.trueX, target.trueY)){
-    log('sys','システム', `狙撃${sn.id+1}班より対装甲目標発見も、最寄りの迫撃砲${nearest.id+1}が射程外(最大射程${MORTAR_MAX_RANGE_M}m)。徹甲弾射撃を断念。`);
-    return;
-  }
-  if(mortarNotReadyToFire(nearest)){
-    log('sys','システム', `狙撃${sn.id+1}班より対装甲目標発見も、最寄りの迫撃砲${nearest.id+1}は陣地転換直後で射撃準備中。徹甲弾射撃を断念。`);
-    return;
-  }
-  if(revealTarget(target)){
-    log('op','斥候', `狙撃${sn.id+1}班が${target.id}を捕捉、<b>${target.def.label}</b>と識別。`);
-  }
-  if(state.ammo.heat <= 0){
-    log('sys','システム', `狙撃${sn.id+1}班より対装甲目標発見、迫撃砲${nearest.id+1}へ徹甲弾射撃を要求するも弾薬不足。`);
-    return;
-  }
-  log('fdc','FDC', `狙撃${sn.id+1}班より対装甲目標発見の報告。迫撃砲${nearest.id+1}が${target.id}へ徹甲弾射撃。`);
-  state.ammo.heat -= 1;
-  state.snipeMortarStrikesPending += 1;
-  launchMortarVolley(nearest, 'heat', 'impact', 1, {x:target.trueX, y:target.trueY, snappedId:target.id}, target, ()=>{
-    state.snipeMortarStrikesPending -= 1;
-    checkEnd();
-    render();
-  });
-}
-
-export function resolveSniperOrders(dt){
+// per user request: 狙撃部隊を、戦車に対して有効なロケットランチャーを装備する軽車両部隊
+// (対戦車部隊)に変更。歩兵ロスター制ではなく戦車と同じ単一HP制の車両ユニットとして扱い、
+// 対空(SAM)と同じ「専任」設計でvehicleタイプのみを交戦対象にする(歩兵/砲兵には無力)。
+// 戦車のresolveTankOrdersと同じburst射撃ループを流用しつつ、対vehicle威力を大きく取っている。
+export function resolveAntitankOrders(dt){
   let anyEvent = false;
   {
-    state.snipers.forEach(sn=>{
-      const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
-      if(aliveSoldiers.length===0) return;
-      // per user request: per-unit ammo -- lazy-init for a sniper team created before this
-      // feature existed (an existing save).
-      if(sn.ammo===undefined){ sn.ammo = UNIT_AMMO_MAX; sn.maxAmmo = UNIT_AMMO_MAX; }
-      if(sn.resting){ tickUnitRest(sn, `狙撃${sn.id+1}班`, dt); return; }
-      applyStandingOrder(sn, `狙撃${sn.id+1}班`, false);
-      applySniperMovement(sn, dt);
-      if(!isUnitBurstReady(sn)) return;
-      consumeBurstShot(sn);
+    state.antitanks.forEach((at, idx)=>{
+      if(at.hp<=0) return;
+      applyAntitankMovement(at, idx, dt);
 
-      if(sn.pendingSnipeTargetId){
-        const t = state.targets.find(x=>x.id===sn.pendingSnipeTargetId);
-        if(!t || t.destroyed || t.type==='heli' || t.type==='drone'){
-          sn.pendingSnipeTargetId = null;
-        } else if(t.revealed){
-          const dist = Math.hypot(t.trueX-sn.x, t.trueY-sn.y);
-          if(dist <= SNIPER_RANGE_UNITS && hasLineOfSight(sn.x, sn.y, t.trueX, t.trueY)){
-            anyEvent = true;
-            sniperEngageTarget(sn, t);
+      let engageTargets = state.targets.filter(t=>!t.destroyed && t.type==='vehicle');
+      if(at.order==='hunt' && at.huntTargetId){
+        const huntTarget = state.targets.find(t=>t.id===at.huntTargetId && !t.destroyed && t.type==='vehicle');
+        if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
+      }
+      if(engageTargets.length===0) return;
+      if(!isUnitBurstReady(at)) return;
+      let dmgMult=1, incomingMult=1;
+      if(at.order==='hunt'){ dmgMult=1.5; incomingMult=1.3; }
+      else if(at.order==='hold'){ dmgMult=0.9; incomingMult=0.7; }
+      else if(at.order==='retreat'){ dmgMult=0.5; incomingMult=0.6; }
+
+      let firedThisTick = false;
+      engageTargets.forEach(t=>{
+        if(firedThisTick) return;
+        if(t.destroyed || at.hp<=0) return;
+        const e = estPos(t);
+        const dist = Math.hypot(e.x-at.x, e.y-at.y);
+        if(dist > ANTITANK_ENGAGE_RANGE) return;
+        if(!hasLineOfSight(at.x, at.y, t.trueX, t.trueY)) return;
+        const blockWall = wallBlockingLineOfFire(at.x, at.y, t.trueX, t.trueY);
+        if(blockWall){
+          anyEvent = true;
+          firedThisTick = true;
+          consumeBurstShot(at);
+          damageWall(blockWall, Math.round(rnd(ANTITANK_DUEL_DMG_TO_ENEMY[0], ANTITANK_DUEL_DMG_TO_ENEMY[1])), `対戦車${idx+1}の射撃`);
+          return;
+        }
+        if(revealTarget(t)){
+          log('op','斥候', `対戦車${idx+1}が${t.id}と交戦、<b>${t.def.label}</b>と識別。`);
+        }
+        const suppressed = isSuppressed(t);
+        const atAltMult = altitudeBonus(at.x, at.y, t.trueX, t.trueY);
+        const suppressionDmgMult = suppressed ? SUPPRESSION_DUEL_DMG_BONUS : 1;
+        const enemyExposureMult = exposureNormalizedMult(getTargetExposure(t));
+        const dmgToEnemy = Math.round(rnd(ANTITANK_DUEL_DMG_TO_ENEMY[0], ANTITANK_DUEL_DMG_TO_ENEMY[1]) * dmgMult * atAltMult * suppressionDmgMult * enemyExposureMult);
+        applyDamageToTarget(t, dmgToEnemy);
+        anyEvent = true;
+        firedThisTick = true;
+        consumeBurstShot(at);
+        fireTracer(at.x, at.y, e.x, e.y, 220, 'missile');
+        if(t.hp<=0 && !t.destroyed){
+          t.destroyed = true; t.hp = 0;
+          log('op','斥候', `${t.id} 対戦車${idx+1}との交戦で撃破を確認。`);
+          onTargetDestroyed(t);
+        }
+        const enemyAltMult = altitudeBonus(t.trueX, t.trueY, at.x, at.y);
+        const suppressionCasualtyMult = suppressed ? SUPPRESSION_CASUALTY_MULT : 1;
+        const hitChance = (0.10 + state.stage*0.006) * incomingMult * enemyAltMult * suppressionCasualtyMult * exposureNormalizedMult(getUnitExposure({kind:'antitank', idx})) * BURST_DMG_COMPENSATION;
+        if(Math.random() < hitChance){
+          const dmg = Math.round(rnd(ANTITANK_INCOMING_DMG[0], ANTITANK_INCOMING_DMG[1]));
+          const wasAlive = at.hp>0;
+          at.hp = Math.max(0, at.hp-dmg);
+          log('sys','前線', `対戦車${idx+1}、${t.id}との交戦で被弾(-${dmg}HP、残り${at.hp}/${at.maxHp})。`);
+          fireTracer(e.x, e.y, at.x, at.y, 280, 'cannon');
+          if(wasAlive && at.hp<=0){
+            log('sys','前線', `対戦車${idx+1}、撃破される。`);
+            spawnDestructionEffect(at.x, at.y, `対戦車${idx+1} 撃破!`, FRIENDLY_MARK_COLOR);
           }
         }
-      }
-
-      const lineTarget = findTargetOnSniperLine(sn);
-      if(lineTarget){
-        if(lineTarget.wall){
-          anyEvent = true;
-          damageWall(lineTarget.wall, Math.round(rnd(SNIPER_DMG[0], SNIPER_DMG[1])), `狙撃${sn.id+1}班の射撃`);
-        } else if(lineTarget.type==='vehicle'){
-          anyEvent = true;
-          callInMortarHeatStrike(lineTarget, sn);
-        } else if(hasLineOfSight(sn.x, sn.y, lineTarget.trueX, lineTarget.trueY)){
-          anyEvent = true;
-          sniperEngageTarget(sn, lineTarget);
-        }
-      }
-
-      // per user request: auto-engage fallback -- only when the player hasn't
-      // designated a snipe target or aim line, so manual designation still takes priority.
-      const hasAimLine = sn.aimAngle!==null && sn.aimAngle!==undefined;
-      if(!sn.pendingSnipeTargetId && !hasAimLine){
-        const auto = findAutoSniperTarget(sn);
-        if(auto){
-          anyEvent = true;
-          if(auto.type==='vehicle') callInMortarHeatStrike(auto, sn);
-          else sniperEngageTarget(sn, auto);
-        }
-      }
+      });
     });
   }
   return anyEvent;
@@ -2293,15 +2209,14 @@ export function setSamOrder(idx, order){
   render();
 }
 
-export function setSniperOrder(idx, order){
-  if(!state.snipers[idx] || state.snipers[idx].resting) return;
-  state.snipers[idx].order = order;
-  unitSpeakOrder('sniper', idx);
+export function setAntitankOrder(idx, order){
+  if(!state.antitanks[idx]) return;
+  state.antitanks[idx].order = order;
   render();
 }
 
 export function setStandingOrder(kind, idx, value){
-  const unit = kind==='squad' ? state.squads[idx] : state.snipers[idx];
+  const unit = kind==='squad' ? state.squads[idx] : null;
   if(!unit) return;
   unit.standingOrder = value || null;
   render();
@@ -2403,11 +2318,13 @@ export function applySmartOrder(targetId){
           y: clamp(sq.y+dy, 30, CANVAS_H-30),
         };
       }
-    } else if(unitType==='sniper'){
-      const sn = state.snipers[idx];
-      if(['advance','hold','retreat'].includes(actionKey)) setSniperOrder(idx, actionKey);
-      else if(actionKey==='snipe_target' && target && target.type!=='heli' && target.type!=='drone'){
-        sn.pendingSnipeTargetId = target.id;
+    } else if(unitType==='antitank'){
+      const at = state.antitanks[idx];
+      if(['advance','hold','retreat'].includes(actionKey)) setAntitankOrder(idx, actionKey);
+      else if(actionKey==='hunt_target' && target && target.type==='vehicle'){
+        at.order = 'hunt';
+        at.huntTargetId = target.id;
+        at.pendingDest = null;
       }
     } else if(unitType==='tank'){
       const tk = state.tanks[idx];
@@ -2433,45 +2350,18 @@ export function applySmartOrder(targetId){
   render();
 }
 
-export function armSniperMoveOrder(idx){
-  if(!state.snipers[idx] || state.snipers[idx].resting) return;
-  state.orderMode = {kind:'sniper-move', idx};
-  state.commandBox = null;
-  render();
-}
-
-export function clearSniperDest(idx){
-  if(!state.snipers[idx]) return;
-  state.snipers[idx].pendingDest = null;
+export function clearAntitankDest(idx){
+  if(!state.antitanks[idx]) return;
+  state.antitanks[idx].pendingDest = null;
   state.orderMode = null;
   render();
 }
 
-export function armSniperTargetOrder(idx){
-  if(!state.snipers[idx] || state.snipers[idx].resting) return;
-  state.orderMode = {kind:'sniper-target', idx};
-  state.commandBox = null;
-  render();
-}
-
-export function clearSniperTarget(idx){
-  if(!state.snipers[idx]) return;
-  state.snipers[idx].pendingSnipeTargetId = null;
-  render();
-}
-
-export function armSniperAimOrder(idx){
-  const sn = state.snipers[idx];
-  if(!sn || sn.resting) return;
-  state.orderMode = {kind:'sniper-aim', idx};
-  state.commandBox = null;
-  unitSpeakOrder('sniper', idx);
-  render();
-}
-
-export function clearSniperAim(idx){
-  if(!state.snipers[idx]) return;
-  state.snipers[idx].aimAngle = null;
+export function clearAntitankHunt(idx){
+  const at = state.antitanks[idx];
+  if(!at) return;
+  at.huntTargetId = null;
+  if(at.order==='hunt') at.order = 'hold';
   render();
 }
 
@@ -2492,13 +2382,12 @@ export function clearMortarMainline(idx){
 
 export function reinforceUnitLabel(kind, idx){
   if(kind==='squad') return `第${idx+1}小隊`;
-  if(kind==='scout') return `斥候${idx+1}班`;
-  return `狙撃${idx+1}班`;
+  return `斥候${idx+1}班`;
 }
 
 export function requestReinforcement(kind, idx){
   if(!state || state.stageResolved) return;
-  const unit = kind==='squad' ? state.squads[idx] : kind==='scout' ? state.scouts[idx] : state.snipers[idx];
+  const unit = kind==='squad' ? state.squads[idx] : kind==='scout' ? state.scouts[idx] : null;
   if(!unit || unit.reinforceUsed || unit.resting) return;
   const deadCount = unit.soldiers.filter(s=>!s.alive).length;
   if(deadCount===0) return;
@@ -2532,7 +2421,6 @@ export function requestReinforcement(kind, idx){
 export function restUnitRef(kind, idx){
   if(kind==='squad') return state.squads[idx];
   if(kind==='scout') return state.scouts[idx];
-  if(kind==='sniper') return state.snipers[idx];
   if(kind==='engineer') return state.engineers[idx];
   return null;
 }
@@ -2540,7 +2428,6 @@ export function restUnitRef(kind, idx){
 export function restUnitLabel(kind, idx){
   if(kind==='squad') return `第${idx+1}小隊`;
   if(kind==='scout') return `斥候${idx+1}班`;
-  if(kind==='sniper') return `狙撃${idx+1}班`;
   if(kind==='engineer') return `工兵小隊`;
   return '';
 }
@@ -2558,8 +2445,6 @@ export function startRest(kind, idx){
   unit.pendingDest = null;
   if('order' in unit) unit.order = 'resting';
   if('huntTargetId' in unit) unit.huntTargetId = null;
-  if('pendingSnipeTargetId' in unit) unit.pendingSnipeTargetId = null;
-  if('aimAngle' in unit) unit.aimAngle = null;
   log('sys','前線', `${restUnitLabel(kind,idx)}、大休止を開始。以後${REST_DURATION_TURNS}ターンは一切の命令を受け付けない代わりに、欠員(${deadCount}名)が徐々に戦列へ復帰する。`);
   render();
 }
@@ -2583,10 +2468,10 @@ export function tickUnitRest(unit, label, dt){
   }
 }
 
-// per user request: a "supply zone" around the (friendly) HQ -- damaged mortars/tanks/sams
-// sitting inside HQ_SUPPLY_ZONE_RADIUS_UNITS slowly regenerate HP for free, and squads/snipers
+// per user request: a "supply zone" around the (friendly) HQ -- damaged mortars/tanks/antitanks/
+// sams sitting inside HQ_SUPPLY_ZONE_RADIUS_UNITS slowly regenerate HP for free, and squads
 // there regenerate their per-unit ammo (see UNIT_AMMO_MAX). HQ itself keeps its own paid
-// repairHq() instead of also being covered here, and squad/sniper/scout soldiers have no
+// repairHq() instead of also being covered here, and squad/scout soldiers have no
 // partial HP to heal (a hit is a permanent casualty, see damageFriendlyAsset) -- see
 // requestReinforcement()/reinforceUnitLabel() for how a wiped-out roster is refilled instead.
 export function applyHqSupplyZone(dt){
@@ -2600,6 +2485,7 @@ export function applyHqSupplyZone(dt){
   };
   state.mortars.forEach(healUnit);
   state.tanks.forEach(healUnit);
+  state.antitanks.forEach(healUnit);
   state.sams.forEach(healUnit);
   const resupplyUnit = u=>{
     if(!u || u.soldiers.every(s=>!s.alive)) return;
@@ -2609,7 +2495,6 @@ export function applyHqSupplyZone(dt){
     u.ammo = Math.min(u.maxAmmo, u.ammo + UNIT_AMMO_RESUPPLY_PER_TURN*dt);
   };
   state.squads.forEach(resupplyUnit);
-  state.snipers.forEach(resupplyUnit);
 }
 
 export function buildHqCover(){
@@ -2687,9 +2572,9 @@ export function getUnitExposure(candidate){
     const u = state.squads[candidate.idx];
     return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y) + trenchCoverBonusAt(u.x, u.y);
   }
-  if(candidate.kind==='sniper'){
-    const u = state.snipers[candidate.idx];
-    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y) + trenchCoverBonusAt(u.x, u.y);
+  if(candidate.kind==='antitank'){
+    const at = state.antitanks[candidate.idx];
+    return at.exposure + terrainCoverTotal(at.x, at.y);
   }
   if(candidate.kind==='engineer'){
     const u = state.engineers[candidate.idx];
@@ -2722,8 +2607,8 @@ export function nearestFriendlyAsset(x, y, includeSquads){
     state.squads.forEach((sq,idx)=>{
       if(sq.soldiers.some(s=>s.alive)) candidates.push({kind:'squad', idx, x:sq.x, y:sq.y});
     });
-    state.snipers.forEach((sn,idx)=>{
-      if(sn.soldiers.some(s=>s.alive)) candidates.push({kind:'sniper', idx, x:sn.x, y:sn.y});
+    state.antitanks.forEach((at,idx)=>{
+      if(at.hp>0) candidates.push({kind:'antitank', idx, x:at.x, y:at.y});
     });
     state.tanks.forEach((tk,idx)=>{
       if(tk.hp>0) candidates.push({kind:'tank', idx, x:tk.x, y:tk.y});
@@ -2844,21 +2729,16 @@ export function damageFriendlyAsset(target, dmg, sourceLabel){
         speakRandomAliveUnit('outburst');
       }
     }
-  } else if(target.kind==='sniper'){
-    const sn = state.snipers[target.idx];
-    if(!sn) return;
-    const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
-    if(aliveSoldiers.length>0){
-      const victim = choice(aliveSoldiers);
-      victim.alive = false;
-      log('sys','被弾', `${sourceLabel}が狙撃${target.idx+1}班を攻撃。<b>${victim.rank} ${victim.name}</b> 戦死。`);
-      announceTicker(`${victim.rank} ${victim.name} 殉職`, 'death');
-      unitSpeakInjury('sniper', target.idx);
-      if(aliveSoldiers.length===1){
-        spawnDestructionEffect(sn.x, sn.y, `狙撃${target.idx+1}班 全滅!`, FRIENDLY_MARK_COLOR);
-        announceTicker(`狙撃${target.idx+1}班 全滅!`, 'death');
-        speakRandomAliveUnit('outburst');
-      }
+  } else if(target.kind==='antitank'){
+    const at = state.antitanks[target.idx];
+    if(!at) return;
+    const wasAlive = at.hp>0;
+    at.hp = Math.max(0, at.hp-dmg);
+    if(at.hp <= at.maxHp*0.2) state.hpDroppedLow = true;
+    log('sys','被弾', `${sourceLabel}が対戦車${target.idx+1}を攻撃。被害 ${dmg}。`);
+    if(wasAlive && at.hp<=0){
+      spawnDestructionEffect(at.x, at.y, `対戦車${target.idx+1} 撃破!`, FRIENDLY_MARK_COLOR);
+      announceTicker(`対戦車${target.idx+1} 撃破!`, 'death');
     }
   } else if(target.kind==='mortar'){
     const mortar = state.mortars[target.idx];
@@ -3641,9 +3521,9 @@ export function resolveEnemyTurn(dt){
   if(!allSquadsWiped()){
     infEvent = resolveSquadOrders(dt);
   }
-  let sniperEvent = false;
-  if(!allSnipersWiped()){
-    sniperEvent = resolveSniperOrders(dt);
+  let antitankEvent = false;
+  if(!allAntitanksWiped()){
+    antitankEvent = resolveAntitankOrders(dt);
   }
   let tankEvent = false;
   if(!allTanksWiped()){
@@ -3664,9 +3544,9 @@ export function resolveEnemyTurn(dt){
   // since most steps fall between turn crossings) would flood the log instead of marking a
   // discrete turn.
   // per user request: 交戦時のサウンド -- looping battlefield-combat ambience plays while
-  // squads/snipers are actively engaging this turn, and pauses again once nothing is
+  // squads/antitanks are actively engaging this turn, and pauses again once nothing is
   // actively engaging.
-  if(infEvent || sniperEvent || tankEvent || samEvent || antiDroned || heliEvent || aaEvent) playCombatAmbience(); else stopCombatAmbience();
+  if(infEvent || antitankEvent || tankEvent || samEvent || antiDroned || heliEvent || aaEvent) playCombatAmbience(); else stopCombatAmbience();
   state.targets.forEach(t=>{
     if(t.suppressed>0) t.suppressed = Math.max(0, t.suppressed-dt);
   });
@@ -3906,7 +3786,7 @@ export function processSpawnQueue(){
 }
 
 export function simulationStep(){
-  if(!state || state.stageResolved || state.snipeMortarStrikesPending>0 || state.placementPending || state.decoyPlacementPending) return;
+  if(!state || state.stageResolved || state.placementPending || state.decoyPlacementPending) return;
   processSpawnQueue();
   const dt = deltaTurns();
   state.turns += dt;
@@ -3956,7 +3836,7 @@ export function simulationStep(){
   resolveEnemyTurn(dt);
   applyHqSupplyZone(dt);
 
-  // per user request: wiping out the enemy via direct fire (squad/tank/sniper/SAM/anti-drone/
+  // per user request: wiping out the enemy via direct fire (squad/tank/antitank/SAM/anti-drone/
   // anti-vehicle, all resolved inside resolveEnemyTurn above) never triggered wave-clear --
   // checkEnd() was previously only called from a mortar volley's async impact callback and the
   // loss-condition branch just below, so killing the last enemy any other way left the wave
@@ -4047,7 +3927,7 @@ export function checkEnd(){
   }
 
   const hasAmmo = state.ammo.he>0 || state.ammo.heat>0;
-  const canFightOn = hasAmmo || state.snipers.some(sn=>sn.soldiers.some(s=>s.alive)) || state.squads.some(sq=>sq.soldiers.some(s=>s.alive));
+  const canFightOn = hasAmmo || state.antitanks.some(at=>at.hp>0) || state.squads.some(sq=>sq.soldiers.some(s=>s.alive));
   if(!canFightOn){
     state.stageResolved = true;
     log('sys','システム','全弾薬を消費し、交戦可能な部隊も残っていない。任務継続不能。');
@@ -4083,8 +3963,8 @@ export function computeReward(){
   const infBonus = Math.round(infFrac*150);
   const scoutFrac = state.scouts.length ? state.scouts.reduce((s,sc)=>s+unitAliveCount(sc)/sc.soldiers.length,0)/state.scouts.length : 0;
   const scoutBonus = Math.round(scoutFrac*100);
-  const sniperFrac = state.snipers.length ? state.snipers.reduce((s,sn)=>s+sn.soldiers.filter(x=>x.alive).length/sn.soldiers.length,0)/state.snipers.length : 0;
-  const sniperBonus = Math.round(sniperFrac*100);
+  const antitankFrac = state.antitanks.length ? state.antitanks.reduce((s,at)=>s+at.hp/at.maxHp,0)/state.antitanks.length : 0;
+  const antitankBonus = Math.round(antitankFrac*100);
   const hqFrac = state.hq.hp/state.hq.maxHp;
   const hqBonus = Math.round(hqFrac*200);
   // per user request (idea 5): destroying the enemy HQ (see checkEnd()) is a flat bonus on
@@ -4094,17 +3974,17 @@ export function computeReward(){
   // the rest of the wave.
   const enemyHqTarget = state.targets.find(t=>t.type==='hq');
   const enemyHqBonus = (enemyHqTarget && enemyHqTarget.destroyed) ? 250 : 0;
-  const total = Math.round((base+turnsBonus+ammoBonus+hpBonus+infBonus+scoutBonus+sniperBonus+hqBonus+enemyHqBonus) * DIFFICULTIES[state.difficulty].rewardMult);
-  return {base,turnsBonus,ammoBonus,hpBonus,infBonus,scoutBonus,sniperBonus,hqBonus,enemyHqBonus,total};
+  const total = Math.round((base+turnsBonus+ammoBonus+hpBonus+infBonus+scoutBonus+antitankBonus+hqBonus+enemyHqBonus) * DIFFICULTIES[state.difficulty].rewardMult);
+  return {base,turnsBonus,ammoBonus,hpBonus,infBonus,scoutBonus,antitankBonus,hqBonus,enemyHqBonus,total};
 }
 
 export function applyWaveResupply(){
   const hpFrac = state.mortars.length ? state.mortars.reduce((s,m)=>s+m.hp/m.maxHp,0)/state.mortars.length : 0;
   const infFrac = totalAliveSoldiers()/totalSquadCapacity();
   const scoutFrac = state.scouts.length ? state.scouts.reduce((s,sc)=>s+unitAliveCount(sc)/sc.soldiers.length,0)/state.scouts.length : 0;
-  const sniperFrac = state.snipers.length ? state.snipers.reduce((s,sn)=>s+sn.soldiers.filter(x=>x.alive).length/sn.soldiers.length,0)/state.snipers.length : 0;
+  const antitankFrac = state.antitanks.length ? state.antitanks.reduce((s,at)=>s+at.hp/at.maxHp,0)/state.antitanks.length : 0;
   const hqFrac = state.hq.hp/state.hq.maxHp;
-  const perf = (hpFrac+infFrac+scoutFrac+sniperFrac+hqFrac)/5;
+  const perf = (hpFrac+infFrac+scoutFrac+antitankFrac+hqFrac)/5;
   const ammoHe = Math.round(10*perf);
   const ammoHeat = Math.round(5*perf);
   const personnel = Math.round(4*perf);
@@ -4118,7 +3998,6 @@ export function awardVeteranXp(){
   const groups = [
     {units:state.squads,  label:i=>`第${i+1}小隊`},
     {units:state.scouts,  label:i=>`斥候${i+1}`},
-    {units:state.snipers, label:i=>`狙撃${i+1}班`},
   ];
   const levelUps = [];
   groups.forEach(group=>{
@@ -4228,6 +4107,38 @@ export function repairTank(idx){
   log('sys','工兵', `戦車${idx+1}、応急修復完了(+${restoreHp}HP)。¥${cost}を消費(現在HP ${tank.hp}/${tank.maxHp})。`);
   // per continuous-sim conversion: no longer forces an extra resolveEnemyTurn(1) here -- the
   // enemy already advances continuously via loop()'s accumulator, so this would double-apply.
+  checkEnd();
+  render();
+}
+
+export function assignAntitankHunt(idx){
+  const at = state.antitanks[idx];
+  if(!at || at.hp<=0) return;
+  const targetId = state.enemyCommandBox;
+  const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
+  if(!target || target.type!=='vehicle') return;
+  if(at.order==='hunt' && at.huntTargetId===target.id){
+    clearAntitankHunt(idx);
+    log('sys','前線', `対戦車${idx+1}、${target.id}への攻撃指示を解除。`);
+    return;
+  }
+  at.order = 'hunt';
+  at.huntTargetId = target.id;
+  at.pendingDest = null;
+  log('sys','前線', `対戦車${idx+1}、${target.id} を攻撃目標に指示。接敵まで前進する。`);
+  render();
+}
+
+export function repairAntitank(idx){
+  const at = state.antitanks[idx];
+  if(!state || state.stageResolved || !at || at.hp<=0 || at.hp>=at.maxHp) return;
+  const restoreHp = Math.min(ANTITANK_REPAIR_HP_PER_CALL, at.maxHp-at.hp);
+  const cost = Math.round(ANTITANK_REPAIR_COST_PER_HP*restoreHp);
+  if(state.money < cost){ log('sys','システム','資金が不足しています。'); return; }
+  state.money -= cost;
+  at.hp = Math.min(at.maxHp, at.hp+restoreHp);
+  state.turns += 1;
+  log('sys','工兵', `対戦車${idx+1}、応急修復完了(+${restoreHp}HP)。¥${cost}を消費(現在HP ${at.hp}/${at.maxHp})。`);
   checkEnd();
   render();
 }
@@ -4348,4 +4259,4 @@ export function advanceSimulation(){
 }
 
 
-Object.assign(window, { totalSquadCapacity, totalRosterCapacity, roundRobinDistribute, gameClockNow, formatGameClock, mortarTooCloseToFire, mortarNotReadyToFire, setGameSpeedByIndex, unitMayFire, deltaTurns, updateTurnBoundary, currentTurnFloor, turnJustCrossed, isSuppressed, maintainFriendlySpacing, smoothVisualPos, buildEnemyInfantryGroups, effectMultiplier, bestMortarLoadoutFor, applyBestMortarLoadout, makeSoldiers, vetLevelOf, unitAvgVetLevel, unitAliveCount, makeFreshRoster, addNewSquad, addNewScout, unitAlive, initGame, rollMapSeedCandidates, startSetup, abandonSavedCampaign, buildHeliTarget, buildEnemyHqTarget, deployBoxSize, startStage, buildPlacementQueue, currentPlacementUnit, handlePlacementClick, skipRemainingPlacement, finishPlacement, makeDecoy, randomDecoySpot, applyDecoyPlacementMode, placeDecoyAt, finishDecoyPlacement, retryStage, deployStage, estimatedTargetPos, estPos, computeDispersionAt, estPosFromMortar, hasLineOfSight, lastStandActive, isTargetDetected, clearHqDest, clearTankDest, clearSamDest, setEngineerOrder, armEngineerMoveOrder, clearEngineerDest, assignEngineerRepair, clearEngineerRepair, armWallBuildOrder, buildWallAt, armTrenchBuildOrder, buildTrenchAt, clearSquadDest, armScoutMoveOrder, clearScoutOrder, revealTarget, updateHqDetection, findHqDefenseThreat, resolveOneScoutDecision, resolveScoutDecision, resolveFriendlyHeliTurn, allScoutsWiped, allSnipersWiped, allMortarsWiped, setMortarOrder, armMortarTargetOrder, resolveOneMortarDecision, resolveMortarDecision, enemyCounterAttack, totalAliveSoldiers, allSquadsWiped, applyStandingOrder, applyHqMovement, resolveHqMovement, applySquadMovement, applyEngineerMovement, allEngineersWiped, resolveEngineerOrders, resolveSquadOrders, applyTankMovement, allTanksWiped, applySamMovement, allSamsWiped, resolveSamOrders, resolveTankOrders, applySniperMovement, sniperEngageTarget, findTargetOnSniperLine, findAutoSniperTarget, callInMortarHeatStrike, resolveSniperOrders, setSquadOrder, setTankOrder, setSamOrder, setSniperOrder, setStandingOrder, resolveSmartUnitIdxs, randomMoveOffsetCanvasUnits, directedMoveOffsetCanvasUnits, applySmartMortarScatter, applySmartOrder, armSniperMoveOrder, clearSniperDest, armSniperTargetOrder, clearSniperTarget, armSniperAimOrder, clearSniperAim, armMortarMainlineOrder, clearMortarMainline, reinforceUnitLabel, requestReinforcement, restUnitRef, restUnitLabel, startRest, tickUnitRest, buildHqCover, repairHq, applyHqSupplyZone, friendlyFireCandidateLabel, checkFriendlyFireAt, getUnitExposure, rollExposureHit, getTargetExposure, nearestFriendlyAsset, applyDamageToTarget, damageFriendlyAsset, spawnInfantryDrone, spawnInfantryDroneSwarm, targetGridCellKey, rebuildTargetGrid, nearestOtherAliveTarget, mergeAdjustedGoal, maybePlaceMine, checkMineTrigger, advanceEnemyArtillery, resolveVehicleAssault, resolveHeliAssault, resolveEnemyAntiAir, resolveSquadAntiDrone, resolveSquadAntiVehicle, resolveDroneSwarm, resolveEnemyEvasion, advanceEnemyInfantry, resolveMortarCounterBattery, resolveEnemyTurn, launchMortarVolley, isAutoCommitRunning, startRealtimeLoop, toggleAutoCommit, setGameSpeed, renderThrottledForStep, simulationStep, finalizeVolley, checkEnd, triggerWaveClearSequence, computeReward, applyWaveResupply, awardVeteranXp, handleStageClear, assignSquadHunt, clearSquadHunt, assignTankHunt, clearTankHunt, repairTank, assignSamHunt, clearSamHunt, repairSam, assignMortarFire, updateFireConfig, advanceSimulation });
+Object.assign(window, { totalSquadCapacity, totalRosterCapacity, roundRobinDistribute, gameClockNow, formatGameClock, mortarTooCloseToFire, mortarNotReadyToFire, setGameSpeedByIndex, unitMayFire, deltaTurns, updateTurnBoundary, currentTurnFloor, turnJustCrossed, isSuppressed, maintainFriendlySpacing, smoothVisualPos, buildEnemyInfantryGroups, effectMultiplier, bestMortarLoadoutFor, applyBestMortarLoadout, makeSoldiers, vetLevelOf, unitAvgVetLevel, unitAliveCount, makeFreshRoster, addNewSquad, addNewScout, unitAlive, initGame, rollMapSeedCandidates, startSetup, abandonSavedCampaign, buildHeliTarget, buildEnemyHqTarget, deployBoxSize, startStage, buildPlacementQueue, currentPlacementUnit, handlePlacementClick, skipRemainingPlacement, finishPlacement, makeDecoy, randomDecoySpot, applyDecoyPlacementMode, placeDecoyAt, finishDecoyPlacement, retryStage, deployStage, estimatedTargetPos, estPos, computeDispersionAt, estPosFromMortar, hasLineOfSight, lastStandActive, isTargetDetected, clearHqDest, clearTankDest, clearSamDest, clearAntitankDest, setEngineerOrder, armEngineerMoveOrder, clearEngineerDest, assignEngineerRepair, clearEngineerRepair, armWallBuildOrder, buildWallAt, armTrenchBuildOrder, buildTrenchAt, clearSquadDest, armScoutMoveOrder, clearScoutOrder, revealTarget, updateHqDetection, findHqDefenseThreat, resolveOneScoutDecision, resolveScoutDecision, resolveFriendlyHeliTurn, allScoutsWiped, allAntitanksWiped, allMortarsWiped, setMortarOrder, armMortarTargetOrder, resolveOneMortarDecision, resolveMortarDecision, enemyCounterAttack, totalAliveSoldiers, allSquadsWiped, applyStandingOrder, applyHqMovement, resolveHqMovement, applySquadMovement, applyEngineerMovement, allEngineersWiped, resolveEngineerOrders, resolveSquadOrders, applyTankMovement, allTanksWiped, applySamMovement, allSamsWiped, resolveSamOrders, resolveTankOrders, applyAntitankMovement, resolveAntitankOrders, setSquadOrder, setTankOrder, setSamOrder, setAntitankOrder, setStandingOrder, resolveSmartUnitIdxs, randomMoveOffsetCanvasUnits, directedMoveOffsetCanvasUnits, applySmartMortarScatter, applySmartOrder, armMortarMainlineOrder, clearMortarMainline, reinforceUnitLabel, requestReinforcement, restUnitRef, restUnitLabel, startRest, tickUnitRest, buildHqCover, repairHq, applyHqSupplyZone, friendlyFireCandidateLabel, checkFriendlyFireAt, getUnitExposure, rollExposureHit, getTargetExposure, nearestFriendlyAsset, applyDamageToTarget, damageFriendlyAsset, spawnInfantryDrone, spawnInfantryDroneSwarm, targetGridCellKey, rebuildTargetGrid, nearestOtherAliveTarget, mergeAdjustedGoal, maybePlaceMine, checkMineTrigger, advanceEnemyArtillery, resolveVehicleAssault, resolveHeliAssault, resolveEnemyAntiAir, resolveSquadAntiDrone, resolveSquadAntiVehicle, resolveDroneSwarm, resolveEnemyEvasion, advanceEnemyInfantry, resolveMortarCounterBattery, resolveEnemyTurn, launchMortarVolley, isAutoCommitRunning, startRealtimeLoop, toggleAutoCommit, setGameSpeed, renderThrottledForStep, simulationStep, finalizeVolley, checkEnd, triggerWaveClearSequence, computeReward, applyWaveResupply, awardVeteranXp, handleStageClear, assignSquadHunt, clearSquadHunt, assignTankHunt, clearTankHunt, repairTank, assignSamHunt, clearSamHunt, repairSam, assignAntitankHunt, clearAntitankHunt, repairAntitank, assignMortarFire, updateFireConfig, advanceSimulation });

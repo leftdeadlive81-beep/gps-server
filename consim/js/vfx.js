@@ -25,7 +25,7 @@ export function fireTracer(startX, startY, endX, endY, duration, weaponType, sol
   // flash at its actual position (soldierOffsets, canvas-unit dx/dy from the unit's aggregate
   // x/y -- see aliveFigureOffsets() in combat.js) instead of a single flash pretending to come
   // from the unit's one aggregate marker point. Units that fire as a single shooter (tank, SAM,
-  // sniper, vehicle, heli, drone...) pass no offsets and keep the original single flash.
+  // antitank, vehicle, heli, drone...) pass no offsets and keep the original single flash.
   const flashPoints = (soldierOffsets && soldierOffsets.length)
     ? soldierOffsets.map(o=>({x:startX+o.dx, y:startY+o.dy}))
     : [{x:startX, y:startY}];

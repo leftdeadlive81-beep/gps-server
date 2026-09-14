@@ -16,6 +16,7 @@ function directMoveTargetUnit(kind, idx){
   if(kind==='squad') return state.squads[idx];
   if(kind==='tank') return state.tanks[idx];
   if(kind==='sam') return state.sams[idx];
+  if(kind==='antitank') return state.antitanks[idx];
   if(kind==='hq') return state.hq;
   return null;
 }
@@ -55,11 +56,11 @@ export function setUnitMoveDest(kind, idx, px, py, silent){
     if(!silent) log('sys','前線', `工兵小隊に移動目標を指示。`);
     return true;
   }
-  if(kind==='sniper'){
-    const sn = state.snipers[idx];
-    if(!sn || !sn.soldiers.some(s=>s.alive) || sn.resting) return false;
-    sn.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
-    if(!silent) log('sys','前線', `狙撃${idx+1}班に移動目標を指示。`);
+  if(kind==='antitank'){
+    const at = state.antitanks[idx];
+    if(!at || at.hp<=0) return false;
+    at.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+    if(!silent) log('sys','前線', `対戦車${idx+1}に移動目標を指示。`);
     return true;
   }
   if(kind==='scout'){
@@ -113,7 +114,7 @@ function unitRefAlive({kind, idx}){
   if(kind==='squad') return state.squads[idx] && state.squads[idx].soldiers.some(s=>s.alive);
   if(kind==='tank') return state.tanks[idx] && state.tanks[idx].hp>0;
   if(kind==='sam') return state.sams[idx] && state.sams[idx].hp>0;
-  if(kind==='sniper') return state.snipers[idx] && state.snipers[idx].soldiers.some(s=>s.alive);
+  if(kind==='antitank') return state.antitanks[idx] && state.antitanks[idx].hp>0;
   if(kind==='engineer') return state.engineers[idx] && unitAlive(state.engineers[idx]);
   return false;
 }
@@ -187,7 +188,7 @@ export function handleMultiSelectClick(sx, sy, px, py){
 }
 
 export function handleCanvasClick(evt){
-  if(!state || state.stageResolved || state.animating || state.snipeMortarStrikesPending>0) return;
+  if(!state || state.stageResolved || state.animating) return;
   if(mapDragMoved) return;
   const cv = document.getElementById('board');
   const rect = cv.getBoundingClientRect();
@@ -279,23 +280,6 @@ export function handleCanvasClick(evt){
       }
     } else if(mode.kind==='mortar-move'){
       setUnitMoveDest('mortar', mode.idx, px, py);
-    } else if(mode.kind==='sniper-move'){
-      setUnitMoveDest('sniper', mode.idx, px, py);
-    } else if(mode.kind==='sniper-target'){
-      const sn = state.snipers[mode.idx];
-      const best = nearestVisibleTargetForScreen(sx, sy, 42);
-      if(sn && best){
-        sn.pendingSnipeTargetId = best.id;
-        log('mortar','狙撃', `狙撃${mode.idx+1}班、${best.id} を狙撃目標に指示。`);
-      } else {
-        log('sys','システム','狙撃目標が見つかりません。捕捉中の目標付近をクリックしてください。');
-      }
-    } else if(mode.kind==='sniper-aim'){
-      const sn = state.snipers[mode.idx];
-      if(sn){
-        sn.aimAngle = bearingBetween(sn.x, sn.y, px, py);
-        log('mortar','狙撃', `狙撃${mode.idx+1}班、射撃方向 ${Math.round(sn.aimAngle)}° を指示。`);
-      }
     } else if(mode.kind==='mortar-mainline'){
       const mortar = state.mortars[mode.idx];
       if(mortar){
@@ -308,10 +292,10 @@ export function handleCanvasClick(evt){
   }
 
   const hit = resolveClickHit(sx, sy);
-  // per user request: while a squad/tank/SAM/HQ's command box is open, a plain click on
-  // empty ground now moves it there directly instead of requiring "移動先を指定" first --
+  // per user request: while a squad/tank/SAM/antitank/HQ's command box is open, a plain click
+  // on empty ground now moves it there directly instead of requiring "移動先を指定" first --
   // these are the only kinds where a click can unambiguously only ever mean "move" (mortar/
-  // sniper/scout/engineer each have other click-based actions that still need their own
+  // scout/engineer each have other click-based actions that still need their own
   // explicit arm button to stay unambiguous, see DIRECT_MOVE_KINDS above).
   if(!hit && state.commandBox && DIRECT_MOVE_KINDS.includes(state.commandBox.kind)){
     // per user request: this used to fire on ANY empty-ground click while the box was open,
@@ -739,7 +723,7 @@ export function focusOnOwnForces(){
   state.tanks.forEach(t=>{ if(t.hp>0) pts.push({x:t.x, y:t.y}); });
   state.sams.forEach(s=>{ if(s.hp>0) pts.push({x:s.x, y:s.y}); });
   state.squads.forEach(sq=>{ if(sq.soldiers.some(s=>s.alive)) pts.push({x:sq.x, y:sq.y}); });
-  state.snipers.forEach(sn=>{ if(sn.soldiers.some(s=>s.alive)) pts.push({x:sn.x, y:sn.y}); });
+  state.antitanks.forEach(at=>{ if(at.hp>0) pts.push({x:at.x, y:at.y}); });
   state.engineers.forEach(en=>{ if(unitAlive(en)) pts.push({x:en.x, y:en.y}); });
   state.scouts.forEach(sc=>{ if(unitAlive(sc)) pts.push({x:sc.x, y:sc.y}); });
   (state.helis||[]).forEach(h=>{ if(h.hp>0) pts.push({x:h.x, y:h.y}); });

@@ -9,7 +9,6 @@ export function calloutUnitRef(kind, idx){
   if(kind==='mortar') return state.mortars[idx];
   if(kind==='scout') return state.scouts[idx];
   if(kind==='squad') return state.squads[idx];
-  if(kind==='sniper') return state.snipers[idx];
   return null;
 }
 
@@ -40,7 +39,6 @@ export function randomAliveUnitRef(){
   state.mortars.forEach((m,i)=>{ if(m.hp>0) pool.push({kind:'mortar', idx:i}); });
   state.scouts.forEach((s,i)=>{ if(unitAlive(s)) pool.push({kind:'scout', idx:i}); });
   state.squads.forEach((sq,i)=>{ if(sq.soldiers.some(s=>s.alive)) pool.push({kind:'squad', idx:i}); });
-  state.snipers.forEach((sn,i)=>{ if(sn.soldiers.some(s=>s.alive)) pool.push({kind:'sniper', idx:i}); });
   if(!pool.length) return null;
   return pool[Math.floor(Math.random()*pool.length)];
 }

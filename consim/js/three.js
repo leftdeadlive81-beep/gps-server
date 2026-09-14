@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { estPos, smoothVisualPos, state, unitAlive } from './combat.js';
-import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, FORTRESS_NEUTRAL_COLOR_3D, FRIENDLY_MARK_COLOR_3D, GRID_LINES, HELI_FLIGHT_ALTITUDE, MAP_INITIAL_AZIMUTH, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, PROC_CANOPY_CELL, PROC_CANOPY_DARK, PROC_CANOPY_LIGHT, PROC_CLEARING_CELL, PROC_CLEARING_COLOR, PROC_CLEARING_EDGE0, PROC_CLEARING_EDGE1, PROC_COLOR_FOREST, PROC_COLOR_HIGH, PROC_COLOR_LOW, PROC_COLOR_WATER, PROC_DRY_PATCH_CELL, PROC_DRY_PATCH_COLOR, PROC_DRY_PATCH_EDGE0, PROC_DRY_PATCH_EDGE1, PROC_MESH_SEGMENTS_X, PROC_MESH_SEGMENTS_Z, PROC_OPEN_MOTTLE_AMOUNT, PROC_OPEN_MOTTLE_CELL, PROC_TERRAIN_HEIGHT_SCALE, PROC_TEXTURE_NOISE_COARSE_AMOUNT, PROC_TEXTURE_NOISE_COARSE_CELL, PROC_TEXTURE_NOISE_FINE_AMOUNT, PROC_TEXTURE_NOISE_FINE_CELL, PROC_TEXTURE_SIZE_X, PROC_TEXTURE_SIZE_Z, SCOUT_SQUAD_SIZE, SHADOW_FRUSTUM_HALF, SKY_COLOR, SNIPER_SQUAD_SIZE, SQUAD_GRID_OFFSETS, SUN_OFFSET, TARGET_TYPE_COLOR, TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, WALK_AMP_EASE, WALK_ANIM_DETAIL_ZOOM, WALK_ANIM_MIN_INTERVAL_MS, WALK_CYCLE_SPEED, WALK_SWING_MAX, WORLD, unitMarkers3d } from './constants.js';
+import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, FORTRESS_NEUTRAL_COLOR_3D, FRIENDLY_MARK_COLOR_3D, GRID_LINES, HELI_FLIGHT_ALTITUDE, MAP_INITIAL_AZIMUTH, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, PROC_CANOPY_CELL, PROC_CANOPY_DARK, PROC_CANOPY_LIGHT, PROC_CLEARING_CELL, PROC_CLEARING_COLOR, PROC_CLEARING_EDGE0, PROC_CLEARING_EDGE1, PROC_COLOR_FOREST, PROC_COLOR_HIGH, PROC_COLOR_LOW, PROC_COLOR_WATER, PROC_DRY_PATCH_CELL, PROC_DRY_PATCH_COLOR, PROC_DRY_PATCH_EDGE0, PROC_DRY_PATCH_EDGE1, PROC_MESH_SEGMENTS_X, PROC_MESH_SEGMENTS_Z, PROC_OPEN_MOTTLE_AMOUNT, PROC_OPEN_MOTTLE_CELL, PROC_TERRAIN_HEIGHT_SCALE, PROC_TEXTURE_NOISE_COARSE_AMOUNT, PROC_TEXTURE_NOISE_COARSE_CELL, PROC_TEXTURE_NOISE_FINE_AMOUNT, PROC_TEXTURE_NOISE_FINE_CELL, PROC_TEXTURE_SIZE_X, PROC_TEXTURE_SIZE_Z, SCOUT_SQUAD_SIZE, SHADOW_FRUSTUM_HALF, SKY_COLOR, SQUAD_GRID_OFFSETS, SUN_OFFSET, TARGET_TYPE_COLOR, TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, WALK_AMP_EASE, WALK_ANIM_DETAIL_ZOOM, WALK_ANIM_MIN_INTERVAL_MS, WALK_CYCLE_SPEED, WALK_SWING_MAX, WORLD, unitMarkers3d } from './constants.js';
 import { updateMapFocusEase } from './input.js';
 import { buildContourLines, buildProceduralRoads, elevationAt, elevationAtFor, nearestPointOnRoad, riverXAt, terrainTypeAtFor } from './terrain.js';
 import { clamp, smoothstep01, valueNoise2D } from './utils.js';
@@ -819,7 +819,7 @@ export function makeMarkerMesh3d(shape, colorHex, formationOffsets){
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(0, y, z);
     // per user request: casting shadows from every one of these small primitive-shape
-    // markers (mortars, squads, snipers, etc. -- ~200 individual draw calls in the shadow
+    // markers (mortars, squads, antitanks, etc. -- ~200 individual draw calls in the shadow
     // pass) was too costly, especially on mobile GPUs. They still RECEIVE shadows (falling
     // under a tank/tree/hill's shadow still darkens them -- that's a cheap shader flag, not
     // an extra draw call) -- only the real FBX models (tank/heli) and terrain still cast.
@@ -882,14 +882,23 @@ export function makeMarkerMesh3d(shape, colorHex, formationOffsets){
     const offsets = formationOffsets && formationOffsets.length ? formationOffsets : SQUAD_GRID_OFFSETS;
     group._soldierFigures = buildHumanoidFigures(group, mat, s, colorHex, offsets);
     addFlag(colorHex);
-  } else if(shape==='scout' || shape==='sniper'){
-    // per user request: 斥候・狙撃班も小隊と同じ人型フィギュア(buildHumanoidFigures)にする一方、
-    // 兵種が見分けられるよう小道具で差別化する -- 斥候は背嚢(偵察装備)のみで武器は目立たせず、
-    // 狙撃班は長い狙撃銃を携行し、旗の色も従来通りタン系(0xc5c0a5)のまま維持する。
-    const offsets = SQUAD_GRID_OFFSETS.slice(0, shape==='scout' ? SCOUT_SQUAD_SIZE : SNIPER_SQUAD_SIZE);
-    group._soldierFigures = buildHumanoidFigures(group, mat, s, colorHex, offsets,
-      shape==='sniper' ? {weapon:'longrifle'} : {pack:true});
-    addFlag(shape==='sniper' ? 0xc5c0a5 : colorHex);
+  } else if(shape==='scout'){
+    // per user request: 斥候も小隊と同じ人型フィギュア(buildHumanoidFigures)にする一方、
+    // 兵種が見分けられるよう小道具で差別化する -- 背嚢(偵察装備)のみで武器は目立たせない。
+    const offsets = SQUAD_GRID_OFFSETS.slice(0, SCOUT_SQUAD_SIZE);
+    group._soldierFigures = buildHumanoidFigures(group, mat, s, colorHex, offsets, {pack:true});
+    addFlag(colorHex);
+  } else if(shape==='antitank'){
+    // per user request: 狙撃部隊を置き換えた対戦車部隊 -- 戦車(tank)/対空(sam)と同じ装軌+
+    // 箱型車体パターンを、軽車両らしく一回り小さく・track間隔を狭くし、前方へ斜めに据え
+    // 付けたロケットランチャーの発射管で兵科を識別できるようにする。
+    addTrack(-s*0.45);
+    addTrack(s*0.45);
+    add(new THREE.BoxGeometry(s*1.0, s*0.24, s*1.0), mat(colorHex), s*0.14);
+    add(new THREE.BoxGeometry(s*0.5, s*0.3, s*0.5), mat(0x39454d), s*0.4);
+    const launcher = add(new THREE.CylinderGeometry(s*0.09, s*0.09, s*0.85, 8), mat(0x2c3436), s*0.55);
+    launcher.rotation.z = -Math.PI*0.12;
+    addFlag(colorHex);
   } else if(shape==='engineer'){
     add(new THREE.BoxGeometry(s*0.9, s*0.3, s*0.7), mat(colorHex), s*0.2);
     add(new THREE.CylinderGeometry(s*0.22, s*0.22, s*0.8, 8), mat(0x6b573f), s*0.7);
@@ -1071,9 +1080,9 @@ export function syncUnitMarkers3d(){
   const friendlyUnit = (key, unit, shape, alive)=>{
     const p = smoothVisualPos(unit, unit.x, unit.y);
     place(key, p.x, p.y, shape, alive ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, true);
-    if(shape==='tank') updateTankHeading3d(unitMarkers3d[key], unit, p.x, p.y);
+    if(shape==='tank' || shape==='antitank') updateTankHeading3d(unitMarkers3d[key], unit, p.x, p.y);
     if(shape==='heli') updateHeliHeading3d(unitMarkers3d[key], unit, p.x, p.y);
-    if(shape==='infantry' || shape==='scout' || shape==='sniper'){
+    if(shape==='infantry' || shape==='scout'){
       updateSoldierFigures3d(unitMarkers3d[key], unit.soldiers.map(s=>s.alive));
       const moving = isVisuallyMoving(unit, p.x, p.y);
       if(walkAnimDue) updateSoldierWalkCycle(unitMarkers3d[key], moving, walkDt);
@@ -1086,7 +1095,7 @@ export function syncUnitMarkers3d(){
   (state.helis||[]).forEach((heli,i)=>friendlyUnit('heli'+i, heli, 'heli', heli.hp>0));
   state.scouts.forEach((s,i)=>friendlyUnit('scout'+i, s, 'scout', unitAlive(s)));
   state.squads.forEach((sq,i)=>friendlyUnit('squad'+i, sq, 'infantry', unitAlive(sq)));
-  state.snipers.forEach((sn,i)=>friendlyUnit('sniper'+i, sn, 'sniper', unitAlive(sn)));
+  state.antitanks.forEach((at,i)=>friendlyUnit('antitank'+i, at, 'antitank', at.hp>0));
   state.engineers.forEach((en,i)=>friendlyUnit('engineer'+i, en, 'engineer', unitAlive(en)));
   // per user request: 防壁(壁) -- 他の自軍ユニットと違い専用の2Dベクター描画に加えて、
   // 3Dミニマップ上でも障害物として視認できるよう箱形メッシュを配置する。

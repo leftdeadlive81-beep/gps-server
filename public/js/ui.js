@@ -1,7 +1,7 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement, unlockedAchievements } from './achievements.js';
 import { abandonSavedCampaign, addNewScout, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, isAutoCommitRunning, mapSeedCandidates, mortarNotReadyToFire, resumedFromSave, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
-import { ACHIEVEMENTS, AMMO_PACK, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_SQUAD_SIZE, SMART_ACTIONS, SMART_UNIT_TYPES, SNIPER_AIM_RANGE_M, SNIPER_RANGE_M, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
+import { ACHIEVEMENTS, AMMO_PACK, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_SQUAD_SIZE, SMART_ACTIONS, SMART_UNIT_TYPES, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, TANK_REPAIR_COST_PER_HP,TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
 import { canvasToScreen, multiSelectCommonOrders, multiSelectMode, multiSelected, pruneMultiSelected, unitGroups } from './input.js';
 import { render } from './main.js';
 import { elevationAt, elevationLabel, terrainTypeAt, terrainTypeLabel } from './terrain.js';
@@ -408,11 +408,13 @@ export function renderSmartOrder(){
   if(step===4){
     const actionDef = SMART_ACTIONS[smartWizard.unitType].find(a=>a.key===smartWizard.actionKey);
     if(actionDef.kind==='target'){
-      // per user request: SAM can only be assigned air targets (heli/drone); squad/tank/
-      // sniper direct-fire weapons can no longer be assigned air targets at all -- anti-air is
-      // the SAM's job now.
+      // per user request: SAM can only be assigned air targets (heli/drone); squad/tank
+      // direct-fire weapons can no longer be assigned air targets at all -- anti-air is
+      // the SAM's job now. Antitank is a vehicle-only specialist (rocket launcher effective
+      // against tanks), so it can only be assigned vehicle targets.
       const typeGate = smartWizard.unitType==='sam' ? (t=>t.type==='heli'||t.type==='drone')
-        : ['squad','tank','sniper'].includes(smartWizard.unitType) ? (t=>t.type!=='heli'&&t.type!=='drone')
+        : smartWizard.unitType==='antitank' ? (t=>t.type==='vehicle')
+        : ['squad','tank'].includes(smartWizard.unitType) ? (t=>t.type!=='heli'&&t.type!=='drone')
         : ()=>true;
       const knownTargets = state.targets.filter(t=>!t.destroyed && t.revealed && typeGate(t));
       body.innerHTML = backBtn + `
@@ -501,7 +503,7 @@ export function showStageClear(reward, resupply){
   setOverlayAccent('', 'After-Action Report');
   document.getElementById('overlay-title').textContent = 'WAVE CLEAR';
   document.getElementById('overlay-text').textContent =
-    `WAVE ${state.stage} 撃退成功。報酬 ¥${reward.total.toLocaleString()}(基本¥${reward.base}+速攻¥${reward.turnsBonus}+残弾¥${reward.ammoBonus}+指揮所無傷¥${reward.hqBonus}+砲兵無傷¥${reward.hpBonus}+歩兵無傷¥${reward.infBonus}+斥候無傷¥${reward.scoutBonus}+狙撃無傷¥${reward.sniperBonus}+敵本部撃破¥${reward.enemyHqBonus}) ／ 所持金 ¥${state.money.toLocaleString()} ／ 補給: 戦果${Math.round(resupply.perf*100)}%によりHE+${resupply.ammoHe}・HEAT+${resupply.ammoHeat}・予備兵力+${resupply.personnel}名`;
+    `WAVE ${state.stage} 撃退成功。報酬 ¥${reward.total.toLocaleString()}(基本¥${reward.base}+速攻¥${reward.turnsBonus}+残弾¥${reward.ammoBonus}+指揮所無傷¥${reward.hqBonus}+砲兵無傷¥${reward.hpBonus}+歩兵無傷¥${reward.infBonus}+斥候無傷¥${reward.scoutBonus}+対戦車無傷¥${reward.antitankBonus}+敵本部撃破¥${reward.enemyHqBonus}) ／ 所持金 ¥${state.money.toLocaleString()} ／ 補給: 戦果${Math.round(resupply.perf*100)}%によりHE+${resupply.ammoHe}・HEAT+${resupply.ammoHeat}・予備兵力+${resupply.personnel}名`;
   document.getElementById('overlay-buttons').innerHTML =
     `<button class="btn primary" onclick="proceedToShop()">次のWAVEへ</button>`;
   ov.classList.add('show');
@@ -576,7 +578,7 @@ export function renderMultiSelectBox(){
       <span class="cb-title">複数選択(${multiSelected.length}隊)</span>
       <button class="cb-close" onclick="toggleMultiSelectMode()">×</button>
     </div>
-    <div class="meta" style="margin-bottom:6px;">${multiSelected.length ? '地図をクリックで選択中の全隊に移動先を指示。ユニットを再タップで選択解除。' : '小隊/戦車/対空/狙撃/工兵をタップして選択してください。'}</div>
+    <div class="meta" style="margin-bottom:6px;">${multiSelected.length ? '地図をクリックで選択中の全隊に移動先を指示。ユニットを再タップで選択解除。' : '小隊/戦車/対空/対戦車/工兵をタップして選択してください。'}</div>
     <div class="squad-orders" style="grid-template-columns:repeat(${orders.length},1fr);margin-bottom:8px;">${btns}</div>
     <div class="meta" style="margin-bottom:4px;">グループとして保存:</div>
     <div class="squad-orders" style="grid-template-columns:repeat(9,1fr);margin-bottom:8px;">${groupSaveBtns}</div>
@@ -959,45 +961,36 @@ export function engineerBoxHtml(idx){
   `;
 }
 
-export function sniperBoxHtml(idx){
-  const sn = state.snipers[idx];
-  const alive = sn.soldiers.filter(s=>s.alive).length;
-  const wiped = alive===0 || sn.resting;
+export function antitankBoxHtml(idx){
+  const at = state.antitanks[idx];
+  const dead = at.hp<=0;
   const btns = ['advance','hold','retreat'].map(o=>
-    `<button class="btn squad-order-btn ${sn.order===o?'active':''}" ${wiped?'disabled':''} onclick="setSniperOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
+    `<button class="btn squad-order-btn ${at.order===o?'active':''}" ${dead?'disabled':''} onclick="setAntitankOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
-  const arming = state.orderMode && state.orderMode.kind==='sniper-move' && state.orderMode.idx===idx;
-  const armingTarget = state.orderMode && state.orderMode.kind==='sniper-target' && state.orderMode.idx===idx;
-  const armingAim = state.orderMode && state.orderMode.kind==='sniper-aim' && state.orderMode.idx===idx;
-  const destStatus = arming ? '地図をクリックして移動先指定…' : (sn.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
-  const snipeTarget = sn.pendingSnipeTargetId ? state.targets.find(t=>t.id===sn.pendingSnipeTargetId) : null;
-  let snipeStatus;
-  if(armingTarget) snipeStatus = '狙撃する目標をクリックして指定…';
-  else if(snipeTarget && !snipeTarget.destroyed) snipeStatus = `狙撃目標: ${snipeTarget.id} (${snipeTarget.revealed?snipeTarget.def.label:'識別不能'})`;
-  else snipeStatus = '狙撃目標: 未設定';
-  let aimStatus;
-  if(armingAim) aimStatus = '射撃方向にする地点をクリック…';
-  else if(sn.aimAngle!==null && sn.aimAngle!==undefined) aimStatus = `射撃方向: ${Math.round(sn.aimAngle)}° (射程${SNIPER_AIM_RANGE_M}m、自動交戦)`;
-  else aimStatus = '射撃方向: 未設定';
+  const huntTarget = at.huntTargetId ? state.targets.find(t=>t.id===at.huntTargetId) : null;
+  const huntStatus = (huntTarget && !huntTarget.destroyed)
+    ? `攻撃目標: ${huntTarget.id} (${huntTarget.revealed?huntTarget.def.label:'識別不能'})`
+    : null;
+  if(dead) return `<div class="empty-hint" style="padding:4px 0;color:var(--red);">撃破</div>`;
+  const repairAmount = Math.min(ANTITANK_REPAIR_HP_PER_CALL, at.maxHp-at.hp);
+  const repairCost = Math.round(ANTITANK_REPAIR_COST_PER_HP*repairAmount);
+  const canRepair = at.hp<at.maxHp && state.money>=repairCost;
+  const engineerBtns = at.hp<at.maxHp ? state.engineers.map((en,enIdx)=>{
+    if(unitAliveCount(en)<=0 || en.resting) return '';
+    const active = en.order==='repair' && en.repairTargetId===at.id;
+    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignEngineerRepair(${enIdx},${idx})">工兵${enIdx+1}に修理させる(無償)${active?'(修理中)':''}</button>`;
+  }).filter(Boolean).join('') : '';
   return `
-    <div class="meta">${alive} / ${sn.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sn.x,sn.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(sn.x,sn.y))} ・ 有効射程約${SNIPER_RANGE_M}m</div>
-    ${exposureMetaHtml(getUnitExposure({kind:'sniper', idx}))}
-    ${restButtonHtml('sniper', idx, sn)}
+    <div class="meta">HP: ${at.hp} / ${at.maxHp}</div>
+    <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,at.hp/at.maxHp*100)}%"></div></div>
+    ${exposureMetaHtml(getUnitExposure({kind:'antitank', idx}))}
+    <div class="meta" style="margin-bottom:6px;color:var(--muted);">対戦車ロケットランチャー専任(vehicleタイプのみ交戦可) ― 歩兵/砲兵には無力</div>
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
-    <div class="row-2" style="margin-bottom:6px;">
-      <button class="btn ${arming?'active squad-order-btn':''}" ${wiped?'disabled':''} onclick="armSniperMoveOrder(${idx})">移動先を指定</button>
-      <button class="btn" ${wiped||!sn.pendingDest?'disabled':''} onclick="clearSniperDest(${idx})">解除</button>
-    </div>
-    <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
-    <button class="btn ${armingTarget?'active squad-order-btn':''}" ${wiped?'disabled':''} onclick="armSniperTargetOrder(${idx})" style="margin-bottom:6px;">狙撃目標を指定</button>
-    <div class="meta" style="margin-bottom:6px;">${snipeStatus}</div>
-    ${sn.pendingSnipeTargetId ? `<button class="btn" onclick="clearSniperTarget(${idx})" style="margin-bottom:6px;">狙撃目標を解除</button>` : ''}
-    <button class="btn ${armingAim?'active squad-order-btn':''}" ${wiped?'disabled':''} onclick="armSniperAimOrder(${idx})" style="margin-bottom:6px;">射撃方向を指定</button>
-    <div class="meta" style="margin-bottom:6px;">${aimStatus}</div>
-    ${(sn.aimAngle!==null && sn.aimAngle!==undefined) ? `<button class="btn" onclick="clearSniperAim(${idx})">射撃方向を解除</button>` : ''}
-    ${standingOrderSelectHtml('sniper', idx, sn, false)}
-    ${soldierRosterHtml(sn.soldiers)}
-    ${reinforceButtonHtml('sniper', idx, sn)}
+    <div class="meta" style="margin-bottom:6px;">${at.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
+    ${at.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearAntitankDest(${idx})">移動先を解除</button>` : ''}
+    ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearAntitankHunt(${idx})">攻撃目標を解除</button>` : ''}
+    <button class="btn" ${canRepair?'':'disabled'} onclick="repairAntitank(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${at.hp>=at.maxHp?' ・ HP満タン':''}</button>
+    ${engineerBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">${engineerBtns}</div>` : ''}
   `;
 }
 
@@ -1041,12 +1034,12 @@ export function renderCommandBox(){
     title = `対空${state.commandBox.idx+1}`;
     bodyHtml = samBoxHtml(state.commandBox.idx);
     pos = canvasToScreen(sam._visX!==undefined?sam._visX:sam.x, sam._visY!==undefined?sam._visY:sam.y);
-  } else if(kind==='sniper'){
-    const sn = state.snipers[state.commandBox.idx];
-    if(!sn){ box.style.display='none'; return; }
-    title = `狙撃${state.commandBox.idx+1}班`;
-    bodyHtml = sniperBoxHtml(state.commandBox.idx);
-    pos = canvasToScreen(sn._visX!==undefined?sn._visX:sn.x, sn._visY!==undefined?sn._visY:sn.y);
+  } else if(kind==='antitank'){
+    const at = state.antitanks[state.commandBox.idx];
+    if(!at){ box.style.display='none'; return; }
+    title = `対戦車${state.commandBox.idx+1}`;
+    bodyHtml = antitankBoxHtml(state.commandBox.idx);
+    pos = canvasToScreen(at._visX!==undefined?at._visX:at.x, at._visY!==undefined?at._visY:at.y);
   } else if(kind==='engineer'){
     const en = state.engineers[state.commandBox.idx];
     if(!en || !unitAlive(en)){ box.style.display='none'; return; }
@@ -1096,12 +1089,10 @@ export function renderEnemyCommandBox(){
     const active = m.order==='fire' && m.pendingFire && m.pendingFire.snappedId===t.id;
     return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignMortarFire(${idx})">迫撃砲${idx+1}に攻撃させる${active?'(照準中)':''}</button>`;
   }).filter(Boolean).join('');
-  // per user request: 対地の直接照準兵器(小隊/戦車/狙撃)はもはや対空目標(ヘリ・ドローン)を
+  // per user request: 対地の直接照準兵器(小隊/戦車)はもはや対空目標(ヘリ・ドローン)を
   // 直接狙い撃てない -- 対空はSAM専任(下のsamBtns)。
   const isAirTarget = t.type==='heli' || t.type==='drone';
-  // per user request: snipers are no longer assignable from here -- they already
-  // auto-engage anything crossing their own aim line (see resolveSniperOrders),
-  // and are aimed via the "狙撃目標を指定"/"射撃方向を指定" buttons in their own unit box.
+  const isVehicleTarget = t.type==='vehicle';
   const squadBtns = isAirTarget ? '' : state.squads.map((sq,idx)=>{
     if(!sq.soldiers.some(s=>s.alive)) return '';
     const active = sq.order==='hunt' && sq.huntTargetId===t.id;
@@ -1117,7 +1108,13 @@ export function renderEnemyCommandBox(){
     const active = sam.order==='hunt' && sam.huntTargetId===t.id;
     return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignSamHunt(${idx})">対空${idx+1}に攻撃させる${active?'(攻撃中)':''}</button>`;
   }).filter(Boolean).join('');
-  const allBtns = mortarBtns + tankBtns + samBtns + squadBtns;
+  // per user request: 対戦車部隊(旧・狙撃部隊)はvehicleタイプ専任のロケットランチャー車両。
+  const antitankBtns = !isVehicleTarget ? '' : state.antitanks.map((at,idx)=>{
+    if(at.hp<=0) return '';
+    const active = at.order==='hunt' && at.huntTargetId===t.id;
+    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignAntitankHunt(${idx})">対戦車${idx+1}に攻撃させる${active?'(攻撃中)':''}</button>`;
+  }).filter(Boolean).join('');
+  const allBtns = mortarBtns + tankBtns + samBtns + antitankBtns + squadBtns;
   box.innerHTML = `
     <div class="cb-head">
       <span class="cb-title">${t.id} ― ${t.revealed?t.def.label:'識別不能'}</span>
@@ -1148,9 +1145,8 @@ export function renderStats(){
   const aliveMortarPersonnel = state.mortars.filter(m=>m.hp>0).length * MORTAR_CREW_SIZE;
   const aliveScoutPersonnel = state.scouts.reduce((s,sc)=>s+unitAliveCount(sc),0);
   const aliveSquadPersonnel = totalAliveSoldiers();
-  const aliveSniperPersonnel = state.snipers.reduce((s,sn)=>s+sn.soldiers.filter(x=>x.alive).length,0);
   const aliveEngineerPersonnel = state.engineers.reduce((s,en)=>s+en.soldiers.filter(x=>x.alive).length,0);
-  const aliveTotal = aliveMortarPersonnel + aliveScoutPersonnel + aliveSquadPersonnel + aliveSniperPersonnel + aliveEngineerPersonnel + state.reserve;
+  const aliveTotal = aliveMortarPersonnel + aliveScoutPersonnel + aliveSquadPersonnel + aliveEngineerPersonnel + state.reserve;
   document.querySelector('#stat-roster .value').textContent = aliveTotal + ' / ' + totalRosterCapacity();
   document.getElementById('board-note').textContent = state.placementPending
     ? '手動配置モード ― 地図上の指定範囲内をクリックして、表示中のユニットの初期位置を指定してください'
@@ -1188,7 +1184,7 @@ export function renderStats(){
   }
   const rows = [];
   // per user request: friendly force-status bars are unified to blue across the board
-  // (HQ was red, mortar amber, scout/squad green -- now all match sniper's existing blue)
+  // (HQ was red, mortar amber, scout/squad green -- now all match this shared blue)
   rows.push(forceRow('指揮所', state.hq.hp/state.hq.maxHp, state.hq.hp>0?Math.round(state.hq.hp/state.hq.maxHp*100)+'%':'陥落', 'var(--blue-id)'));
   state.mortars.forEach((m,i)=>{
     rows.push(forceRow(`迫${i+1}`, m.hp/m.maxHp, m.hp>0?Math.round(m.hp/m.maxHp*100)+'%':'不能', 'var(--blue-id)', 'mortar', i));
@@ -1210,9 +1206,8 @@ export function renderStats(){
     const alive = sq.soldiers.filter(s=>s.alive).length;
     rows.push(forceRow(`小隊${i+1}`, alive/sq.soldiers.length, `${alive}/${sq.soldiers.length}`, 'var(--blue-id)', 'squad', i));
   });
-  state.snipers.forEach((sn,i)=>{
-    const alive = sn.soldiers.filter(s=>s.alive).length;
-    rows.push(forceRow(`狙${i+1}`, alive/sn.soldiers.length, `${alive}/${sn.soldiers.length}`, 'var(--blue-id)', 'sniper', i));
+  state.antitanks.forEach((at,i)=>{
+    rows.push(forceRow(`対戦車${i+1}`, at.hp/at.maxHp, at.hp>0?Math.round(at.hp/at.maxHp*100)+'%':'撃破', 'var(--blue-id)', 'antitank', i));
   });
   state.engineers.forEach((en,i)=>{
     const alive = en.soldiers.filter(s=>s.alive).length;
@@ -1230,7 +1225,6 @@ export function renderStats(){
   state.mortars.forEach(m=>{ if(m.hp<=0 || m.hp/m.maxHp<0.5) troubledUnits++; });
   state.scouts.forEach(s=>{ const a=unitAliveCount(s); if(a===0 || a/s.soldiers.length<0.5) troubledUnits++; });
   state.squads.forEach(sq=>{ const a=sq.soldiers.filter(x=>x.alive).length; if(a===0 || a/sq.soldiers.length<0.5) troubledUnits++; });
-  state.snipers.forEach(sn=>{ const a=sn.soldiers.filter(x=>x.alive).length; if(a===0 || a/sn.soldiers.length<0.5) troubledUnits++; });
   document.getElementById('force-list-badge').textContent = troubledUnits>0 ? `⚠ ${troubledUnits}` : '';
 
   document.getElementById('self-ammo-line').textContent = `現有弾薬: HE ${state.ammo.he} ／ HEAT ${state.ammo.heat}`;
@@ -1269,9 +1263,9 @@ export function renderDecisionPanel(){
     if(s.pendingDest) queued.push(`斥候${idx+1}: 移動`);
   });
   state.squads.forEach((sq,idx)=>{ if(sq.pendingDest) queued.push(`第${idx+1}小隊: 移動`); });
-  state.snipers.forEach((sn,idx)=>{
-    if(sn.pendingSnipeTargetId) queued.push(`狙撃${idx+1}班: 狙撃`);
-    else if(sn.pendingDest) queued.push(`狙撃${idx+1}班: 移動`);
+  state.antitanks.forEach((at,idx)=>{
+    if(at.order==='hunt' && at.huntTargetId) queued.push(`対戦車${idx+1}: 攻撃`);
+    else if(at.pendingDest) queued.push(`対戦車${idx+1}: 移動`);
   });
   const summary = queued.join(' / ');
   holders.forEach(h=>{ h.innerHTML = `
@@ -1357,7 +1351,7 @@ export function repositionOpenCommandBoxes(){
         : kind==='sam' ? state.sams[idx]
         : kind==='scout' ? state.scouts[idx]
         : kind==='squad' ? state.squads[idx]
-        : kind==='sniper' ? state.snipers[idx]
+        : kind==='antitank' ? state.antitanks[idx]
         : kind==='engineer' ? state.engineers[idx]
         : null;
       if(unit){
@@ -1392,4 +1386,4 @@ export function anyOverlayShown(){
 }
 
 
-Object.assign(window, { renderMapSelectOverlay, renderMapSelectBody, selectMapSeed, renderDeploymentSelectBody, selectDeploymentMode, renderDecoySelectBody, selectDecoyMode, openShop, closeShop, renderShop, buyEquipment, buyAmmo, unlockFuze, toggleStatbar, toggleBoardNote, toggleDrawer, closeAllDrawers, toggleMapFullscreen, updateFullscreenBtnIcon, log, openSmartOrder, closeSmartOrder, smartOrderBack, smartOrderPickType, smartOrderPickScope, smartOrderPickAction, smartOrderPickTarget, smartOrderConfirmInstant, renderSmartOrder, hqBoxHtml, showWaveRewardChoice, chooseWaveReward, setOverlayAccent, showStageClear, proceedToShop, showGameClear, showStageFailed, renderMultiSelectBox, closeCommandBox, closeEnemyCommandBox, mortarBoxHtml, mortarMainlineHtml, updateFireConfigCancel, exposureMetaHtml, soldierRosterHtml, restButtonHtml, reinforceButtonHtml, scoutBoxHtml, standingOrderSelectHtml, squadBoxHtml, tankBoxHtml, samBoxHtml, engineerBoxHtml, sniperBoxHtml, renderCommandBox, positionCommandBox, renderEnemyCommandBox, renderStats, renderDecisionPanel, closeDecoyCommandBox, renderDecoyCommandBox, repositionOpenCommandBoxes, anyOverlayShown });
+Object.assign(window, { renderMapSelectOverlay, renderMapSelectBody, selectMapSeed, renderDeploymentSelectBody, selectDeploymentMode, renderDecoySelectBody, selectDecoyMode, openShop, closeShop, renderShop, buyEquipment, buyAmmo, unlockFuze, toggleStatbar, toggleBoardNote, toggleDrawer, closeAllDrawers, toggleMapFullscreen, updateFullscreenBtnIcon, log, openSmartOrder, closeSmartOrder, smartOrderBack, smartOrderPickType, smartOrderPickScope, smartOrderPickAction, smartOrderPickTarget, smartOrderConfirmInstant, renderSmartOrder, hqBoxHtml, showWaveRewardChoice, chooseWaveReward, setOverlayAccent, showStageClear, proceedToShop, showGameClear, showStageFailed, renderMultiSelectBox, closeCommandBox, closeEnemyCommandBox, mortarBoxHtml, mortarMainlineHtml, updateFireConfigCancel, exposureMetaHtml, soldierRosterHtml, restButtonHtml, reinforceButtonHtml, scoutBoxHtml, standingOrderSelectHtml, squadBoxHtml, tankBoxHtml, samBoxHtml, engineerBoxHtml, antitankBoxHtml, renderCommandBox, positionCommandBox, renderEnemyCommandBox, renderStats, renderDecisionPanel, closeDecoyCommandBox, renderDecoyCommandBox, repositionOpenCommandBoxes, anyOverlayShown });

@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { computeDispersionAt, currentPlacementUnit, estPos, isSuppressed, smoothVisualPos, state, unitAlive, unitAliveCount } from './combat.js';
-import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FORTRESS_NEUTRAL_COLOR, FRIENDLY_MARK_COLOR, GRID_LINES, HQ_SUPPLY_ZONE_RADIUS_UNITS, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_DETAIL_EFFECT_ZOOM, MAP_DETAIL_LABEL_ZOOM, MAP_FULL_DETAIL_ZOOM, MAP_INITIAL_AZIMUTH, MAP_VIEW, METERS_PER_UNIT, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SNIPER_AIM_RANGE_UNITS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, UNIT_AMMO_MAX, TRENCH_LINE_WIDTH, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
+import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FORTRESS_NEUTRAL_COLOR, FRIENDLY_MARK_COLOR, GRID_LINES, HQ_SUPPLY_ZONE_RADIUS_UNITS, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_DETAIL_EFFECT_ZOOM, MAP_DETAIL_LABEL_ZOOM, MAP_FULL_DETAIL_ZOOM, MAP_INITIAL_AZIMUTH, MAP_VIEW, METERS_PER_UNIT, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, UNIT_AMMO_MAX, TRENCH_LINE_WIDTH, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
 import { isMultiSelected } from './input.js';
 import { choppedLineSegments, febaLineSegments } from './terrain.js';
 import { project, projectAtWorldY, scaledIconH, threeReady } from './three.js';
@@ -279,7 +279,7 @@ export function drawMinimap(){
   state.scouts.forEach(s=>{ if(unitAlive(s)) friendlyPts.push([s.x, s.y]); });
   (state.helis||[]).forEach(h=>{ if(h.hp>0) friendlyPts.push([h.x, h.y]); });
   state.squads.forEach(sq=>{ if(sq.soldiers.some(s=>s.alive)) friendlyPts.push([sq.x, sq.y]); });
-  state.snipers.forEach(sn=>{ if(sn.soldiers.some(s=>s.alive)) friendlyPts.push([sn.x, sn.y]); });
+  state.antitanks.forEach(at=>{ if(at.hp>0) friendlyPts.push([at.x, at.y]); });
   ctx.fillStyle = FRIENDLY_MARK_COLOR;
   friendlyPts.forEach(([x,y])=>{
     const pt = proj(x,y);
@@ -462,7 +462,7 @@ export function drawBoard(){
     ...state.mortars.map((unit,i)=>({unit, label:`迫撃砲${i+1}`})),
     ...state.scouts.map((unit,i)=>({unit, label:`斥候${i+1}`})),
     ...state.squads.map((unit,i)=>({unit, label:`第${i+1}小隊`})),
-    ...state.snipers.map((unit,i)=>({unit, label:`狙撃${i+1}班`})),
+    ...state.antitanks.map((unit,i)=>({unit, label:`対戦車${i+1}`})),
     ...state.tanks.map((unit,i)=>({unit, label:`戦車${i+1}`})),
     ...state.sams.map((unit,i)=>({unit, label:`対空${i+1}`})),
     ...state.engineers.map((unit,i)=>({unit, label:`工兵${i+1}`})),
@@ -615,7 +615,7 @@ export function drawBoard(){
       ctx.stroke();
       ctx.setLineDash([]);
       // per user request: mortar max range fixed at 6km -- enforced in setPendingFireAt/
-      // assignMortarFire/applySmartOrder/callInMortarHeatStrike (all reject a shot beyond
+      // assignMortarFire/applySmartOrder (all reject a shot beyond
       // MORTAR_MAX_RANGE_UNITS). No matching outer ring drawn here: at 6km radius it would
       // cover nearly the entire map width and, drawn per mortar, add real per-frame cost for
       // little practical benefit over the existing "target too far" rejection message.
@@ -701,8 +701,8 @@ export function drawBoard(){
     ctx.lineWidth = 1;
     ctx.stroke();
   };
-  // per user request: HQ本部の周りの補給ゾーン -- 中に入っている損傷ユニット(迫撃砲/戦車/SAM)は
-  // 徐々に回復し、歩兵小隊/狙撃班は弾薬を再補給する(see applyHqSupplyZone() in combat.js)。
+  // per user request: HQ本部の周りの補給ゾーン -- 中に入っている損傷ユニット(迫撃砲/戦車/対戦車/SAM)は
+  // 徐々に回復し、歩兵小隊は弾薬を再補給する(see applyHqSupplyZone() in combat.js)。
   // 常時表示(showDetailLabels条件なし)にして、遠くから見てもゾーンの存在に気付けるようにした。
   if(state.hq && state.hq.hp>0){
     drawGroundDetectionCircle(state.hq, HQ_SUPPLY_ZONE_RADIUS_UNITS, 'rgba(122,201,138,0.55)', 'rgba(122,201,138,0.07)');
@@ -918,52 +918,38 @@ export function drawBoard(){
     });
   }
 
-  // friendly sniper teams (自軍) ― precision long-range fire teams
-  if(state.snipers && state.snipers.length){
-    state.snipers.forEach((sn, snIdx)=>{
-      const snVisL = smoothVisualPos(sn, sn.x, sn.y);
-      const snVis = project(snVisL.x, snVisL.y);
-      const aliveSoldiers = sn.soldiers.filter(s=>s.alive);
-      drawSelectionRing(ctx, snVis.x, snVis.y, (state.commandBox && state.commandBox.kind==='sniper' && state.commandBox.idx===snIdx) || isMultiSelected('sniper', snIdx));
-      if(showDetailLabels && aliveSoldiers.length>0) drawAttritionBar(ctx, snVis.x+20, snVis.y, aliveSoldiers.length/sn.soldiers.length);
-      const snOrderIcon = ORDER_ICON[sn.order] + (sn.pendingDest ? '→' : '');
-      const snAmmoLabel = (sn.ammo===undefined || sn.ammo>0) ? ` 弾${Math.ceil(sn.ammo ?? UNIT_AMMO_MAX)}` : ' 弾切れ';
-      if(showDetailLabels) queueFriendlyLabel(snVis.x, snVis.y, [{text:`狙撃${snIdx+1}班 ${aliveSoldiers.length}/${sn.soldiers.length} ${snOrderIcon}${snAmmoLabel}`, dy:27, font:'14px "JetBrains Mono"', color: aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25'}],
-        (state.commandBox && state.commandBox.kind==='sniper' && state.commandBox.idx===snIdx) || isMultiSelected('sniper', snIdx), '狙撃');
+  // 対戦車部隊マーカー(自軍) ― 戦車と同じ描画パターン(単一HP制の車両)。
+  state.antitanks.forEach((at, atIdx)=>{
+    const atVisL = smoothVisualPos(at, at.x, at.y);
+    const atVis = project(atVisL.x, atVisL.y);
+    const atAlive = at.hp>0;
+    ctx.save();
+    ctx.translate(atVis.x, atVis.y);
+    drawSelectionRing(ctx, 0, 0, (state.commandBox && state.commandBox.kind==='antitank' && state.commandBox.idx===atIdx) || isMultiSelected('antitank', atIdx));
+    const atOrderIcon = ORDER_ICON[at.order] + (at.pendingDest ? '→' : '');
+    if(showDetailLabels) queueFriendlyLabel(atVis.x, atVis.y, [{text: atAlive?`対戦車${at.id+1} ${atOrderIcon}`:`対戦車${at.id+1}(撃破)`, dy:44, font:'15px "JetBrains Mono"'}],
+      (state.commandBox && state.commandBox.kind==='antitank' && state.commandBox.idx===atIdx) || isMultiSelected('antitank', atIdx), '対戦車');
+    ctx.restore();
 
-      if(aliveSoldiers.length>0 && sn.pendingSnipeTargetId){
-        const t = state.targets.find(x=>x.id===sn.pendingSnipeTargetId);
+    if(atAlive){
+      if(showDetailLabels) drawAttritionBar(ctx, atVis.x+18, atVis.y-2, at.hp/at.maxHp);
+      if(at.order==='hunt' && at.huntTargetId){
+        const t = state.targets.find(x=>x.id===at.huntTargetId);
         if(t && !t.destroyed && t.revealed){
           const eL = estPos(t);
           const e = project(eL.x, eL.y);
           ctx.beginPath();
-          ctx.setLineDash([2,4]);
-          ctx.strokeStyle = 'rgba(111,155,191,0.5)';
+          ctx.setLineDash([3,3]);
+          ctx.strokeStyle = 'rgba(193,69,59,0.35)';
           ctx.lineWidth = 1;
-          ctx.moveTo(snVis.x, snVis.y);
+          ctx.moveTo(atVis.x, atVis.y);
           ctx.lineTo(e.x, e.y);
           ctx.stroke();
           ctx.setLineDash([]);
         }
       }
-
-      // firing-direction line ― solid blue, SNIPER_AIM_RANGE_UNITS long; any
-      // enemy that overlaps it is auto-engaged (see findTargetOnSniperLine).
-      if(aliveSoldiers.length>0 && sn.aimAngle!==null && sn.aimAngle!==undefined){
-        const rad = sn.aimAngle*Math.PI/180;
-        const endL = {x: sn.x+Math.sin(rad)*SNIPER_AIM_RANGE_UNITS, y: sn.y-Math.cos(rad)*SNIPER_AIM_RANGE_UNITS};
-        const endVis = project(endL.x, endL.y);
-        if(endVis.visible){
-          ctx.beginPath();
-          ctx.strokeStyle = 'rgba(80,150,230,0.65)';
-          ctx.lineWidth = 2;
-          ctx.moveTo(snVis.x, snVis.y);
-          ctx.lineTo(endVis.x, endVis.y);
-          ctx.stroke();
-        }
-      }
-    });
-  }
+    }
+  });
 
   drawPendingFriendlyLabels(ctx, pendingFriendlyLabels);
 
@@ -1272,7 +1258,7 @@ export function drawBoard(){
       return;
     }
 
-    // rifle (small arms: squad/sniper/anti-drone point defense/generic enemy infantry),
+    // rifle (small arms: squad/anti-drone point defense/generic enemy infantry),
     // cannon (tank/vehicle direct-fire guns), and heli (attack helicopter gun/rocket runs)
     // all share this trailing-tracer-with-shell shape, differing only in color/thickness.
     const style = wt==='cannon' ? {trail:'255,235,200,0.4', core:'255,235,205,0.95', shell:'#fff6dd', width:4,   shellR:4.2}
