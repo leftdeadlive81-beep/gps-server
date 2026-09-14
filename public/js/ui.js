@@ -1,7 +1,7 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement, unlockedAchievements } from './achievements.js';
 import { abandonSavedCampaign, addNewAntitank, addNewHeli, addNewMortar, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, healAllForces, isAutoCommitRunning, mapSeedCandidates, mortarNotReadyToFire, mortarTooCloseToFire, mortarTooFarToFire, resumedFromSave, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
-import { ACHIEVEMENTS, AMMO_PACK, ANTITANK_ENGAGE_RANGE, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_ENGAGE_RANGE, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SMART_ACTIONS, SMART_UNIT_TYPES, SQUAD_ENGAGE_RANGE, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, TANK_ENGAGE_RANGE, TANK_REPAIR_COST_PER_HP,TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
+import { ACHIEVEMENTS, AMMO_PACK, ANTITANK_AA_RANGE, ANTITANK_ENGAGE_RANGE, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_ENGAGE_RANGE, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SMART_ACTIONS, SMART_UNIT_TYPES, SQUAD_ENGAGE_RANGE, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, TANK_ENGAGE_RANGE, TANK_REPAIR_COST_PER_HP,TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
 import { canvasToScreen, multiSelectCommonOrders, multiSelectMode, multiSelected, pruneMultiSelected, unitGroups } from './input.js';
 import { render } from './main.js';
 import { elevationAt, elevationLabel, terrainTypeAt, terrainTypeLabel } from './terrain.js';
@@ -410,10 +410,10 @@ export function renderSmartOrder(){
     if(actionDef.kind==='target'){
       // per user request: SAM can only be assigned air targets (heli/drone); squad/tank
       // direct-fire weapons can no longer be assigned air targets at all -- anti-air is
-      // the SAM's job now. Antitank is a vehicle-only specialist (rocket launcher effective
-      // against tanks), so it can only be assigned vehicle targets.
+      // primarily the SAM's job. Antitank carries both a主兵装(対戦車ロケットランチャー、
+      // vehicle専任)と副武装(対空自衛火器、heli/drone)なので、その両方を選べる。
       const typeGate = smartWizard.unitType==='sam' ? (t=>t.type==='heli'||t.type==='drone')
-        : smartWizard.unitType==='antitank' ? (t=>t.type==='vehicle')
+        : smartWizard.unitType==='antitank' ? (t=>t.type==='vehicle'||t.type==='heli'||t.type==='drone')
         : ['squad','tank'].includes(smartWizard.unitType) ? (t=>t.type!=='heli'&&t.type!=='drone')
         : ()=>true;
       const knownTargets = state.targets.filter(t=>!t.destroyed && t.revealed && typeGate(t));
@@ -626,10 +626,13 @@ export function closeEnemyCommandBox(){
 function huntTargetListHtml(idx, unit, engageRangeUnits, assignFnName, targetTypeGate, activeTargetId){
   const candidates = state.targets.filter(t=>!t.destroyed && t.revealed && targetTypeGate(t));
   if(!candidates.length) return '<div class="empty-hint" style="padding:4px 0;">捕捉中の目標がありません</div>';
+  // per user request(対戦車の対空ウェポン追加): engageRangeUnitsは固定値の他、対象ごとに
+  // 射程が異なるユニット(主兵装/副武装で射程が違う対戦車部隊)向けに関数も受け付ける。
   const rows = candidates.map(t=>{
+    const rangeForTarget = typeof engageRangeUnits==='function' ? engageRangeUnits(t) : engageRangeUnits;
     const dist = Math.hypot(t.trueX-unit.x, t.trueY-unit.y);
-    const outOfRange = dist > engageRangeUnits;
-    const distM = unitsToMeters(dist), rangeM = unitsToMeters(engageRangeUnits);
+    const outOfRange = dist > rangeForTarget;
+    const distM = unitsToMeters(dist), rangeM = unitsToMeters(rangeForTarget);
     const active = activeTargetId===t.id;
     return {
       outOfRange, dist,
@@ -1057,13 +1060,13 @@ export function antitankBoxHtml(idx){
     <div class="meta">HP: ${at.hp} / ${at.maxHp}</div>
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,at.hp/at.maxHp*100)}%"></div></div>
     ${exposureMetaHtml(getUnitExposure({kind:'antitank', idx}))}
-    <div class="meta" style="margin-bottom:6px;color:var(--muted);">対戦車ロケットランチャー専任(vehicleタイプのみ交戦可) ― 歩兵/砲兵には無力</div>
+    <div class="meta" style="margin-bottom:6px;color:var(--muted);">対戦車ロケットランチャー(vehicle) + 対空自衛火器(heli/drone) ― 歩兵/砲兵には無力</div>
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
     <div class="meta" style="margin-bottom:6px;">${at.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
     ${at.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearAntitankDest(${idx})">移動先を解除</button>` : ''}
     ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearAntitankHunt(${idx})">攻撃目標を解除</button>` : ''}
     <div class="meta" style="margin:8px 0 4px;">攻撃目標を選択:</div>
-    ${huntTargetListHtml(idx, at, ANTITANK_ENGAGE_RANGE, 'assignAntitankHunt', tt=>tt.type==='vehicle', at.huntTargetId)}
+    ${huntTargetListHtml(idx, at, tt=>tt.type==='vehicle'?ANTITANK_ENGAGE_RANGE:ANTITANK_AA_RANGE, 'assignAntitankHunt', tt=>tt.type==='vehicle'||tt.type==='heli'||tt.type==='drone', at.huntTargetId)}
     <button class="btn" style="margin-top:8px;" ${canRepair?'':'disabled'} onclick="repairAntitank(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${at.hp>=at.maxHp?' ・ HP満タン':''}</button>
     ${engineerBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">${engineerBtns}</div>` : ''}
   `;
@@ -1211,10 +1214,11 @@ export function renderEnemyCommandBox(){
     if(sam.hp<=0) return null;
     return huntRow('sam', idx, sam, `対空${idx+1}に攻撃させる`, SAM_ENGAGE_RANGE, `assignSamHunt(${idx})`);
   }).filter(Boolean);
-  // per user request: 対戦車部隊(旧・狙撃部隊)はvehicleタイプ専任のロケットランチャー車両。
-  const antitankRows = !isVehicleTarget ? [] : state.antitanks.map((at,idx)=>{
+  // per user request: 対戦車部隊は主兵装(対戦車ロケットランチャー、vehicle専任)に加え、
+  // 対空戦闘ウェポン(副武装、heli/drone向け・ANTITANK_AA_RANGE)も搭載する。
+  const antitankRows = (!isVehicleTarget && !isAirTarget) ? [] : state.antitanks.map((at,idx)=>{
     if(at.hp<=0) return null;
-    return huntRow('antitank', idx, at, `対戦車${idx+1}に攻撃させる`, ANTITANK_ENGAGE_RANGE, `assignAntitankHunt(${idx})`);
+    return huntRow('antitank', idx, at, `対戦車${idx+1}に攻撃させる`, isAirTarget ? ANTITANK_AA_RANGE : ANTITANK_ENGAGE_RANGE, `assignAntitankHunt(${idx})`);
   }).filter(Boolean);
   // 各兵科ごとに「射程内(使用可能)を先、距離が近い順」に並べ替える -- 射程情報を出す
   // だけでなく、一覧の並び自体が「どれが妥当か」の第一の判断材料になるようにする。

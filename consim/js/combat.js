@@ -1,7 +1,7 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement } from './achievements.js';
 import { pickWaveBgm, playCombatAmbience, playSfx, startBgm, stopCombatAmbience } from './audio.js';
-import { AA_ATTACK_DAMAGE, AA_COOLDOWN_TICKS, AA_ENGAGE_RANGE, ANOMALOUS_JUMP_UNITS, ANTITANK_DUEL_DMG_TO_ENEMY, ANTITANK_ENGAGE_RANGE, ANTITANK_EXPOSURE, ANTITANK_INCOMING_DMG, ANTITANK_MAX_HP, ANTITANK_MOVE_CAP, ANTITANK_POS, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, ARTILLERY_FIRE_RANGE_UNITS, ARTILLERY_MOVE_CAP, ARTILLERY_STANDOFF_RANGE_UNITS, BURST_COOLDOWN_MS_MAX, BURST_COOLDOWN_MS_MIN, BURST_DMG_COMPENSATION, BURST_SHOTS_MAX, BURST_SHOTS_MIN, BURST_SHOT_INTERVAL_MS_MAX, BURST_SHOT_INTERVAL_MS_MIN, CANVAS_H, CANVAS_W, COUNTER_CHANCE, COUNTER_DAMAGE, DECOY_LURE_MULT_DAY, DECOY_LURE_MULT_NIGHT, DECOY_MAX_HP, DECOY_MODES, DEPLOYMENT_MODES, DEPLOY_BOX_METERS, DIFFICULTIES, DRONE_DETONATE_DAMAGE, DRONE_DETONATE_RANGE, DRONE_INTRO_STAGE, DRONE_SPEED, ENEMY_FORMATION_BASE_SIZE, ENEMY_FORMATION_NAMES, ENEMY_FORMATION_TEMPLATES, ENEMY_FOCUS_FIRE_WINDOW_MS, ENEMY_HQ_EXPOSURE, ENEMY_INFANTRY_DOCTRINES, ENEMY_INFANTRY_TOTAL_TARGET, ENEMY_SPAWN_MIN_X, ENGINEER_POS, ENGINEER_REPAIR_HP_PER_TURN, ENGINEER_REPAIR_RANGE_UNITS, ESTIMATE_CLAMP_MARGIN, EXPOSURE_DEFAULT, FLANK_OFFSET_RANGE_UNITS, FLIGHT_DURATION, FORTRESS_CAPTURE_RANGE_UNITS, FORTRESS_COUNT, FORTRESS_MAX_HP, FORTRESS_MG_COOLDOWN_MS_MAX, FORTRESS_MG_COOLDOWN_MS_MIN, FORTRESS_MG_DMG, FORTRESS_MG_RANGE_UNITS, FORTRESS_MG_SHOTS_MAX, FORTRESS_MG_SHOTS_MIN, FORTRESS_MG_SHOT_INTERVAL_MS_MAX, FORTRESS_MG_SHOT_INTERVAL_MS_MIN, FORTRESS_MISSILE_COOLDOWN_MS_MAX, FORTRESS_MISSILE_COOLDOWN_MS_MIN, FORTRESS_MISSILE_DMG, FORTRESS_MISSILE_RANGE_UNITS, FORTRESS_NEUTRAL_COLOR, FORTRESS_SIEGE_DMG, FORTRESS_ZONE_ENEMY_X, FORTRESS_ZONE_FRIENDLY_X, FORTRESS_ZONE_MID_X, FORTRESS_ZONE_Y, FRIENDLY_HELI_MOVE_UNITS, FRIENDLY_INF_POS, FRIENDLY_KIND_LIST, FRIENDLY_MARK_COLOR, FRIENDLY_SPACING_PUSH, FRIENDLY_SPACING_RADIUS, FUZES, GAME_SPEED_INTERVALS, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GAME_START_DATETIME, GAME_VERSION, HELI_ATTACK_BURST, HELI_ATTACK_DAMAGE, HELI_COOLDOWN_TICKS, HELI_ENGAGE_RANGE, HELI_EXPOSURE, HELI_MAX_RANGE_UNITS, HELI_MOVE_CAP, HELI_WITHDRAW_DIST, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_DEFENSE_ATTACKER_WINDOW_MS, HQ_DEFENSE_DMG_MULT, HQ_DEFENSE_RANGE_UNITS, HQ_DETECT_RANGE_UNITS, HQ_MAX_HP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, HQ_SUPPLY_HEAL_PCT_PER_TURN, HQ_SUPPLY_ZONE_RADIUS_UNITS, HQ_X, HQ_Y, ILLUM_DURATION_TURNS, ILLUM_RADIUS_M, INFANTRY_DRONE_COOLDOWN_TICKS, INFANTRY_DRONE_LAUNCH_CHANCE, INFANTRY_DRONE_SWARM_SIZE, INFANTRY_DUEL_DMG_TO_ENEMY, INFANTRY_MOVE_CAP, INFANTRY_STANDOFF_UNITS, INITIAL_DEPLOY_SPACING_MULT, LAST_STAND_THRESHOLD, LAUNCH_INTERVAL, MAP_SEED_CANDIDATE_COUNT, MARKER_REVEAL_RADIUS_UNITS, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MERGE_HP_THRESHOLD, METERS_PER_UNIT, MINE_DAMAGE, MINE_MAX_ACTIVE, MINE_PLACEMENT_CHANCE, MINE_TRIGGER_RADIUS_UNITS, MORTAR_BEST_LOADOUT, MORTAR_CB_DETECT_BASE, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CB_STRIKE_DMG, MORTAR_CB_WARN_TURNS, MORTAR_CREW_SIZE, MORTAR_DISPERSION_UNITS, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MAX_RANGE_UNITS, MORTAR_MIN_RANGE_M, MORTAR_MIN_RANGE_UNITS, MORTAR_MOVE_CAP, MORTAR_ORDER_LABEL, MORTAR_RELOAD_MS, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, NUM_ANTITANKS, NUM_ENGINEERS, NUM_MORTARS, NUM_SAMS, NUM_SCOUTS, NUM_SQUADS, NUM_TANKS, OP, OP_HOME_X, OP_HOME_Y, ORDER_LABEL, PERSONNEL_ROSTER, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, ROAD_PULL_RADIUS, ROSTER_ENGINEER_TEAMS, ROSTER_MORTAR_CREWS, ROSTER_RESERVE_INITIAL, ROSTER_SCOUT_TEAMS, ROSTER_SQUADS, SAM_DUEL_DMG_TO_ENEMY, SAM_ENGAGE_RANGE, SAM_EXPOSURE, SAM_MAX_HP, SAM_MOVE_CAP, SAM_POS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_ADVANCE_LIMIT_X, SCOUT_EXPOSURE, SCOUT_LOWER_Y, SCOUT_MAX_RANGE_UNITS, SCOUT_MOVE_CAP, SCOUT_SQUAD_SIZE, SCOUT_UPPER_Y, SCOUT_X, SHELLS, SHELL_DISPERSION_MULT, SHELL_KILL_RADIUS_UNITS, SIM_STEP_MAX_CATCHUP, SIM_STEP_MS, SMART_ACTIONS, SMART_UNIT_TYPES, SMOKE_DURATION_TURNS, SMOKE_RADIUS_M, SMOKE_RADIUS_UNITS, SQUAD_ADVANCE_LIMIT_X, SQUAD_ANTI_DRONE_DMG, SQUAD_ANTI_DRONE_HIT_CHANCE, SQUAD_ANTI_DRONE_RANGE_UNITS, SQUAD_ASSAULT_LIMIT_X, SQUAD_ENGAGE_RANGE, SQUAD_FORMATION_ADJUST_M, SQUAD_GRID_OFFSETS, SQUAD_RETREAT_LIMIT_X, SQUAD_SIZE, STAGE_COUNT, STEP_RENDER_MIN_INTERVAL_MS, SUPPRESSION_CASUALTY_MULT, SUPPRESSION_COUNTER_MULT, SUPPRESSION_DUEL_DMG_BONUS, SUPPRESSION_MOVE_MULT, SUPPRESSION_NEARMISS_TURNS, SUPPRESSION_RETREAT_CHANCE, SUPPRESSION_TURNS, TANK_DUEL_DMG_TO_ENEMY, TANK_ENGAGE_RANGE, TANK_EXPOSURE, TANK_INCOMING_DMG, TANK_MAX_HP, TANK_MOVE_CAP, TANK_POS, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_GRID_CELL_SIZE, TARGET_GRID_MAX_RINGS, TARGET_TYPES, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, TRENCH_BUILD_COST, UNIT_AMMO_EMPTY_DMG_MULT, UNIT_AMMO_MAX, UNIT_AMMO_RESUPPLY_PER_TURN, VEHICLE_ASSAULT_DAMAGE, VEHICLE_ASSAULT_RANGE, VEHICLE_MOVE_CAP, VET_DMG_BONUS_PER_LEVEL, VET_EXPOSURE_BONUS_PER_LEVEL, VET_MAX_LEVEL, VET_XP_PER_LEVEL, HQ_MORTAR_COOLDOWN_TICKS, HQ_MORTAR_COUNT, HQ_MORTAR_DAMAGE, HQ_TANKGUN_COOLDOWN_TICKS, HQ_TANKGUN_COUNT, HQ_TANKGUN_DAMAGE, WALL_BUILD_COST, WALL_MAX_HP, WALL_RADIUS, WAVE_CLEAR_EFFECT_WAIT_MS, WAVE_CLEAR_FANFARE_HOLD_MS, WAVE_SPAWN_DELAY_MS, WAVE_SPAWN_WINDOW_MS, WEAPON_FIRE_INTERVAL, WEAPON_FIRE_OFFSET, WEATHER_TYPES, WORLD } from './constants.js';
+import { AA_ATTACK_DAMAGE, AA_COOLDOWN_TICKS, AA_ENGAGE_RANGE, ANOMALOUS_JUMP_UNITS, ANTITANK_AA_DMG, ANTITANK_AA_RANGE, ANTITANK_DUEL_DMG_TO_ENEMY, ANTITANK_ENGAGE_RANGE, ANTITANK_EXPOSURE, ANTITANK_INCOMING_DMG, ANTITANK_MAX_HP, ANTITANK_MOVE_CAP, ANTITANK_POS, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, ARTILLERY_FIRE_RANGE_UNITS, ARTILLERY_MOVE_CAP, ARTILLERY_STANDOFF_RANGE_UNITS, BURST_COOLDOWN_MS_MAX, BURST_COOLDOWN_MS_MIN, BURST_DMG_COMPENSATION, BURST_SHOTS_MAX, BURST_SHOTS_MIN, BURST_SHOT_INTERVAL_MS_MAX, BURST_SHOT_INTERVAL_MS_MIN, CANVAS_H, CANVAS_W, COUNTER_CHANCE, COUNTER_DAMAGE, DECOY_LURE_MULT_DAY, DECOY_LURE_MULT_NIGHT, DECOY_MAX_HP, DECOY_MODES, DEPLOYMENT_MODES, DEPLOY_BOX_METERS, DIFFICULTIES, DRONE_DETONATE_DAMAGE, DRONE_DETONATE_RANGE, DRONE_INTRO_STAGE, DRONE_SPEED, ENEMY_FORMATION_BASE_SIZE, ENEMY_FORMATION_NAMES, ENEMY_FORMATION_TEMPLATES, ENEMY_FOCUS_FIRE_WINDOW_MS, ENEMY_HQ_EXPOSURE, ENEMY_INFANTRY_DOCTRINES, ENEMY_INFANTRY_TOTAL_TARGET, ENEMY_SPAWN_MIN_X, ENGINEER_POS, ENGINEER_REPAIR_HP_PER_TURN, ENGINEER_REPAIR_RANGE_UNITS, ESTIMATE_CLAMP_MARGIN, EXPOSURE_DEFAULT, FLANK_OFFSET_RANGE_UNITS, FLIGHT_DURATION, FORTRESS_CAPTURE_RANGE_UNITS, FORTRESS_COUNT, FORTRESS_MAX_HP, FORTRESS_MG_COOLDOWN_MS_MAX, FORTRESS_MG_COOLDOWN_MS_MIN, FORTRESS_MG_DMG, FORTRESS_MG_RANGE_UNITS, FORTRESS_MG_SHOTS_MAX, FORTRESS_MG_SHOTS_MIN, FORTRESS_MG_SHOT_INTERVAL_MS_MAX, FORTRESS_MG_SHOT_INTERVAL_MS_MIN, FORTRESS_MISSILE_COOLDOWN_MS_MAX, FORTRESS_MISSILE_COOLDOWN_MS_MIN, FORTRESS_MISSILE_DMG, FORTRESS_MISSILE_RANGE_UNITS, FORTRESS_NEUTRAL_COLOR, FORTRESS_SIEGE_DMG, FORTRESS_ZONE_ENEMY_X, FORTRESS_ZONE_FRIENDLY_X, FORTRESS_ZONE_MID_X, FORTRESS_ZONE_Y, FRIENDLY_HELI_MOVE_UNITS, FRIENDLY_INF_POS, FRIENDLY_KIND_LIST, FRIENDLY_MARK_COLOR, FRIENDLY_SPACING_PUSH, FRIENDLY_SPACING_RADIUS, FUZES, GAME_SPEED_INTERVALS, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GAME_START_DATETIME, GAME_VERSION, HELI_ATTACK_BURST, HELI_ATTACK_DAMAGE, HELI_COOLDOWN_TICKS, HELI_ENGAGE_RANGE, HELI_EXPOSURE, HELI_MAX_RANGE_UNITS, HELI_MOVE_CAP, HELI_WITHDRAW_DIST, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_DEFENSE_ATTACKER_WINDOW_MS, HQ_DEFENSE_DMG_MULT, HQ_DEFENSE_RANGE_UNITS, HQ_DETECT_RANGE_UNITS, HQ_MAX_HP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, HQ_SUPPLY_HEAL_PCT_PER_TURN, HQ_SUPPLY_ZONE_RADIUS_UNITS, HQ_X, HQ_Y, ILLUM_DURATION_TURNS, ILLUM_RADIUS_M, INFANTRY_DRONE_COOLDOWN_TICKS, INFANTRY_DRONE_LAUNCH_CHANCE, INFANTRY_DRONE_SWARM_SIZE, INFANTRY_DUEL_DMG_TO_ENEMY, INFANTRY_MOVE_CAP, INFANTRY_STANDOFF_UNITS, INITIAL_DEPLOY_SPACING_MULT, LAST_STAND_THRESHOLD, LAUNCH_INTERVAL, MAP_SEED_CANDIDATE_COUNT, MARKER_REVEAL_RADIUS_UNITS, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MERGE_HP_THRESHOLD, METERS_PER_UNIT, MINE_DAMAGE, MINE_MAX_ACTIVE, MINE_PLACEMENT_CHANCE, MINE_TRIGGER_RADIUS_UNITS, MORTAR_BEST_LOADOUT, MORTAR_CB_DETECT_BASE, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CB_STRIKE_DMG, MORTAR_CB_WARN_TURNS, MORTAR_CREW_SIZE, MORTAR_DISPERSION_UNITS, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MAX_RANGE_UNITS, MORTAR_MIN_RANGE_M, MORTAR_MIN_RANGE_UNITS, MORTAR_MOVE_CAP, MORTAR_ORDER_LABEL, MORTAR_RELOAD_MS, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, NUM_ANTITANKS, NUM_ENGINEERS, NUM_MORTARS, NUM_SAMS, NUM_SCOUTS, NUM_SQUADS, NUM_TANKS, OP, OP_HOME_X, OP_HOME_Y, ORDER_LABEL, PERSONNEL_ROSTER, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, ROAD_PULL_RADIUS, ROSTER_ENGINEER_TEAMS, ROSTER_MORTAR_CREWS, ROSTER_RESERVE_INITIAL, ROSTER_SCOUT_TEAMS, ROSTER_SQUADS, SAM_DUEL_DMG_TO_ENEMY, SAM_ENGAGE_RANGE, SAM_EXPOSURE, SAM_MAX_HP, SAM_MOVE_CAP, SAM_POS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_ADVANCE_LIMIT_X, SCOUT_EXPOSURE, SCOUT_LOWER_Y, SCOUT_MAX_RANGE_UNITS, SCOUT_MOVE_CAP, SCOUT_SQUAD_SIZE, SCOUT_UPPER_Y, SCOUT_X, SHELLS, SHELL_DISPERSION_MULT, SHELL_KILL_RADIUS_UNITS, SIM_STEP_MAX_CATCHUP, SIM_STEP_MS, SMART_ACTIONS, SMART_UNIT_TYPES, SMOKE_DURATION_TURNS, SMOKE_RADIUS_M, SMOKE_RADIUS_UNITS, SQUAD_ADVANCE_LIMIT_X, SQUAD_ANTI_DRONE_DMG, SQUAD_ANTI_DRONE_HIT_CHANCE, SQUAD_ANTI_DRONE_RANGE_UNITS, SQUAD_ASSAULT_LIMIT_X, SQUAD_ENGAGE_RANGE, SQUAD_FORMATION_ADJUST_M, SQUAD_GRID_OFFSETS, SQUAD_RETREAT_LIMIT_X, SQUAD_SIZE, STAGE_COUNT, STEP_RENDER_MIN_INTERVAL_MS, SUPPRESSION_CASUALTY_MULT, SUPPRESSION_COUNTER_MULT, SUPPRESSION_DUEL_DMG_BONUS, SUPPRESSION_MOVE_MULT, SUPPRESSION_NEARMISS_TURNS, SUPPRESSION_RETREAT_CHANCE, SUPPRESSION_TURNS, TANK_DUEL_DMG_TO_ENEMY, TANK_ENGAGE_RANGE, TANK_EXPOSURE, TANK_INCOMING_DMG, TANK_MAX_HP, TANK_MOVE_CAP, TANK_POS, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_GRID_CELL_SIZE, TARGET_GRID_MAX_RINGS, TARGET_TYPES, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, TRENCH_BUILD_COST, UNIT_AMMO_EMPTY_DMG_MULT, UNIT_AMMO_MAX, UNIT_AMMO_RESUPPLY_PER_TURN, VEHICLE_ASSAULT_DAMAGE, VEHICLE_ASSAULT_RANGE, VEHICLE_MOVE_CAP, VET_DMG_BONUS_PER_LEVEL, VET_EXPOSURE_BONUS_PER_LEVEL, VET_MAX_LEVEL, VET_XP_PER_LEVEL, HQ_MORTAR_COOLDOWN_TICKS, HQ_MORTAR_COUNT, HQ_MORTAR_DAMAGE, HQ_TANKGUN_COOLDOWN_TICKS, HQ_TANKGUN_COUNT, HQ_TANKGUN_DAMAGE, WALL_BUILD_COST, WALL_MAX_HP, WALL_RADIUS, WAVE_CLEAR_EFFECT_WAIT_MS, WAVE_CLEAR_FANFARE_HOLD_MS, WAVE_SPAWN_DELAY_MS, WAVE_SPAWN_WINDOW_MS, WEAPON_FIRE_INTERVAL, WEAPON_FIRE_OFFSET, WEATHER_TYPES, WORLD } from './constants.js';
 import { resetClickCycle } from './input.js';
 import { render } from './main.js';
 import { applySavedCampaign, clearCampaignSave, loadCampaign, saveCampaign } from './savegame.js';
@@ -2167,8 +2167,10 @@ export function applyAntitankMovement(at, idx, dt){
 
 // per user request: 狙撃部隊を、戦車に対して有効なロケットランチャーを装備する軽車両部隊
 // (対戦車部隊)に変更。歩兵ロスター制ではなく戦車と同じ単一HP制の車両ユニットとして扱い、
-// 対空(SAM)と同じ「専任」設計でvehicleタイプのみを交戦対象にする(歩兵/砲兵には無力)。
-// 戦車のresolveTankOrdersと同じburst射撃ループを流用しつつ、対vehicle威力を大きく取っている。
+// 主兵装はvehicleタイプ専任(歩兵/砲兵には無力)。戦車のresolveTankOrdersと同じburst
+// 射撃ループを流用しつつ、対vehicle威力を大きく取っている。加えて対空戦闘ウェポン(副武装、
+// heli/drone向け)も搭載し、独立したburstタイマーで主兵装と同一tick内に併用できる
+// (下のresolveAntitankOrders後半、ANTITANK_AA_RANGE/ANTITANK_AA_DMGを参照)。
 export function resolveAntitankOrders(dt){
   let anyEvent = false;
   {
@@ -2176,67 +2178,114 @@ export function resolveAntitankOrders(dt){
       if(at.hp<=0) return;
       applyAntitankMovement(at, idx, dt);
 
+      // 主兵装: 対戦車ロケットランチャー(vehicleタイプ専任)。
       let engageTargets = state.targets.filter(t=>!t.destroyed && t.type==='vehicle');
       if(at.order==='hunt' && at.huntTargetId){
         const huntTarget = state.targets.find(t=>t.id===at.huntTargetId && !t.destroyed && t.type==='vehicle');
         if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
       }
-      if(engageTargets.length===0) return;
-      if(!isUnitBurstReady(at)) return;
       let dmgMult=1, incomingMult=1;
       if(at.order==='hunt'){ dmgMult=1.5; incomingMult=1.3; }
       else if(at.order==='hold'){ dmgMult=0.9; incomingMult=0.7; }
       else if(at.order==='retreat'){ dmgMult=0.5; incomingMult=0.6; }
 
-      let firedThisTick = false;
-      engageTargets.forEach(t=>{
-        if(firedThisTick) return;
-        if(t.destroyed || at.hp<=0) return;
-        const e = estPos(t);
-        const dist = Math.hypot(e.x-at.x, e.y-at.y);
-        if(dist > ANTITANK_ENGAGE_RANGE) return;
-        if(!hasLineOfSight(at.x, at.y, t.trueX, t.trueY)) return;
-        const blockWall = wallBlockingLineOfFire(at.x, at.y, t.trueX, t.trueY);
-        if(blockWall){
+      if(engageTargets.length>0 && isUnitBurstReady(at)){
+        let firedThisTick = false;
+        engageTargets.forEach(t=>{
+          if(firedThisTick) return;
+          if(t.destroyed || at.hp<=0) return;
+          const e = estPos(t);
+          const dist = Math.hypot(e.x-at.x, e.y-at.y);
+          if(dist > ANTITANK_ENGAGE_RANGE) return;
+          if(!hasLineOfSight(at.x, at.y, t.trueX, t.trueY)) return;
+          const blockWall = wallBlockingLineOfFire(at.x, at.y, t.trueX, t.trueY);
+          if(blockWall){
+            anyEvent = true;
+            firedThisTick = true;
+            consumeBurstShot(at);
+            damageWall(blockWall, Math.round(rnd(ANTITANK_DUEL_DMG_TO_ENEMY[0], ANTITANK_DUEL_DMG_TO_ENEMY[1])), `対戦車${idx+1}の射撃`);
+            return;
+          }
+          if(revealTarget(t)){
+            log('op','斥候', `対戦車${idx+1}が${t.id}と交戦、<b>${t.def.label}</b>と識別。`);
+          }
+          const suppressed = isSuppressed(t);
+          const atAltMult = altitudeBonus(at.x, at.y, t.trueX, t.trueY);
+          const suppressionDmgMult = suppressed ? SUPPRESSION_DUEL_DMG_BONUS : 1;
+          const enemyExposureMult = exposureNormalizedMult(getTargetExposure(t));
+          const dmgToEnemy = Math.round(rnd(ANTITANK_DUEL_DMG_TO_ENEMY[0], ANTITANK_DUEL_DMG_TO_ENEMY[1]) * dmgMult * atAltMult * suppressionDmgMult * enemyExposureMult);
+          applyDamageToTarget(t, dmgToEnemy);
           anyEvent = true;
           firedThisTick = true;
           consumeBurstShot(at);
-          damageWall(blockWall, Math.round(rnd(ANTITANK_DUEL_DMG_TO_ENEMY[0], ANTITANK_DUEL_DMG_TO_ENEMY[1])), `対戦車${idx+1}の射撃`);
-          return;
-        }
-        if(revealTarget(t)){
-          log('op','斥候', `対戦車${idx+1}が${t.id}と交戦、<b>${t.def.label}</b>と識別。`);
-        }
-        const suppressed = isSuppressed(t);
-        const atAltMult = altitudeBonus(at.x, at.y, t.trueX, t.trueY);
-        const suppressionDmgMult = suppressed ? SUPPRESSION_DUEL_DMG_BONUS : 1;
-        const enemyExposureMult = exposureNormalizedMult(getTargetExposure(t));
-        const dmgToEnemy = Math.round(rnd(ANTITANK_DUEL_DMG_TO_ENEMY[0], ANTITANK_DUEL_DMG_TO_ENEMY[1]) * dmgMult * atAltMult * suppressionDmgMult * enemyExposureMult);
-        applyDamageToTarget(t, dmgToEnemy);
-        anyEvent = true;
-        firedThisTick = true;
-        consumeBurstShot(at);
-        fireTracer(at.x, at.y, e.x, e.y, 220, 'missile');
-        if(t.hp<=0 && !t.destroyed){
-          t.destroyed = true; t.hp = 0;
-          log('op','斥候', `${t.id} 対戦車${idx+1}との交戦で撃破を確認。`);
-          onTargetDestroyed(t);
-        }
-        const enemyAltMult = altitudeBonus(t.trueX, t.trueY, at.x, at.y);
-        const suppressionCasualtyMult = suppressed ? SUPPRESSION_CASUALTY_MULT : 1;
-        const hitChance = (0.10 + state.stage*0.006) * incomingMult * enemyAltMult * suppressionCasualtyMult * exposureNormalizedMult(getUnitExposure({kind:'antitank', idx})) * BURST_DMG_COMPENSATION;
-        if(Math.random() < hitChance){
-          const dmg = Math.round(rnd(ANTITANK_INCOMING_DMG[0], ANTITANK_INCOMING_DMG[1]));
-          const wasAlive = at.hp>0;
-          at.hp = Math.max(0, at.hp-dmg);
-          log('sys','前線', `対戦車${idx+1}、${t.id}との交戦で被弾(-${dmg}HP、残り${at.hp}/${at.maxHp})。`);
-          fireTracer(e.x, e.y, at.x, at.y, 280, 'cannon');
-          if(wasAlive && at.hp<=0){
-            log('sys','前線', `対戦車${idx+1}、撃破される。`);
-            spawnDestructionEffect(at.x, at.y, `対戦車${idx+1} 撃破!`, FRIENDLY_MARK_COLOR);
+          fireTracer(at.x, at.y, e.x, e.y, 220, 'missile');
+          if(t.hp<=0 && !t.destroyed){
+            t.destroyed = true; t.hp = 0;
+            log('op','斥候', `${t.id} 対戦車${idx+1}との交戦で撃破を確認。`);
+            onTargetDestroyed(t);
           }
+          const enemyAltMult = altitudeBonus(t.trueX, t.trueY, at.x, at.y);
+          const suppressionCasualtyMult = suppressed ? SUPPRESSION_CASUALTY_MULT : 1;
+          const hitChance = (0.10 + state.stage*0.006) * incomingMult * enemyAltMult * suppressionCasualtyMult * exposureNormalizedMult(getUnitExposure({kind:'antitank', idx})) * BURST_DMG_COMPENSATION;
+          if(Math.random() < hitChance){
+            const dmg = Math.round(rnd(ANTITANK_INCOMING_DMG[0], ANTITANK_INCOMING_DMG[1]));
+            const wasAlive = at.hp>0;
+            at.hp = Math.max(0, at.hp-dmg);
+            log('sys','前線', `対戦車${idx+1}、${t.id}との交戦で被弾(-${dmg}HP、残り${at.hp}/${at.maxHp})。`);
+            fireTracer(e.x, e.y, at.x, at.y, 280, 'cannon');
+            if(wasAlive && at.hp<=0){
+              log('sys','前線', `対戦車${idx+1}、撃破される。`);
+              spawnDestructionEffect(at.x, at.y, `対戦車${idx+1} 撃破!`, FRIENDLY_MARK_COLOR);
+            }
+          }
+        });
+      }
+
+      // per user request: 対戦車部隊に対空戦闘ウェポン(副武装)を追加 -- 主兵装(上の対戦車
+      // ロケットランチャー、at.burstNextAt/at.burstShotsLeft)とは独立したburstタイマー
+      // (at.aaBurstNextAt/at.aaBurstShotsLeft)を持ち、同一tick内で両方が独立して交戦できる
+      // (要塞のMG+ミサイルランチャーと同じ、1ユニットに独立した複数武装のパターンを踏襲)。
+      // isUnitBurstReady/consumeBurstShotはunit.burstNextAt/burstShotsLeftという固定の
+      // フィールド名しか読み書きしないので、要塞のmgBurstNextAt/mgBurstShotsLeftと同じく
+      // ラッパーオブジェクト経由で呼び、結果をat.aaBurstNextAt/at.aaBurstShotsLeftへ書き戻す。
+      // 対空専任のSAMより射程・威力は控えめな自衛用途(ANTITANK_AA_RANGE/ANTITANK_AA_DMG)。
+      if(at.hp>0){
+        let aaTargets = state.targets.filter(t=>!t.destroyed && (t.type==='heli'||t.type==='drone'));
+        if(at.order==='hunt' && at.huntTargetId){
+          const aaHunt = state.targets.find(t=>t.id===at.huntTargetId && !t.destroyed && (t.type==='heli'||t.type==='drone'));
+          if(aaHunt && !aaTargets.includes(aaHunt)) aaTargets = aaTargets.concat([aaHunt]);
         }
-      });
+        if(aaTargets.length>0){
+          const aaUnit = {burstNextAt: at.aaBurstNextAt, burstShotsLeft: at.aaBurstShotsLeft};
+          if(isUnitBurstReady(aaUnit)){
+            let aaFired = false;
+            aaTargets.forEach(t=>{
+              if(aaFired) return;
+              if(t.destroyed) return;
+              const e = estPos(t);
+              const dist = Math.hypot(e.x-at.x, e.y-at.y);
+              if(dist > ANTITANK_AA_RANGE) return;
+              if(revealTarget(t)){
+                log('op','斥候', `対戦車${idx+1}(対空)が${t.id}と交戦、<b>${t.def.label}</b>と識別。`);
+              }
+              const atAltMult = altitudeBonus(at.x, at.y, t.trueX, t.trueY);
+              const enemyExposureMult = exposureNormalizedMult(getTargetExposure(t));
+              const dmgToEnemy = Math.round(rnd(ANTITANK_AA_DMG[0], ANTITANK_AA_DMG[1]) * dmgMult * atAltMult * enemyExposureMult);
+              applyDamageToTarget(t, dmgToEnemy);
+              anyEvent = true;
+              aaFired = true;
+              consumeBurstShot(aaUnit);
+              fireTracer(at.x, at.y, e.x, e.y, 220, 'missile');
+              if(t.hp<=0 && !t.destroyed){
+                t.destroyed = true; t.hp = 0;
+                log('op','斥候', `${t.id} 対戦車${idx+1}の対空射撃で撃破を確認。`);
+                onTargetDestroyed(t);
+              }
+            });
+          }
+          at.aaBurstNextAt = aaUnit.burstNextAt; at.aaBurstShotsLeft = aaUnit.burstShotsLeft;
+        }
+      }
     });
   }
   return anyEvent;
@@ -4168,7 +4217,9 @@ export function assignAntitankHunt(idx, explicitTargetId){
   if(!at || at.hp<=0) return;
   const targetId = explicitTargetId || state.enemyCommandBox;
   const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
-  if(!target || target.type!=='vehicle') return;
+  // per user request: 対空戦闘ウェポン追加に伴い、対戦車部隊はvehicleに加えてheli/drone
+  // (対空副武装の対象)もhunt目標に指定できる。
+  if(!target || (target.type!=='vehicle' && target.type!=='heli' && target.type!=='drone')) return;
   if(at.order==='hunt' && at.huntTargetId===target.id){
     clearAntitankHunt(idx);
     log('sys','前線', `対戦車${idx+1}、${target.id}への攻撃指示を解除。`);

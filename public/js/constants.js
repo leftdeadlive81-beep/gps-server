@@ -260,6 +260,15 @@ export const ANTITANK_REPAIR_HP_PER_CALL = 20;
 
 export const ANTITANK_REPAIR_COST_PER_HP = 30;
 
+// per user request: 対戦車部隊に対空戦闘ウェポン(副武装)を追加 -- 主兵装(対戦車ロケット
+// ランチャー、上のANTITANK_ENGAGE_RANGE/ANTITANK_DUEL_DMG_TO_ENEMY)とは別に、独立した
+// burstタイマーを持つ自衛用の対空火器を搭載する(要塞のMG+ミサイルランチャーと同じ、
+// 1ユニットに独立した複数武装のパターン)。対空専任のSAM(SAM_ENGAGE_RANGE=715、
+// SAM_DUEL_DMG_TO_ENEMY=[13,21])より射程・威力は控えめな自衛目的の兵装とする。
+export const ANTITANK_AA_RANGE = 300;
+
+export const ANTITANK_AA_DMG = [6, 12];
+
 // per user request: 工兵による戦車の野戦修理 -- 上の即時・有償の応急修復(repairTank)とは
 // 別の無償(労力のみ)の手段。工兵を戦車に近接させて修理を指示すると、この射程内にいる間
 // 緩やかに回復し続ける。指定先に自ら移動する点、資金を消費しない点が既存の修復と異なる。
