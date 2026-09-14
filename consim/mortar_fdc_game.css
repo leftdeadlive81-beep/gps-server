@@ -450,6 +450,10 @@
   }
   .btn:hover:not(:disabled){background:var(--edge-dim);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.25);}
   .btn:disabled{opacity:.35;cursor:not-allowed;}
+  /* per user request: 敵目標の攻撃部隊選択パネル -- 射程外でも指示自体は出せる兵科
+     (小隊/戦車/対戦車/対空)のボタンは、射程外(disabled)より軽く薄める程度に留める。 */
+  .btn.range-out{opacity:.6;}
+  .btn .range-note{display:block;font-size:10px;font-weight:400;letter-spacing:0;opacity:.75;margin-top:2px;}
   .btn.primary{background:linear-gradient(135deg,#c79438,#806126);border-color:var(--amber);color:#161308;box-shadow:0 0 16px rgba(240,189,85,.15);}
   .btn.primary:hover:not(:disabled){background:var(--amber);}
   .btn.recon{background:#26301e;border-color:var(--edge);}

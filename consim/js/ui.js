@@ -1,7 +1,7 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement, unlockedAchievements } from './achievements.js';
-import { abandonSavedCampaign, addNewAntitank, addNewHeli, addNewMortar, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, healAllForces, isAutoCommitRunning, mapSeedCandidates, mortarNotReadyToFire, resumedFromSave, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
-import { ACHIEVEMENTS, AMMO_PACK, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SMART_ACTIONS, SMART_UNIT_TYPES, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, TANK_REPAIR_COST_PER_HP,TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
+import { abandonSavedCampaign, addNewAntitank, addNewHeli, addNewMortar, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, healAllForces, isAutoCommitRunning, mapSeedCandidates, mortarNotReadyToFire, mortarTooCloseToFire, mortarTooFarToFire, resumedFromSave, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
+import { ACHIEVEMENTS, AMMO_PACK, ANTITANK_ENGAGE_RANGE, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_ENGAGE_RANGE, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SMART_ACTIONS, SMART_UNIT_TYPES, SQUAD_ENGAGE_RANGE, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, TANK_ENGAGE_RANGE, TANK_REPAIR_COST_PER_HP,TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
 import { canvasToScreen, multiSelectCommonOrders, multiSelectMode, multiSelected, pruneMultiSelected, unitGroups } from './input.js';
 import { render } from './main.js';
 import { elevationAt, elevationLabel, terrainTypeAt, terrainTypeLabel } from './terrain.js';
@@ -1105,37 +1105,69 @@ export function renderEnemyCommandBox(){
   const vx = t._visX!==undefined ? t._visX : estPos(t).x;
   const vy = t._visY!==undefined ? t._visY : estPos(t).y;
   const pos = canvasToScreen(vx, vy);
-  const mortarBtns = state.mortars.map((m,idx)=>{
-    if(m.hp<=0) return '';
+
+  // per user request: 攻撃部隊選択パネルに目標までの距離/射程を表示し、射程外のユニットを
+  // 後方へ並べ替える -- 部隊数が増えるほど「どれを充てるのが妥当か」を一覧だけで判断
+  // しづらくなっていたのに対応。小隊/戦車/対戦車/対空へのhunt指示は射程外でも受け付け
+  // (接敵まで前進する既存仕様のまま)なので、射程外でもボタン自体は押せるが薄く表示する
+  // だけに留める。迫撃砲だけは陣地から動かず射程外だと発射自体ができない
+  // (assignMortarFireの既存の却下ロジックと同じmortarTooCloseToFire/mortarTooFarToFireで
+  // 判定し、その場合はボタンを押せなくする)。
+  const rangeNote = (distM, rangeLabel, extra)=>
+    `<span class="range-note">距離${distM}m ／ 射程${rangeLabel}${extra?` ・ ${extra}`:''}</span>`;
+  const huntRow = (kind, idx, unit, label, engageRangeUnits, onclickAttr)=>{
+    const active = unit.order==='hunt' && unit.huntTargetId===t.id;
+    const dist = Math.hypot(vx-unit.x, vy-unit.y);
+    const outOfRange = dist > engageRangeUnits;
+    const distM = unitsToMeters(dist), rangeM = unitsToMeters(engageRangeUnits);
+    return {
+      outOfRange,
+      dist,
+      html: `<button class="btn ${active?'active squad-order-btn':''} ${outOfRange?'range-out':''}" onclick="${onclickAttr}">${label}${active?'(攻撃中)':''}${rangeNote(distM, rangeM+'m', outOfRange?'要接近':null)}</button>`,
+    };
+  };
+  const mortarRows = state.mortars.map((m,idx)=>{
+    if(m.hp<=0) return null;
     const active = m.order==='fire' && m.pendingFire && m.pendingFire.snappedId===t.id;
-    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignMortarFire(${idx})">迫撃砲${idx+1}に攻撃させる${active?'(照準中)':''}</button>`;
-  }).filter(Boolean).join('');
+    const dist = Math.hypot(vx-m.x, vy-m.y);
+    const tooClose = mortarTooCloseToFire(m, vx, vy);
+    const tooFar = mortarTooFarToFire(m, vx, vy);
+    const disabled = !active && (tooClose || tooFar);
+    const distM = unitsToMeters(dist);
+    const reason = tooClose ? '近すぎ' : tooFar ? '射程外' : null;
+    return {
+      outOfRange: disabled,
+      dist,
+      html: `<button class="btn ${active?'active squad-order-btn':''} ${disabled?'range-out':''}" ${disabled?'disabled':''} onclick="assignMortarFire(${idx})">迫撃砲${idx+1}に攻撃させる${active?'(照準中)':''}${rangeNote(distM, `${MORTAR_MIN_RANGE_M}-${MORTAR_MAX_RANGE_M}m`, reason)}</button>`,
+    };
+  }).filter(Boolean);
   // per user request: 対地の直接照準兵器(小隊/戦車)はもはや対空目標(ヘリ・ドローン)を
   // 直接狙い撃てない -- 対空はSAM専任(下のsamBtns)。
   const isAirTarget = t.type==='heli' || t.type==='drone';
   const isVehicleTarget = t.type==='vehicle';
-  const squadBtns = isAirTarget ? '' : state.squads.map((sq,idx)=>{
-    if(!sq.soldiers.some(s=>s.alive)) return '';
-    const active = sq.order==='hunt' && sq.huntTargetId===t.id;
-    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignSquadHunt(${idx})">第${idx+1}小隊に攻撃させる${active?'(攻撃中)':''}</button>`;
-  }).filter(Boolean).join('');
-  const tankBtns = isAirTarget ? '' : state.tanks.map((tank,idx)=>{
-    if(tank.hp<=0) return '';
-    const active = tank.order==='hunt' && tank.huntTargetId===t.id;
-    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignTankHunt(${idx})">戦車${idx+1}に攻撃させる${active?'(攻撃中)':''}</button>`;
-  }).filter(Boolean).join('');
-  const samBtns = !isAirTarget ? '' : state.sams.map((sam,idx)=>{
-    if(sam.hp<=0) return '';
-    const active = sam.order==='hunt' && sam.huntTargetId===t.id;
-    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignSamHunt(${idx})">対空${idx+1}に攻撃させる${active?'(攻撃中)':''}</button>`;
-  }).filter(Boolean).join('');
+  const squadRows = isAirTarget ? [] : state.squads.map((sq,idx)=>{
+    if(!sq.soldiers.some(s=>s.alive)) return null;
+    return huntRow('squad', idx, sq, `第${idx+1}小隊に攻撃させる`, SQUAD_ENGAGE_RANGE, `assignSquadHunt(${idx})`);
+  }).filter(Boolean);
+  const tankRows = isAirTarget ? [] : state.tanks.map((tank,idx)=>{
+    if(tank.hp<=0) return null;
+    return huntRow('tank', idx, tank, `戦車${idx+1}に攻撃させる`, TANK_ENGAGE_RANGE, `assignTankHunt(${idx})`);
+  }).filter(Boolean);
+  const samRows = !isAirTarget ? [] : state.sams.map((sam,idx)=>{
+    if(sam.hp<=0) return null;
+    return huntRow('sam', idx, sam, `対空${idx+1}に攻撃させる`, SAM_ENGAGE_RANGE, `assignSamHunt(${idx})`);
+  }).filter(Boolean);
   // per user request: 対戦車部隊(旧・狙撃部隊)はvehicleタイプ専任のロケットランチャー車両。
-  const antitankBtns = !isVehicleTarget ? '' : state.antitanks.map((at,idx)=>{
-    if(at.hp<=0) return '';
-    const active = at.order==='hunt' && at.huntTargetId===t.id;
-    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignAntitankHunt(${idx})">対戦車${idx+1}に攻撃させる${active?'(攻撃中)':''}</button>`;
-  }).filter(Boolean).join('');
-  const allBtns = mortarBtns + tankBtns + samBtns + antitankBtns + squadBtns;
+  const antitankRows = !isVehicleTarget ? [] : state.antitanks.map((at,idx)=>{
+    if(at.hp<=0) return null;
+    return huntRow('antitank', idx, at, `対戦車${idx+1}に攻撃させる`, ANTITANK_ENGAGE_RANGE, `assignAntitankHunt(${idx})`);
+  }).filter(Boolean);
+  // 各兵科ごとに「射程内(使用可能)を先、距離が近い順」に並べ替える -- 射程情報を出す
+  // だけでなく、一覧の並び自体が「どれが妥当か」の第一の判断材料になるようにする。
+  const sortRows = rows => rows.slice().sort((a,b)=> (a.outOfRange-b.outOfRange) || (a.dist-b.dist));
+  const allBtns = [mortarRows, tankRows, samRows, antitankRows, squadRows]
+    .map(rows=>sortRows(rows).map(r=>r.html).join(''))
+    .join('');
   box.innerHTML = `
     <div class="cb-head">
       <span class="cb-title">${t.id} ― ${t.revealed?t.def.label:'識別不能'}</span>
