@@ -203,7 +203,9 @@ export const MINE_MAX_ACTIVE = 4;
 
 export const MERGE_HP_THRESHOLD = 0.4;
 
-export const INFANTRY_DUEL_DMG_TO_ENEMY = [4,9];
+// per user request: 発砲頻度アップ(バースト連射化、BURST_DMG_COMPENSATION参照)に合わせて
+// 1発あたりの威力を約3.5分の1に引き下げ、総ダメージ量は概ね維持(旧値 [4,9])。
+export const INFANTRY_DUEL_DMG_TO_ENEMY = [1,3];
 
 export const SQUAD_SIZE = 10;
 
@@ -231,7 +233,8 @@ export const TANK_EXPOSURE = 65;
 
 export const TANK_ENGAGE_RANGE = 325;
 
-export const TANK_DUEL_DMG_TO_ENEMY = [18, 32];
+// per user request: バースト連射化に合わせ威力を約3.5分の1に引き下げ(旧値 [18,32])。
+export const TANK_DUEL_DMG_TO_ENEMY = [5, 9];
 
 export const TANK_INCOMING_DMG = [8, 20];
 
@@ -256,7 +259,8 @@ export const SAM_EXPOSURE = 45;
 
 export const SAM_ENGAGE_RANGE = 715;
 
-export const SAM_DUEL_DMG_TO_ENEMY = [45, 75];
+// per user request: バースト連射化に合わせ威力を約3.5分の1に引き下げ(旧値 [45,75])。
+export const SAM_DUEL_DMG_TO_ENEMY = [13, 21];
 
 export const SAM_REPAIR_HP_PER_CALL = 20;
 
@@ -494,7 +498,8 @@ export const SNIPER_AIM_LINE_WIDTH_M = 20;
 
 export const SNIPER_AIM_LINE_WIDTH_UNITS = SNIPER_AIM_LINE_WIDTH_M / METERS_PER_UNIT;
 
-export const SNIPER_DMG = [20,32];
+// per user request: バースト連射化に合わせ威力を約3.5分の1に引き下げ(旧値 [20,32])。
+export const SNIPER_DMG = [6, 9];
 
 export const SNIPER_EXECUTE_HP_THRESHOLD = 0.3;
 
@@ -726,6 +731,21 @@ export const MORTAR_RELOAD_MS = 650;
 export const WEAPON_FIRE_INTERVAL = { squad:1, tank:1, sam:1, sniper:1 };
 
 export const WEAPON_FIRE_OFFSET = { squad:0, tank:1, sam:2, sniper:3 };
+
+// per user request: 発砲頻度を上げ、かつ「パパパン」という連射→小休止のリズムにする -- 小隊/
+// 戦車/対空/狙撃の主戦闘ループは、この単位ごとの実時間バーストサイクル(unitMayBurstFire系、
+// combat.js)に置き換えた。WEAPON_FIRE_INTERVAL/OFFSETとunitMayFire自体は、対戦車肉薄射撃
+// (resolveSquadAntiVehicle)など、あえて低頻度のままにする副次的な交戦にのみ残す。
+export const BURST_SHOTS_MIN = 2;
+export const BURST_SHOTS_MAX = 4;
+export const BURST_SHOT_INTERVAL_MS_MIN = 150;
+export const BURST_SHOT_INTERVAL_MS_MAX = 250;
+export const BURST_COOLDOWN_MS_MIN = 900;
+export const BURST_COOLDOWN_MS_MAX = 1600;
+// 旧来の「ターン毎に1発」方式に比べ平均発射間隔が約3.5倍速くなる計算(バースト内の間隔と
+// 小休止の平均から算出)なので、1発あたりの威力/被弾率にこの係数を掛けて総ダメージ量を
+// 相殺し、体感の激しさだけを上げて難易度は大きく変えないようにする。
+export const BURST_DMG_COMPENSATION = 1/3.5;
 
 export const SIM_STEP_MS = 100;
 

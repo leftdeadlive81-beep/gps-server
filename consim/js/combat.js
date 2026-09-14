@@ -1,7 +1,7 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement } from './achievements.js';
 import { pickWaveBgm, playCombatAmbience, playSfx, startBgm, stopCombatAmbience } from './audio.js';
-import { AA_ATTACK_DAMAGE, AA_COOLDOWN_TICKS, AA_ENGAGE_RANGE, ANOMALOUS_JUMP_UNITS, ARTILLERY_FIRE_RANGE_UNITS, ARTILLERY_MOVE_CAP, ARTILLERY_STANDOFF_RANGE_UNITS, CANVAS_H, CANVAS_W, COUNTER_CHANCE, COUNTER_DAMAGE, DECOY_LURE_MULT_DAY, DECOY_LURE_MULT_NIGHT, DECOY_MAX_HP, DECOY_MODES, DEPLOYMENT_MODES, DEPLOY_BOX_METERS, DIFFICULTIES, DRONE_DETONATE_DAMAGE, DRONE_DETONATE_RANGE, DRONE_INTRO_STAGE, DRONE_SPEED, ENEMY_FORMATION_BASE_SIZE, ENEMY_FORMATION_NAMES, ENEMY_FORMATION_TEMPLATES, ENEMY_FOCUS_FIRE_WINDOW_MS, ENEMY_HQ_EXPOSURE, ENEMY_INFANTRY_DOCTRINES, ENEMY_INFANTRY_TOTAL_TARGET, ENEMY_SPAWN_MIN_X, ENGINEER_POS, ENGINEER_REPAIR_HP_PER_TURN, ENGINEER_REPAIR_RANGE_UNITS, ESTIMATE_CLAMP_MARGIN, EXPOSURE_DEFAULT, FLANK_OFFSET_RANGE_UNITS, FLIGHT_DURATION, FRIENDLY_HELI_MOVE_UNITS, FRIENDLY_INF_POS, FRIENDLY_KIND_LIST, FRIENDLY_MARK_COLOR, FRIENDLY_SPACING_PUSH, FRIENDLY_SPACING_RADIUS, FUZES, GAME_SPEED_INTERVALS, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GAME_START_DATETIME, GAME_VERSION, HELI_ATTACK_BURST, HELI_ATTACK_DAMAGE, HELI_COOLDOWN_TICKS, HELI_ENGAGE_RANGE, HELI_EXPOSURE, HELI_MAX_RANGE_UNITS, HELI_MOVE_CAP, HELI_WITHDRAW_DIST, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_DEFENSE_ATTACKER_WINDOW_MS, HQ_DEFENSE_DMG_MULT, HQ_DEFENSE_RANGE_UNITS, HQ_DETECT_RANGE_UNITS, HQ_MAX_HP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, HQ_SUPPLY_HEAL_PCT_PER_TURN, HQ_SUPPLY_ZONE_RADIUS_UNITS, HQ_X, HQ_Y, ILLUM_DURATION_TURNS, ILLUM_RADIUS_M, INFANTRY_DRONE_COOLDOWN_TICKS, INFANTRY_DRONE_LAUNCH_CHANCE, INFANTRY_DRONE_SWARM_SIZE, INFANTRY_DUEL_DMG_TO_ENEMY, INFANTRY_MOVE_CAP, INFANTRY_STANDOFF_UNITS, INITIAL_DEPLOY_SPACING_MULT, LAST_STAND_THRESHOLD, LAUNCH_INTERVAL, MAP_SEED_CANDIDATE_COUNT, MARKER_REVEAL_RADIUS_UNITS, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MERGE_HP_THRESHOLD, METERS_PER_UNIT, MINE_DAMAGE, MINE_MAX_ACTIVE, MINE_PLACEMENT_CHANCE, MINE_TRIGGER_RADIUS_UNITS, MORTAR_BEST_LOADOUT, MORTAR_CB_DETECT_BASE, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CB_STRIKE_DMG, MORTAR_CB_WARN_TURNS, MORTAR_CREW_SIZE, MORTAR_DISPERSION_UNITS, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MAX_RANGE_UNITS, MORTAR_MIN_RANGE_M, MORTAR_MIN_RANGE_UNITS, MORTAR_MOVE_CAP, MORTAR_ORDER_LABEL, MORTAR_RELOAD_MS, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, NUM_ENGINEERS, NUM_MORTARS, NUM_SAMS, NUM_SCOUTS, NUM_SNIPERS, NUM_SQUADS, NUM_TANKS, OP, OP_HOME_X, OP_HOME_Y, ORDER_LABEL, PERSONNEL_ROSTER, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, ROAD_PULL_RADIUS, ROSTER_ENGINEER_TEAMS, ROSTER_MORTAR_CREWS, ROSTER_RESERVE_INITIAL, ROSTER_SCOUT_TEAMS, ROSTER_SNIPER_TEAMS, ROSTER_SQUADS, SAM_DUEL_DMG_TO_ENEMY, SAM_ENGAGE_RANGE, SAM_EXPOSURE, SAM_MAX_HP, SAM_MOVE_CAP, SAM_POS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_ADVANCE_LIMIT_X, SCOUT_EXPOSURE, SCOUT_LOWER_Y, SCOUT_MAX_RANGE_UNITS, SCOUT_MOVE_CAP, SCOUT_SQUAD_SIZE, SCOUT_UPPER_Y, SCOUT_X, SHELLS, SHELL_DISPERSION_MULT, SHELL_KILL_RADIUS_UNITS, SIM_STEP_MAX_CATCHUP, SIM_STEP_MS, SMART_ACTIONS, SMART_UNIT_TYPES, SMOKE_DURATION_TURNS, SMOKE_RADIUS_M, SMOKE_RADIUS_UNITS, SNIPER_AIM_LINE_WIDTH_UNITS, SNIPER_AIM_RANGE_UNITS, SNIPER_DMG, SNIPER_EXECUTE_HP_THRESHOLD, SNIPER_MOVE_CAP, SNIPER_POS, SNIPER_RANGE_UNITS, SQUAD_ADVANCE_LIMIT_X, SQUAD_ANTI_DRONE_DMG, SQUAD_ANTI_DRONE_HIT_CHANCE, SQUAD_ANTI_DRONE_RANGE_UNITS, SQUAD_ASSAULT_LIMIT_X, SQUAD_ENGAGE_RANGE, SQUAD_FORMATION_ADJUST_M, SQUAD_GRID_OFFSETS, SQUAD_RETREAT_LIMIT_X, SQUAD_SIZE, STAGE_COUNT, STEP_RENDER_MIN_INTERVAL_MS, SUPPRESSION_CASUALTY_MULT, SUPPRESSION_COUNTER_MULT, SUPPRESSION_DUEL_DMG_BONUS, SUPPRESSION_MOVE_MULT, SUPPRESSION_NEARMISS_TURNS, SUPPRESSION_RETREAT_CHANCE, SUPPRESSION_TURNS, TANK_DUEL_DMG_TO_ENEMY, TANK_ENGAGE_RANGE, TANK_EXPOSURE, TANK_INCOMING_DMG, TANK_MAX_HP, TANK_MOVE_CAP, TANK_POS, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_GRID_CELL_SIZE, TARGET_GRID_MAX_RINGS, TARGET_TYPES, TERRAIN_TYPE_FOREST, TRENCH_BUILD_COST, UNIT_AMMO_EMPTY_DMG_MULT, UNIT_AMMO_MAX, UNIT_AMMO_RESUPPLY_PER_TURN, VEHICLE_ASSAULT_DAMAGE, VEHICLE_ASSAULT_RANGE, VEHICLE_MOVE_CAP, VET_DMG_BONUS_PER_LEVEL, VET_EXPOSURE_BONUS_PER_LEVEL, VET_MAX_LEVEL, VET_XP_PER_LEVEL, HQ_MORTAR_COOLDOWN_TICKS, HQ_MORTAR_COUNT, HQ_MORTAR_DAMAGE, HQ_TANKGUN_COOLDOWN_TICKS, HQ_TANKGUN_COUNT, HQ_TANKGUN_DAMAGE, WALL_BUILD_COST, WALL_MAX_HP, WALL_RADIUS, WAVE_CLEAR_EFFECT_WAIT_MS, WAVE_CLEAR_FANFARE_HOLD_MS, WAVE_SPAWN_DELAY_MS, WAVE_SPAWN_WINDOW_MS, WEAPON_FIRE_INTERVAL, WEAPON_FIRE_OFFSET, WEATHER_TYPES, WORLD } from './constants.js';
+import { AA_ATTACK_DAMAGE, AA_COOLDOWN_TICKS, AA_ENGAGE_RANGE, ANOMALOUS_JUMP_UNITS, ARTILLERY_FIRE_RANGE_UNITS, ARTILLERY_MOVE_CAP, ARTILLERY_STANDOFF_RANGE_UNITS, BURST_COOLDOWN_MS_MAX, BURST_COOLDOWN_MS_MIN, BURST_DMG_COMPENSATION, BURST_SHOTS_MAX, BURST_SHOTS_MIN, BURST_SHOT_INTERVAL_MS_MAX, BURST_SHOT_INTERVAL_MS_MIN, CANVAS_H, CANVAS_W, COUNTER_CHANCE, COUNTER_DAMAGE, DECOY_LURE_MULT_DAY, DECOY_LURE_MULT_NIGHT, DECOY_MAX_HP, DECOY_MODES, DEPLOYMENT_MODES, DEPLOY_BOX_METERS, DIFFICULTIES, DRONE_DETONATE_DAMAGE, DRONE_DETONATE_RANGE, DRONE_INTRO_STAGE, DRONE_SPEED, ENEMY_FORMATION_BASE_SIZE, ENEMY_FORMATION_NAMES, ENEMY_FORMATION_TEMPLATES, ENEMY_FOCUS_FIRE_WINDOW_MS, ENEMY_HQ_EXPOSURE, ENEMY_INFANTRY_DOCTRINES, ENEMY_INFANTRY_TOTAL_TARGET, ENEMY_SPAWN_MIN_X, ENGINEER_POS, ENGINEER_REPAIR_HP_PER_TURN, ENGINEER_REPAIR_RANGE_UNITS, ESTIMATE_CLAMP_MARGIN, EXPOSURE_DEFAULT, FLANK_OFFSET_RANGE_UNITS, FLIGHT_DURATION, FRIENDLY_HELI_MOVE_UNITS, FRIENDLY_INF_POS, FRIENDLY_KIND_LIST, FRIENDLY_MARK_COLOR, FRIENDLY_SPACING_PUSH, FRIENDLY_SPACING_RADIUS, FUZES, GAME_SPEED_INTERVALS, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GAME_START_DATETIME, GAME_VERSION, HELI_ATTACK_BURST, HELI_ATTACK_DAMAGE, HELI_COOLDOWN_TICKS, HELI_ENGAGE_RANGE, HELI_EXPOSURE, HELI_MAX_RANGE_UNITS, HELI_MOVE_CAP, HELI_WITHDRAW_DIST, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_DEFENSE_ATTACKER_WINDOW_MS, HQ_DEFENSE_DMG_MULT, HQ_DEFENSE_RANGE_UNITS, HQ_DETECT_RANGE_UNITS, HQ_MAX_HP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, HQ_SUPPLY_HEAL_PCT_PER_TURN, HQ_SUPPLY_ZONE_RADIUS_UNITS, HQ_X, HQ_Y, ILLUM_DURATION_TURNS, ILLUM_RADIUS_M, INFANTRY_DRONE_COOLDOWN_TICKS, INFANTRY_DRONE_LAUNCH_CHANCE, INFANTRY_DRONE_SWARM_SIZE, INFANTRY_DUEL_DMG_TO_ENEMY, INFANTRY_MOVE_CAP, INFANTRY_STANDOFF_UNITS, INITIAL_DEPLOY_SPACING_MULT, LAST_STAND_THRESHOLD, LAUNCH_INTERVAL, MAP_SEED_CANDIDATE_COUNT, MARKER_REVEAL_RADIUS_UNITS, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MERGE_HP_THRESHOLD, METERS_PER_UNIT, MINE_DAMAGE, MINE_MAX_ACTIVE, MINE_PLACEMENT_CHANCE, MINE_TRIGGER_RADIUS_UNITS, MORTAR_BEST_LOADOUT, MORTAR_CB_DETECT_BASE, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CB_STRIKE_DMG, MORTAR_CB_WARN_TURNS, MORTAR_CREW_SIZE, MORTAR_DISPERSION_UNITS, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MAX_RANGE_UNITS, MORTAR_MIN_RANGE_M, MORTAR_MIN_RANGE_UNITS, MORTAR_MOVE_CAP, MORTAR_ORDER_LABEL, MORTAR_RELOAD_MS, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, NUM_ENGINEERS, NUM_MORTARS, NUM_SAMS, NUM_SCOUTS, NUM_SNIPERS, NUM_SQUADS, NUM_TANKS, OP, OP_HOME_X, OP_HOME_Y, ORDER_LABEL, PERSONNEL_ROSTER, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, ROAD_PULL_RADIUS, ROSTER_ENGINEER_TEAMS, ROSTER_MORTAR_CREWS, ROSTER_RESERVE_INITIAL, ROSTER_SCOUT_TEAMS, ROSTER_SNIPER_TEAMS, ROSTER_SQUADS, SAM_DUEL_DMG_TO_ENEMY, SAM_ENGAGE_RANGE, SAM_EXPOSURE, SAM_MAX_HP, SAM_MOVE_CAP, SAM_POS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_ADVANCE_LIMIT_X, SCOUT_EXPOSURE, SCOUT_LOWER_Y, SCOUT_MAX_RANGE_UNITS, SCOUT_MOVE_CAP, SCOUT_SQUAD_SIZE, SCOUT_UPPER_Y, SCOUT_X, SHELLS, SHELL_DISPERSION_MULT, SHELL_KILL_RADIUS_UNITS, SIM_STEP_MAX_CATCHUP, SIM_STEP_MS, SMART_ACTIONS, SMART_UNIT_TYPES, SMOKE_DURATION_TURNS, SMOKE_RADIUS_M, SMOKE_RADIUS_UNITS, SNIPER_AIM_LINE_WIDTH_UNITS, SNIPER_AIM_RANGE_UNITS, SNIPER_DMG, SNIPER_EXECUTE_HP_THRESHOLD, SNIPER_MOVE_CAP, SNIPER_POS, SNIPER_RANGE_UNITS, SQUAD_ADVANCE_LIMIT_X, SQUAD_ANTI_DRONE_DMG, SQUAD_ANTI_DRONE_HIT_CHANCE, SQUAD_ANTI_DRONE_RANGE_UNITS, SQUAD_ASSAULT_LIMIT_X, SQUAD_ENGAGE_RANGE, SQUAD_FORMATION_ADJUST_M, SQUAD_GRID_OFFSETS, SQUAD_RETREAT_LIMIT_X, SQUAD_SIZE, STAGE_COUNT, STEP_RENDER_MIN_INTERVAL_MS, SUPPRESSION_CASUALTY_MULT, SUPPRESSION_COUNTER_MULT, SUPPRESSION_DUEL_DMG_BONUS, SUPPRESSION_MOVE_MULT, SUPPRESSION_NEARMISS_TURNS, SUPPRESSION_RETREAT_CHANCE, SUPPRESSION_TURNS, TANK_DUEL_DMG_TO_ENEMY, TANK_ENGAGE_RANGE, TANK_EXPOSURE, TANK_INCOMING_DMG, TANK_MAX_HP, TANK_MOVE_CAP, TANK_POS, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_GRID_CELL_SIZE, TARGET_GRID_MAX_RINGS, TARGET_TYPES, TERRAIN_TYPE_FOREST, TRENCH_BUILD_COST, UNIT_AMMO_EMPTY_DMG_MULT, UNIT_AMMO_MAX, UNIT_AMMO_RESUPPLY_PER_TURN, VEHICLE_ASSAULT_DAMAGE, VEHICLE_ASSAULT_RANGE, VEHICLE_MOVE_CAP, VET_DMG_BONUS_PER_LEVEL, VET_EXPOSURE_BONUS_PER_LEVEL, VET_MAX_LEVEL, VET_XP_PER_LEVEL, HQ_MORTAR_COOLDOWN_TICKS, HQ_MORTAR_COUNT, HQ_MORTAR_DAMAGE, HQ_TANKGUN_COOLDOWN_TICKS, HQ_TANKGUN_COUNT, HQ_TANKGUN_DAMAGE, WALL_BUILD_COST, WALL_MAX_HP, WALL_RADIUS, WAVE_CLEAR_EFFECT_WAIT_MS, WAVE_CLEAR_FANFARE_HOLD_MS, WAVE_SPAWN_DELAY_MS, WAVE_SPAWN_WINDOW_MS, WEAPON_FIRE_INTERVAL, WEAPON_FIRE_OFFSET, WEATHER_TYPES, WORLD } from './constants.js';
 import { resetClickCycle } from './input.js';
 import { render } from './main.js';
 import { applySavedCampaign, clearCampaignSave, loadCampaign, saveCampaign } from './savegame.js';
@@ -60,6 +60,30 @@ export function setGameSpeedByIndex(idx){ setGameSpeed(GAME_SPEED_ORDER[idx]); }
 export function unitMayFire(kind, index, tick){
   const interval = WEAPON_FIRE_INTERVAL[kind] || 3;
   return ((tick + index*2 + WEAPON_FIRE_OFFSET[kind]) % interval) === 0;
+}
+
+// per user request: 発砲頻度を上げ、単調な「ターン毎に1発」ではなく「パパパン(連射)→小休止」
+// のリズムにする -- 迫撃砲のreloadingUntilと同様、ターンではなく実時間(performance.now())で
+// 個体ごとに回すバースト射撃サイクル。isUnitBurstReadyは呼び出し側が実際に交戦可能な目標を
+// 見つけたかどうかに関わらず何度呼んでも安全な「覗き見」で、初回呼び出し時に次回準備完了
+// 時刻をランダム初期化するだけ(ユニット間で位相をずらすため)。実際にその機会で発砲する
+// ときだけconsumeBurstShotを1回呼び、連射内は次弾までの短い間隔、バースト完了後は小休止の
+// 間隔を次回準備完了時刻として設定する。
+export function isUnitBurstReady(unit){
+  if(unit.burstNextAt === undefined){
+    unit.burstNextAt = performance.now() + rnd(0, BURST_COOLDOWN_MS_MAX);
+  }
+  return performance.now() >= unit.burstNextAt;
+}
+
+export function consumeBurstShot(unit){
+  if(!unit.burstShotsLeft){
+    unit.burstShotsLeft = Math.round(rnd(BURST_SHOTS_MIN, BURST_SHOTS_MAX));
+  }
+  unit.burstShotsLeft -= 1;
+  unit.burstNextAt = performance.now() + (unit.burstShotsLeft>0
+    ? rnd(BURST_SHOT_INTERVAL_MS_MIN, BURST_SHOT_INTERVAL_MS_MAX)
+    : rnd(BURST_COOLDOWN_MS_MIN, BURST_COOLDOWN_MS_MAX));
 }
 
 // per user request: when a multi-figure unit (a friendly squad, an enemy infantry group)
@@ -1572,10 +1596,10 @@ export function resolveSquadOrders(dt){
         if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
       }
       if(engageTargets.length===0) return;
-      // Firing is a discrete once-per-turn event (unitMayFire's tick-modulo stagger is
-      // deterministic, not a rate) -- only evaluate it the instant a whole turn is crossed,
-      // using the original tick formula unchanged.
-      if(!turnJustCrossed() || !unitMayFire('squad', sqIdx, currentTurnFloor())) return;
+      // per user request: 単調な「ターン毎に1発」をやめ、ユニットごとの実時間バースト
+      // サイクル(パパパン→小休止)に変更(isUnitBurstReady/consumeBurstShot、上のコメント
+      // 参照)。実際に交戦相手が見つかった時だけ1回分を消費する。
+      if(!isUnitBurstReady(sq)) return;
       let dmgMult=1, casualtyMult=1;
       if(sq.order==='assault' || sq.order==='hunt'){ dmgMult=1.6; casualtyMult=1.5; }
       else if(sq.order==='hold'){ dmgMult=0.9; casualtyMult=0.6; }
@@ -1597,6 +1621,8 @@ export function resolveSquadOrders(dt){
         const blockWall = wallBlockingLineOfFire(sq.x, sq.y, t.trueX, t.trueY);
         if(blockWall){
           anyEvent = true;
+          firedThisTick = true;
+          consumeBurstShot(sq);
           damageWall(blockWall, Math.round(rnd(INFANTRY_DUEL_DMG_TO_ENEMY[0], INFANTRY_DUEL_DMG_TO_ENEMY[1])), `第${sqIdx+1}小隊の射撃`);
           return;
         }
@@ -1617,6 +1643,7 @@ export function resolveSquadOrders(dt){
         sq.ammo = Math.max(0, sq.ammo-1);
         anyEvent = true;
         firedThisTick = true;
+        consumeBurstShot(sq);
         // per user request: show a shooting animation for the squad's own outgoing fire too,
         // not just the enemy's return fire on a casualty (see fireTracer() below). Each alive
         // soldier's own stick figure gets its own muzzle flash (aliveFigureOffsets), not one
@@ -1629,7 +1656,7 @@ export function resolveSquadOrders(dt){
         }
         const enemyAltMult = altitudeBonus(t.trueX, t.trueY, sq.x, sq.y);
         const suppressionCasualtyMult = suppressed ? SUPPRESSION_CASUALTY_MULT : 1;
-        const casualtyChance = (0.08 + state.stage*0.008) * casualtyMult * enemyAltMult * suppressionCasualtyMult * exposureNormalizedMult(getUnitExposure({kind:'squad', idx:sqIdx}));
+        const casualtyChance = (0.08 + state.stage*0.008) * casualtyMult * enemyAltMult * suppressionCasualtyMult * exposureNormalizedMult(getUnitExposure({kind:'squad', idx:sqIdx})) * BURST_DMG_COMPENSATION;
         if(Math.random() < casualtyChance){
           const victim = choice(curAlive);
           victim.alive = false;
@@ -1751,7 +1778,7 @@ export function resolveSamOrders(dt){
         if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
       }
       if(engageTargets.length===0) return;
-      if(!turnJustCrossed() || !unitMayFire('sam', idx, currentTurnFloor())) return;
+      if(!isUnitBurstReady(sam)) return;
       let dmgMult=1;
       if(sam.order==='hunt'){ dmgMult=1.5; }
       else if(sam.order==='hold'){ dmgMult=0.9; }
@@ -1773,6 +1800,7 @@ export function resolveSamOrders(dt){
         applyDamageToTarget(t, dmgToEnemy);
         anyEvent = true;
         firedThisTick = true;
+        consumeBurstShot(sam);
         fireTracer(sam.x, sam.y, e.x, e.y, 220, 'missile');
         if(t.hp<=0 && !t.destroyed){
           t.destroyed = true; t.hp = 0;
@@ -1800,7 +1828,7 @@ export function resolveTankOrders(dt){
         if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
       }
       if(engageTargets.length===0) return;
-      if(!turnJustCrossed() || !unitMayFire('tank', idx, currentTurnFloor())) return;
+      if(!isUnitBurstReady(tank)) return;
       let dmgMult=1, incomingMult=1;
       if(tank.order==='hunt'){ dmgMult=1.5; incomingMult=1.3; }
       else if(tank.order==='hold'){ dmgMult=0.9; incomingMult=0.7; }
@@ -1819,6 +1847,8 @@ export function resolveTankOrders(dt){
         const blockWall = wallBlockingLineOfFire(tank.x, tank.y, t.trueX, t.trueY);
         if(blockWall){
           anyEvent = true;
+          firedThisTick = true;
+          consumeBurstShot(tank);
           damageWall(blockWall, Math.round(rnd(TANK_DUEL_DMG_TO_ENEMY[0], TANK_DUEL_DMG_TO_ENEMY[1])), `戦車${idx+1}の砲撃`);
           return;
         }
@@ -1833,6 +1863,7 @@ export function resolveTankOrders(dt){
         applyDamageToTarget(t, dmgToEnemy);
         anyEvent = true;
         firedThisTick = true;
+        consumeBurstShot(tank);
         fireTracer(tank.x, tank.y, e.x, e.y, 220, 'cannon');
         if(t.hp<=0 && !t.destroyed){
           t.destroyed = true; t.hp = 0;
@@ -1841,7 +1872,7 @@ export function resolveTankOrders(dt){
         }
         const enemyAltMult = altitudeBonus(t.trueX, t.trueY, tank.x, tank.y);
         const suppressionCasualtyMult = suppressed ? SUPPRESSION_CASUALTY_MULT : 1;
-        const hitChance = (0.10 + state.stage*0.006) * incomingMult * enemyAltMult * suppressionCasualtyMult * exposureNormalizedMult(getUnitExposure({kind:'tank', idx}));
+        const hitChance = (0.10 + state.stage*0.006) * incomingMult * enemyAltMult * suppressionCasualtyMult * exposureNormalizedMult(getUnitExposure({kind:'tank', idx})) * BURST_DMG_COMPENSATION;
         if(Math.random() < hitChance){
           const dmg = Math.round(rnd(TANK_INCOMING_DMG[0], TANK_INCOMING_DMG[1]));
           const wasAlive = tank.hp>0;
@@ -2007,7 +2038,8 @@ export function resolveSniperOrders(dt){
       if(sn.resting){ tickUnitRest(sn, `狙撃${sn.id+1}班`, dt); return; }
       applyStandingOrder(sn, `狙撃${sn.id+1}班`, false);
       applySniperMovement(sn, dt);
-      if(!turnJustCrossed() || !unitMayFire('sniper', sn.id, currentTurnFloor())) return;
+      if(!isUnitBurstReady(sn)) return;
+      consumeBurstShot(sn);
 
       if(sn.pendingSnipeTargetId){
         const t = state.targets.find(x=>x.id===sn.pendingSnipeTargetId);
