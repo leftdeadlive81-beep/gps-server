@@ -308,6 +308,60 @@ export const TRENCH_LINE_COLOR = 'rgba(139,105,60,0.9)';
 
 export const TRENCH_LINE_WIDTH = 3;
 
+// per user request: 要塞(Fortress) -- 敵味方どちらの歩兵でも占領でき、占領している側は
+// 内蔵の機関銃(対歩兵)とミサイルランチャー(対車両/対空)を使える固定拠点。壁/塹壕と違い
+// 工兵が建てるものではなく、waveごとに自陣近く/敵陣近く/中間地点へ1つずつ、計3つ自動配置
+// される。無人(owner===null)の要塞は近くにいる方の歩兵がそのまま占領するが、既に相手側が
+// 占領している要塞は、その場に居座って包囲戦(FORTRESS_SIEGE_DMG)でHPを0まで削らない限り
+// 奪えない(0になるとownerがnullに戻り、HPも全回復して再び無人状態から奪い合いになる)。
+export const FORTRESS_COUNT = 3;
+
+export const FORTRESS_MAX_HP = 260;
+
+// 歩兵が占領/包囲戦を行うには要塞のこの範囲内にいる必要がある(工兵の野戦修理と近い距離感)。
+export const FORTRESS_CAPTURE_RANGE_UNITS = 45;
+
+// 占領されていない側の歩兵が居座って包囲戦を行うときの、burstタイミング1回あたりのHP削り量。
+export const FORTRESS_SIEGE_DMG = [4, 9];
+
+export const FORTRESS_MG_DMG = [2, 5];
+
+export const FORTRESS_MG_RANGE_UNITS = 160;
+
+export const FORTRESS_MG_SHOTS_MIN = 3;
+
+export const FORTRESS_MG_SHOTS_MAX = 6;
+
+export const FORTRESS_MG_SHOT_INTERVAL_MS_MIN = 110;
+
+export const FORTRESS_MG_SHOT_INTERVAL_MS_MAX = 180;
+
+export const FORTRESS_MG_COOLDOWN_MS_MIN = 700;
+
+export const FORTRESS_MG_COOLDOWN_MS_MAX = 1300;
+
+export const FORTRESS_MISSILE_DMG = [16, 26];
+
+export const FORTRESS_MISSILE_RANGE_UNITS = 420;
+
+export const FORTRESS_MISSILE_COOLDOWN_MS_MIN = 2200;
+
+export const FORTRESS_MISSILE_COOLDOWN_MS_MAX = 3200;
+
+// 配置ゾーン -- 自陣寄り/中間地点/敵陣寄りに1つずつ、各ゾーン内のX範囲でランダムなY(ほぼ全高)
+// に生成する(地雷や擬陣地と同様、水域だけは避けるようリトライする -- terrain.jsのTERRAIN_TYPE_WATER)。
+export const FORTRESS_ZONE_FRIENDLY_X = [260, 520];
+
+export const FORTRESS_ZONE_ENEMY_X = [CANVAS_W-520, CANVAS_W-260];
+
+export const FORTRESS_ZONE_MID_X = [CANVAS_W/2-220, CANVAS_W/2+220];
+
+export const FORTRESS_ZONE_Y = [120, CANVAS_H-120];
+
+export const FORTRESS_NEUTRAL_COLOR = '#9c9478';
+
+export const FORTRESS_NEUTRAL_COLOR_3D = 0x9c9478;
+
 export const PERSONNEL_ROSTER = [
   {rank:'1等陸尉', name:'佐藤'},
   {rank:'2等陸尉', name:'鈴木'},

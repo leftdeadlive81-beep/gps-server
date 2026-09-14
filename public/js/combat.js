@@ -1,7 +1,7 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement } from './achievements.js';
 import { pickWaveBgm, playCombatAmbience, playSfx, startBgm, stopCombatAmbience } from './audio.js';
-import { AA_ATTACK_DAMAGE, AA_COOLDOWN_TICKS, AA_ENGAGE_RANGE, ANOMALOUS_JUMP_UNITS, ARTILLERY_FIRE_RANGE_UNITS, ARTILLERY_MOVE_CAP, ARTILLERY_STANDOFF_RANGE_UNITS, BURST_COOLDOWN_MS_MAX, BURST_COOLDOWN_MS_MIN, BURST_DMG_COMPENSATION, BURST_SHOTS_MAX, BURST_SHOTS_MIN, BURST_SHOT_INTERVAL_MS_MAX, BURST_SHOT_INTERVAL_MS_MIN, CANVAS_H, CANVAS_W, COUNTER_CHANCE, COUNTER_DAMAGE, DECOY_LURE_MULT_DAY, DECOY_LURE_MULT_NIGHT, DECOY_MAX_HP, DECOY_MODES, DEPLOYMENT_MODES, DEPLOY_BOX_METERS, DIFFICULTIES, DRONE_DETONATE_DAMAGE, DRONE_DETONATE_RANGE, DRONE_INTRO_STAGE, DRONE_SPEED, ENEMY_FORMATION_BASE_SIZE, ENEMY_FORMATION_NAMES, ENEMY_FORMATION_TEMPLATES, ENEMY_FOCUS_FIRE_WINDOW_MS, ENEMY_HQ_EXPOSURE, ENEMY_INFANTRY_DOCTRINES, ENEMY_INFANTRY_TOTAL_TARGET, ENEMY_SPAWN_MIN_X, ENGINEER_POS, ENGINEER_REPAIR_HP_PER_TURN, ENGINEER_REPAIR_RANGE_UNITS, ESTIMATE_CLAMP_MARGIN, EXPOSURE_DEFAULT, FLANK_OFFSET_RANGE_UNITS, FLIGHT_DURATION, FRIENDLY_HELI_MOVE_UNITS, FRIENDLY_INF_POS, FRIENDLY_KIND_LIST, FRIENDLY_MARK_COLOR, FRIENDLY_SPACING_PUSH, FRIENDLY_SPACING_RADIUS, FUZES, GAME_SPEED_INTERVALS, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GAME_START_DATETIME, GAME_VERSION, HELI_ATTACK_BURST, HELI_ATTACK_DAMAGE, HELI_COOLDOWN_TICKS, HELI_ENGAGE_RANGE, HELI_EXPOSURE, HELI_MAX_RANGE_UNITS, HELI_MOVE_CAP, HELI_WITHDRAW_DIST, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_DEFENSE_ATTACKER_WINDOW_MS, HQ_DEFENSE_DMG_MULT, HQ_DEFENSE_RANGE_UNITS, HQ_DETECT_RANGE_UNITS, HQ_MAX_HP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, HQ_SUPPLY_HEAL_PCT_PER_TURN, HQ_SUPPLY_ZONE_RADIUS_UNITS, HQ_X, HQ_Y, ILLUM_DURATION_TURNS, ILLUM_RADIUS_M, INFANTRY_DRONE_COOLDOWN_TICKS, INFANTRY_DRONE_LAUNCH_CHANCE, INFANTRY_DRONE_SWARM_SIZE, INFANTRY_DUEL_DMG_TO_ENEMY, INFANTRY_MOVE_CAP, INFANTRY_STANDOFF_UNITS, INITIAL_DEPLOY_SPACING_MULT, LAST_STAND_THRESHOLD, LAUNCH_INTERVAL, MAP_SEED_CANDIDATE_COUNT, MARKER_REVEAL_RADIUS_UNITS, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MERGE_HP_THRESHOLD, METERS_PER_UNIT, MINE_DAMAGE, MINE_MAX_ACTIVE, MINE_PLACEMENT_CHANCE, MINE_TRIGGER_RADIUS_UNITS, MORTAR_BEST_LOADOUT, MORTAR_CB_DETECT_BASE, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CB_STRIKE_DMG, MORTAR_CB_WARN_TURNS, MORTAR_CREW_SIZE, MORTAR_DISPERSION_UNITS, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MAX_RANGE_UNITS, MORTAR_MIN_RANGE_M, MORTAR_MIN_RANGE_UNITS, MORTAR_MOVE_CAP, MORTAR_ORDER_LABEL, MORTAR_RELOAD_MS, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, NUM_ENGINEERS, NUM_MORTARS, NUM_SAMS, NUM_SCOUTS, NUM_SNIPERS, NUM_SQUADS, NUM_TANKS, OP, OP_HOME_X, OP_HOME_Y, ORDER_LABEL, PERSONNEL_ROSTER, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, ROAD_PULL_RADIUS, ROSTER_ENGINEER_TEAMS, ROSTER_MORTAR_CREWS, ROSTER_RESERVE_INITIAL, ROSTER_SCOUT_TEAMS, ROSTER_SNIPER_TEAMS, ROSTER_SQUADS, SAM_DUEL_DMG_TO_ENEMY, SAM_ENGAGE_RANGE, SAM_EXPOSURE, SAM_MAX_HP, SAM_MOVE_CAP, SAM_POS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_ADVANCE_LIMIT_X, SCOUT_EXPOSURE, SCOUT_LOWER_Y, SCOUT_MAX_RANGE_UNITS, SCOUT_MOVE_CAP, SCOUT_SQUAD_SIZE, SCOUT_UPPER_Y, SCOUT_X, SHELLS, SHELL_DISPERSION_MULT, SHELL_KILL_RADIUS_UNITS, SIM_STEP_MAX_CATCHUP, SIM_STEP_MS, SMART_ACTIONS, SMART_UNIT_TYPES, SMOKE_DURATION_TURNS, SMOKE_RADIUS_M, SMOKE_RADIUS_UNITS, SNIPER_AIM_LINE_WIDTH_UNITS, SNIPER_AIM_RANGE_UNITS, SNIPER_DMG, SNIPER_EXECUTE_HP_THRESHOLD, SNIPER_MOVE_CAP, SNIPER_POS, SNIPER_RANGE_UNITS, SQUAD_ADVANCE_LIMIT_X, SQUAD_ANTI_DRONE_DMG, SQUAD_ANTI_DRONE_HIT_CHANCE, SQUAD_ANTI_DRONE_RANGE_UNITS, SQUAD_ASSAULT_LIMIT_X, SQUAD_ENGAGE_RANGE, SQUAD_FORMATION_ADJUST_M, SQUAD_GRID_OFFSETS, SQUAD_RETREAT_LIMIT_X, SQUAD_SIZE, STAGE_COUNT, STEP_RENDER_MIN_INTERVAL_MS, SUPPRESSION_CASUALTY_MULT, SUPPRESSION_COUNTER_MULT, SUPPRESSION_DUEL_DMG_BONUS, SUPPRESSION_MOVE_MULT, SUPPRESSION_NEARMISS_TURNS, SUPPRESSION_RETREAT_CHANCE, SUPPRESSION_TURNS, TANK_DUEL_DMG_TO_ENEMY, TANK_ENGAGE_RANGE, TANK_EXPOSURE, TANK_INCOMING_DMG, TANK_MAX_HP, TANK_MOVE_CAP, TANK_POS, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_GRID_CELL_SIZE, TARGET_GRID_MAX_RINGS, TARGET_TYPES, TERRAIN_TYPE_FOREST, TRENCH_BUILD_COST, UNIT_AMMO_EMPTY_DMG_MULT, UNIT_AMMO_MAX, UNIT_AMMO_RESUPPLY_PER_TURN, VEHICLE_ASSAULT_DAMAGE, VEHICLE_ASSAULT_RANGE, VEHICLE_MOVE_CAP, VET_DMG_BONUS_PER_LEVEL, VET_EXPOSURE_BONUS_PER_LEVEL, VET_MAX_LEVEL, VET_XP_PER_LEVEL, HQ_MORTAR_COOLDOWN_TICKS, HQ_MORTAR_COUNT, HQ_MORTAR_DAMAGE, HQ_TANKGUN_COOLDOWN_TICKS, HQ_TANKGUN_COUNT, HQ_TANKGUN_DAMAGE, WALL_BUILD_COST, WALL_MAX_HP, WALL_RADIUS, WAVE_CLEAR_EFFECT_WAIT_MS, WAVE_CLEAR_FANFARE_HOLD_MS, WAVE_SPAWN_DELAY_MS, WAVE_SPAWN_WINDOW_MS, WEAPON_FIRE_INTERVAL, WEAPON_FIRE_OFFSET, WEATHER_TYPES, WORLD } from './constants.js';
+import { AA_ATTACK_DAMAGE, AA_COOLDOWN_TICKS, AA_ENGAGE_RANGE, ANOMALOUS_JUMP_UNITS, ARTILLERY_FIRE_RANGE_UNITS, ARTILLERY_MOVE_CAP, ARTILLERY_STANDOFF_RANGE_UNITS, BURST_COOLDOWN_MS_MAX, BURST_COOLDOWN_MS_MIN, BURST_DMG_COMPENSATION, BURST_SHOTS_MAX, BURST_SHOTS_MIN, BURST_SHOT_INTERVAL_MS_MAX, BURST_SHOT_INTERVAL_MS_MIN, CANVAS_H, CANVAS_W, COUNTER_CHANCE, COUNTER_DAMAGE, DECOY_LURE_MULT_DAY, DECOY_LURE_MULT_NIGHT, DECOY_MAX_HP, DECOY_MODES, DEPLOYMENT_MODES, DEPLOY_BOX_METERS, DIFFICULTIES, DRONE_DETONATE_DAMAGE, DRONE_DETONATE_RANGE, DRONE_INTRO_STAGE, DRONE_SPEED, ENEMY_FORMATION_BASE_SIZE, ENEMY_FORMATION_NAMES, ENEMY_FORMATION_TEMPLATES, ENEMY_FOCUS_FIRE_WINDOW_MS, ENEMY_HQ_EXPOSURE, ENEMY_INFANTRY_DOCTRINES, ENEMY_INFANTRY_TOTAL_TARGET, ENEMY_SPAWN_MIN_X, ENGINEER_POS, ENGINEER_REPAIR_HP_PER_TURN, ENGINEER_REPAIR_RANGE_UNITS, ESTIMATE_CLAMP_MARGIN, EXPOSURE_DEFAULT, FLANK_OFFSET_RANGE_UNITS, FLIGHT_DURATION, FORTRESS_CAPTURE_RANGE_UNITS, FORTRESS_COUNT, FORTRESS_MAX_HP, FORTRESS_MG_COOLDOWN_MS_MAX, FORTRESS_MG_COOLDOWN_MS_MIN, FORTRESS_MG_DMG, FORTRESS_MG_RANGE_UNITS, FORTRESS_MG_SHOTS_MAX, FORTRESS_MG_SHOTS_MIN, FORTRESS_MG_SHOT_INTERVAL_MS_MAX, FORTRESS_MG_SHOT_INTERVAL_MS_MIN, FORTRESS_MISSILE_COOLDOWN_MS_MAX, FORTRESS_MISSILE_COOLDOWN_MS_MIN, FORTRESS_MISSILE_DMG, FORTRESS_MISSILE_RANGE_UNITS, FORTRESS_NEUTRAL_COLOR, FORTRESS_SIEGE_DMG, FORTRESS_ZONE_ENEMY_X, FORTRESS_ZONE_FRIENDLY_X, FORTRESS_ZONE_MID_X, FORTRESS_ZONE_Y, FRIENDLY_HELI_MOVE_UNITS, FRIENDLY_INF_POS, FRIENDLY_KIND_LIST, FRIENDLY_MARK_COLOR, FRIENDLY_SPACING_PUSH, FRIENDLY_SPACING_RADIUS, FUZES, GAME_SPEED_INTERVALS, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GAME_START_DATETIME, GAME_VERSION, HELI_ATTACK_BURST, HELI_ATTACK_DAMAGE, HELI_COOLDOWN_TICKS, HELI_ENGAGE_RANGE, HELI_EXPOSURE, HELI_MAX_RANGE_UNITS, HELI_MOVE_CAP, HELI_WITHDRAW_DIST, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_DEFENSE_ATTACKER_WINDOW_MS, HQ_DEFENSE_DMG_MULT, HQ_DEFENSE_RANGE_UNITS, HQ_DETECT_RANGE_UNITS, HQ_MAX_HP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, HQ_SUPPLY_HEAL_PCT_PER_TURN, HQ_SUPPLY_ZONE_RADIUS_UNITS, HQ_X, HQ_Y, ILLUM_DURATION_TURNS, ILLUM_RADIUS_M, INFANTRY_DRONE_COOLDOWN_TICKS, INFANTRY_DRONE_LAUNCH_CHANCE, INFANTRY_DRONE_SWARM_SIZE, INFANTRY_DUEL_DMG_TO_ENEMY, INFANTRY_MOVE_CAP, INFANTRY_STANDOFF_UNITS, INITIAL_DEPLOY_SPACING_MULT, LAST_STAND_THRESHOLD, LAUNCH_INTERVAL, MAP_SEED_CANDIDATE_COUNT, MARKER_REVEAL_RADIUS_UNITS, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MERGE_HP_THRESHOLD, METERS_PER_UNIT, MINE_DAMAGE, MINE_MAX_ACTIVE, MINE_PLACEMENT_CHANCE, MINE_TRIGGER_RADIUS_UNITS, MORTAR_BEST_LOADOUT, MORTAR_CB_DETECT_BASE, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CB_STRIKE_DMG, MORTAR_CB_WARN_TURNS, MORTAR_CREW_SIZE, MORTAR_DISPERSION_UNITS, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MAX_RANGE_UNITS, MORTAR_MIN_RANGE_M, MORTAR_MIN_RANGE_UNITS, MORTAR_MOVE_CAP, MORTAR_ORDER_LABEL, MORTAR_RELOAD_MS, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, NUM_ENGINEERS, NUM_MORTARS, NUM_SAMS, NUM_SCOUTS, NUM_SNIPERS, NUM_SQUADS, NUM_TANKS, OP, OP_HOME_X, OP_HOME_Y, ORDER_LABEL, PERSONNEL_ROSTER, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, ROAD_PULL_RADIUS, ROSTER_ENGINEER_TEAMS, ROSTER_MORTAR_CREWS, ROSTER_RESERVE_INITIAL, ROSTER_SCOUT_TEAMS, ROSTER_SNIPER_TEAMS, ROSTER_SQUADS, SAM_DUEL_DMG_TO_ENEMY, SAM_ENGAGE_RANGE, SAM_EXPOSURE, SAM_MAX_HP, SAM_MOVE_CAP, SAM_POS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_ADVANCE_LIMIT_X, SCOUT_EXPOSURE, SCOUT_LOWER_Y, SCOUT_MAX_RANGE_UNITS, SCOUT_MOVE_CAP, SCOUT_SQUAD_SIZE, SCOUT_UPPER_Y, SCOUT_X, SHELLS, SHELL_DISPERSION_MULT, SHELL_KILL_RADIUS_UNITS, SIM_STEP_MAX_CATCHUP, SIM_STEP_MS, SMART_ACTIONS, SMART_UNIT_TYPES, SMOKE_DURATION_TURNS, SMOKE_RADIUS_M, SMOKE_RADIUS_UNITS, SNIPER_AIM_LINE_WIDTH_UNITS, SNIPER_AIM_RANGE_UNITS, SNIPER_DMG, SNIPER_EXECUTE_HP_THRESHOLD, SNIPER_MOVE_CAP, SNIPER_POS, SNIPER_RANGE_UNITS, SQUAD_ADVANCE_LIMIT_X, SQUAD_ANTI_DRONE_DMG, SQUAD_ANTI_DRONE_HIT_CHANCE, SQUAD_ANTI_DRONE_RANGE_UNITS, SQUAD_ASSAULT_LIMIT_X, SQUAD_ENGAGE_RANGE, SQUAD_FORMATION_ADJUST_M, SQUAD_GRID_OFFSETS, SQUAD_RETREAT_LIMIT_X, SQUAD_SIZE, STAGE_COUNT, STEP_RENDER_MIN_INTERVAL_MS, SUPPRESSION_CASUALTY_MULT, SUPPRESSION_COUNTER_MULT, SUPPRESSION_DUEL_DMG_BONUS, SUPPRESSION_MOVE_MULT, SUPPRESSION_NEARMISS_TURNS, SUPPRESSION_RETREAT_CHANCE, SUPPRESSION_TURNS, TANK_DUEL_DMG_TO_ENEMY, TANK_ENGAGE_RANGE, TANK_EXPOSURE, TANK_INCOMING_DMG, TANK_MAX_HP, TANK_MOVE_CAP, TANK_POS, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_GRID_CELL_SIZE, TARGET_GRID_MAX_RINGS, TARGET_TYPES, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, TRENCH_BUILD_COST, UNIT_AMMO_EMPTY_DMG_MULT, UNIT_AMMO_MAX, UNIT_AMMO_RESUPPLY_PER_TURN, VEHICLE_ASSAULT_DAMAGE, VEHICLE_ASSAULT_RANGE, VEHICLE_MOVE_CAP, VET_DMG_BONUS_PER_LEVEL, VET_EXPOSURE_BONUS_PER_LEVEL, VET_MAX_LEVEL, VET_XP_PER_LEVEL, HQ_MORTAR_COOLDOWN_TICKS, HQ_MORTAR_COUNT, HQ_MORTAR_DAMAGE, HQ_TANKGUN_COOLDOWN_TICKS, HQ_TANKGUN_COUNT, HQ_TANKGUN_DAMAGE, WALL_BUILD_COST, WALL_MAX_HP, WALL_RADIUS, WAVE_CLEAR_EFFECT_WAIT_MS, WAVE_CLEAR_FANFARE_HOLD_MS, WAVE_SPAWN_DELAY_MS, WAVE_SPAWN_WINDOW_MS, WEAPON_FIRE_INTERVAL, WEAPON_FIRE_OFFSET, WEATHER_TYPES, WORLD } from './constants.js';
 import { resetClickCycle } from './input.js';
 import { render } from './main.js';
 import { applySavedCampaign, clearCampaignSave, loadCampaign, saveCampaign } from './savegame.js';
@@ -315,6 +315,7 @@ export function initGame(){
     engineers: [],
     walls: [],
     trenches: [],
+    fortresses: [],
     scouts: Array.from({length:NUM_SCOUTS}, (_,i)=>({
       id:i, x:SCOUT_X, y:SCOUT_UPPER_Y+i*40,
       soldiers: makeSoldiers(ROSTER_SCOUT_TEAMS[i]), pendingDest:null,
@@ -785,6 +786,7 @@ export function startStage(){
   }
   render();
   if(!state.placementPending) applyDecoyPlacementMode(state.decoyPlacementMode);
+  spawnFortresses();
 }
 
 export function buildPlacementQueue(){
@@ -837,6 +839,7 @@ export function finishPlacement(){
   log('op','斥候', '前線に展開完了。各斥候の観測方向を指示せよ。');
   render();
   applyDecoyPlacementMode(state.decoyPlacementMode);
+  spawnFortresses();
 }
 
 export function makeDecoy(x,y){ return {x, y, hp:DECOY_MAX_HP, maxHp:DECOY_MAX_HP, destroyed:false}; }
@@ -859,6 +862,193 @@ export function applyDecoyPlacementMode(mode){
   }
   render();
   if(!state.decoyPlacementPending) startRealtimeLoop();
+}
+
+export let fortressIdCounter = 0;
+
+// per user request: like randomDecoySpot() but retries a handful of times to avoid landing
+// in water (decoys don't bother with this since a fake position doesn't need to be usable
+// ground -- a fortress does, since infantry actually have to walk up to and stand at it).
+function randomFortressSpotInZone(xRange){
+  let best = {x: rnd(xRange[0], xRange[1]), y: rnd(FORTRESS_ZONE_Y[0], FORTRESS_ZONE_Y[1])};
+  for(let i=0;i<8;i++){
+    if(terrainTypeAt(best.x, best.y) !== TERRAIN_TYPE_WATER) return best;
+    best = {x: rnd(xRange[0], xRange[1]), y: rnd(FORTRESS_ZONE_Y[0], FORTRESS_ZONE_Y[1])};
+  }
+  return best;
+}
+
+// per user request: 要塞を毎wave 3か所(自陣寄り/中間地点/敵陣寄り)に再配置する。壁と違い
+// wave間で位置は引き継がず(擬陣地と同じ扱い)、占領状況・HPも含め完全にリセットする。
+export function spawnFortresses(){
+  const zones = [FORTRESS_ZONE_FRIENDLY_X, FORTRESS_ZONE_MID_X, FORTRESS_ZONE_ENEMY_X];
+  state.fortresses = zones.map(zoneX=>{
+    const p = randomFortressSpotInZone(zoneX);
+    fortressIdCounter += 1;
+    return {
+      id: fortressIdCounter, x: p.x, y: p.y,
+      hp: FORTRESS_MAX_HP, maxHp: FORTRESS_MAX_HP,
+      owner: null,
+      siegeNextAt: 0,
+      mgBurstNextAt: undefined, mgBurstShotsLeft: undefined,
+      missileNextAt: 0,
+    };
+  });
+  log('sys','システム', `要塞を${FORTRESS_COUNT}箇所(自陣・中間・敵陣)に確認。無人 ― 歩兵が到達すれば占領可能。`);
+}
+
+// per user request: 要塞の占領/包囲戦 -- 無人の要塞は近くにいる方の歩兵(自軍=小隊、敵=歩兵
+// 目標)がそのまま占領する。既に占領されている要塞は、占領していない側の歩兵がその場に居座る
+// ことで包囲戦(burst間隔のHP削り)を行い、HPが尽きると無人状態に戻る(全回復し、再び占領権
+// が発生する)。歩兵以外(戦車/対空/工兵/斥候/狙撃)は占領/包囲戦に参加できない。
+export function resolveFortressSiege(dt){
+  if(!state.fortresses || !state.fortresses.length) return false;
+  let anyEvent = false;
+  state.fortresses.forEach(f=>{
+    const friendlySquad = state.squads.find(sq=>unitAlive(sq) && Math.hypot(sq.x-f.x, sq.y-f.y) <= FORTRESS_CAPTURE_RANGE_UNITS);
+    const enemyInfantry = state.targets.find(t=>!t.destroyed && t.type==='infantry' && Math.hypot(t.trueX-f.x, t.trueY-f.y) <= FORTRESS_CAPTURE_RANGE_UNITS);
+    if(f.owner===null){
+      if(friendlySquad && !enemyInfantry){
+        f.owner = 'friendly';
+        anyEvent = true;
+        log('sys','前線', `要塞を占領した。機関銃・ミサイルランチャーが使用可能に。`);
+      } else if(enemyInfantry && !friendlySquad){
+        f.owner = 'enemy';
+        anyEvent = true;
+        log('sys','警報', `要塞が敵に占領された。`);
+      }
+      return;
+    }
+    const besieger = f.owner==='friendly' ? enemyInfantry : friendlySquad;
+    if(!besieger || performance.now() < f.siegeNextAt) return;
+    f.siegeNextAt = performance.now() + rnd(400, 700);
+    f.hp = Math.max(0, f.hp - Math.round(rnd(FORTRESS_SIEGE_DMG[0], FORTRESS_SIEGE_DMG[1])));
+    anyEvent = true;
+    if(f.hp<=0){
+      log('sys', f.owner==='friendly' ? '警報' : '前線', `要塞の${f.owner==='friendly'?'守備隊':'敵守備隊'}が制圧され、無人化した。`);
+      f.owner = null;
+      f.hp = f.maxHp;
+      f.mgBurstNextAt = undefined; f.mgBurstShotsLeft = undefined; f.missileNextAt = 0;
+    }
+  });
+  return anyEvent;
+}
+
+function nearestFriendlyInfantryLike(x, y, range){
+  let best=null, bestDist=Infinity;
+  const consider = (kind, list, isAlive)=>{
+    list.forEach((u,idx)=>{
+      if(!isAlive(u)) return;
+      const d = Math.hypot(u.x-x, u.y-y);
+      if(d<=range && d<bestDist){ bestDist=d; best={kind, idx, x:u.x, y:u.y}; }
+    });
+  };
+  consider('squad', state.squads, unitAlive);
+  consider('scout', state.scouts, unitAlive);
+  consider('sniper', state.snipers, unitAlive);
+  consider('engineer', state.engineers, unitAlive);
+  return best;
+}
+
+function nearestFriendlyVehicleLike(x, y, range){
+  let best=null, bestDist=Infinity;
+  state.tanks.forEach((tk,idx)=>{
+    if(tk.hp<=0) return;
+    const d = Math.hypot(tk.x-x, tk.y-y);
+    if(d<=range && d<bestDist){ bestDist=d; best={kind:'tank', idx, x:tk.x, y:tk.y}; }
+  });
+  (state.helis||[]).forEach((h,idx)=>{
+    if(h.hp<=0) return;
+    const d = Math.hypot(h.x-x, h.y-y);
+    if(d<=range && d<bestDist){ bestDist=d; best={kind:'heli', idx, x:h.x, y:h.y}; }
+  });
+  return best;
+}
+
+// per user request: 占領された要塞の内蔵兵装 -- 機関銃(対歩兵、burst連射方式。squad/tankの
+// 主戦闘ループと同じisUnitBurstReady/consumeBurstShotを、要塞専用フィールド(f.mgBurst*)に
+// 読み書きする薄いラッパー越しに再利用する)とミサイルランチャー(対車両/対空、単発+クール
+// ダウン方式)。占領側が自軍なら敵目標(state.targets)を、敵ならnearestFriendly*ヘルパーで
+// 自軍アセットを狙う ―― HQ防衛砲台(resolveEnemyHqAttack)と同じ「双方向」設計。
+export function resolveFortressWeapons(dt){
+  if(!state.fortresses || !state.fortresses.length) return false;
+  let anyEvent = false;
+  state.fortresses.forEach(f=>{
+    if(!f.owner || f.hp<=0) return;
+    const isFriendly = f.owner==='friendly';
+    const sourceLabel = isFriendly ? '要塞' : '要塞(敵占領)';
+
+    const mgUnit = {burstNextAt: f.mgBurstNextAt, burstShotsLeft: f.mgBurstShotsLeft};
+    if(isUnitBurstReady(mgUnit)){
+      let mgTarget = null;
+      if(isFriendly){
+        let bd=Infinity;
+        state.targets.forEach(t=>{
+          if(t.destroyed || (t.type!=='infantry' && t.type!=='artillery')) return;
+          const d = Math.hypot(t.trueX-f.x, t.trueY-f.y);
+          if(d<=FORTRESS_MG_RANGE_UNITS && d<bd && hasLineOfSight(f.x,f.y,t.trueX,t.trueY)){ bd=d; mgTarget=t; }
+        });
+      } else {
+        mgTarget = nearestFriendlyInfantryLike(f.x, f.y, FORTRESS_MG_RANGE_UNITS);
+        if(mgTarget && !hasLineOfSight(f.x,f.y,mgTarget.x,mgTarget.y)) mgTarget=null;
+      }
+      if(mgTarget){
+        consumeBurstShot(mgUnit);
+        anyEvent = true;
+        if(isFriendly){
+          if(revealTarget(mgTarget)) log('op','斥候', `要塞が${mgTarget.id}を捕捉、<b>${mgTarget.def.label}</b>と識別。`);
+          const dmg = Math.round(rnd(FORTRESS_MG_DMG[0], FORTRESS_MG_DMG[1]) * exposureNormalizedMult(getTargetExposure(mgTarget)));
+          applyDamageToTarget(mgTarget, dmg);
+          fireTracer(f.x, f.y, mgTarget.trueX, mgTarget.trueY, 200, 'rifle');
+          if(mgTarget.hp<=0 && !mgTarget.destroyed){
+            mgTarget.destroyed = true; mgTarget.hp = 0;
+            log('op','前線', `${sourceLabel}の機関銃が${mgTarget.id}を<b>撃破</b>。`);
+            onTargetDestroyed(mgTarget);
+          }
+        } else if(rollExposureHit(getUnitExposure(mgTarget))){
+          const dmg = Math.round(rnd(FORTRESS_MG_DMG[0], FORTRESS_MG_DMG[1]));
+          damageFriendlyAsset(mgTarget, dmg, `${sourceLabel}の機関銃`);
+          fireTracer(f.x, f.y, mgTarget.x, mgTarget.y, 200, 'rifle');
+        }
+      }
+    }
+    f.mgBurstNextAt = mgUnit.burstNextAt; f.mgBurstShotsLeft = mgUnit.burstShotsLeft;
+
+    if(performance.now() >= f.missileNextAt){
+      let msTarget = null;
+      if(isFriendly){
+        let bd=Infinity;
+        state.targets.forEach(t=>{
+          if(t.destroyed || (t.type!=='vehicle' && t.type!=='heli' && t.type!=='drone')) return;
+          const d = Math.hypot(t.trueX-f.x, t.trueY-f.y);
+          if(d<=FORTRESS_MISSILE_RANGE_UNITS && d<bd && hasLineOfSight(f.x,f.y,t.trueX,t.trueY)){ bd=d; msTarget=t; }
+        });
+      } else {
+        msTarget = nearestFriendlyVehicleLike(f.x, f.y, FORTRESS_MISSILE_RANGE_UNITS);
+        if(msTarget && !hasLineOfSight(f.x,f.y,msTarget.x,msTarget.y)) msTarget=null;
+      }
+      if(msTarget){
+        f.missileNextAt = performance.now() + rnd(FORTRESS_MISSILE_COOLDOWN_MS_MIN, FORTRESS_MISSILE_COOLDOWN_MS_MAX);
+        anyEvent = true;
+        if(isFriendly){
+          if(revealTarget(msTarget)) log('op','斥候', `要塞が${msTarget.id}を捕捉、<b>${msTarget.def.label}</b>と識別。`);
+          const dmg = Math.round(rnd(FORTRESS_MISSILE_DMG[0], FORTRESS_MISSILE_DMG[1]) * exposureNormalizedMult(getTargetExposure(msTarget)));
+          applyDamageToTarget(msTarget, dmg);
+          fireTracer(f.x, f.y, msTarget.trueX, msTarget.trueY, 260, 'missile');
+          if(msTarget.hp<=0 && !msTarget.destroyed){
+            msTarget.destroyed = true; msTarget.hp = 0;
+            log('op','前線', `${sourceLabel}のミサイルランチャーが${msTarget.id}を<b>撃破</b>。`);
+            onTargetDestroyed(msTarget);
+          }
+        } else if(rollExposureHit(getUnitExposure(msTarget))){
+          const dmg = Math.round(rnd(FORTRESS_MISSILE_DMG[0], FORTRESS_MISSILE_DMG[1]));
+          damageFriendlyAsset(msTarget, dmg, `${sourceLabel}のミサイルランチャー`);
+          fireTracer(f.x, f.y, msTarget.x, msTarget.y, 260, 'missile');
+        }
+      }
+    }
+  });
+  return anyEvent;
 }
 
 export function placeDecoyAt(x, y){
@@ -3442,6 +3632,8 @@ export function resolveEnemyTurn(dt){
   resolveEnemyEvasion(dt);
   const antiDroned = resolveSquadAntiDrone(dt);
   resolveSquadAntiVehicle(dt);
+  resolveFortressSiege(dt);
+  resolveFortressWeapons(dt);
   resolveDroneSwarm(dt);
   enemyCounterAttack(dt);
   resolveMortarCounterBattery(dt);

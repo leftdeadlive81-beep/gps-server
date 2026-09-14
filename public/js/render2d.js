@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { computeDispersionAt, currentPlacementUnit, estPos, isSuppressed, smoothVisualPos, state, unitAlive, unitAliveCount } from './combat.js';
-import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FRIENDLY_MARK_COLOR, GRID_LINES, HQ_SUPPLY_ZONE_RADIUS_UNITS, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_DETAIL_EFFECT_ZOOM, MAP_DETAIL_LABEL_ZOOM, MAP_FULL_DETAIL_ZOOM, MAP_INITIAL_AZIMUTH, MAP_VIEW, METERS_PER_UNIT, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SNIPER_AIM_RANGE_UNITS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, UNIT_AMMO_MAX, TRENCH_LINE_WIDTH, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
+import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FORTRESS_NEUTRAL_COLOR, FRIENDLY_MARK_COLOR, GRID_LINES, HQ_SUPPLY_ZONE_RADIUS_UNITS, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_DETAIL_EFFECT_ZOOM, MAP_DETAIL_LABEL_ZOOM, MAP_FULL_DETAIL_ZOOM, MAP_INITIAL_AZIMUTH, MAP_VIEW, METERS_PER_UNIT, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SNIPER_AIM_RANGE_UNITS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, UNIT_AMMO_MAX, TRENCH_LINE_WIDTH, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
 import { isMultiSelected } from './input.js';
 import { choppedLineSegments, febaLineSegments } from './terrain.js';
 import { project, projectAtWorldY, scaledIconH, threeReady } from './three.js';
@@ -129,6 +129,31 @@ export function drawWallShape(ctx, cx, cy, dead){
   ctx.moveTo(-18,10); ctx.lineTo(-13,-10); ctx.lineTo(13,-10); ctx.lineTo(18,10); ctx.closePath();
   ctx.fill();
   ctx.stroke();
+  ctx.restore();
+}
+
+// per user request: 要塞 -- 壁より一回り大きい八角形の陣地シルエットに、占領側の色を塗る
+// (自軍=青/敵=赤/中立=タン)。中立は無人のグレーがかった輪郭で「まだ誰のものでもない」と
+// 一目でわかるようにする。
+export function drawFortressShape(ctx, cx, cy, owner){
+  const color = owner==='friendly' ? FRIENDLY_MARK_COLOR : owner==='enemy' ? ENEMY_MARK_COLOR : FORTRESS_NEUTRAL_COLOR;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.fillStyle = owner ? color+'73' : 'rgba(156,148,120,0.28)';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = owner ? 2.5 : 2;
+  if(!owner) ctx.setLineDash([4,3]);
+  ctx.beginPath();
+  const r = 24;
+  for(let i=0;i<8;i++){
+    const a = Math.PI/8 + i*Math.PI/4;
+    const px = Math.sin(a)*r, py = -Math.cos(a)*r*0.68;
+    if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.setLineDash([]);
   ctx.restore();
 }
 
@@ -273,6 +298,14 @@ export function drawMinimap(){
     ctx.beginPath();
     ctx.arc(pt.x, pt.y, 1.6, 0, Math.PI*2);
     ctx.fill();
+  });
+
+  // 要塞 -- 占領を争う固定目標なので、ドット表示のユニットと区別できるよう小さい四角形で
+  // 描く(占領側で色分け、無人はタン系)。
+  (state.fortresses||[]).forEach(f=>{
+    const pt = proj(f.x, f.y);
+    ctx.fillStyle = f.owner==='friendly' ? FRIENDLY_MARK_COLOR : f.owner==='enemy' ? ENEMY_MARK_COLOR : FORTRESS_NEUTRAL_COLOR;
+    ctx.fillRect(pt.x-2.2, pt.y-2.2, 4.4, 4.4);
   });
 
   // combat hotspots -- any still-live flash (impact/hit effect) reads as "fighting is
@@ -804,6 +837,24 @@ export function drawBoard(){
     const wVis = project(w.x, w.y);
     drawWallShape(ctx, wVis.x, wVis.y, w.hp<=0);
     if(w.hp>0) drawAttritionBar(ctx, wVis.x+20, wVis.y, w.hp/w.maxHp);
+  });
+
+  // 要塞 ― 占領可能な固定拠点。歩兵/戦車/擬陣地と違い、フレンドリー・ラベルの集約対象外
+  // (queueFriendlyLabelはfriendly-onlyのクラスタリング前提なので、中立/敵占領もありうる
+  // 要塞はここで直接ラベルを描く)。
+  (state.fortresses||[]).forEach(f=>{
+    const fVis = project(f.x, f.y);
+    drawFortressShape(ctx, fVis.x, fVis.y, f.owner);
+    drawAttritionBar(ctx, fVis.x+26, fVis.y, f.hp/f.maxHp);
+    if(showDetailLabels){
+      const ownerLabel = f.owner==='friendly' ? '要塞(自軍)' : f.owner==='enemy' ? '要塞(敵)' : '要塞(無人)';
+      ctx.save();
+      ctx.font = '13px "JetBrains Mono"';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = f.owner==='friendly' ? FRIENDLY_MARK_COLOR : f.owner==='enemy' ? ENEMY_MARK_COLOR : FORTRESS_NEUTRAL_COLOR;
+      ctx.fillText(ownerLabel, fVis.x, fVis.y+38);
+      ctx.restore();
+    }
   });
 
   // per user request: 塹壕(線方式) -- 壁と違い射線を遮らないので身代わり被弾やHPバーはない。

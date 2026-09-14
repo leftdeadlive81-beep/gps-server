@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { estPos, smoothVisualPos, state, unitAlive } from './combat.js';
-import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, FRIENDLY_MARK_COLOR_3D, GRID_LINES, HELI_FLIGHT_ALTITUDE, MAP_INITIAL_AZIMUTH, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, PROC_CANOPY_CELL, PROC_CANOPY_DARK, PROC_CANOPY_LIGHT, PROC_CLEARING_CELL, PROC_CLEARING_COLOR, PROC_CLEARING_EDGE0, PROC_CLEARING_EDGE1, PROC_COLOR_FOREST, PROC_COLOR_HIGH, PROC_COLOR_LOW, PROC_COLOR_WATER, PROC_DRY_PATCH_CELL, PROC_DRY_PATCH_COLOR, PROC_DRY_PATCH_EDGE0, PROC_DRY_PATCH_EDGE1, PROC_MESH_SEGMENTS_X, PROC_MESH_SEGMENTS_Z, PROC_OPEN_MOTTLE_AMOUNT, PROC_OPEN_MOTTLE_CELL, PROC_TERRAIN_HEIGHT_SCALE, PROC_TEXTURE_NOISE_COARSE_AMOUNT, PROC_TEXTURE_NOISE_COARSE_CELL, PROC_TEXTURE_NOISE_FINE_AMOUNT, PROC_TEXTURE_NOISE_FINE_CELL, PROC_TEXTURE_SIZE_X, PROC_TEXTURE_SIZE_Z, SCOUT_SQUAD_SIZE, SHADOW_FRUSTUM_HALF, SKY_COLOR, SNIPER_SQUAD_SIZE, SQUAD_GRID_OFFSETS, SUN_OFFSET, TARGET_TYPE_COLOR, TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, WALK_AMP_EASE, WALK_ANIM_DETAIL_ZOOM, WALK_ANIM_MIN_INTERVAL_MS, WALK_CYCLE_SPEED, WALK_SWING_MAX, WORLD, unitMarkers3d } from './constants.js';
+import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, FORTRESS_NEUTRAL_COLOR_3D, FRIENDLY_MARK_COLOR_3D, GRID_LINES, HELI_FLIGHT_ALTITUDE, MAP_INITIAL_AZIMUTH, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, PROC_CANOPY_CELL, PROC_CANOPY_DARK, PROC_CANOPY_LIGHT, PROC_CLEARING_CELL, PROC_CLEARING_COLOR, PROC_CLEARING_EDGE0, PROC_CLEARING_EDGE1, PROC_COLOR_FOREST, PROC_COLOR_HIGH, PROC_COLOR_LOW, PROC_COLOR_WATER, PROC_DRY_PATCH_CELL, PROC_DRY_PATCH_COLOR, PROC_DRY_PATCH_EDGE0, PROC_DRY_PATCH_EDGE1, PROC_MESH_SEGMENTS_X, PROC_MESH_SEGMENTS_Z, PROC_OPEN_MOTTLE_AMOUNT, PROC_OPEN_MOTTLE_CELL, PROC_TERRAIN_HEIGHT_SCALE, PROC_TEXTURE_NOISE_COARSE_AMOUNT, PROC_TEXTURE_NOISE_COARSE_CELL, PROC_TEXTURE_NOISE_FINE_AMOUNT, PROC_TEXTURE_NOISE_FINE_CELL, PROC_TEXTURE_SIZE_X, PROC_TEXTURE_SIZE_Z, SCOUT_SQUAD_SIZE, SHADOW_FRUSTUM_HALF, SKY_COLOR, SNIPER_SQUAD_SIZE, SQUAD_GRID_OFFSETS, SUN_OFFSET, TARGET_TYPE_COLOR, TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, WALK_AMP_EASE, WALK_ANIM_DETAIL_ZOOM, WALK_ANIM_MIN_INTERVAL_MS, WALK_CYCLE_SPEED, WALK_SWING_MAX, WORLD, unitMarkers3d } from './constants.js';
 import { updateMapFocusEase } from './input.js';
 import { buildContourLines, buildProceduralRoads, elevationAt, elevationAtFor, nearestPointOnRoad, riverXAt, terrainTypeAtFor } from './terrain.js';
 import { clamp, smoothstep01, valueNoise2D } from './utils.js';
@@ -898,6 +898,16 @@ export function makeMarkerMesh3d(shape, colorHex, formationOffsets){
     add(new THREE.BoxGeometry(s*1.2, s*0.8, s*1.2), mat(colorHex), s*0.4);
     add(new THREE.ConeGeometry(s*0.85, s*0.7, 4), mat(0x4b5961), s*1.15);
     addFlag(colorHex);
+  } else if(shape==='fortress'){
+    // per user request: 要塞 -- 占領可能な固定拠点。壁(box)より一回り大きい土台+本体+
+    // 四隅の胸壁で「陣地」らしいシルエットにし、色は占領側(colorHexで既に自軍/敵/中立の
+    // どれかに解決済み)で塗り分ける。
+    add(new THREE.BoxGeometry(s*1.9, s*0.22, s*1.9), mat(0x4b4034), s*0.11);
+    add(new THREE.BoxGeometry(s*1.5, s*0.9, s*1.5), mat(colorHex), s*0.57);
+    [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([sx,sz])=>{
+      add(new THREE.BoxGeometry(s*0.22, s*0.5, s*0.22), mat(colorHex)).position.set(sx*s*0.72, s*1.27, sz*s*0.72);
+    });
+    addFlag(colorHex);
   } else {
     let geo;
     if(shape==='cone') geo = new THREE.ConeGeometry(s*0.55, s*1.3, 8);
@@ -1084,6 +1094,15 @@ export function syncUnitMarkers3d(){
     const key = 'wall'+w.id;
     seen[key] = true;
     place(key, w.x, w.y, 'box', w.hp>0 ? FRIENDLY_MARK_COLOR_3D : 0x5c2a25, w.hp>0);
+  });
+  // per user request: 要塞 -- 占領側で色分け(自軍=青、敵=赤、中立=タン)。壁と同様の
+  // seen{}パターンでキー管理するが、wave毎に全て作り直される(壁と違い恒久物ではない)ので
+  // 古いidの掃除はhideMarker3d任せで十分。
+  (state.fortresses||[]).forEach(f=>{
+    const key = 'fortress'+f.id;
+    seen[key] = true;
+    const color = f.owner==='friendly' ? FRIENDLY_MARK_COLOR_3D : f.owner==='enemy' ? TARGET_TYPE_COLOR.infantry : FORTRESS_NEUTRAL_COLOR_3D;
+    place(key, f.x, f.y, 'fortress', color, true);
   });
   state.targets.forEach((t,i)=>{
     const key = 'target'+t.id;
