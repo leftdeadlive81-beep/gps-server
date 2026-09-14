@@ -520,7 +520,10 @@
   .ach-status.locked{color:var(--muted);}
 
   .shop-row.reward-squad{border-left:3px solid var(--blue-id);}
-  .shop-row.reward-scout{border-left:3px solid var(--green-id);}
+  .shop-row.reward-mortar{border-left:3px solid var(--green-id);}
+  .shop-row.reward-antitank{border-left:3px solid var(--red);}
+  .shop-row.reward-heli{border-left:3px solid var(--blue-id);}
+  .shop-row.reward-heal{border-left:3px solid var(--gray-id);}
   .shop-row.reward-ammo{border-left:3px solid var(--amber);}
 
   @media (max-width:600px){

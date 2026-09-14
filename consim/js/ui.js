@@ -1,7 +1,7 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement, unlockedAchievements } from './achievements.js';
-import { abandonSavedCampaign, addNewScout, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, isAutoCommitRunning, mapSeedCandidates, mortarNotReadyToFire, resumedFromSave, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
-import { ACHIEVEMENTS, AMMO_PACK, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_SQUAD_SIZE, SMART_ACTIONS, SMART_UNIT_TYPES, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, TANK_REPAIR_COST_PER_HP,TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
+import { abandonSavedCampaign, addNewAntitank, addNewHeli, addNewMortar, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, healAllForces, isAutoCommitRunning, mapSeedCandidates, mortarNotReadyToFire, resumedFromSave, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
+import { ACHIEVEMENTS, AMMO_PACK, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SMART_ACTIONS, SMART_UNIT_TYPES, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, TANK_REPAIR_COST_PER_HP,TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
 import { canvasToScreen, multiSelectCommonOrders, multiSelectMode, multiSelected, pruneMultiSelected, unitGroups } from './input.js';
 import { render } from './main.js';
 import { elevationAt, elevationLabel, terrainTypeAt, terrainTypeLabel } from './terrain.js';
@@ -462,9 +462,21 @@ export function showWaveRewardChoice(){
       <div><div class="label">小隊を1個追加</div><div class="sub">新たな歩兵小隊(${SQUAD_SIZE}名)が編成され前線に加わる</div></div>
       <div class="actions"><button class="btn primary" onclick="chooseWaveReward('squad')">選択</button></div>
     </div>
-    <div class="shop-row reward-scout">
-      <div><div class="label">斥候班を1個追加</div><div class="sub">新たな斥候班(${SCOUT_SQUAD_SIZE}名)が編成され前線に加わる</div></div>
-      <div class="actions"><button class="btn primary" onclick="chooseWaveReward('scout')">選択</button></div>
+    <div class="shop-row reward-mortar">
+      <div><div class="label">迫撃砲班を1個追加</div><div class="sub">新たな迫撃砲班(${MORTAR_CREW_SIZE}名)が編成され前線に加わる</div></div>
+      <div class="actions"><button class="btn primary" onclick="chooseWaveReward('mortar')">選択</button></div>
+    </div>
+    <div class="shop-row reward-antitank">
+      <div><div class="label">対戦車部隊を1個追加</div><div class="sub">戦車に対して有効なロケットランチャーを装備する軽車両部隊が前線に加わる</div></div>
+      <div class="actions"><button class="btn primary" onclick="chooseWaveReward('antitank')">選択</button></div>
+    </div>
+    <div class="shop-row reward-heli">
+      <div><div class="label">攻撃ヘリを1機追加</div><div class="sub">新たなヘリが前線に加わる</div></div>
+      <div class="actions"><button class="btn primary" onclick="chooseWaveReward('heli')">選択</button></div>
+    </div>
+    <div class="shop-row reward-heal">
+      <div><div class="label">全体回復</div><div class="sub">全部隊のHPを満タンに回復し、倒れた兵員も戦列に復帰する</div></div>
+      <div class="actions"><button class="btn primary" onclick="chooseWaveReward('heal')">選択</button></div>
     </div>
     <div class="shop-row reward-ammo">
       <div><div class="label">迫撃砲弾を補充</div><div class="sub">HE・HEATをランダムな数量だけ補給する</div></div>
@@ -479,9 +491,18 @@ export function chooseWaveReward(kind){
   if(kind==='squad'){
     const id = addNewSquad();
     log('fdc','増援', `WAVEクリアボーナス: 新編成の第${id+1}小隊(${SQUAD_SIZE}名)が前線に加わった。`);
-  } else if(kind==='scout'){
-    const id = addNewScout();
-    log('fdc','増援', `WAVEクリアボーナス: 新編成の斥候${id+1}班(${SCOUT_SQUAD_SIZE}名)が前線に加わった。`);
+  } else if(kind==='mortar'){
+    const id = addNewMortar();
+    log('fdc','増援', `WAVEクリアボーナス: 新編成の迫撃砲${id+1}班(${MORTAR_CREW_SIZE}名)が前線に加わった。`);
+  } else if(kind==='antitank'){
+    const id = addNewAntitank();
+    log('fdc','増援', `WAVEクリアボーナス: 新編成の対戦車${id+1}が前線に加わった。`);
+  } else if(kind==='heli'){
+    const id = addNewHeli();
+    log('fdc','増援', `WAVEクリアボーナス: 新編成のヘリ${id+1}が前線に加わった。`);
+  } else if(kind==='heal'){
+    healAllForces();
+    log('fdc','衛生', `WAVEクリアボーナス: 全部隊が全回復した。`);
   } else if(kind==='ammo'){
     const he = Math.round(rnd(10,30));
     const heat = Math.round(rnd(5,15));
