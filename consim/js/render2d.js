@@ -308,6 +308,20 @@ export function drawBoard(){
   ctx.save();
   const shakeOff = currentShakeOffset();
   ctx.translate(shakeOff.x, shakeOff.y);
+
+  // per user request: weather tint (night/rain/fog, see WEATHER_TYPES) used to be painted
+  // near the end of this function, on top of every unit icon/label/HP-bar already drawn --
+  // at night that made unit symbols themselves hard to read, not just the background, since
+  // the flat semi-transparent rect covered the whole canvas regardless of what was already
+  // on it. Painted first instead, everything drawn afterward (grid/contours, unit icons,
+  // labels, HP bars, tracers) composites cleanly on top at full brightness, while the map
+  // background still reads as dim/tinted through any pixel nothing else covers.
+  const weatherTint = state.weather && WEATHER_TYPES[state.weather].tint;
+  if(weatherTint){
+    ctx.fillStyle = weatherTint;
+    ctx.fillRect(0,0,cv.width,cv.height);
+  }
+
   const nowWander = performance.now();
   const showDetailLabels = MAP_VIEW.zoom >= MAP_DETAIL_LABEL_ZOOM;
   const showFullDetail = MAP_VIEW.zoom >= MAP_FULL_DETAIL_ZOOM;
@@ -1435,13 +1449,6 @@ export function drawBoard(){
       ctx.fill();
     }
   });
-
-  // weather tint overlay
-  const weatherTint = state.weather && WEATHER_TYPES[state.weather].tint;
-  if(weatherTint){
-    ctx.fillStyle = weatherTint;
-    ctx.fillRect(0,0,cv.width,cv.height);
-  }
 
   // weather particles (rain streaks / drifting fog wisps) ― see ensureWeatherParticles()
   ensureWeatherParticles(cv.width, cv.height);
