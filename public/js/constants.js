@@ -38,11 +38,11 @@ export const SCOUT_UPPER_Y = 55;
 
 export const SCOUT_LOWER_Y = 405;
 
-// per user request: increased (1.4->2.0) so friendly units don't start the wave already
-// clustered close enough for their labels to overlap -- a complementary measure alongside
-// drawPendingFriendlyLabels()'s label-clustering in render2d.js, since deployment spacing alone
-// doesn't help once units regroup mid-battle.
-export const INITIAL_DEPLOY_SPACING_MULT = 2.0;
+// per user request: increased (1.4->2.0, then 2.0->4.0) so friendly units don't start the wave
+// already clustered close enough for their labels to overlap -- a complementary measure
+// alongside drawPendingFriendlyLabels()'s label-clustering in render2d.js, since deployment
+// spacing alone doesn't help once units regroup mid-battle.
+export const INITIAL_DEPLOY_SPACING_MULT = 4.0;
 
 export const PRICE_EQUIP = {armor:1200, optics:1000, extMag:800};
 
@@ -293,7 +293,8 @@ export const SAM_REPAIR_HP_PER_CALL = 20;
 
 export const SAM_REPAIR_COST_PER_HP = 50;
 
-export const NUM_ENGINEERS = 1;
+// per user request: ゲーム開始時のユニット数を3に増加(工兵に迫撃砲修理も追加した際の要望)。
+export const NUM_ENGINEERS = 3;
 
 export const ENGINEER_SQUAD_SIZE = 6;
 

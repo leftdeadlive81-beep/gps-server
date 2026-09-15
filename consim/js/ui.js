@@ -777,12 +777,26 @@ export function mortarBoxHtml(idx){
         ? `<div class="meta" style="margin-bottom:6px;">同一陣地からの連続射撃 ${mortar.shotsSinceMove}回 ― 対砲兵レーダーに捕捉される危険あり</div>`
         : '');
 
+  // per user request: 工兵は迫撃砲も修理できるようにする -- 戦車/対戦車パネルと同じ導線
+  // (無償・近接が必要な野戦修理)を迫撃砲パネルにも用意する。損傷時のみHPを表示する。
+  const hpHtml = (!dead && mortar.hp<mortar.maxHp) ? `
+    <div class="meta">HP: ${mortar.hp} / ${mortar.maxHp}</div>
+    <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,mortar.hp/mortar.maxHp*100)}%"></div></div>
+  ` : '';
+  const engineerBtns = (!dead && mortar.hp<mortar.maxHp) ? state.engineers.map((en,enIdx)=>{
+    if(unitAliveCount(en)<=0 || en.resting) return '';
+    const active = en.order==='repair' && en.repairTargetKind==='mortar' && en.repairTargetId===mortar.id;
+    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignEngineerRepair(${enIdx},'mortar',${idx})">工兵${enIdx+1}に修理させる(無償)${active?'(修理中)':''}</button>`;
+  }).filter(Boolean).join('') : '';
+
   return `
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin-bottom:8px;">${stanceBtns}</div>
+    ${hpHtml}
     ${cbWarnHtml}
     ${bodyHtml}
     ${!dead ? mortarMainlineHtml(idx, mortar) : ''}
     ${exposureMetaHtml(getUnitExposure({kind:'mortar', idx}))}
+    ${engineerBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin:6px 0;">${engineerBtns}</div>` : ''}
     ${crewHtml}
   `;
 }
@@ -929,8 +943,8 @@ export function tankBoxHtml(idx){
   // 待機中で修理可能な工兵のみ。応急修復(有償・即時)とは別の選択肢として併記する。
   const engineerBtns = tank.hp<tank.maxHp ? state.engineers.map((en,enIdx)=>{
     if(unitAliveCount(en)<=0 || en.resting) return '';
-    const active = en.order==='repair' && en.repairTargetId===tank.id;
-    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignEngineerRepair(${enIdx},${idx})">工兵${enIdx+1}に修理させる(無償)${active?'(修理中)':''}</button>`;
+    const active = en.order==='repair' && en.repairTargetKind==='tank' && en.repairTargetId===tank.id;
+    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignEngineerRepair(${enIdx},'tank',${idx})">工兵${enIdx+1}に修理させる(無償)${active?'(修理中)':''}</button>`;
   }).filter(Boolean).join('') : '';
   return `
     <div class="meta">HP: ${tank.hp} / ${tank.maxHp}</div>
@@ -1003,18 +1017,26 @@ export function engineerBoxHtml(idx){
     : trenchCapReached ? `塹壕は上限(${MAX_TRENCHES}本)に達しています`
     : trenchMoneyShort ? `資金不足(建設費 ¥${TRENCH_BUILD_COST})`
     : `現在の塹壕: ${state.trenches.length}/${MAX_TRENCHES}本`;
-  // per user request: 工兵による戦車の野戦修理(無償・近接が必要) -- 応急修復(有償・即時、
-  // 戦車側パネル)とは別の手段として工兵側にも導線を用意する。
-  const repairTarget = en.repairTargetId!=null ? state.tanks.find(t=>t.id===en.repairTargetId) : null;
-  const repairableTanks = state.tanks.filter(t=>t.hp>0 && t.hp<t.maxHp);
-  const repairBtns = repairableTanks.map(t=>{
-    const tIdx = state.tanks.indexOf(t);
-    const active = en.order==='repair' && en.repairTargetId===t.id;
-    return `<button class="btn ${active?'active squad-order-btn':''}" ${resting?'disabled':''} onclick="assignEngineerRepair(${idx},${tIdx})">戦車${t.id+1}を修理${active?'(修理中)':''}</button>`;
+  // per user request: 工兵による戦車/対戦車/迫撃砲の野戦修理(無償・近接が必要) -- 応急修復
+  // (有償・即時、各ユニット側パネル)とは別の手段として工兵側にも導線を用意する。迫撃砲も
+  // 戦車/対戦車と同様にここへ統合(per user request: 工兵は迫撃砲も修理できるようにする)。
+  const repairCandidates = [
+    ...state.tanks.map((t,i)=>({kind:'tank', idx:i, unit:t, label:`戦車${t.id+1}`})),
+    ...state.antitanks.map((t,i)=>({kind:'antitank', idx:i, unit:t, label:`対戦車${t.id+1}`})),
+    ...state.mortars.map((t,i)=>({kind:'mortar', idx:i, unit:t, label:`迫撃砲${t.id+1}`})),
+  ];
+  const repairTargetEntry = en.repairTargetKind!=null && en.repairTargetId!=null
+    ? repairCandidates.find(c=>c.kind===en.repairTargetKind && c.unit.id===en.repairTargetId)
+    : null;
+  const repairTarget = repairTargetEntry ? repairTargetEntry.unit : null;
+  const repairableCandidates = repairCandidates.filter(c=>c.unit.hp>0 && c.unit.hp<c.unit.maxHp);
+  const repairBtns = repairableCandidates.map(c=>{
+    const active = en.order==='repair' && en.repairTargetKind===c.kind && en.repairTargetId===c.unit.id;
+    return `<button class="btn ${active?'active squad-order-btn':''}" ${resting?'disabled':''} onclick="assignEngineerRepair(${idx},'${c.kind}',${c.idx})">${c.label}を修理${active?'(修理中)':''}</button>`;
   }).join('');
   const repairStatus = repairTarget
-    ? `修理対象: 戦車${repairTarget.id+1} (HP ${Math.round(repairTarget.hp)}/${repairTarget.maxHp}) ・ 近接すると自動で回復`
-    : (repairableTanks.length ? '損傷した戦車を選んで無償で修理を指示できます(近接が必要)' : '損傷した戦車はありません');
+    ? `修理対象: ${repairTargetEntry.label} (HP ${Math.round(repairTarget.hp)}/${repairTarget.maxHp}) ・ 近接すると自動で回復`
+    : (repairableCandidates.length ? '損傷した戦車・対戦車・迫撃砲を選んで無償で修理を指示できます(近接が必要)' : '損傷した装備はありません');
   return `
     <div class="meta">${alive}/${en.soldiers.length}名</div>
     ${exposureMetaHtml(getUnitExposure({kind:'engineer', idx}))}
@@ -1053,8 +1075,8 @@ export function antitankBoxHtml(idx){
   const canRepair = at.hp<at.maxHp && state.money>=repairCost;
   const engineerBtns = at.hp<at.maxHp ? state.engineers.map((en,enIdx)=>{
     if(unitAliveCount(en)<=0 || en.resting) return '';
-    const active = en.order==='repair' && en.repairTargetId===at.id;
-    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignEngineerRepair(${enIdx},${idx})">工兵${enIdx+1}に修理させる(無償)${active?'(修理中)':''}</button>`;
+    const active = en.order==='repair' && en.repairTargetKind==='antitank' && en.repairTargetId===at.id;
+    return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignEngineerRepair(${enIdx},'antitank',${idx})">工兵${enIdx+1}に修理させる(無償)${active?'(修理中)':''}</button>`;
   }).filter(Boolean).join('') : '';
   return `
     <div class="meta">HP: ${at.hp} / ${at.maxHp}</div>

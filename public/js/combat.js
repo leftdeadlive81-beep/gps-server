@@ -821,6 +821,7 @@ export function startStage(){
       soldiers: makeSoldiers(ROSTER_ENGINEER_TEAMS[ei]),
       reinforceUsed: false,
       exposure: EXPOSURE_DEFAULT,
+      repairTargetKind: null,
       repairTargetId: null,
     }));
     state.walls = [];
@@ -1871,11 +1872,11 @@ export function applyEngineerMovement(en, enIdx, dt){
     en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
     en.y = clamp(next.y, 30, CANVAS_H-30);
   } else if(en.order==='repair' && en.repairTargetId!=null){
-    // per user request: 工兵による戦車の野戦修理 -- 修理対象の戦車まで自ら移動する。
+    // per user request: 工兵による戦車/対戦車/迫撃砲の野戦修理 -- 修理対象まで自ら移動する。
     // 射程内に入ったら止まり、実際の回復はresolveEngineerOrders()側で毎ステップ処理する。
-    const tank = state.tanks.find(t=>t.id===en.repairTargetId);
-    if(tank && tank.hp>0 && Math.hypot(tank.x-en.x, tank.y-en.y) > ENGINEER_REPAIR_RANGE_UNITS){
-      const next = terrainAwareStep(en.x, en.y, tank.x, tank.y, INFANTRY_MOVE_CAP*dt);
+    const target = findEngineerRepairTarget(en);
+    if(target && target.hp>0 && Math.hypot(target.x-en.x, target.y-en.y) > ENGINEER_REPAIR_RANGE_UNITS){
+      const next = terrainAwareStep(en.x, en.y, target.x, target.y, INFANTRY_MOVE_CAP*dt);
       en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
       en.y = clamp(next.y, 30, CANVAS_H-30);
     }
@@ -1887,20 +1888,45 @@ export function allEngineersWiped(){
   return !state.engineers.length || state.engineers.every(e=>!unitAlive(e));
 }
 
-// per user request: 工兵による戦車の野戦修理を指示/解除する。既存の即時・有償修理(repairTank)
-// とは独立した無償の手段 -- 工兵を対象の戦車まで移動させ、射程内に留まる間HPを緩やかに回復する。
-export function assignEngineerRepair(enIdx, tankIdx){
+// per user request: 工兵の野戦修理対象を戦車/対戦車/迫撃砲の3種に一般化する -- kindごとの
+// 配列とラベルをここで一元管理し、assignEngineerRepair/clearEngineerRepair/
+// resolveEngineerOrders/applyEngineerMovementはこれ経由で対象を解決する。
+function repairTargetArray(kind){
+  if(kind==='tank') return state.tanks;
+  if(kind==='antitank') return state.antitanks;
+  if(kind==='mortar') return state.mortars;
+  return null;
+}
+
+function repairTargetLabel(kind, target){
+  if(kind==='tank') return `戦車${target.id+1}`;
+  if(kind==='antitank') return `対戦車${target.id+1}`;
+  if(kind==='mortar') return `迫撃砲${target.id+1}`;
+  return '';
+}
+
+function findEngineerRepairTarget(en){
+  const arr = repairTargetArray(en.repairTargetKind);
+  return arr ? arr.find(t=>t.id===en.repairTargetId) : null;
+}
+
+// per user request: 工兵による戦車/対戦車/迫撃砲の野戦修理を指示/解除する。既存の即時・有償
+// 修理(repairTank等)とは独立した無償の手段 -- 工兵を対象まで移動させ、射程内に留まる間HPを
+// 緩やかに回復する。kindは'tank'/'antitank'/'mortar'、idxはその配列内でのインデックス。
+export function assignEngineerRepair(enIdx, kind, idx){
   const en = state.engineers[enIdx];
-  const tank = state.tanks[tankIdx];
-  if(!en || unitAliveCount(en)<=0 || en.resting || !tank || tank.hp<=0) return;
-  if(en.order==='repair' && en.repairTargetId===tank.id){
+  const arr = repairTargetArray(kind);
+  const target = arr ? arr[idx] : null;
+  if(!en || unitAliveCount(en)<=0 || en.resting || !target || target.hp<=0) return;
+  if(en.order==='repair' && en.repairTargetKind===kind && en.repairTargetId===target.id){
     clearEngineerRepair(enIdx);
     return;
   }
   en.order = 'repair';
-  en.repairTargetId = tank.id;
+  en.repairTargetKind = kind;
+  en.repairTargetId = target.id;
   en.pendingDest = null;
-  log('sys','工兵', `工兵小隊、戦車${tank.id+1}の野戦修理に向かう。`);
+  log('sys','工兵', `工兵小隊、${repairTargetLabel(kind, target)}の野戦修理に向かう。`);
   render();
 }
 
@@ -1908,6 +1934,7 @@ export function clearEngineerRepair(idx){
   const en = state.engineers[idx];
   if(!en) return;
   en.repairTargetId = null;
+  en.repairTargetKind = null;
   if(en.order==='repair') en.order = 'hold';
   render();
 }
@@ -1923,16 +1950,18 @@ export function resolveEngineerOrders(dt){
     applyEngineerMovement(en, enIdx, dt);
     if(en.x!==beforeX || en.y!==beforeY) anyEvent = true;
     if(en.order==='repair' && en.repairTargetId!=null){
-      const tank = state.tanks.find(t=>t.id===en.repairTargetId);
-      if(!tank || tank.hp<=0){
+      const target = findEngineerRepairTarget(en);
+      if(!target || target.hp<=0){
         en.repairTargetId = null;
+        en.repairTargetKind = null;
         en.order = 'hold';
-      } else if(Math.hypot(tank.x-en.x, tank.y-en.y) <= ENGINEER_REPAIR_RANGE_UNITS && tank.hp<tank.maxHp){
-        tank.hp = Math.min(tank.maxHp, tank.hp + ENGINEER_REPAIR_HP_PER_TURN*dt);
+      } else if(Math.hypot(target.x-en.x, target.y-en.y) <= ENGINEER_REPAIR_RANGE_UNITS && target.hp<target.maxHp){
+        target.hp = Math.min(target.maxHp, target.hp + ENGINEER_REPAIR_HP_PER_TURN*dt);
         anyEvent = true;
-        if(tank.hp>=tank.maxHp){
-          log('sys','工兵', `戦車${tank.id+1}、野戦修理完了(HP ${Math.round(tank.hp)}/${tank.maxHp})。`);
+        if(target.hp>=target.maxHp){
+          log('sys','工兵', `${repairTargetLabel(en.repairTargetKind, target)}、野戦修理完了(HP ${Math.round(target.hp)}/${target.maxHp})。`);
           en.repairTargetId = null;
+          en.repairTargetKind = null;
           en.order = 'hold';
         }
       }
