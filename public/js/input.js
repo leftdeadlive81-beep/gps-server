@@ -56,6 +56,13 @@ export function setUnitMoveDest(kind, idx, px, py, silent){
     if(!silent) log('sys','前線', `工兵小隊に移動目標を指示。`);
     return true;
   }
+  if(kind==='medic'){
+    const me = state.medics[idx];
+    if(!me || !unitAlive(me) || me.resting) return false;
+    me.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+    if(!silent) log('sys','前線', `衛生${idx+1}小隊に移動目標を指示。`);
+    return true;
+  }
   if(kind==='antitank'){
     const at = state.antitanks[idx];
     if(!at || at.hp<=0) return false;
@@ -252,6 +259,8 @@ export function handleCanvasClick(evt){
       setUnitMoveDest('hq', mode.idx, px, py);
     } else if(mode.kind==='engineer-move'){
       setUnitMoveDest('engineer', mode.idx, px, py);
+    } else if(mode.kind==='medic-move'){
+      setUnitMoveDest('medic', mode.idx, px, py);
     } else if(mode.kind==='wall-build'){
       buildWallAt(clamp(px, 10, CANVAS_W-10), clamp(py, 20, CANVAS_H-20));
     } else if(mode.kind==='trench-build-p1'){
@@ -725,6 +734,7 @@ export function focusOnOwnForces(){
   state.squads.forEach(sq=>{ if(sq.soldiers.some(s=>s.alive)) pts.push({x:sq.x, y:sq.y}); });
   state.antitanks.forEach(at=>{ if(at.hp>0) pts.push({x:at.x, y:at.y}); });
   state.engineers.forEach(en=>{ if(unitAlive(en)) pts.push({x:en.x, y:en.y}); });
+  state.medics.forEach(me=>{ if(unitAlive(me)) pts.push({x:me.x, y:me.y}); });
   state.scouts.forEach(sc=>{ if(unitAlive(sc)) pts.push({x:sc.x, y:sc.y}); });
   (state.helis||[]).forEach(h=>{ if(h.hp>0) pts.push({x:h.x, y:h.y}); });
   if(!pts.length){

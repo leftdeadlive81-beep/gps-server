@@ -431,12 +431,17 @@
   }
 
   .roster-list{max-height:110px;overflow-y:auto;margin-bottom:8px;border-top:1px dashed var(--edge);padding-top:6px;}
-  .roster-row{display:flex;justify-content:space-between;gap:6px;font-family:var(--font-mono);font-size:10.5px;padding:1px 0;}
+  .roster-row{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px;font-family:var(--font-mono);font-size:10.5px;padding:1px 0;}
   .roster-row .r-rank{color:var(--muted);white-space:nowrap;}
   .roster-row .r-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .roster-row.dead{color:var(--red);opacity:.65;}
   .roster-row.dead .r-rank{color:var(--red);}
   .roster-row.dead .r-name{text-decoration:line-through;}
+  /* per user request: 衛生小隊による蘇生(「真の医療コンセプト」)-- 負傷中の兵を戦死とは
+     別の色(琥珀)で示し、手遅れまでの残り猶予をバッジで表示する。 */
+  .roster-row.wounded{color:var(--amber);}
+  .roster-row.wounded .r-rank{color:var(--amber);}
+  .r-wounded-badge{flex-basis:100%;font-size:9.5px;color:var(--amber);opacity:.9;}
 
   .enemy-breakdown{display:flex;flex-direction:column;gap:3px;}
   .enemy-breakdown .eb-archetype{

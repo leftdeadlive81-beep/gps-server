@@ -130,6 +130,18 @@ export function drawEngineerIcon(ctx, cx, cy, size, dead){
   ctx.restore();
 }
 
+export function drawMedicIcon(ctx, cx, cy, size, dead){
+  ctx.save();
+  ctx.translate(cx, cy);
+  drawUnitBase(ctx, size, dead);
+  ctx.fillStyle = dead ? '#5c2a25' : '#d23c3c';
+  ctx.beginPath();
+  ctx.rect(-size*0.09, -size*0.32, size*0.18, size*0.64);
+  ctx.rect(-size*0.32, -size*0.09, size*0.64, size*0.18);
+  ctx.fill();
+  ctx.restore();
+}
+
 export function drawWallShape(ctx, cx, cy, dead){
   ctx.save();
   ctx.translate(cx, cy);
@@ -477,6 +489,7 @@ export function drawBoard(){
     ...state.tanks.map((unit,i)=>({unit, label:`戦車${i+1}`})),
     ...state.sams.map((unit,i)=>({unit, label:`対空${i+1}`})),
     ...state.engineers.map((unit,i)=>({unit, label:`工兵${i+1}`})),
+    ...state.medics.map((unit,i)=>({unit, label:`衛生${i+1}`})),
   ];
   movingUnits.forEach(({unit, label})=>{
     if(!unit || !unit.pendingDest) return;
@@ -888,6 +901,22 @@ export function drawBoard(){
       (state.commandBox && state.commandBox.kind==='engineer' && state.commandBox.idx===enIdx) || isMultiSelected('engineer', enIdx), '工兵');
     ctx.restore();
     if(showDetailLabels && aliveSoldiers.length>0) drawAttritionBar(ctx, enVis.x+18, enVis.y, aliveSoldiers.length/en.soldiers.length);
+  });
+
+  // 衛生小隊 (自軍) ― 工兵と同じ soldiers ロスター制。戦闘はせず移動+負傷者の蘇生のみ。
+  state.medics.forEach((me, meIdx)=>{
+    const meVisL = smoothVisualPos(me, me.x, me.y);
+    const meVis = project(meVisL.x, meVisL.y);
+    const aliveSoldiers = me.soldiers.filter(s=>s.alive);
+    ctx.save();
+    ctx.translate(meVis.x, meVis.y);
+    drawMedicIcon(ctx, 0, 0, scaledIconH(22), aliveSoldiers.length===0);
+    drawSelectionRing(ctx, 0, 0, (state.commandBox && state.commandBox.kind==='medic' && state.commandBox.idx===meIdx));
+    const meOrderIcon = aliveSoldiers.length>0 ? ` ${ORDER_ICON[me.order]}${me.pendingDest?'→':''}` : '';
+    if(showDetailLabels) queueFriendlyLabel(meVis.x, meVis.y, [{text:`衛生 ${aliveSoldiers.length}/${me.soldiers.length}${meOrderIcon}`, dy:28, font:'14px "JetBrains Mono"'}],
+      (state.commandBox && state.commandBox.kind==='medic' && state.commandBox.idx===meIdx), '衛生');
+    ctx.restore();
+    if(showDetailLabels && aliveSoldiers.length>0) drawAttritionBar(ctx, meVis.x+18, meVis.y, aliveSoldiers.length/me.soldiers.length);
   });
 
   // friendly infantry squads (自軍) ― orderly formation, moves as a unit per order
@@ -1556,4 +1585,4 @@ export function drawBoard(){
 }
 
 
-Object.assign(window, { mortarStatusIcon, drawUnitBase, drawUnitIcon, drawTankIcon, drawSamIcon, drawEngineerIcon, drawWallShape, drawAttritionBar, drawSelectionRing, drawMinimap, drawBoard });
+Object.assign(window, { mortarStatusIcon, drawUnitBase, drawUnitIcon, drawTankIcon, drawSamIcon, drawEngineerIcon, drawMedicIcon, drawWallShape, drawAttritionBar, drawSelectionRing, drawMinimap, drawBoard });

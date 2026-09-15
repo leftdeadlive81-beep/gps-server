@@ -300,6 +300,25 @@ export const ENGINEER_SQUAD_SIZE = 6;
 
 export const ENGINEER_POS = {x: 260, y: CANVAS_H/2};
 
+// per user request: 衛生小隊 -- 兵士は被弾で即死するのではなく、一定確率(WOUND_CHANCE)で
+// 「負傷」(alive=trueのまま行動不能)になり、WOUND_BLEEDOUT_MS以内に衛生小隊が駆けつけて
+// 蘇生(MEDIC_REVIVE_MS)させない限り手遅れで死亡する、という「真の医療コンセプト」。
+// 工兵の無償野戦修理(ENGINEER_REPAIR_*)と対になる人員版で、対象が装備のHPではなく
+// 兵士の負傷状態である点が異なる。
+export const WOUND_CHANCE = 0.55;
+
+export const WOUND_BLEEDOUT_MS = 75000;
+
+export const NUM_MEDICS = 2;
+
+export const MEDIC_SQUAD_SIZE = 4;
+
+export const MEDIC_POS = {x: 300, y: CANVAS_H/2 + 60};
+
+export const MEDIC_REVIVE_RANGE_UNITS = 40;
+
+export const MEDIC_REVIVE_MS = 8000;
+
 export const RESERVE_SIZE = 10;
 
 export const MAX_DECOYS = 5;
@@ -500,12 +519,24 @@ export const PERSONNEL_ROSTER = [
   {rank:'2等陸曹', name:'工藤'},
   {rank:'3等陸曹', name:'今村'},
   {rank:'陸士長', name:'柴田'},
+  // per user request: 衛生小隊を追加。同じ理由でさらに人員を足す(NUM_MEDICS*MEDIC_SQUAD_SIZE
+  // 分+若干の余裕)。
+  {rank:'3等陸曹', name:'吉川'},
+  {rank:'陸士長', name:'久保'},
+  {rank:'陸士長', name:'安田'},
+  {rank:'1等陸士', name:'篠原'},
+  {rank:'1等陸士', name:'菊池'},
+  {rank:'1等陸士', name:'成田'},
+  {rank:'1等陸士', name:'古川'},
+  {rank:'1等陸士', name:'平井'},
+  {rank:'2等陸士', name:'村山'},
+  {rank:'2等陸士', name:'荒木'},
 ];
 
-export const [ROSTER_MORTAR_POOL, ROSTER_SCOUT_POOL, ROSTER_SQUAD_POOL, ROSTER_ENGINEER_POOL, ROSTER_RESERVE_INITIAL] =
+export const [ROSTER_MORTAR_POOL, ROSTER_SCOUT_POOL, ROSTER_SQUAD_POOL, ROSTER_ENGINEER_POOL, ROSTER_MEDIC_POOL, ROSTER_RESERVE_INITIAL] =
   roundRobinDistribute(PERSONNEL_ROSTER, [
     MORTAR_CREW_SIZE*NUM_MORTARS, SCOUT_SQUAD_SIZE*NUM_SCOUTS,
-    SQUAD_SIZE*NUM_SQUADS, ENGINEER_SQUAD_SIZE*NUM_ENGINEERS, RESERVE_SIZE,
+    SQUAD_SIZE*NUM_SQUADS, ENGINEER_SQUAD_SIZE*NUM_ENGINEERS, MEDIC_SQUAD_SIZE*NUM_MEDICS, RESERVE_SIZE,
   ]);
 
 export const ROSTER_MORTAR_CREWS = roundRobinDistribute(ROSTER_MORTAR_POOL, Array(NUM_MORTARS).fill(MORTAR_CREW_SIZE));
@@ -513,6 +544,8 @@ export const ROSTER_MORTAR_CREWS = roundRobinDistribute(ROSTER_MORTAR_POOL, Arra
 export const ROSTER_SCOUT_TEAMS  = roundRobinDistribute(ROSTER_SCOUT_POOL, Array(NUM_SCOUTS).fill(SCOUT_SQUAD_SIZE));
 
 export const ROSTER_ENGINEER_TEAMS = roundRobinDistribute(ROSTER_ENGINEER_POOL, Array(NUM_ENGINEERS).fill(ENGINEER_SQUAD_SIZE));
+
+export const ROSTER_MEDIC_TEAMS = roundRobinDistribute(ROSTER_MEDIC_POOL, Array(NUM_MEDICS).fill(MEDIC_SQUAD_SIZE));
 
 export const ROSTER_SQUADS = roundRobinDistribute(ROSTER_SQUAD_POOL, Array(NUM_SQUADS).fill(SQUAD_SIZE));
 
@@ -1165,6 +1198,7 @@ export const FRIENDLY_KIND_LIST = [
   { kind:'squad',    list:()=>state.squads,    alive:u=>u.soldiers.some(s=>s.alive),  label:i=>`第${i+1}小隊` },
   { kind:'antitank', list:()=>state.antitanks, alive:u=>u.hp>0,                       label:i=>`対戦車${i+1}` },
   { kind:'engineer', list:()=>state.engineers, alive:u=>u.soldiers.some(s=>s.alive),  label:()=>'工兵小隊' },
+  { kind:'medic',    list:()=>state.medics||[], alive:u=>u.soldiers.some(s=>s.alive), label:i=>`衛生${i+1}小隊` },
 ];
 
 export const TARGET_GRID_CELL_SIZE = 200;

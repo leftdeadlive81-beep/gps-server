@@ -913,6 +913,15 @@ export function makeMarkerMesh3d(shape, colorHex, formationOffsets){
     add(new THREE.BoxGeometry(s*0.9, s*0.3, s*0.7), mat(colorHex), s*0.2);
     add(new THREE.CylinderGeometry(s*0.22, s*0.22, s*0.8, 8), mat(0x6b573f), s*0.7);
     addFlag(colorHex);
+  } else if(shape==='medic'){
+    // per user request: 衛生小隊 -- 工兵と同じ箱型車体パターンを踏襲しつつ、赤十字を模した
+    // 十字マーカー(自軍/敵の色分けとは独立した固定の赤)で医療部隊であることを識別できる
+    // ようにする。
+    add(new THREE.BoxGeometry(s*0.85, s*0.3, s*0.65), mat(colorHex), s*0.2);
+    const crossMat = mat(0xd23c3c);
+    add(new THREE.BoxGeometry(s*0.54, s*0.08, s*0.16), crossMat, s*0.56);
+    add(new THREE.BoxGeometry(s*0.16, s*0.08, s*0.54), crossMat, s*0.56);
+    addFlag(colorHex);
   } else if(shape==='hq'){
     add(new THREE.BoxGeometry(s*1.2, s*0.8, s*1.2), mat(colorHex), s*0.4);
     add(new THREE.ConeGeometry(s*0.85, s*0.7, 4), mat(0x4b5961), s*1.15);
@@ -1107,6 +1116,7 @@ export function syncUnitMarkers3d(){
   state.squads.forEach((sq,i)=>friendlyUnit('squad'+i, sq, 'infantry', unitAlive(sq)));
   state.antitanks.forEach((at,i)=>friendlyUnit('antitank'+i, at, 'antitank', at.hp>0));
   state.engineers.forEach((en,i)=>friendlyUnit('engineer'+i, en, 'engineer', unitAlive(en)));
+  state.medics.forEach((me,i)=>friendlyUnit('medic'+i, me, 'medic', unitAlive(me)));
   // per user request: 防壁(壁) -- 他の自軍ユニットと違い専用の2Dベクター描画に加えて、
   // 3Dミニマップ上でも障害物として視認できるよう箱形メッシュを配置する。
   state.walls.forEach(w=>{

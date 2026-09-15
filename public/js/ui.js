@@ -854,7 +854,13 @@ export function soldierRosterHtml(soldiers){
   const rows = soldiers.map(s=>{
     const lvl = s.alive ? vetLevelOf(s) : 0;
     const vetBadge = lvl>0 ? `<span style="color:var(--amber);letter-spacing:-1px;margin-left:3px;" title="古参兵 Lv.${lvl}">${'★'.repeat(lvl)}</span>` : '';
-    return `<div class="roster-row${s.alive?'':' dead'}"><span class="r-rank">${s.rank}</span><span class="r-name">${s.name}${vetBadge}</span></div>`;
+    // per user request: 衛生小隊による蘇生(「真の医療コンセプト」)-- 負傷中(wounded)の兵は
+    // 戦死(dead)とは別に、救護待ちであることが一目で分かるようバッジと残り猶予を表示する。
+    const woundedBadge = (s.alive && s.wounded)
+      ? `<span class="r-wounded-badge" title="衛生小隊の救護を待っている">🩹負傷 ― 手当まであと約${Math.max(0,Math.ceil((s.bleedOutAt-performance.now())/1000))}秒</span>`
+      : '';
+    const rowCls = !s.alive ? ' dead' : (s.wounded ? ' wounded' : '');
+    return `<div class="roster-row${rowCls}"><span class="r-rank">${s.rank}</span><span class="r-name">${s.name}${vetBadge}</span>${woundedBadge}</div>`;
   }).join('');
   return `<div class="roster-list">${rows}</div>`;
 }
@@ -1079,6 +1085,55 @@ export function engineerBoxHtml(idx){
   `;
 }
 
+export function medicBoxHtml(idx){
+  const me = state.medics[idx];
+  const alive = unitAliveCount(me);
+  const dead = alive<=0;
+  if(dead) return `<div class="empty-hint" style="padding:4px 0;color:var(--red);">全滅</div>`;
+  const resting = me.resting;
+  const btns = ['advance','hold','retreat'].map(o=>
+    `<button class="btn squad-order-btn ${me.order===o?'active':''}" ${resting?'disabled':''} onclick="setMedicOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
+  ).join('');
+  const armingMove = state.orderMode && state.orderMode.kind==='medic-move' && state.orderMode.idx===idx;
+  const destStatus = armingMove ? '地図をクリックして移動先指定…' : (me.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
+  // per user request: 衛生小隊による蘇生(「真の医療コンセプト」)-- 負傷者を抱える友軍ユニット
+  // (小隊/斥候/工兵/他の衛生小隊)から選んで無償で救護を指示できる(工兵の野戦修理と同型の
+  // 導線 -- see assignEngineerRepair/engineerBoxHtml)。
+  const reviveCandidates = [
+    ...state.squads.map((u,i)=>({kind:'squad', idx:i, unit:u, label:`第${i+1}小隊`})),
+    ...state.scouts.map((u,i)=>({kind:'scout', idx:i, unit:u, label:`斥候${i+1}班`})),
+    ...state.engineers.map((u,i)=>({kind:'engineer', idx:i, unit:u, label:'工兵小隊'})),
+    ...state.medics.map((u,i)=>({kind:'medic', idx:i, unit:u, label:`衛生${i+1}小隊`})),
+  ].filter(c=>c.unit.soldiers.some(s=>s.alive && s.wounded));
+  const reviveTargetEntry = me.reviveTargetKind!=null && me.reviveTargetIdx!=null
+    ? reviveCandidates.find(c=>c.kind===me.reviveTargetKind && c.idx===me.reviveTargetIdx)
+    : null;
+  const reviveBtns = reviveCandidates.map(c=>{
+    const woundedCount = c.unit.soldiers.filter(s=>s.alive && s.wounded).length;
+    const active = me.order==='revive' && me.reviveTargetKind===c.kind && me.reviveTargetIdx===c.idx;
+    return `<button class="btn ${active?'active squad-order-btn':''}" ${resting?'disabled':''} onclick="assignMedicRevive(${idx},'${c.kind}',${c.idx})">${c.label}を救護(負傷${woundedCount}名)${active?'(救護中)':''}</button>`;
+  }).join('');
+  const reviveStatus = reviveTargetEntry
+    ? `救護対象: ${reviveTargetEntry.label} ・ 近接すると自動で処置開始`
+    : (reviveCandidates.length ? '負傷者を抱える部隊を選んで無償で救護を指示できます(近接が必要)' : '救護を要する負傷者はいません');
+  return `
+    <div class="meta">${alive}/${me.soldiers.length}名</div>
+    ${exposureMetaHtml(getUnitExposure({kind:'medic', idx}))}
+    <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/me.soldiers.length*100)}%"></div></div>
+    ${restButtonHtml('medic', idx, me)}
+    <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
+    <div class="row-2" style="margin-bottom:6px;">
+      <button class="btn ${armingMove?'active squad-order-btn':''}" ${resting?'disabled':''} onclick="armMedicMoveOrder(${idx})">移動先を指定</button>
+      <button class="btn" ${!me.pendingDest?'disabled':''} onclick="clearMedicDest(${idx})">解除</button>
+    </div>
+    <div class="meta" style="margin-bottom:8px;">${destStatus}</div>
+    ${reviveBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">${reviveBtns}</div>` : ''}
+    <div class="meta" style="margin-bottom:8px;">${reviveStatus}</div>
+    ${reviveTargetEntry ? `<button class="btn" style="margin-bottom:8px;" onclick="clearMedicRevive(${idx})">救護を解除</button>` : ''}
+    ${soldierRosterHtml(me.soldiers)}
+  `;
+}
+
 export function antitankBoxHtml(idx){
   const at = state.antitanks[idx];
   const dead = at.hp<=0;
@@ -1166,6 +1221,12 @@ export function renderCommandBox(){
     title = '工兵小隊';
     bodyHtml = engineerBoxHtml(state.commandBox.idx);
     pos = canvasToScreen(en._visX!==undefined?en._visX:en.x, en._visY!==undefined?en._visY:en.y);
+  } else if(kind==='medic'){
+    const me = state.medics[state.commandBox.idx];
+    if(!me || !unitAlive(me)){ box.style.display='none'; return; }
+    title = `衛生${state.commandBox.idx+1}小隊`;
+    bodyHtml = medicBoxHtml(state.commandBox.idx);
+    pos = canvasToScreen(me._visX!==undefined?me._visX:me.x, me._visY!==undefined?me._visY:me.y);
   } else {
     box.style.display='none';
     return;
@@ -1371,6 +1432,10 @@ export function renderStats(){
     const alive = en.soldiers.filter(s=>s.alive).length;
     rows.push(forceRow(`工${i+1}`, alive/en.soldiers.length, `${alive}/${en.soldiers.length}`, 'var(--blue-id)', 'engineer', i));
   });
+  state.medics.forEach((me,i)=>{
+    const alive = me.soldiers.filter(s=>s.alive).length;
+    rows.push(forceRow(`衛生${i+1}`, alive/me.soldiers.length, `${alive}/${me.soldiers.length}`, 'var(--blue-id)', 'medic', i));
+  });
   rows.push(forceRow('予備', state.reserve/RESERVE_SIZE, `${state.reserve}/${RESERVE_SIZE}`, 'var(--muted)'));
   document.getElementById('force-list').innerHTML = rows.join('');
 
@@ -1511,6 +1576,7 @@ export function repositionOpenCommandBoxes(){
         : kind==='squad' ? state.squads[idx]
         : kind==='antitank' ? state.antitanks[idx]
         : kind==='engineer' ? state.engineers[idx]
+        : kind==='medic' ? state.medics[idx]
         : null;
       if(unit){
         const ux = unit._visX!==undefined ? unit._visX : unit.x;
@@ -1574,4 +1640,4 @@ export function closeSurrenderOverlay(){
 }
 
 
-Object.assign(window, { renderMapSelectOverlay, renderMapSelectBody, selectMapSeed, renderDeploymentSelectBody, selectDeploymentMode, renderDecoySelectBody, selectDecoyMode, openShop, closeShop, renderShop, buyEquipment, buyAmmo, unlockFuze, toggleStatbar, toggleBoardNote, toggleDrawer, closeAllDrawers, toggleMapFullscreen, updateFullscreenBtnIcon, log, openSmartOrder, closeSmartOrder, smartOrderBack, smartOrderPickType, smartOrderPickScope, smartOrderPickAction, smartOrderPickTarget, smartOrderConfirmInstant, renderSmartOrder, hqBoxHtml, showWaveRewardChoice, chooseWaveReward, setOverlayAccent, showStageClear, proceedToShop, showGameClear, showStageFailed, renderMultiSelectBox, closeCommandBox, closeEnemyCommandBox, mortarBoxHtml, mortarMainlineHtml, updateFireConfigCancel, exposureMetaHtml, soldierRosterHtml, restButtonHtml, reinforceButtonHtml, scoutBoxHtml, standingOrderSelectHtml, squadBoxHtml, tankBoxHtml, samBoxHtml, engineerBoxHtml, antitankBoxHtml, renderCommandBox, positionCommandBox, renderEnemyCommandBox, renderStats, renderDecisionPanel, closeDecoyCommandBox, renderDecoyCommandBox, repositionOpenCommandBoxes, anyOverlayShown, showBattleStartBanner, openSurrenderOverlay, closeSurrenderOverlay });
+Object.assign(window, { renderMapSelectOverlay, renderMapSelectBody, selectMapSeed, renderDeploymentSelectBody, selectDeploymentMode, renderDecoySelectBody, selectDecoyMode, openShop, closeShop, renderShop, buyEquipment, buyAmmo, unlockFuze, toggleStatbar, toggleBoardNote, toggleDrawer, closeAllDrawers, toggleMapFullscreen, updateFullscreenBtnIcon, log, openSmartOrder, closeSmartOrder, smartOrderBack, smartOrderPickType, smartOrderPickScope, smartOrderPickAction, smartOrderPickTarget, smartOrderConfirmInstant, renderSmartOrder, hqBoxHtml, showWaveRewardChoice, chooseWaveReward, setOverlayAccent, showStageClear, proceedToShop, showGameClear, showStageFailed, renderMultiSelectBox, closeCommandBox, closeEnemyCommandBox, mortarBoxHtml, mortarMainlineHtml, updateFireConfigCancel, exposureMetaHtml, soldierRosterHtml, restButtonHtml, reinforceButtonHtml, scoutBoxHtml, standingOrderSelectHtml, squadBoxHtml, tankBoxHtml, samBoxHtml, engineerBoxHtml, medicBoxHtml, antitankBoxHtml, renderCommandBox, positionCommandBox, renderEnemyCommandBox, renderStats, renderDecisionPanel, closeDecoyCommandBox, renderDecoyCommandBox, repositionOpenCommandBoxes, anyOverlayShown, showBattleStartBanner, openSurrenderOverlay, closeSurrenderOverlay });
