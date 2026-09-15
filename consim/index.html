@@ -18,6 +18,11 @@
        pointer-events:none(CSS側)で戦闘操作をブロックしない。 -->
   <div class="battle-start-banner" id="battle-start-banner"></div>
 
+  <!-- per user request: 隊員死亡のテロップが地味なので強調したい -- ticker-bar(下部)に
+       流れて収まる前に、画面上部で一瞬ポップイン→フラッシュして目立たせる(see
+       flashKiaAlert() in ui.js)。pointer-events:noneで戦闘操作をブロックしない。 -->
+  <div class="kia-flash" id="kia-flash"></div>
+
   <div class="enemy-overlay">
     <div class="eo-head">敵状 ― CONTACTS</div>
     <div class="eo-count" id="stat-left">--</div>

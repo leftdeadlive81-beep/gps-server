@@ -275,6 +275,26 @@ export function announceTicker(text, cls){
   tickerMessages.push({text, cls: cls||''});
   if(tickerMessages.length > TICKER_MAX_ENTRIES) tickerMessages.shift();
   renderTicker();
+  // per user request: 隊員死亡のテロップが地味なので強調したい -- スクロールするテロップ欄
+  // (下記renderTicker、変更なし)に流れて「収まる」のはそのままに、流れ込む瞬間だけ画面上部に
+  // 骸骨アイコン付きの警告をポップイン→フラッシュ→フェードで一瞬強調表示する2段構成にした。
+  if(cls==='death') flashKiaAlert(text);
+}
+
+// per user request: 死亡テロップの強調演出。showBattleStartBanner()と同じ「タイマーで
+// 前回分を打ち切って上書き」パターンだが、画面中央に大きく出す戦闘開始バナーとは違い、
+// 隊員が頻繁に死ぬ局面で鬱陶しくならないよう画面上部の小さめの警告カードに留める
+// (CSSのkia-flashクラス側でポップイン+フラッシュ+フェードのタイミングを管理)。
+let kiaFlashTimer = null;
+export function flashKiaAlert(text){
+  const el = document.getElementById('kia-flash');
+  if(!el) return;
+  el.innerHTML = `<span class="kia-flash-icon">💀</span><span>${text}</span>`;
+  el.classList.remove('show');
+  void el.offsetWidth; // force reflow so re-triggering the class restarts the CSS animation
+  el.classList.add('show');
+  if(kiaFlashTimer) clearTimeout(kiaFlashTimer);
+  kiaFlashTimer = setTimeout(()=>{ el.classList.remove('show'); }, 1800);
 }
 
 export function renderTicker(){

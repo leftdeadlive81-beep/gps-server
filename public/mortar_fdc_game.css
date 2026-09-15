@@ -92,6 +92,31 @@
     0%{transform:scale(0.55);} 12%{transform:scale(1.1);} 22%{transform:scale(1);} 100%{transform:scale(1);}
   }
 
+  /* per user request: 隊員死亡のテロップが地味なので強調したい -- ticker-bar(下部)に
+     流れて収まる前に、画面上部で一瞬ポップイン→フラッシュ→フェードして目立たせる
+     (see flashKiaAlert() in ui.js)。戦闘開始バナーのような画面全体の演出だと、隊員が
+     頻繁に死ぬ局面で鬱陶しくなるため、意図的に小さめの警告カードに留める。 */
+  .kia-flash{
+    position:absolute; top:calc(54px + env(safe-area-inset-top)); left:50%;
+    z-index:44; pointer-events:none;
+    display:flex; align-items:center; gap:6px;
+    padding:6px 14px; border-radius:6px;
+    background:rgba(40,10,10,.9); border:1px solid rgba(224,90,79,.75);
+    box-shadow:0 6px 20px rgba(0,0,0,.45);
+    font-family:var(--font-mono); font-size:13px; font-weight:700; color:var(--red);
+    white-space:nowrap; opacity:0;
+    transform:translateX(-50%) scale(0.7);
+  }
+  .kia-flash-icon{font-size:16px;}
+  .kia-flash.show{ animation:kia-flash-pop 1800ms ease-out forwards; }
+  @keyframes kia-flash-pop{
+    0%{opacity:0; transform:translateX(-50%) scale(0.7); filter:brightness(1);}
+    10%{opacity:1; transform:translateX(-50%) scale(1.15); filter:brightness(2.2);}
+    24%{transform:translateX(-50%) scale(1); filter:brightness(1);}
+    80%{opacity:1; transform:translateX(-50%) scale(1);}
+    100%{opacity:0; transform:translateX(-50%) scale(0.92);}
+  }
+
   .enemy-overlay{
     position:absolute; top:calc(46px + env(safe-area-inset-top)); right:8px; z-index:41;
     width:132px; max-width:38vw; max-height:calc(100% - 60px - env(safe-area-inset-top));
