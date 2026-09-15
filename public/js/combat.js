@@ -722,6 +722,15 @@ export function startStage(){
   // 波を跨いで恒久的に残る(現実の陣地構築なので、破壊されない限り消えない)。
   if(state.walls) state.walls = state.walls.filter(w=>w.hp>0);
 
+  // per user request: WAVEクリア時に敵陣深くまで前進していた部隊をそのまま次WAVEへ持ち越すと、
+  // 敵のスポーン地点との距離が近すぎて理不尽な難易度になることがある。完全な再配置(初期陣地
+  // へのリセット)ではなく、通常の前進限界線(hunt指示なしでは超えられない既存の線 -- resolve
+  // *Ordersの各clampと同じSQUAD_ADVANCE_LIMIT_X/SCOUT_ADVANCE_LIMIT_X基準)より前に出ている
+  // 部隊だけ、その線まで引き戻す。線の内側で前進を止めていた部隊はそのまま(達成した前進を
+  // 消さない)。stage===1(初回配備)では各部隊がまだ存在しないか、いてもHQ付近の配備ボックス
+  // 内で安全線より手前なので実質no-op。
+  regroupOverextendedUnits();
+
   if(stage===1){
     // first wave ― fresh deployment at full roster strength, confined to a real 1km x 1km
     // box on the map's west edge (see deployBoxSize()). Reuses the original constants'
@@ -1265,6 +1274,26 @@ export function hasLineOfSight(fromX,fromY,toX,toY){
     if(walls && walls.some(w=>w.hp>0 && Math.hypot(x-w.x,y-w.y) <= WALL_RADIUS)) return false;
   }
   return true;
+}
+
+// per user request: WAVE開始時の部隊再編成 -- 安全線(SQUAD_ADVANCE_LIMIT_X/
+// SCOUT_ADVANCE_LIMIT_X、resolveSquadOrders等の通常移動が既にclampしている、hunt指示なしでは
+// 超えられない線)より前に出ている部隊だけを、その線まで引き戻す。startStage()から呼ばれる。
+export function regroupOverextendedUnits(){
+  let pulledBack = 0;
+  const pullBack = (unit, limitX) => {
+    if(unit.x > limitX){ unit.x = limitX; pulledBack++; }
+  };
+  if(state.squads) state.squads.forEach(sq=>pullBack(sq, SQUAD_ADVANCE_LIMIT_X));
+  if(state.tanks) state.tanks.forEach(tk=>pullBack(tk, SQUAD_ADVANCE_LIMIT_X));
+  if(state.sams) state.sams.forEach(sam=>pullBack(sam, SQUAD_ADVANCE_LIMIT_X));
+  if(state.antitanks) state.antitanks.forEach(at=>pullBack(at, SQUAD_ADVANCE_LIMIT_X));
+  if(state.engineers) state.engineers.forEach(en=>pullBack(en, SQUAD_ADVANCE_LIMIT_X));
+  if(state.scouts) state.scouts.forEach(sc=>pullBack(sc, SCOUT_ADVANCE_LIMIT_X));
+  if(pulledBack>0){
+    log('sys','前線', `${pulledBack}部隊、前線を再編成のため後退。`);
+    announceTicker(`${pulledBack}部隊が前線を再編成のため後退`);
+  }
 }
 
 export function lastStandActive(){
