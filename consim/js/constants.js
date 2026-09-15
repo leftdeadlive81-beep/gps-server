@@ -1082,6 +1082,14 @@ export const TERRAIN_COVER_RELIEF_SATURATION = 0.15;
 
 export const LAST_STAND_THRESHOLD = 3;
 
+// per user request: 敵全逃亡(ROUT) -- 残存わずかでLAST_STANDに入る瞬間、死に物狂いの突撃
+// (charge)一択だった分岐に、統制崩壊→交戦放棄して戦場離脱を図る代替パターンを追加。
+// 閾値はLAST_STAND_THRESHOLDと共通、閾値到達の瞬間に一度だけROUT_CHANCEで抽選する
+// (state.routActive、resolveEnemyTurn参照)。
+export const ROUT_CHANCE = 0.35;
+export const ROUT_SPEED_MULT = 1.7;
+export const ROUT_ESCAPE_MARGIN = 40;
+
 export const MAX_DEBRIS_PARTICLES = 140;
 
 export const MAX_CRATERS = 90;

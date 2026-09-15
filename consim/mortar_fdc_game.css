@@ -79,6 +79,12 @@
   }
   .battle-start-banner.show{ animation:battle-start-fade 3000ms ease-out forwards; }
   .battle-start-banner.show span{ display:inline-block; animation:battle-start-pop 3000ms ease-out forwards; }
+  /* per user request: 敵全逃亡(ROUT)演出 -- 同じ大文字バナーを、切迫した警告の琥珀色ではなく
+     「敵が崩れた」朗報らしい寒色(青)で出す。 */
+  .battle-start-banner.rout span{
+    color:var(--blue-id);
+    text-shadow:0 0 44px rgba(111,155,191,.65), 0 4px 20px rgba(0,0,0,.85);
+  }
   @keyframes battle-start-fade{
     0%{opacity:0;} 8%{opacity:1;} 78%{opacity:1;} 100%{opacity:0;}
   }
@@ -245,6 +251,7 @@
     padding:0 22px; display:inline-flex; align-items:center;
   }
   .ticker-item.death{color:var(--red); font-weight:700;}
+  .ticker-item.rout{color:var(--blue-id); font-weight:700;}
   @keyframes ticker-scroll{
     from{transform:translateX(0);}
     to{transform:translateX(-50%);}

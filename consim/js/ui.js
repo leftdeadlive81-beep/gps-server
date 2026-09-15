@@ -1505,12 +1505,15 @@ export function anyOverlayShown(){
 // 止めない(pointer-events:noneの非ブロッキング演出、CSSのbattle-start-bannerクラス側で
 // ポップイン→3秒キープ→フェードアウトのタイミングを管理)。
 let battleStartBannerTimer = null;
-export function showBattleStartBanner(text){
+// per user request: 敵全逃亡(ROUT)の演出にも同じバナーを流用 -- 第2引数variantで色違いの
+// CSS修飾クラス(例:'rout')を付けられるようにした(省略時は従来通りの琥珀色)。
+export function showBattleStartBanner(text, variant){
   const el = document.getElementById('battle-start-banner');
   if(!el) return;
   el.innerHTML = `<span>${text || '戦闘開始'}</span>`;
-  el.classList.remove('show');
+  el.classList.remove('show', 'rout');
   void el.offsetWidth; // force reflow so re-triggering the class restarts the CSS animation
+  if(variant) el.classList.add(variant);
   el.classList.add('show');
   if(battleStartBannerTimer) clearTimeout(battleStartBannerTimer);
   battleStartBannerTimer = setTimeout(()=>{ el.classList.remove('show'); }, 3000);
