@@ -2142,7 +2142,9 @@ export function resolveTankOrders(dt){
       if(tank.hp<=0) return;
       applyTankMovement(tank, idx, dt);
 
-      let engageTargets = state.targets.filter(t=>!t.destroyed && (t.type==='infantry' || t.type==='vehicle'));
+      // per user request: 砲兵は無装甲の砲側員なので、小隊と同様に戦車の通常の交戦対象にも含める
+      // (以前は歩兵/車両タイプのみが対象で、真横にいる砲兵さえhunt指示なしでは無視して撃たなかった)。
+      let engageTargets = state.targets.filter(t=>!t.destroyed && (t.type==='infantry' || t.type==='vehicle' || t.type==='artillery'));
       if(tank.order==='hunt' && tank.huntTargetId){
         // per user request: direct-fire tank guns can't effectively engage aircraft -- anti-air
         // is the SAM's job now (see resolveSamOrders).
