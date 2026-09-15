@@ -64,6 +64,28 @@
   #board3d{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;}
   #board{position:absolute;inset:0;width:100%;height:100%;display:block;background:transparent;touch-action:none;}
 
+  /* per user request: 毎WAVE開始時に画面中央へ大きく3秒間表示する「戦闘開始」演出。
+     pointer-events:noneで戦闘操作(地図クリック等)をブロックしない。 */
+  .battle-start-banner{
+    position:absolute; inset:0; z-index:45; pointer-events:none;
+    display:flex; align-items:center; justify-content:center;
+    opacity:0;
+  }
+  .battle-start-banner span{
+    font-family:var(--font-display); font-weight:800; letter-spacing:4px;
+    font-size:clamp(38px, 11vw, 100px); color:var(--amber);
+    text-shadow:0 0 44px rgba(240,189,85,.65), 0 4px 20px rgba(0,0,0,.85);
+    text-transform:uppercase; white-space:nowrap;
+  }
+  .battle-start-banner.show{ animation:battle-start-fade 3000ms ease-out forwards; }
+  .battle-start-banner.show span{ display:inline-block; animation:battle-start-pop 3000ms ease-out forwards; }
+  @keyframes battle-start-fade{
+    0%{opacity:0;} 8%{opacity:1;} 78%{opacity:1;} 100%{opacity:0;}
+  }
+  @keyframes battle-start-pop{
+    0%{transform:scale(0.55);} 12%{transform:scale(1.1);} 22%{transform:scale(1);} 100%{transform:scale(1);}
+  }
+
   .enemy-overlay{
     position:absolute; top:calc(46px + env(safe-area-inset-top)); right:8px; z-index:41;
     width:132px; max-width:38vw; max-height:calc(100% - 60px - env(safe-area-inset-top));

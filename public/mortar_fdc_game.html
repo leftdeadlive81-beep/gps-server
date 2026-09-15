@@ -14,6 +14,10 @@
   <canvas id="board3d"></canvas>
   <canvas id="board" width="2600" height="460"></canvas>
 
+  <!-- per user request: 毎WAVE開始時に画面中央へ「戦闘開始」を大きく3秒間表示する演出。
+       pointer-events:none(CSS側)で戦闘操作をブロックしない。 -->
+  <div class="battle-start-banner" id="battle-start-banner"></div>
+
   <div class="enemy-overlay">
     <div class="eo-head">敵状 ― CONTACTS</div>
     <div class="eo-count" id="stat-left">--</div>
@@ -46,6 +50,8 @@
       <button class="hud-icon-btn" onclick="toggleBoardNote()" title="使い方">?</button>
       <button class="hud-icon-btn" id="multiSelectBtn" onclick="toggleMultiSelectMode()" title="複数選択">☑</button>
       <button class="hud-icon-btn" id="mapFullscreenBtn" onclick="toggleMapFullscreen()" title="全画面表示にする">⛶</button>
+      <!-- per user request: 戦闘中いつでも選べる降伏(同WAVE再挑戦、またはゲームをやめる)。 -->
+      <button class="hud-icon-btn" onclick="openSurrenderOverlay()" title="降伏">🏳</button>
     </div>
     <div class="statbar" id="statbar-content">
       <div class="stat" id="stat-datetime"><div class="label">日時</div><div class="value">--</div></div>
@@ -150,6 +156,19 @@
     <div id="achievements-body"></div>
     <div style="height:10px"></div>
     <button class="btn primary" onclick="closeAchievements()">閉じる</button>
+  </div>
+</div>
+
+<!-- per user request: 戦闘中いつでも選べる降伏 -- 同WAVEを再挑戦(retryStage)、または
+     ゲームをやめる(abandonSavedCampaign、既存の新規開始と同じ確認ダイアログ付き破壊的操作)。 -->
+<div class="overlay" id="surrender-overlay">
+  <div class="card shop-card accent-red">
+    <div class="overlay-kicker">Command Decision</div>
+    <h2>降伏 ― SURRENDER</h2>
+    <p>この戦線を維持する見込みはあるか。決断せよ。</p>
+    <button class="btn primary" style="margin-bottom:8px;" onclick="closeSurrenderOverlay(); retryStage();">同WAVEを再挑戦</button>
+    <button class="btn" style="margin-bottom:8px;" onclick="if(confirm('セーブデータを削除してゲームをやめますか？この操作は取り消せません。')) abandonSavedCampaign();">ゲームをやめる</button>
+    <button class="btn" onclick="closeSurrenderOverlay()">戦闘に戻る</button>
   </div>
 </div>
 

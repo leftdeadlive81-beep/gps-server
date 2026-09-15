@@ -7,7 +7,7 @@ import { render } from './main.js';
 import { applySavedCampaign, clearCampaignSave, loadCampaign, saveCampaign } from './savegame.js';
 import { ROAD_GRAPH, advanceAlongPath, airborneStep, altitudeBonus, applyWallBlock, computeFebaX, damageWall, elevationAt, generateAirborneLandingSpots, generateProceduralTerrain, generateSpots, getCachedRoadPath, nearestRoadPoint, nearestWallHit, pickArchetypeForStage, pickTerrainForStage, pickTypesForCount, scoutTerrainAwareStep, terrainAwareStep, terrainCoverTotal, terrainTypeAt, trenchCoverBonusAt, wallBlockingLineOfFire } from './terrain.js';
 import { disposeMarker3d, regenerateTerrain } from './three.js';
-import { announceTicker, closeSmartOrder, log, renderMapSelectOverlay, showGameClear, showStageClear, showStageFailed, showWaveRewardChoice, smartWizard } from './ui.js';
+import { announceTicker, closeSmartOrder, log, renderMapSelectOverlay, showBattleStartBanner, showGameClear, showStageClear, showStageFailed, showWaveRewardChoice, smartWizard } from './ui.js';
 import { bearingBetween, choice, clamp, exposureNormalizedMult, gauss, hitChanceFromExposure, rnd, smoothstep01, unitsToMeters, visualTweenDurationMs, weightedChoice } from './utils.js';
 import { fireTracer, isHitStopped, onTargetDestroyed, projectiles, resetAllVfx, ripples, spawn3dImpactEffect, spawn3dProjectile, spawnDestructionEffect, spawnHitEffect, spawnWarningBanner } from './vfx.js';
 import { speakCoordination, speakRandomAliveUnit, unitSpeak, unitSpeakInjury, unitSpeakOrder } from './voice.js';
@@ -876,6 +876,8 @@ export function startStage(){
   resetAllVfx();
 
   document.getElementById('overlay').classList.remove('show');
+  // per user request: 毎WAVE開始時に画面中央へ「戦闘開始」を大きく3秒間表示する。
+  showBattleStartBanner('戦闘開始');
   log('sys','システム', `WAVE ${stage} / ${STAGE_COUNT} ― 目標${state.targets.length}件を確認。天候: ${weather.label}(${weather.desc})。敵編成: ${archetype.label}。`);
   log('sys','敵AI', '敵歩兵は強襲・側面・支援の各ドクトリンで行動する。支援部隊は距離を保って援護射撃を行う。');
   // per user request: WAVEの攻撃アーキタイプに応じた具体的な警告 -- プレイヤーが編成を

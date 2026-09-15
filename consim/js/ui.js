@@ -1501,5 +1501,32 @@ export function anyOverlayShown(){
   return !!document.querySelector('.overlay.show');
 }
 
+// per user request: 毎WAVE開始時に画面中央へ「戦闘開始」を大きく3秒間表示する -- 戦闘を
+// 止めない(pointer-events:noneの非ブロッキング演出、CSSのbattle-start-bannerクラス側で
+// ポップイン→3秒キープ→フェードアウトのタイミングを管理)。
+let battleStartBannerTimer = null;
+export function showBattleStartBanner(text){
+  const el = document.getElementById('battle-start-banner');
+  if(!el) return;
+  el.innerHTML = `<span>${text || '戦闘開始'}</span>`;
+  el.classList.remove('show');
+  void el.offsetWidth; // force reflow so re-triggering the class restarts the CSS animation
+  el.classList.add('show');
+  if(battleStartBannerTimer) clearTimeout(battleStartBannerTimer);
+  battleStartBannerTimer = setTimeout(()=>{ el.classList.remove('show'); }, 3000);
+}
 
-Object.assign(window, { renderMapSelectOverlay, renderMapSelectBody, selectMapSeed, renderDeploymentSelectBody, selectDeploymentMode, renderDecoySelectBody, selectDecoyMode, openShop, closeShop, renderShop, buyEquipment, buyAmmo, unlockFuze, toggleStatbar, toggleBoardNote, toggleDrawer, closeAllDrawers, toggleMapFullscreen, updateFullscreenBtnIcon, log, openSmartOrder, closeSmartOrder, smartOrderBack, smartOrderPickType, smartOrderPickScope, smartOrderPickAction, smartOrderPickTarget, smartOrderConfirmInstant, renderSmartOrder, hqBoxHtml, showWaveRewardChoice, chooseWaveReward, setOverlayAccent, showStageClear, proceedToShop, showGameClear, showStageFailed, renderMultiSelectBox, closeCommandBox, closeEnemyCommandBox, mortarBoxHtml, mortarMainlineHtml, updateFireConfigCancel, exposureMetaHtml, soldierRosterHtml, restButtonHtml, reinforceButtonHtml, scoutBoxHtml, standingOrderSelectHtml, squadBoxHtml, tankBoxHtml, samBoxHtml, engineerBoxHtml, antitankBoxHtml, renderCommandBox, positionCommandBox, renderEnemyCommandBox, renderStats, renderDecisionPanel, closeDecoyCommandBox, renderDecoyCommandBox, repositionOpenCommandBoxes, anyOverlayShown });
+// per user request: 戦闘中いつでも選べる「降伏」-- 同WAVEを再挑戦(retryStage)、または
+// ゲームをやめる(abandonSavedCampaign、既存の新規開始ボタンと同じ確認ダイアログ付き
+// 破壊的操作)のどちらかを選べる。他のオーバーレイと同じ.overlay.showパターンなので、
+// 表示中はmain.jsのloop()側で自動的に3D描画が止まる(anyOverlayShown()を参照)。
+export function openSurrenderOverlay(){
+  document.getElementById('surrender-overlay').classList.add('show');
+}
+
+export function closeSurrenderOverlay(){
+  document.getElementById('surrender-overlay').classList.remove('show');
+}
+
+
+Object.assign(window, { renderMapSelectOverlay, renderMapSelectBody, selectMapSeed, renderDeploymentSelectBody, selectDeploymentMode, renderDecoySelectBody, selectDecoyMode, openShop, closeShop, renderShop, buyEquipment, buyAmmo, unlockFuze, toggleStatbar, toggleBoardNote, toggleDrawer, closeAllDrawers, toggleMapFullscreen, updateFullscreenBtnIcon, log, openSmartOrder, closeSmartOrder, smartOrderBack, smartOrderPickType, smartOrderPickScope, smartOrderPickAction, smartOrderPickTarget, smartOrderConfirmInstant, renderSmartOrder, hqBoxHtml, showWaveRewardChoice, chooseWaveReward, setOverlayAccent, showStageClear, proceedToShop, showGameClear, showStageFailed, renderMultiSelectBox, closeCommandBox, closeEnemyCommandBox, mortarBoxHtml, mortarMainlineHtml, updateFireConfigCancel, exposureMetaHtml, soldierRosterHtml, restButtonHtml, reinforceButtonHtml, scoutBoxHtml, standingOrderSelectHtml, squadBoxHtml, tankBoxHtml, samBoxHtml, engineerBoxHtml, antitankBoxHtml, renderCommandBox, positionCommandBox, renderEnemyCommandBox, renderStats, renderDecisionPanel, closeDecoyCommandBox, renderDecoyCommandBox, repositionOpenCommandBoxes, anyOverlayShown, showBattleStartBanner, openSurrenderOverlay, closeSurrenderOverlay });
