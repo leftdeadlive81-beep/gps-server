@@ -1657,17 +1657,32 @@ export function anyOverlayShown(){
 // ポップイン→3秒キープ→フェードアウトのタイミングを管理)。
 let battleStartBannerTimer = null;
 // per user request: 敵全逃亡(ROUT)の演出にも同じバナーを流用 -- 第2引数variantで色違いの
-// CSS修飾クラス(例:'rout')を付けられるようにした(省略時は従来通りの琥珀色)。
+// CSS修飾クラス(例:'rout'、'critical' -- 後者はtriggerDramaticMoment用)を付けられる
+// ようにした(省略時は従来通りの琥珀色)。
 export function showBattleStartBanner(text, variant){
   const el = document.getElementById('battle-start-banner');
   if(!el) return;
   el.innerHTML = `<span>${text || '戦闘開始'}</span>`;
-  el.classList.remove('show', 'rout');
+  el.classList.remove('show', 'rout', 'critical');
   void el.offsetWidth; // force reflow so re-triggering the class restarts the CSS animation
   if(variant) el.classList.add(variant);
   el.classList.add('show');
   if(battleStartBannerTimer) clearTimeout(battleStartBannerTimer);
   battleStartBannerTimer = setTimeout(()=>{ el.classList.remove('show'); }, 3000);
+}
+
+// per user request(プレイヤーが驚くような演出): HQ危機・地雷奇襲などここぞという瞬間に
+// 画面(地図部分のみ、HUDは対象外)を短く揺らす。showBattleStartBannerと同じ
+// remove→reflow→addパターンで、連続発生時も毎回アニメーションを最初から再生する。
+let screenShakeTimer = null;
+export function triggerScreenShake(){
+  const el = document.querySelector('.board-wrap');
+  if(!el) return;
+  el.classList.remove('shake');
+  void el.offsetWidth;
+  el.classList.add('shake');
+  if(screenShakeTimer) clearTimeout(screenShakeTimer);
+  screenShakeTimer = setTimeout(()=>{ el.classList.remove('shake'); }, 500);
 }
 
 // per user request: 戦闘中いつでも選べる「降伏」-- 同WAVEを再挑戦(retryStage)、または

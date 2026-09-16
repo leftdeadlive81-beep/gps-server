@@ -1405,6 +1405,16 @@ export const TERRAIN_TYPE_SPEED_MULT = { [TERRAIN_TYPE_FOREST]: 0.7, [TERRAIN_TY
 
 export const MAP_DOUBLETAP_ZOOM_LEVEL = 2.5;
 
+// per user request(プレイヤーが驚くような演出): HQ危機・地雷奇襲など、ここぞという瞬間に
+// カメラを自動でその地点へ一時的にスウィングさせる演出(triggerDramaticMoment/
+// triggerDramaticCameraSwoop)のズーム量・保持時間。プレイヤーが演出中に地図を操作
+// (ドラッグ/ホイール/タップ)すると即座にキャンセルされ、元の視点へは戻さない
+// (mapFocusTarget=nullにする既存の入力ハンドラと、それを検知するcameraSwoopActive
+// フラグの両方を使う -- input.jsのsetupMapControls参照)。
+export const CAMERA_SWOOP_ZOOM = 2.5;
+
+export const CAMERA_SWOOP_HOLD_MS = 1300;
+
 export const SQUAD_GRID_OFFSETS = Array.from({length:SQUAD_SIZE}, (_,i)=>{
   const col = i%5, row = Math.floor(i/5);
   return {dx:(col-2)*10, dy:(row-0.5)*14};

@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { applyBestMortarLoadout, buildTrenchAt, buildWallAt, estPos, estPosFromMortar, handlePlacementClick, mortarNotReadyToFire, mortarTooCloseToFire, mortarTooFarToFire, placeDecoyAt, resolveSmartUnitIdxs, state, unitAlive } from './combat.js';
-import { CAMERA_PRESETS, CANVAS_H, CANVAS_W, DECOY_LONGPRESS_MOVE_TOLERANCE_PX, DECOY_LONGPRESS_MS, DIRECT_MOVE_KINDS, FRIENDLY_KIND_LIST, MAP_DOUBLETAP_ZOOM_LEVEL, MAP_INITIAL_AZIMUTH, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_MOVE_START_DELAY_MS, MULTI_SELECT_KINDS, MULTI_SELECT_ORDER_SETTER, ORDER_LABEL, SCOUT_ADVANCE_LIMIT_X, SMART_UNIT_TYPES, SQUAD_ADVANCE_LIMIT_X, SQUAD_ASSAULT_LIMIT_X, SQUAD_RETREAT_LIMIT_X } from './constants.js';
+import { CAMERA_PRESETS, CAMERA_SWOOP_HOLD_MS, CANVAS_H, CANVAS_W, DECOY_LONGPRESS_MOVE_TOLERANCE_PX, DECOY_LONGPRESS_MS, DIRECT_MOVE_KINDS, FRIENDLY_KIND_LIST, MAP_DOUBLETAP_ZOOM_LEVEL, MAP_INITIAL_AZIMUTH, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_MOVE_START_DELAY_MS, MULTI_SELECT_KINDS, MULTI_SELECT_ORDER_SETTER, ORDER_LABEL, SCOUT_ADVANCE_LIMIT_X, SMART_UNIT_TYPES, SQUAD_ADVANCE_LIMIT_X, SQUAD_ASSAULT_LIMIT_X, SQUAD_RETREAT_LIMIT_X } from './constants.js';
 import { render } from './main.js';
 import { clampMapView, groundPlaneCanvasUnitAt, project, resizeThree, terrainCanvasUnitAt, threeReady, updateCameraFromView } from './three.js';
 import { anyOverlayShown, log } from './ui.js';
@@ -477,6 +477,25 @@ export function focusMapOn(cx, cy, zoom){
   mapFocusTarget = { x: cx, y: cy, zoom };
 }
 
+// per user request(プレイヤーが驚くような演出): HQ危機・地雷奇襲などここぞという瞬間に、
+// カメラを自動でその地点へ一時的にスウィング→保持→元の視点へ戻す演出。既存の
+// focusMapOn/updateMapFocusEaseのイージングをそのまま使い、「戻る」動作だけ
+// setTimeoutで追加する。cameraSwoopActiveは、保持時間中にプレイヤーが地図を手動操作
+// (ドラッグ/ホイール/タップ、いずれもmapFocusTarget=nullにする既存ハンドラ側で一緒に
+// falseにする -- setupMapControls参照)した場合、無理に元の視点へ戻さないための目印。
+export let cameraSwoopActive = false;
+
+export function triggerDramaticCameraSwoop(cx, cy, zoom){
+  const originalCx = MAP_VIEW.cx, originalCy = MAP_VIEW.cy, originalZoom = MAP_VIEW.zoom;
+  cameraSwoopActive = true;
+  focusMapOn(cx, cy, zoom!==undefined ? zoom : MAP_VIEW.zoom);
+  setTimeout(()=>{
+    if(!cameraSwoopActive) return; // プレイヤーが保持時間中に手動操作 -- 戻さず現在の視点を尊重
+    cameraSwoopActive = false;
+    focusMapOn(originalCx, originalCy, originalZoom);
+  }, CAMERA_SWOOP_HOLD_MS);
+}
+
 export function updateMapFocusEase(){
   if(!mapFocusTarget) return;
   MAP_VIEW.cx += (mapFocusTarget.x-MAP_VIEW.cx)*0.15;
@@ -547,6 +566,7 @@ export function setupMapControls(){
     mode = e.button===2 ? 'rotate' : 'pan';
     lastX = e.clientX; lastY = e.clientY;
     mapFocusTarget = null;
+    cameraSwoopActive = false;
     decoyLongPressStart(e.clientX, e.clientY);
     if(mode==='pan'){
       const rect = el.getBoundingClientRect();
@@ -579,6 +599,7 @@ export function setupMapControls(){
   el.addEventListener('wheel', e=>{
     e.preventDefault();
     mapFocusTarget = null;
+    cameraSwoopActive = false;
     const factor = e.deltaY<0 ? 1.12 : 1/1.12;
     MAP_VIEW.zoom = clamp(MAP_VIEW.zoom*factor, MAP_ZOOM_MIN, MAP_ZOOM_MAX);
     clampMapView();
@@ -607,6 +628,7 @@ export function setupMapControls(){
   });
   el.addEventListener('touchstart', e=>{
     mapFocusTarget = null;
+    cameraSwoopActive = false;
     if(e.touches.length===1){
       touchLastX=e.touches[0].clientX; touchLastY=e.touches[0].clientY;
       const rect = el.getBoundingClientRect();
