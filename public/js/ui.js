@@ -1050,7 +1050,8 @@ export function engineerBoxHtml(idx){
   const alive = unitAliveCount(en);
   const dead = alive<=0;
   if(dead) return `<div class="empty-hint" style="padding:4px 0;color:var(--red);">全滅</div>`;
-  const resting = en.resting;
+  const shaken = !!en.shakenUntil;
+  const resting = en.resting || shaken;
   const btns = ['advance','hold','retreat'].map(o=>
     `<button class="btn squad-order-btn ${en.order===o?'active':''}" ${resting?'disabled':''} onclick="setEngineerOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
@@ -1094,6 +1095,7 @@ export function engineerBoxHtml(idx){
     : (repairableCandidates.length ? '損傷した戦車・対戦車・迫撃砲を選んで無償で修理を指示できます(近接が必要)' : '損傷した装備はありません');
   return `
     <div class="meta">${alive}/${en.soldiers.length}名</div>
+    ${shaken ? `<div class="meta" style="margin-bottom:6px;color:var(--red);font-weight:700;">⚠ 動揺・統制喪失中 ― 独断で後退中(命令不能、残り約${Math.max(0,Math.ceil((en.shakenUntil-performance.now())/1000))}秒)</div>` : ''}
     ${exposureMetaHtml(getUnitExposure({kind:'engineer', idx}))}
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/en.soldiers.length*100)}%"></div></div>
     ${restButtonHtml('engineer', idx, en)}

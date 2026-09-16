@@ -2014,6 +2014,16 @@ export function applyBandMovement(band, bandIdx, dt){
 }
 
 export function applyEngineerMovement(en, enIdx, dt){
+  // per user request: 敵前逃亡 -- 動揺中は修理作業中含め保留中の移動先/命令を無視し、独断で
+  // 後方(SQUAD_RETREAT_LIMIT_X方向)へ後退する(applySquadMovementと同型)。pendingDestや
+  // repairTargetId等はクリアせずそのまま残すので、統制回復後は自然に元の作業へ復帰する。
+  if(en.shakenUntil){
+    const next = terrainAwareStep(en.x, en.y, SQUAD_RETREAT_LIMIT_X, en.y, INFANTRY_MOVE_CAP*dt);
+    en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+    en.y = clamp(next.y, 30, CANVAS_H-30);
+    checkMineTrigger('engineer', enIdx, en.x, en.y);
+    return;
+  }
   if(en.pendingDest){
     const next = terrainAwareStep(en.x, en.y, en.pendingDest.x, en.pendingDest.y, INFANTRY_MOVE_CAP*dt);
     en.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
@@ -2108,6 +2118,20 @@ export function resolveEngineerOrders(dt){
     const aliveSoldiers = en.soldiers.filter(s=>s.alive && !s.wounded);
     if(aliveSoldiers.length===0) return;
     if(en.resting){ tickUnitRest(en, '工兵小隊', dt); return; }
+    // per user request: 敵前逃亡 -- 動揺中は修理作業も既定行動も行わず後退のみ。期限が来たら
+    // 統制を回復し、修理作業を含む通常運用に自動的に戻る(resolveSquadOrdersと同型)。
+    if(en.shakenUntil){
+      if(performance.now() >= en.shakenUntil){
+        en.shakenUntil = null;
+        log('sys','前線', `工兵小隊、統制を回復。`);
+        announceTicker(`工兵小隊 再編成完了`);
+      } else {
+        const beforeX = en.x, beforeY = en.y;
+        applyEngineerMovement(en, enIdx, dt);
+        if(en.x!==beforeX || en.y!==beforeY) anyEvent = true;
+        return;
+      }
+    }
     applyStandingOrder(en, '工兵小隊', false);
     const beforeX = en.x, beforeY = en.y;
     applyEngineerMovement(en, enIdx, dt);
@@ -3391,22 +3415,25 @@ function inflictCasualty(unit, unitLabel, voiceKind, voiceIdx){
     announceTicker(`${victim.rank} ${victim.name} 殉職`, 'death');
   }
   if(voiceKind) unitSpeakInjury(voiceKind, voiceIdx);
-  if(voiceKind==='squad') maybeShakeSquad(unit, voiceIdx);
+  // per user request: 敵前逃亡 -- 小隊に加え、工兵小隊も持ち場(修理作業中含む)を離れて
+  // 独断で後退することがあるようにする。対象になる兵科はここで列挙する。
+  if(voiceKind==='squad' || voiceKind==='engineer') maybeShakeUnit(unit, unitLabel);
   return victim;
 }
 
-// per user request: 敵前逃亡 -- 損耗甚大(残存戦力がSHAKEN_HP_THRESHOLD以下)の小隊は、
-// 死傷者が出るたびSHAKEN_CHANCEの確率で統制を失い、命令を受け付けず独断で後退する
-// (applySquadMovement/resolveSquadOrdersで参照)。既に動揺中なら再判定しない。永続的な
+// per user request: 敵前逃亡 -- 損耗甚大(残存戦力がSHAKEN_HP_THRESHOLD以下)の部隊は、
+// 死傷者が出るたびSHAKEN_CHANCEの確率で統制を失い、命令(修理作業中の工兵なら持ち場も
+// 含む)を受け付けず独断で後退する(applySquadMovement/applyEngineerMovement、
+// resolveSquadOrders/resolveEngineerOrdersで参照)。既に動揺中なら再判定しない。永続的な
 // 戦力喪失ではなく、SHAKEN_DURATION_MS後に自然回復する一時的な状態。
-function maybeShakeSquad(sq, sqIdx){
-  if(sq.shakenUntil) return;
-  const effective = sq.soldiers.filter(s=>s.alive && !s.wounded);
-  if(effective.length/sq.soldiers.length > SHAKEN_HP_THRESHOLD) return;
+function maybeShakeUnit(unit, label){
+  if(unit.shakenUntil) return;
+  const effective = unit.soldiers.filter(s=>s.alive && !s.wounded);
+  if(effective.length/unit.soldiers.length > SHAKEN_HP_THRESHOLD) return;
   if(Math.random() >= SHAKEN_CHANCE) return;
-  sq.shakenUntil = performance.now() + SHAKEN_DURATION_MS;
-  log('sys','前線', `第${sqIdx+1}小隊、損耗甚大により統制を喪失、独断で後退中(敵前逃亡)。`);
-  announceTicker(`第${sqIdx+1}小隊 動揺・後退`);
+  unit.shakenUntil = performance.now() + SHAKEN_DURATION_MS;
+  log('sys','前線', `${label}、損耗甚大により統制を喪失、独断で後退中(敵前逃亡)。`);
+  announceTicker(`${label} 動揺・後退`);
 }
 
 // per user request: 負傷者(wounded)が期限(bleedOutAt)までに衛生小隊の蘇生を受けられ
