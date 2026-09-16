@@ -768,12 +768,19 @@ export function startStage(){
     const origSpanY = SCOUT_LOWER_Y - SCOUT_UPPER_Y;
     const deployYScale = origSpanY>0 ? deployBoxH/origSpanY : 1;
     const deployYMid = CANVAS_H/2;
-    const deployYMin = deployYMid - deployBoxH/2, deployYMax = deployYMid + deployBoxH/2;
+    // per user request: 部隊間隔を広げるほどdeployYScale(=deployBoxH/origSpanY)自体もdeployBoxHに
+    // 比例して大きくなるため、各部隊のY方向オフセットをdeployYMid±deployBoxH/2(=旧deployYMin/
+    // deployYMax)へクランプすると、INITIAL_DEPLOY_SPACING_MULTをいくら上げても比率が変わらず
+    // 効果が出ない(それどころか倍率を上げるほど複数部隊が同じクランプ端に重なって初期配置が
+    // 完全に重複する)。「現実的な1km四方の配置ボックス」という意味合いはX方向(deployX)だけに
+    // 残し、Y方向は他の全ユニット移動と同じ画面内クランプ(30〜CANVAS_H-30)にすることで、
+    // 倍率を上げた分だけ実際に間隔が広がるようにする。
+    const deployYMinBound = 30, deployYMaxBound = CANVAS_H-30;
 
     state.scouts = Array.from({length:NUM_SCOUTS}, (_,i)=>{
       const scoutX = deployX(SCOUT_X);
       const scoutStep = (NUM_SCOUTS>1 ? (SCOUT_LOWER_Y-SCOUT_UPPER_Y)/(NUM_SCOUTS-1) : 0) * INITIAL_DEPLOY_SPACING_MULT * deployYScale;
-      const sy = clamp(deployYMid + (i-(NUM_SCOUTS-1)/2)*scoutStep, deployYMin, deployYMax);
+      const sy = clamp(deployYMid + (i-(NUM_SCOUTS-1)/2)*scoutStep, deployYMinBound, deployYMaxBound);
       return {
         id: i, x: scoutX, y: sy,
         soldiers: makeSoldiers(ROSTER_SCOUT_TEAMS[i]), pendingDest: null,
@@ -785,7 +792,7 @@ export function startStage(){
         hp:120, maxHp:120, exposure:EXPOSURE_DEFAULT, orbitAngle:0, observationBonus:0}];
     }
     state.mortars = Array.from({length:NUM_MORTARS}, (_,i)=>({
-      id:i, x:deployX(OP_HOME_X), y:clamp(deployYMid+(i-(NUM_MORTARS-1)/2)*40*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax), hp:100, maxHp:100,
+      id:i, x:deployX(OP_HOME_X), y:clamp(deployYMid+(i-(NUM_MORTARS-1)/2)*40*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMinBound, deployYMaxBound), hp:100, maxHp:100,
       order:'standby', pendingFire:null, pendingDest:null,
       fireShell:'he', fireFuze:'impact', fireCount:2,
       mainlineAngle: null,
@@ -800,7 +807,7 @@ export function startStage(){
       huntTargetId: null,
       standingOrder: null,
       x: deployX(FRIENDLY_INF_POS.x),
-      y: clamp(deployYMid + (si-(NUM_SQUADS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax),
+      y: clamp(deployYMid + (si-(NUM_SQUADS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMinBound, deployYMaxBound),
       soldiers: makeSoldiers(ROSTER_SQUADS[si]),
       reinforceUsed: false,
       exposure: EXPOSURE_DEFAULT,
@@ -812,7 +819,7 @@ export function startStage(){
       pendingDest: null,
       huntTargetId: null,
       x: deployX(ANTITANK_POS.x),
-      y: clamp(deployYMid + (ati-(NUM_ANTITANKS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax),
+      y: clamp(deployYMid + (ati-(NUM_ANTITANKS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMinBound, deployYMaxBound),
       hp: ANTITANK_MAX_HP, maxHp: ANTITANK_MAX_HP,
       exposure: ANTITANK_EXPOSURE,
     }));
@@ -822,7 +829,7 @@ export function startStage(){
       pendingDest: null,
       huntTargetId: null,
       x: deployX(TANK_POS.x),
-      y: clamp(deployYMid + (i-(NUM_TANKS-1)/2)*60*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax),
+      y: clamp(deployYMid + (i-(NUM_TANKS-1)/2)*60*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMinBound, deployYMaxBound),
       hp: TANK_MAX_HP, maxHp: TANK_MAX_HP,
       exposure: TANK_EXPOSURE,
     }));
@@ -832,7 +839,7 @@ export function startStage(){
       pendingDest: null,
       huntTargetId: null,
       x: deployX(SAM_POS.x),
-      y: clamp(deployYMid + (i-(NUM_SAMS-1)/2)*60*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax),
+      y: clamp(deployYMid + (i-(NUM_SAMS-1)/2)*60*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMinBound, deployYMaxBound),
       hp: SAM_MAX_HP, maxHp: SAM_MAX_HP,
       exposure: SAM_EXPOSURE,
     }));
@@ -842,7 +849,7 @@ export function startStage(){
       pendingDest: null,
       standingOrder: null,
       x: deployX(ENGINEER_POS.x),
-      y: clamp(deployYMid + (ei-(NUM_ENGINEERS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax),
+      y: clamp(deployYMid + (ei-(NUM_ENGINEERS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMinBound, deployYMaxBound),
       soldiers: makeSoldiers(ROSTER_ENGINEER_TEAMS[ei]),
       reinforceUsed: false,
       exposure: EXPOSURE_DEFAULT,
@@ -855,7 +862,7 @@ export function startStage(){
       pendingDest: null,
       standingOrder: null,
       x: deployX(MEDIC_POS.x),
-      y: clamp(deployYMid + (mi-(NUM_MEDICS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax),
+      y: clamp(deployYMid + (mi-(NUM_MEDICS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMinBound, deployYMaxBound),
       soldiers: makeSoldiers(ROSTER_MEDIC_TEAMS[mi]),
       reinforceUsed: false,
       exposure: EXPOSURE_DEFAULT,
@@ -874,7 +881,7 @@ export function startStage(){
       huntTargetId: null,
       standingOrder: null,
       x: deployX(BAND_POS.x),
-      y: clamp(deployYMid + (bi-(NUM_BANDS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax),
+      y: clamp(deployYMid + (bi-(NUM_BANDS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMinBound, deployYMaxBound),
       soldiers: makeSoldiers(ROSTER_BAND_TEAMS[bi]),
       reinforceUsed: false,
       exposure: EXPOSURE_DEFAULT,
