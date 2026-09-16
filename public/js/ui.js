@@ -928,7 +928,8 @@ export function standingOrderSelectHtml(kind, idx, unit, allowAssault){
 export function squadBoxHtml(idx){
   const sq = state.squads[idx];
   const alive = sq.soldiers.filter(s=>s.alive).length;
-  const wiped = alive===0 || sq.resting;
+  const shaken = !!sq.shakenUntil;
+  const wiped = alive===0 || sq.resting || shaken;
   const btns = ['advance','hold','assault','retreat'].map(o=>
     `<button class="btn squad-order-btn ${sq.order===o?'active':''}" ${wiped?'disabled':''} onclick="setSquadOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
@@ -938,6 +939,7 @@ export function squadBoxHtml(idx){
     : null;
   return `
     <div class="meta">${alive} / ${sq.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sq.x,sq.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(sq.x,sq.y))}</div>
+    ${shaken ? `<div class="meta" style="margin-bottom:6px;color:var(--red);font-weight:700;">⚠ 動揺・統制喪失中 ― 独断で後退中(命令不能、残り約${Math.max(0,Math.ceil((sq.shakenUntil-performance.now())/1000))}秒)</div>` : ''}
     ${exposureMetaHtml(getUnitExposure({kind:'squad', idx}))}
     ${restButtonHtml('squad', idx, sq)}
     <div class="squad-orders" style="margin:6px 0;">${btns}</div>

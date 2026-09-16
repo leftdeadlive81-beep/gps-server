@@ -608,6 +608,16 @@ export const FEBA_MIN_X = SQUAD_RETREAT_LIMIT_X;
 
 export const FEBA_MAX_X = SQUAD_ASSAULT_LIMIT_X;
 
+// per user request(敵前逃亡): 小隊の残存戦力がSHAKEN_HP_THRESHOLD以下まで落ち込んだ状態で
+// 新たに死傷者が出るたび、SHAKEN_CHANCEの確率で統制を失い(shakenUntil)、命令を受け付けず
+// 独断でSQUAD_RETREAT_LIMIT_X方向へ後退する。SHAKEN_DURATION_MS経過で自然に統制を回復する
+// 一時的な状態(永続的な戦力喪失ではない)。
+export const SHAKEN_HP_THRESHOLD = 0.35;
+
+export const SHAKEN_CHANCE = 0.45;
+
+export const SHAKEN_DURATION_MS = 20000;
+
 export const FEBA_LINE_COLOR = 'rgba(50,130,255,0.95)';
 
 export const FEBA_LINE_WIDTH = 4;
