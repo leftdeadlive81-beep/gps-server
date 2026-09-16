@@ -1,7 +1,7 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement, unlockedAchievements } from './achievements.js';
 import { abandonSavedCampaign, addNewAntitank, addNewHeli, addNewMortar, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, healAllForces, isAutoCommitRunning, mapSeedCandidates, mortarNotReadyToFire, mortarTooCloseToFire, mortarTooFarToFire, resumedFromSave, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
-import { ACHIEVEMENTS, AMMO_PACK, ANTITANK_AA_RANGE, ANTITANK_ENGAGE_RANGE, BAND_ENGAGE_RANGE, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_ENGAGE_RANGE, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SMART_ACTIONS, SMART_UNIT_TYPES, SQUAD_ENGAGE_RANGE, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, TANK_ENGAGE_RANGE, TANK_REPAIR_COST_PER_HP,TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
+import { ACHIEVEMENTS, AMMO_PACK, ANTITANK_AA_RANGE, ANTITANK_ENGAGE_RANGE, BAND_ENGAGE_RANGE, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_ENGAGE_RANGE, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SMART_ACTIONS, SMART_UNIT_TYPES, SQUAD_ENGAGE_RANGE, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, SUPPLY_CARRY_MAX, UNIT_AMMO_MAX, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, TANK_ENGAGE_RANGE, TANK_REPAIR_COST_PER_HP,TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
 import { canvasToScreen, multiSelectCommonOrders, multiSelectMode, multiSelected, pruneMultiSelected, unitGroups } from './input.js';
 import { render } from './main.js';
 import { elevationAt, elevationLabel, terrainTypeAt, terrainTypeLabel } from './terrain.js';
@@ -1116,6 +1116,50 @@ export function engineerBoxHtml(idx){
   `;
 }
 
+export function supplyBoxHtml(idx){
+  const su = state.supplies[idx];
+  const alive = unitAliveCount(su);
+  const dead = alive<=0;
+  if(dead) return `<div class="empty-hint" style="padding:4px 0;color:var(--red);">全滅</div>`;
+  const resting = su.resting;
+  const btns = ['advance','hold','retreat'].map(o=>
+    `<button class="btn squad-order-btn ${su.order===o?'active':''}" ${resting?'disabled':''} onclick="setSupplyOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
+  ).join('');
+  const armingMove = state.orderMode && state.orderMode.kind==='supply-move' && state.orderMode.idx===idx;
+  const destStatus = armingMove ? '地図をクリックして移動先指定…' : (su.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
+  // per user request: 補給隊 -- 対象小隊を指定すると解除するまで自動で本部⇔対象を往復する
+  // (工兵の野戦修理/衛生小隊の蘇生と同じ「指定→解除するまで継続」の導線)。
+  const supplyCandidates = state.squads.map((sq,i)=>({idx:i, unit:sq, label:`第${i+1}小隊`}));
+  const targetEntry = su.supplyTargetId!=null
+    ? supplyCandidates.find(c=>c.unit.id===su.supplyTargetId)
+    : null;
+  const needyCandidates = supplyCandidates.filter(c=>unitAlive(c.unit) && (c.unit.ammo===undefined || c.unit.ammo<c.unit.maxAmmo));
+  const supplyBtns = needyCandidates.map(c=>{
+    const active = su.order==='supply' && su.supplyTargetId===c.unit.id;
+    return `<button class="btn ${active?'active squad-order-btn':''}" ${resting?'disabled':''} onclick="assignSupplyRun(${idx},${c.idx})">${c.label}へ補給${active?'(補給中)':''}</button>`;
+  }).join('');
+  const phaseLabel = su.supplyPhase==='toHq' ? '本部で補充中/移動中' : su.supplyPhase==='toTarget' ? '対象へ補給移動中' : '';
+  const supplyStatus = targetEntry
+    ? `補給対象: ${targetEntry.label} (弾薬 ${Math.round(targetEntry.unit.ammo!==undefined?targetEntry.unit.ammo:UNIT_AMMO_MAX)}/${targetEntry.unit.maxAmmo||UNIT_AMMO_MAX}) ・ 携行弾薬 ${Math.round(su.carry)}/${SUPPLY_CARRY_MAX} ・ ${phaseLabel}`
+    : (needyCandidates.length ? '弾薬が不足している小隊を選んで補給を指示できます(解除するまで本部と自動往復)' : '弾薬不足の小隊はありません');
+  return `
+    <div class="meta">${alive}/${su.soldiers.length}名</div>
+    ${exposureMetaHtml(getUnitExposure({kind:'supply', idx}))}
+    <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/su.soldiers.length*100)}%"></div></div>
+    ${restButtonHtml('supply', idx, su)}
+    <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
+    <div class="row-2" style="margin-bottom:6px;">
+      <button class="btn ${armingMove?'active squad-order-btn':''}" ${resting?'disabled':''} onclick="armSupplyMoveOrder(${idx})">移動先を指定</button>
+      <button class="btn" ${!su.pendingDest?'disabled':''} onclick="clearSupplyDest(${idx})">解除</button>
+    </div>
+    <div class="meta" style="margin-bottom:8px;">${destStatus}</div>
+    ${supplyBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">${supplyBtns}</div>` : ''}
+    <div class="meta" style="margin-bottom:8px;">${supplyStatus}</div>
+    ${targetEntry ? `<button class="btn" style="margin-bottom:8px;" onclick="clearSupplyRun(${idx})">補給を解除</button>` : ''}
+    ${soldierRosterHtml(su.soldiers)}
+  `;
+}
+
 export function medicBoxHtml(idx){
   const me = state.medics[idx];
   const alive = unitAliveCount(me);
@@ -1265,6 +1309,12 @@ export function renderCommandBox(){
     title = '音楽隊';
     bodyHtml = bandBoxHtml(state.commandBox.idx);
     pos = canvasToScreen(band._visX!==undefined?band._visX:band.x, band._visY!==undefined?band._visY:band.y);
+  } else if(kind==='supply'){
+    const su = state.supplies[state.commandBox.idx];
+    if(!su || !unitAlive(su)){ box.style.display='none'; return; }
+    title = `補給${state.commandBox.idx+1}`;
+    bodyHtml = supplyBoxHtml(state.commandBox.idx);
+    pos = canvasToScreen(su._visX!==undefined?su._visX:su.x, su._visY!==undefined?su._visY:su.y);
   } else {
     box.style.display='none';
     return;
@@ -1477,6 +1527,10 @@ export function renderStats(){
   state.bands.forEach((band,i)=>{
     const alive = band.soldiers.filter(s=>s.alive).length;
     rows.push(forceRow(`音楽隊`, alive/band.soldiers.length, `${alive}/${band.soldiers.length}`, 'var(--blue-id)', 'band', i));
+  });
+  (state.supplies||[]).forEach((su,i)=>{
+    const alive = su.soldiers.filter(s=>s.alive).length;
+    rows.push(forceRow(`補給${i+1}`, alive/su.soldiers.length, `${alive}/${su.soldiers.length}`, 'var(--blue-id)', 'supply', i));
   });
   rows.push(forceRow('予備', state.reserve/RESERVE_SIZE, `${state.reserve}/${RESERVE_SIZE}`, 'var(--muted)'));
   document.getElementById('force-list').innerHTML = rows.join('');

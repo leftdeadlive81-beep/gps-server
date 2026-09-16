@@ -142,6 +142,25 @@ export function drawMedicIcon(ctx, cx, cy, size, dead){
   ctx.restore();
 }
 
+export function drawSupplyIcon(ctx, cx, cy, size, dead){
+  ctx.save();
+  ctx.translate(cx, cy);
+  drawUnitBase(ctx, size, dead);
+  const col = dead ? '#5c2a25' : '#c9975a';
+  ctx.fillStyle = col;
+  ctx.strokeStyle = dead ? '#3a1b18' : '#7a5a30';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.rect(-size*0.3, -size*0.24, size*0.6, size*0.48);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-size*0.3, 0); ctx.lineTo(size*0.3, 0);
+  ctx.moveTo(0, -size*0.24); ctx.lineTo(0, size*0.24);
+  ctx.stroke();
+  ctx.restore();
+}
+
 export function drawWallShape(ctx, cx, cy, dead){
   ctx.save();
   ctx.translate(cx, cy);
@@ -491,6 +510,7 @@ export function drawBoard(){
     ...state.engineers.map((unit,i)=>({unit, label:`工兵${i+1}`})),
     ...state.medics.map((unit,i)=>({unit, label:`衛生${i+1}`})),
     ...state.bands.map((unit,i)=>({unit, label:'音楽隊'})),
+    ...(state.supplies||[]).map((unit,i)=>({unit, label:`補給${i+1}`})),
   ];
   movingUnits.forEach(({unit, label})=>{
     if(!unit || !unit.pendingDest) return;
@@ -918,6 +938,23 @@ export function drawBoard(){
       (state.commandBox && state.commandBox.kind==='medic' && state.commandBox.idx===meIdx), '衛生');
     ctx.restore();
     if(showDetailLabels && aliveSoldiers.length>0) drawAttritionBar(ctx, meVis.x+18, meVis.y, aliveSoldiers.length/me.soldiers.length);
+  });
+
+  // 補給隊 (自軍) ― 工兵/衛生小隊と同じ soldiers ロスター制。戦闘はせず移動+小隊への
+  // 弾薬補給(本部⇔対象の自動往復)のみ。
+  (state.supplies||[]).forEach((su, suIdx)=>{
+    const suVisL = smoothVisualPos(su, su.x, su.y);
+    const suVis = project(suVisL.x, suVisL.y);
+    const aliveSoldiers = su.soldiers.filter(s=>s.alive);
+    ctx.save();
+    ctx.translate(suVis.x, suVis.y);
+    drawSupplyIcon(ctx, 0, 0, scaledIconH(22), aliveSoldiers.length===0);
+    drawSelectionRing(ctx, 0, 0, (state.commandBox && state.commandBox.kind==='supply' && state.commandBox.idx===suIdx));
+    const suOrderIcon = aliveSoldiers.length>0 ? ` ${ORDER_ICON[su.order]}${su.pendingDest?'→':''}` : '';
+    if(showDetailLabels) queueFriendlyLabel(suVis.x, suVis.y, [{text:`補給 ${aliveSoldiers.length}/${su.soldiers.length}${suOrderIcon}`, dy:28, font:'14px "JetBrains Mono"'}],
+      (state.commandBox && state.commandBox.kind==='supply' && state.commandBox.idx===suIdx), '補給');
+    ctx.restore();
+    if(showDetailLabels && aliveSoldiers.length>0) drawAttritionBar(ctx, suVis.x+18, suVis.y, aliveSoldiers.length/su.soldiers.length);
   });
 
   // friendly infantry squads (自軍) ― orderly formation, moves as a unit per order

@@ -342,6 +342,21 @@ export const MEDIC_REVIVE_RANGE_UNITS = 40;
 
 export const MEDIC_REVIVE_MS = 8000;
 
+// per user request: 補給隊 -- 本部周辺だけを自動回復させるHQ_SUPPLY_ZONE(前進した部隊には
+// 届かない)を補う、移動可能な弾薬補給部隊。工兵(装備HP)/衛生小隊(負傷兵)とは対象を分け、
+// 小隊の per-unit 弾薬(UNIT_AMMO_MAX)専任とする。補給対象を指定すると解除するまで自動で
+// 本部⇔対象を往復し続ける(assignSupplyRun/resolveSupplyOrders) -- 有限の携行弾薬
+// (SUPPLY_CARRY_MAX)を使い切ったら本部へ戻って補充する、という補給線そのものを表現する。
+export const NUM_SUPPLIES = 2;
+
+export const SUPPLY_SQUAD_SIZE = 4;
+
+export const SUPPLY_POS = {x: 340, y: CANVAS_H/2 - 60};
+
+export const SUPPLY_RESUPPLY_RANGE_UNITS = 40;
+
+export const SUPPLY_HQ_RANGE_UNITS = 40;
+
 export const RESERVE_SIZE = 10;
 
 export const MAX_DECOYS = 5;
@@ -566,13 +581,23 @@ export const PERSONNEL_ROSTER = [
   {rank:'1等陸士', name:'河合'},
   {rank:'2等陸士', name:'柳沢'},
   {rank:'2等陸士', name:'小松'},
+  // per user request: 補給隊を追加。同じ理由でさらに人員を足す(NUM_SUPPLIES*SUPPLY_SQUAD_SIZE
+  // 分+若干の余裕)。
+  {rank:'3等陸曹', name:'間宮'},
+  {rank:'陸士長', name:'紺野'},
+  {rank:'陸士長', name:'宇野'},
+  {rank:'1等陸士', name:'榊原'},
+  {rank:'1等陸士', name:'須藤'},
+  {rank:'1等陸士', name:'滝沢'},
+  {rank:'2等陸士', name:'桜井'},
+  {rank:'2等陸士', name:'今井'},
 ];
 
-export const [ROSTER_MORTAR_POOL, ROSTER_SCOUT_POOL, ROSTER_SQUAD_POOL, ROSTER_ENGINEER_POOL, ROSTER_MEDIC_POOL, ROSTER_BAND_POOL, ROSTER_RESERVE_INITIAL] =
+export const [ROSTER_MORTAR_POOL, ROSTER_SCOUT_POOL, ROSTER_SQUAD_POOL, ROSTER_ENGINEER_POOL, ROSTER_MEDIC_POOL, ROSTER_BAND_POOL, ROSTER_SUPPLY_POOL, ROSTER_RESERVE_INITIAL] =
   roundRobinDistribute(PERSONNEL_ROSTER, [
     MORTAR_CREW_SIZE*NUM_MORTARS, SCOUT_SQUAD_SIZE*NUM_SCOUTS,
     SQUAD_SIZE*NUM_SQUADS, ENGINEER_SQUAD_SIZE*NUM_ENGINEERS, MEDIC_SQUAD_SIZE*NUM_MEDICS,
-    BAND_SQUAD_SIZE*NUM_BANDS, RESERVE_SIZE,
+    BAND_SQUAD_SIZE*NUM_BANDS, SUPPLY_SQUAD_SIZE*NUM_SUPPLIES, RESERVE_SIZE,
   ]);
 
 export const ROSTER_MORTAR_CREWS = roundRobinDistribute(ROSTER_MORTAR_POOL, Array(NUM_MORTARS).fill(MORTAR_CREW_SIZE));
@@ -584,6 +609,8 @@ export const ROSTER_ENGINEER_TEAMS = roundRobinDistribute(ROSTER_ENGINEER_POOL, 
 export const ROSTER_MEDIC_TEAMS = roundRobinDistribute(ROSTER_MEDIC_POOL, Array(NUM_MEDICS).fill(MEDIC_SQUAD_SIZE));
 
 export const ROSTER_BAND_TEAMS = roundRobinDistribute(ROSTER_BAND_POOL, Array(NUM_BANDS).fill(BAND_SQUAD_SIZE));
+
+export const ROSTER_SUPPLY_TEAMS = roundRobinDistribute(ROSTER_SUPPLY_POOL, Array(NUM_SUPPLIES).fill(SUPPLY_SQUAD_SIZE));
 
 export const ROSTER_SQUADS = roundRobinDistribute(ROSTER_SQUAD_POOL, Array(NUM_SQUADS).fill(SQUAD_SIZE));
 
@@ -705,6 +732,10 @@ export const UNIT_AMMO_RESUPPLY_PER_TURN = 8;
 // outright (still fires, just far less effectively) -- less confusing than a unit that
 // suddenly stops responding to engagement orders for no visible reason.
 export const UNIT_AMMO_EMPTY_DMG_MULT = 0.35;
+
+// per user request(補給隊): 携行弾薬はUNIT_AMMO_MAXと同量 -- 一度の往復で小隊1個分を
+// フル補給できる量にすることで、「本部⇔前線を往復する補給線」の1サイクルがわかりやすい。
+export const SUPPLY_CARRY_MAX = UNIT_AMMO_MAX;
 
 // per user request: enemy fire against the current HQ-defense threat hits harder
 // ("全力で攻撃" -- attacking with full force), on top of redirecting nearby infantry to
@@ -1046,7 +1077,7 @@ export const ORDER_LABEL = {advance:'前進', retreat:'後退', hold:'防御', a
 
 export const MORTAR_ORDER_LABEL = {fire:'射撃', standby:'待機', move:'移動'};
 
-export const ORDER_ICON = {advance:'▲', retreat:'▼', hold:'■', assault:'◆', hunt:'◎', resting:'Z', repair:'⚒'};
+export const ORDER_ICON = {advance:'▲', retreat:'▼', hold:'■', assault:'◆', hunt:'◎', resting:'Z', repair:'⚒', supply:'↔'};
 
 export const MORTAR_ORDER_ICON = {fire:'●', standby:'■', move:'✦'};
 
@@ -1251,6 +1282,7 @@ export const FRIENDLY_KIND_LIST = [
   { kind:'engineer', list:()=>state.engineers, alive:u=>u.soldiers.some(s=>s.alive),  label:()=>'工兵小隊' },
   { kind:'medic',    list:()=>state.medics||[], alive:u=>u.soldiers.some(s=>s.alive), label:i=>`衛生${i+1}小隊` },
   { kind:'band',     list:()=>state.bands||[], alive:u=>u.soldiers.some(s=>s.alive),  label:()=>'音楽隊' },
+  { kind:'supply',   list:()=>state.supplies||[], alive:u=>u.soldiers.some(s=>s.alive), label:i=>`補給${i+1}` },
 ];
 
 export const TARGET_GRID_CELL_SIZE = 200;
