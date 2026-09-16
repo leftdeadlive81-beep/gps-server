@@ -201,6 +201,15 @@ export const MINE_PLACEMENT_CHANCE = 0.12;
 
 export const MINE_MAX_ACTIVE = 4;
 
+// per user request(敵が積極的に地雷を設置): 頻度・最大数はそのままに、"どこに置くか"だけ
+// 賢くする。MINE_AMBUSH_BIAS_CHANCEの確率で、実際に自軍部隊が展開・接近している道路上の
+// 地点を優先的に狙う(それ以外は従来通りの完全ランダム)。地雷自体は地図上に一切表示され
+// ないため、毎回100%で狙われると理不尽な待ち伏せになる -- 確率で混ぜることで「賢くなった
+// が全知ではない」バランスを保つ。
+export const MINE_AMBUSH_BIAS_CHANCE = 0.65;
+
+export const MINE_AMBUSH_SEARCH_RADIUS_UNITS = 450;
+
 export const MERGE_HP_THRESHOLD = 0.4;
 
 // per user request: 発砲頻度アップ(バースト連射化、BURST_DMG_COMPENSATION参照)に合わせて
