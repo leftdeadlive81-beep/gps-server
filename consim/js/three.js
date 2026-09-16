@@ -756,68 +756,197 @@ export function terrainCanvasUnitAt(px, py){
   return { x: (p.x-WORLD.originX)/WORLD.scaleX, y: (p.z-WORLD.originZ)/WORLD.scaleZ };
 }
 
-export function buildHumanoidFigures(group, matFn, s, colorHex, offsets, opts){
+// per user request: convert per-soldier THREE.Group figures (each built from ~6 separate
+// THREE.Mesh children with their own freshly-allocated materials -- 2 legs, 2 arms, 1 torso,
+// 1 head, plus an optional weapon/pack) into a small fixed set of shared THREE.InstancedMesh
+// pools, one per body-part type, so the whole battlefield's soldiers cost 6 draw calls total
+// instead of hundreds. Each soldier gets a permanently-assigned slot index per part pool
+// (freed back to a free-list when its unit marker is disposed -- see freeSoldierFigureSlots/
+// disposeMarker3d below); per-frame posing (walk-cycle limb swing, following the marker's own
+// moving/rotating position) writes matrices directly into each pool's instance buffer via
+// flushSoldierInstances3d instead of relying on the scene graph to compose transforms for us.
+const SOLDIER_SLOT_CAPACITY = 160; // friendly squads+scouts+band max 63, enemy infantry capped at ENEMY_INFANTRY_TOTAL_TARGET=50 -- generous buffer above their sum
+const SOLDIER_WEAPON_CAPACITY = 16; // only 音楽隊(band) figures carry one
+const SOLDIER_PACK_CAPACITY = 24; // only 斥候(scout) figures carry one
+
+let soldierPool = null;
+
+const _ZERO_MATRIX = new THREE.Matrix4().makeScale(0, 0, 0);
+const _UNIT_X = new THREE.Vector3(1, 0, 0);
+const _UNIT_Z = new THREE.Vector3(0, 0, 1);
+const _pV = new THREE.Vector3(), _pQ = new THREE.Quaternion(), _pS = new THREE.Vector3(1, 1, 1);
+const _lV = new THREE.Vector3(), _lQ = new THREE.Quaternion(), _lS = new THREE.Vector3();
+const _mPivot = new THREE.Matrix4(), _mLocal = new THREE.Matrix4(), _mWorld = new THREE.Matrix4();
+
+function buildSoldierPool(){
+  // per-soldier world size is baked once here (from the map's fixed WORLD.scale and the
+  // current mobile/desktop breakpoint) since one shared pool geometry can't vary in size per
+  // instance -- see makeMarkerMesh3d's own (still per-call) `s` for why that's normally fine:
+  // both are the same formula and WORLD.scale never changes after terrain generation, so this
+  // only drifts from a marker's own `s` in the rare case a window resize crosses the 600px
+  // breakpoint mid-game, which is an acceptable cosmetic edge case for a perf-motivated change.
+  const s = Math.max(0.6, (WORLD.scaleX+WORLD.scaleZ)/2*7.5) * mobileIconMult();
+  const SC = s*2.2; // FIGURE_SCALE=2.2, matching every existing call site (none ever overrides it)
+  const legGeo = new THREE.CylinderGeometry(0.045, 0.05, 0.22, 5);
+  const armGeo = new THREE.CylinderGeometry(0.04, 0.045, 0.26, 5);
+  const torsoGeo = new THREE.CylinderGeometry(0.1, 0.12, 0.34, 6);
+  const headGeo = new THREE.SphereGeometry(0.11, 6, 5);
+  const weaponGeo = new THREE.CylinderGeometry(0.022, 0.022, 1, 5); // unit height -- actual length applied via per-instance Y scale
+  const packGeo = new THREE.BoxGeometry(0.13, 0.17, 0.09);
+  // Legs/head/weapon/pack colors never varied per-soldier even before this change (the old
+  // matFn calls only ever passed colorHex for arms/torso -- everything else used a fixed
+  // color), so only the arm/torso pools need per-instance color (set once at allocation below).
+  const legs = new THREE.InstancedMesh(legGeo, new THREE.MeshStandardMaterial({color:0x3b342a, roughness:0.7, metalness:0.05}), SOLDIER_SLOT_CAPACITY*2);
+  const arms = new THREE.InstancedMesh(armGeo, new THREE.MeshStandardMaterial({color:0xffffff, roughness:0.7, metalness:0.05}), SOLDIER_SLOT_CAPACITY*2);
+  const torsos = new THREE.InstancedMesh(torsoGeo, new THREE.MeshStandardMaterial({color:0xffffff, roughness:0.7, metalness:0.05}), SOLDIER_SLOT_CAPACITY);
+  const heads = new THREE.InstancedMesh(headGeo, new THREE.MeshStandardMaterial({color:0xd1b28a, roughness:0.7, metalness:0.05}), SOLDIER_SLOT_CAPACITY);
+  const weapons = new THREE.InstancedMesh(weaponGeo, new THREE.MeshStandardMaterial({color:0x242a2b, roughness:0.7, metalness:0.05}), SOLDIER_WEAPON_CAPACITY);
+  const packs = new THREE.InstancedMesh(packGeo, new THREE.MeshStandardMaterial({color:0x4a5a3a, roughness:0.7, metalness:0.05}), SOLDIER_PACK_CAPACITY);
+  [legs, arms, torsos, heads, weapons, packs].forEach(mesh=>{
+    mesh.receiveShadow = true;
+    mesh.frustumCulled = false; // instances span the whole battlefield -- the geometry's own tiny bounding sphere would cull everyone incorrectly
+    for(let i=0; i<mesh.count; i++) mesh.setMatrixAt(i, _ZERO_MATRIX);
+    mesh.instanceMatrix.needsUpdate = true;
+    scene3d.add(mesh);
+  });
+  soldierPool = {
+    SC, legs, arms, torsos, heads, weapons, packs,
+    freeSlots: Array.from({length:SOLDIER_SLOT_CAPACITY}, (_,i)=>SOLDIER_SLOT_CAPACITY-1-i),
+    freeWeapons: Array.from({length:SOLDIER_WEAPON_CAPACITY}, (_,i)=>SOLDIER_WEAPON_CAPACITY-1-i),
+    freePacks: Array.from({length:SOLDIER_PACK_CAPACITY}, (_,i)=>SOLDIER_PACK_CAPACITY-1-i),
+  };
+}
+
+function allocSoldierSlot(){
+  if(!soldierPool) buildSoldierPool();
+  if(!soldierPool.freeSlots.length){ console.warn('兵士インスタンスの上限に達しました -- SOLDIER_SLOT_CAPACITYを増やしてください'); return -1; }
+  return soldierPool.freeSlots.pop();
+}
+function allocWeaponSlot(){
+  if(!soldierPool) buildSoldierPool();
+  return soldierPool.freeWeapons.length ? soldierPool.freeWeapons.pop() : -1;
+}
+function allocPackSlot(){
+  if(!soldierPool) buildSoldierPool();
+  return soldierPool.freePacks.length ? soldierPool.freePacks.pop() : -1;
+}
+
+// Composes pivotTransform*partLocalOffset*marker.matrixWorld for a swinging leg/arm mesh,
+// replicating what the old THREE.Group parenting (marker -> legPivot -> leg) did automatically.
+function composeLimbWorldMatrix(marker, pivotX, pivotY, pivotZ, swingAngle, localY, SC){
+  _pQ.setFromAxisAngle(_UNIT_X, swingAngle);
+  _mPivot.compose(_pV.set(pivotX, pivotY, pivotZ), _pQ, _pS);
+  _lQ.identity();
+  _mLocal.compose(_lV.set(0, localY*SC, 0), _lQ, _lS.set(SC, SC, SC));
+  _mPivot.multiply(_mLocal);
+  return _mWorld.multiplyMatrices(marker.matrixWorld, _mPivot);
+}
+
+// Same idea for torso/head/weapon/pack, which (unlike legs/arms) attach straight to the
+// marker with no swinging pivot in between.
+function composeStaticWorldMatrix(marker, localX, localY, localZ, scaleX, scaleY, scaleZ, rotZ){
+  if(rotZ) _lQ.setFromAxisAngle(_UNIT_Z, rotZ); else _lQ.identity();
+  _mLocal.compose(_lV.set(localX, localY, localZ), _lQ, _lS.set(scaleX, scaleY, scaleZ));
+  return _mWorld.multiplyMatrices(marker.matrixWorld, _mLocal);
+}
+
+export function buildHumanoidFigures(group, colorHex, offsets, opts){
   opts = opts || {};
-  const FIGURE_SCALE = opts.figureScale || 2.2;
-  const clusterR = s*1.1*FIGURE_SCALE;
+  if(!soldierPool) buildSoldierPool();
+  const pool = soldierPool;
+  const SC = pool.SC;
+  const clusterR = SC*1.1;
   const maxR = Math.max(1, ...offsets.map(o=>Math.hypot(o.dx,o.dy)));
-  const legMat = matFn(0x3b342a);
+  const factionColor = new THREE.Color(colorHex);
+  const legH = SC*0.22, bodyH = SC*0.34, armH = SC*0.26;
+  const hipY = legH, bodyY = legH + bodyH*0.5, shoulderY = bodyY + bodyH*0.5;
+  const weaponLenRatio = opts.weapon==='longrifle' ? 0.62 : 0.42;
   return offsets.map(o=>{
     const x = (o.dx/maxR)*clusterR, z = (o.dy/maxR)*clusterR;
-    const fig = new THREE.Group();
-    const legH = s*0.22*FIGURE_SCALE, bodyH = s*0.34*FIGURE_SCALE, armH = s*0.26*FIGURE_SCALE;
-    const hipY = legH, bodyY = legH + bodyH*0.5, shoulderY = bodyY + bodyH*0.5;
-    const legPivots = [], armPivots = [];
-    [-1,1].forEach(side=>{
-      const legPivot = new THREE.Group();
-      legPivot.position.set(x + side*s*0.05*FIGURE_SCALE, hipY, z);
-      const leg = new THREE.Mesh(new THREE.CylinderGeometry(s*0.045*FIGURE_SCALE, s*0.05*FIGURE_SCALE, legH, 5), legMat);
-      leg.position.set(0, -legH*0.5, 0);
-      leg.receiveShadow = true;
-      legPivot.add(leg);
-      fig.add(legPivot);
-      legPivots.push(legPivot);
-
-      const armPivot = new THREE.Group();
-      armPivot.position.set(x + side*s*0.16*FIGURE_SCALE, shoulderY, z);
-      const arm = new THREE.Mesh(new THREE.CylinderGeometry(s*0.04*FIGURE_SCALE, s*0.045*FIGURE_SCALE, armH, 5), matFn(colorHex));
-      arm.position.set(0, -armH*0.5, 0);
-      arm.receiveShadow = true;
-      armPivot.add(arm);
-      fig.add(armPivot);
-      armPivots.push(armPivot);
-    });
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(s*0.1*FIGURE_SCALE, s*0.12*FIGURE_SCALE, bodyH, 6), matFn(colorHex));
-    body.position.set(x, bodyY, z);
-    body.receiveShadow = true;
-    fig.add(body);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(s*0.11*FIGURE_SCALE, 6, 5), matFn(0xd1b28a));
-    head.position.set(x, shoulderY + s*0.05*FIGURE_SCALE, z);
-    head.receiveShadow = true;
-    fig.add(head);
-    // Attached to the torso (fig), not a swinging arm pivot, so it stays a calm, readable
-    // silhouette instead of flailing around with the walk-cycle arm swing.
-    if(opts.weapon){
-      const len = s*(opts.weapon==='longrifle'?0.62:0.42)*FIGURE_SCALE;
-      const rifle = new THREE.Mesh(new THREE.CylinderGeometry(s*0.022*FIGURE_SCALE, s*0.022*FIGURE_SCALE, len, 5), matFn(0x242a2b));
-      rifle.rotation.z = Math.PI/2.3;
-      rifle.position.set(x + s*0.15*FIGURE_SCALE, bodyY, z + s*0.09*FIGURE_SCALE);
-      rifle.receiveShadow = true;
-      fig.add(rifle);
+    const slot = allocSoldierSlot();
+    const fig = {
+      slot,
+      legA: slot>=0 ? slot*2 : -1, legB: slot>=0 ? slot*2+1 : -1,
+      armA: slot>=0 ? slot*2 : -1, armB: slot>=0 ? slot*2+1 : -1,
+      weaponSlot: -1, packSlot: -1, weaponLenRatio,
+      x, z, hipY, bodyY, shoulderY,
+      _walkPhase: Math.random()*Math.PI*2, _walkAmp: 0, _swing: 0,
+      alive: true,
+    };
+    if(slot>=0){
+      pool.arms.setColorAt(fig.armA, factionColor);
+      pool.arms.setColorAt(fig.armB, factionColor);
+      pool.torsos.setColorAt(slot, factionColor);
+      if(pool.arms.instanceColor) pool.arms.instanceColor.needsUpdate = true;
+      if(pool.torsos.instanceColor) pool.torsos.instanceColor.needsUpdate = true;
     }
-    if(opts.pack){
-      const pack = new THREE.Mesh(new THREE.BoxGeometry(s*0.13*FIGURE_SCALE, s*0.17*FIGURE_SCALE, s*0.09*FIGURE_SCALE), matFn(0x4a5a3a));
-      pack.position.set(x, bodyY, z - s*0.1*FIGURE_SCALE);
-      pack.receiveShadow = true;
-      fig.add(pack);
-    }
-    fig._legPivots = legPivots;
-    fig._armPivots = armPivots;
-    fig._walkPhase = Math.random()*Math.PI*2;
-    fig._walkAmp = 0;
-    group.add(fig);
+    if(opts.weapon) fig.weaponSlot = allocWeaponSlot();
+    if(opts.pack) fig.packSlot = allocPackSlot();
     return fig;
   });
+}
+
+// Writes this marker's current pose (position/heading, already applied to `marker` by the
+// caller, plus each figure's alive-state and walk-cycle swing) into the shared instance pools.
+// Must run every frame for every unit with humanoid figures -- see syncUnitMarkers3d.
+function flushSoldierInstances3d(marker){
+  const figs = marker._soldierFigures;
+  if(!figs || !figs.length || !soldierPool) return;
+  marker.updateMatrixWorld(true);
+  const pool = soldierPool;
+  const SC = pool.SC;
+  figs.forEach(fig=>{
+    if(fig.slot<0) return;
+    if(!fig.alive){ zeroSoldierFigureMatrices(fig); return; }
+    const swing = fig._swing||0;
+    pool.legs.setMatrixAt(fig.legA, composeLimbWorldMatrix(marker, fig.x-SC*0.05, fig.hipY, fig.z, swing, -0.11, SC));
+    pool.legs.setMatrixAt(fig.legB, composeLimbWorldMatrix(marker, fig.x+SC*0.05, fig.hipY, fig.z, -swing, -0.11, SC));
+    pool.arms.setMatrixAt(fig.armA, composeLimbWorldMatrix(marker, fig.x-SC*0.16, fig.shoulderY, fig.z, -swing, -0.13, SC));
+    pool.arms.setMatrixAt(fig.armB, composeLimbWorldMatrix(marker, fig.x+SC*0.16, fig.shoulderY, fig.z, swing, -0.13, SC));
+    pool.torsos.setMatrixAt(fig.slot, composeStaticWorldMatrix(marker, fig.x, fig.bodyY, fig.z, SC, SC, SC, 0));
+    pool.heads.setMatrixAt(fig.slot, composeStaticWorldMatrix(marker, fig.x, fig.shoulderY+SC*0.05, fig.z, SC, SC, SC, 0));
+    // Attached straight to the marker origin, not a swinging arm pivot, so it stays a calm,
+    // readable silhouette instead of flailing around with the walk-cycle arm swing.
+    if(fig.weaponSlot>=0) pool.weapons.setMatrixAt(fig.weaponSlot, composeStaticWorldMatrix(marker, fig.x+SC*0.15, fig.bodyY, fig.z+SC*0.09, SC, SC*fig.weaponLenRatio, SC, Math.PI/2.3));
+    if(fig.packSlot>=0) pool.packs.setMatrixAt(fig.packSlot, composeStaticWorldMatrix(marker, fig.x, fig.bodyY, fig.z-SC*0.1, SC, SC, SC, 0));
+  });
+}
+
+function zeroSoldierFigureMatrices(fig){
+  if(!soldierPool || fig.slot<0) return;
+  const pool = soldierPool;
+  pool.legs.setMatrixAt(fig.legA, _ZERO_MATRIX);
+  pool.legs.setMatrixAt(fig.legB, _ZERO_MATRIX);
+  pool.arms.setMatrixAt(fig.armA, _ZERO_MATRIX);
+  pool.arms.setMatrixAt(fig.armB, _ZERO_MATRIX);
+  pool.torsos.setMatrixAt(fig.slot, _ZERO_MATRIX);
+  pool.heads.setMatrixAt(fig.slot, _ZERO_MATRIX);
+  if(fig.weaponSlot>=0) pool.weapons.setMatrixAt(fig.weaponSlot, _ZERO_MATRIX);
+  if(fig.packSlot>=0) pool.packs.setMatrixAt(fig.packSlot, _ZERO_MATRIX);
+}
+
+// Called when a unit's marker is torn down (wave transition, target pruned/destroyed, stale-
+// key cleanup) -- unlike hideMarker3d (which only zero-scales, keeping the slots reserved in
+// case the same marker becomes visible again), this returns the slots to the free-list so a
+// later unit can reuse them, which is what keeps the fixed-capacity pools from ever filling up
+// across a long game with many waves of enemy infantry spawning under fresh target ids.
+function freeSoldierFigureSlots(fig){
+  zeroSoldierFigureMatrices(fig);
+  if(!soldierPool) return;
+  const pool = soldierPool;
+  if(fig.slot>=0){ pool.freeSlots.push(fig.slot); fig.slot = fig.legA = fig.legB = fig.armA = fig.armB = -1; }
+  if(fig.weaponSlot>=0){ pool.freeWeapons.push(fig.weaponSlot); fig.weaponSlot = -1; }
+  if(fig.packSlot>=0){ pool.freePacks.push(fig.packSlot); fig.packSlot = -1; }
+}
+
+function flagSoldierPoolMatricesDirty(){
+  if(!soldierPool) return;
+  soldierPool.legs.instanceMatrix.needsUpdate = true;
+  soldierPool.arms.instanceMatrix.needsUpdate = true;
+  soldierPool.torsos.instanceMatrix.needsUpdate = true;
+  soldierPool.heads.instanceMatrix.needsUpdate = true;
+  soldierPool.weapons.instanceMatrix.needsUpdate = true;
+  soldierPool.packs.instanceMatrix.needsUpdate = true;
 }
 
 export function makeMarkerMesh3d(shape, colorHex, formationOffsets){
@@ -889,20 +1018,20 @@ export function makeMarkerMesh3d(shape, colorHex, formationOffsets){
     // Each pattern is normalized to its own bounding radius so box/line/wedge/skirmish/etc.
     // all read as a similarly-sized cluster instead of some being tiny and others huge.
     const offsets = formationOffsets && formationOffsets.length ? formationOffsets : SQUAD_GRID_OFFSETS;
-    group._soldierFigures = buildHumanoidFigures(group, mat, s, colorHex, offsets);
+    group._soldierFigures = buildHumanoidFigures(group, colorHex, offsets);
     addFlag(colorHex);
   } else if(shape==='scout'){
     // per user request: 斥候も小隊と同じ人型フィギュア(buildHumanoidFigures)にする一方、
     // 兵種が見分けられるよう小道具で差別化する -- 背嚢(偵察装備)のみで武器は目立たせない。
     const offsets = SQUAD_GRID_OFFSETS.slice(0, SCOUT_SQUAD_SIZE);
-    group._soldierFigures = buildHumanoidFigures(group, mat, s, colorHex, offsets, {pack:true});
+    group._soldierFigures = buildHumanoidFigures(group, colorHex, offsets, {pack:true});
     addFlag(colorHex);
   } else if(shape==='band'){
     // per user request: 音楽隊 -- 近接戦闘に秀でた本部警備専任の実戦部隊。小隊と同じ人型
     // フィギュアに、近接武器の小道具(weapon: 'longrifle'以外を渡すと短めの得物になる)を
     // 持たせて見分けられるようにする。
     const offsets = SQUAD_GRID_OFFSETS.slice(0, BAND_SQUAD_SIZE);
-    group._soldierFigures = buildHumanoidFigures(group, mat, s, colorHex, offsets, {weapon:'melee'});
+    group._soldierFigures = buildHumanoidFigures(group, colorHex, offsets, {weapon:'melee'});
     addFlag(colorHex);
   } else if(shape==='antitank'){
     // per user request: 狙撃部隊を置き換えた対戦車部隊 -- 戦車(tank)/対空(sam)と同じ装軌+
@@ -967,27 +1096,22 @@ export function getMarker3d(key, shape, colorHex, formationOffsets){
 
 export function updateSoldierFigures3d(marker, aliveFlags){
   if(!marker || !marker._soldierFigures) return;
-  marker._soldierFigures.forEach((fig,i)=>{ fig.visible = !!(aliveFlags && aliveFlags[i]); });
+  marker._soldierFigures.forEach((fig,i)=>{ fig.alive = !!(aliveFlags && aliveFlags[i]); });
 }
 
 export function updateSoldierWalkCycle(marker, moving, dtSeconds){
   if(!marker || !marker._soldierFigures) return;
   marker._soldierFigures.forEach(fig=>{
-    if(!fig.visible || !fig._legPivots) return;
+    if(!fig.alive) return;
     const targetAmp = moving ? 1 : 0;
     fig._walkAmp += (targetAmp-fig._walkAmp) * Math.min(1, dtSeconds*WALK_AMP_EASE);
     if(fig._walkAmp < 0.01){
       fig._walkAmp = 0;
-      fig._legPivots[0].rotation.x = 0; fig._legPivots[1].rotation.x = 0;
-      fig._armPivots[0].rotation.x = 0; fig._armPivots[1].rotation.x = 0;
+      fig._swing = 0;
       return;
     }
     fig._walkPhase += dtSeconds*WALK_CYCLE_SPEED;
-    const swing = Math.sin(fig._walkPhase) * WALK_SWING_MAX * fig._walkAmp;
-    fig._legPivots[0].rotation.x = swing;
-    fig._legPivots[1].rotation.x = -swing;
-    fig._armPivots[0].rotation.x = -swing;
-    fig._armPivots[1].rotation.x = swing;
+    fig._swing = Math.sin(fig._walkPhase) * WALK_SWING_MAX * fig._walkAmp;
   });
 }
 
@@ -1033,13 +1157,27 @@ export function updateHeliHeading3d(marker, target, visualX, visualY){
 
 export function hideMarker3d(key){
   const m = unitMarkers3d[key];
-  if(m) m.visible = false;
+  if(!m) return;
+  m.visible = false;
+  // per user request(instanced soldiers): unlike the marker's own THREE.Group, its soldier
+  // figures no longer live inside it as real children -- m.visible=false alone wouldn't hide
+  // them. Zero-scale their instances too, but keep the slots reserved (not freed) in case this
+  // same marker becomes visible again (e.g. an enemy HQ target toggling !revealed).
+  if(m._soldierFigures){
+    m._soldierFigures.forEach(zeroSoldierFigureMatrices);
+    flagSoldierPoolMatricesDirty();
+  }
 }
 
 export function disposeMarker3d(key){
   const m = unitMarkers3d[key];
   if(!m) return;
   if(scene3d) scene3d.remove(m);
+  if(m._soldierFigures){
+    m._soldierFigures.forEach(freeSoldierFigureSlots);
+    flagSoldierPoolMatricesDirty();
+    m._soldierFigures = null;
+  }
   m.traverse(child=>{
     if(child.geometry) child.geometry.dispose();
     if(child.material){
@@ -1113,6 +1251,7 @@ export function syncUnitMarkers3d(){
       const moving = isVisuallyMoving(unit, p.x, p.y);
       if(walkAnimDue) updateSoldierWalkCycle(unitMarkers3d[key], moving, walkDt);
       updateSoldierHeading3d(unitMarkers3d[key], unit, p.x, p.y);
+      flushSoldierInstances3d(unitMarkers3d[key]);
     }
   };
   state.mortars.forEach((m,i)=>friendlyUnit('mortar'+i, m, 'mortar', m.hp>0));
@@ -1159,12 +1298,19 @@ export function syncUnitMarkers3d(){
       const moving = isVisuallyMoving(t, e.x, e.y);
       if(walkAnimDue) updateSoldierWalkCycle(unitMarkers3d[key], moving, walkDt);
       updateSoldierHeading3d(unitMarkers3d[key], t, e.x, e.y);
+      flushSoldierInstances3d(unitMarkers3d[key]);
     }
   });
 
+  // per user request(instanced soldiers): changed from hideMarker3d to disposeMarker3d --
+  // a key that's vanished from every place() call this frame (not just this tick's `visible`
+  // toggle, an actual gone-for-good key, e.g. a pre-wave-transition teardown this loop somehow
+  // missed) has nothing left referencing it, so its soldier instance slots (if any) should be
+  // freed back to the pool rather than held hidden-but-reserved forever.
   Object.keys(unitMarkers3d).forEach(key=>{
-    if(!seen[key]) hideMarker3d(key);
+    if(!seen[key]) disposeMarker3d(key);
   });
+  flagSoldierPoolMatricesDirty();
 }
 
 export let _fogRayVec = null, _fogRayDir = null;
