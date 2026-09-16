@@ -18,6 +18,7 @@ function directMoveTargetUnit(kind, idx){
   if(kind==='sam') return state.sams[idx];
   if(kind==='antitank') return state.antitanks[idx];
   if(kind==='hq') return state.hq;
+  if(kind==='band') return state.bands[idx];
   return null;
 }
 
@@ -27,6 +28,13 @@ export function setUnitMoveDest(kind, idx, px, py, silent){
     if(!sq || sq.resting) return false;
     sq.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
     if(!silent) log('sys','前線', `第${idx+1}小隊に移動目標を指示。`);
+    return true;
+  }
+  if(kind==='band'){
+    const band = state.bands[idx];
+    if(!band || band.resting) return false;
+    band.pendingDest = { x: clamp(px, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X), y: clamp(py, 30, CANVAS_H-30) };
+    if(!silent) log('sys','前線', `音楽隊に移動目標を指示。`);
     return true;
   }
   if(kind==='tank'){
@@ -123,6 +131,7 @@ function unitRefAlive({kind, idx}){
   if(kind==='sam') return state.sams[idx] && state.sams[idx].hp>0;
   if(kind==='antitank') return state.antitanks[idx] && state.antitanks[idx].hp>0;
   if(kind==='engineer') return state.engineers[idx] && unitAlive(state.engineers[idx]);
+  if(kind==='band') return state.bands[idx] && unitAlive(state.bands[idx]);
   return false;
 }
 
@@ -735,6 +744,7 @@ export function focusOnOwnForces(){
   state.antitanks.forEach(at=>{ if(at.hp>0) pts.push({x:at.x, y:at.y}); });
   state.engineers.forEach(en=>{ if(unitAlive(en)) pts.push({x:en.x, y:en.y}); });
   state.medics.forEach(me=>{ if(unitAlive(me)) pts.push({x:me.x, y:me.y}); });
+  state.bands.forEach(b=>{ if(unitAlive(b)) pts.push({x:b.x, y:b.y}); });
   state.scouts.forEach(sc=>{ if(unitAlive(sc)) pts.push({x:sc.x, y:sc.y}); });
   (state.helis||[]).forEach(h=>{ if(h.hp>0) pts.push({x:h.x, y:h.y}); });
   if(!pts.length){

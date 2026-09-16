@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { computeDispersionAt, currentPlacementUnit, estPos, isSuppressed, smoothVisualPos, state, unitAlive, unitAliveCount } from './combat.js';
-import { CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FORTRESS_NEUTRAL_COLOR, FRIENDLY_MARK_COLOR, GRID_LINES, HQ_SUPPLY_ZONE_RADIUS_UNITS, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_DETAIL_EFFECT_ZOOM, MAP_DETAIL_LABEL_ZOOM, MAP_FULL_DETAIL_ZOOM, MAP_INITIAL_AZIMUTH, MAP_VIEW, METERS_PER_UNIT, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, UNIT_AMMO_MAX, TRENCH_LINE_WIDTH, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
+import { BAND_ENGAGE_RANGE, CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FORTRESS_NEUTRAL_COLOR, FRIENDLY_MARK_COLOR, GRID_LINES, HQ_SUPPLY_ZONE_RADIUS_UNITS, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_DETAIL_EFFECT_ZOOM, MAP_DETAIL_LABEL_ZOOM, MAP_FULL_DETAIL_ZOOM, MAP_INITIAL_AZIMUTH, MAP_VIEW, METERS_PER_UNIT, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, UNIT_AMMO_MAX, TRENCH_LINE_WIDTH, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
 import { isMultiSelected } from './input.js';
 import { choppedLineSegments, febaLineSegments } from './terrain.js';
 import { project, projectAtWorldY, scaledIconH, threeReady } from './three.js';
@@ -490,6 +490,7 @@ export function drawBoard(){
     ...state.sams.map((unit,i)=>({unit, label:`対空${i+1}`})),
     ...state.engineers.map((unit,i)=>({unit, label:`工兵${i+1}`})),
     ...state.medics.map((unit,i)=>({unit, label:`衛生${i+1}`})),
+    ...state.bands.map((unit,i)=>({unit, label:'音楽隊'})),
   ];
   movingUnits.forEach(({unit, label})=>{
     if(!unit || !unit.pendingDest) return;
@@ -950,6 +951,39 @@ export function drawBoard(){
           ctx.strokeStyle = 'rgba(193,69,59,0.35)';
           ctx.lineWidth = 1;
           ctx.moveTo(sqVis.x, sqVis.y);
+          ctx.lineTo(e.x, e.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        });
+      }
+    });
+  }
+
+  // 音楽隊マーカー(自軍) ― 近接戦闘専任の本部警備部隊。小隊と同じ人型フィギュア描画パターン
+  // (弾薬(ammo)の概念は持たない点、射程がBAND_ENGAGE_RANGEと短い点が異なる)。
+  if(state.bands && state.bands.length){
+    state.bands.forEach((band, bandIdx)=>{
+      const bandVisL = smoothVisualPos(band, band.x, band.y);
+      const bandVis = project(bandVisL.x, bandVisL.y);
+      const aliveSoldiers = band.soldiers.filter(s=>s.alive);
+      if(!threeReady) drawUnitIcon(ctx, infantryIcon, bandVis.x, bandVis.y, scaledIconH(22), aliveSoldiers.length===0);
+      drawSelectionRing(ctx, bandVis.x, bandVis.y, (state.commandBox && state.commandBox.kind==='band' && state.commandBox.idx===bandIdx) || isMultiSelected('band', bandIdx));
+      if(showDetailLabels && aliveSoldiers.length>0) drawAttritionBar(ctx, bandVis.x+32, bandVis.y, aliveSoldiers.length/band.soldiers.length);
+      const bandOrderIcon = ORDER_ICON[band.order] + (band.pendingDest ? '→' : '');
+      if(showDetailLabels) queueFriendlyLabel(bandVis.x, bandVis.y, [{text:`音楽隊 ${aliveSoldiers.length}/${band.soldiers.length} ${bandOrderIcon}`, dy:28, font:'14px "JetBrains Mono"', color: aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25'}],
+        (state.commandBox && state.commandBox.kind==='band' && state.commandBox.idx===bandIdx) || isMultiSelected('band', bandIdx), '音楽隊');
+
+      if(aliveSoldiers.length>0){
+        state.targets.filter(t=>!t.destroyed && t.type==='infantry' && t.revealed).forEach(t=>{
+          const eL = estPos(t);
+          const dist = Math.hypot(eL.x-band.x, eL.y-band.y);
+          if(dist > BAND_ENGAGE_RANGE) return;
+          const e = project(eL.x, eL.y);
+          ctx.beginPath();
+          ctx.setLineDash([3,3]);
+          ctx.strokeStyle = 'rgba(193,69,59,0.35)';
+          ctx.lineWidth = 1;
+          ctx.moveTo(bandVis.x, bandVis.y);
           ctx.lineTo(e.x, e.y);
           ctx.stroke();
           ctx.setLineDash([]);

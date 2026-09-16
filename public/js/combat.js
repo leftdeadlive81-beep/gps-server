@@ -1,7 +1,7 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement } from './achievements.js';
 import { pickWaveBgm, playCombatAmbience, playSfx, startBgm, stopCombatAmbience } from './audio.js';
-import { AA_ATTACK_DAMAGE, AA_COOLDOWN_TICKS, AA_ENGAGE_RANGE, AIRBORNE_DROP_AT_MS, AIRBORNE_LANDING_IMMUNE_MS, AIRBORNE_WARNING_LEAD_MS, ANOMALOUS_JUMP_UNITS, ANTITANK_AA_DMG, ANTITANK_AA_RANGE, ANTITANK_DUEL_DMG_TO_ENEMY, ANTITANK_ENGAGE_RANGE, ANTITANK_EXPOSURE, ANTITANK_INCOMING_DMG, ANTITANK_MAX_HP, ANTITANK_MOVE_CAP, ANTITANK_POS, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, ARTILLERY_FIRE_RANGE_UNITS, ARTILLERY_MOVE_CAP, ARTILLERY_STANDOFF_RANGE_UNITS, BURST_COOLDOWN_MS_MAX, BURST_COOLDOWN_MS_MIN, BURST_DMG_COMPENSATION, BURST_SHOTS_MAX, BURST_SHOTS_MIN, BURST_SHOT_INTERVAL_MS_MAX, BURST_SHOT_INTERVAL_MS_MIN, CANVAS_H, CANVAS_W, COUNTER_CHANCE, COUNTER_DAMAGE, DECOY_LURE_MULT_DAY, DECOY_LURE_MULT_NIGHT, DECOY_MAX_HP, DECOY_MODES, DEPLOYMENT_MODES, DEPLOY_BOX_METERS, DIFFICULTIES, DRONE_DETONATE_DAMAGE, DRONE_DETONATE_RANGE, DRONE_INTRO_STAGE, DRONE_SPEED, ENEMY_FORMATION_BASE_SIZE, ENEMY_FORMATION_NAMES, ENEMY_FORMATION_TEMPLATES, ENEMY_FOCUS_FIRE_WINDOW_MS, ENEMY_HQ_EXPOSURE, ENEMY_INFANTRY_DOCTRINES, ENEMY_INFANTRY_TOTAL_TARGET, ENEMY_SPAWN_MIN_X, ENGINEER_POS, ENGINEER_REPAIR_HP_PER_TURN, ENGINEER_REPAIR_RANGE_UNITS, ESTIMATE_CLAMP_MARGIN, EXPOSURE_DEFAULT, FLANK_OFFSET_RANGE_UNITS, FLIGHT_DURATION, FORTRESS_CAPTURE_RANGE_UNITS, FORTRESS_COUNT, FORTRESS_MAX_HP, FORTRESS_MG_COOLDOWN_MS_MAX, FORTRESS_MG_COOLDOWN_MS_MIN, FORTRESS_MG_DMG, FORTRESS_MG_RANGE_UNITS, FORTRESS_MG_SHOTS_MAX, FORTRESS_MG_SHOTS_MIN, FORTRESS_MG_SHOT_INTERVAL_MS_MAX, FORTRESS_MG_SHOT_INTERVAL_MS_MIN, FORTRESS_MISSILE_COOLDOWN_MS_MAX, FORTRESS_MISSILE_COOLDOWN_MS_MIN, FORTRESS_MISSILE_DMG, FORTRESS_MISSILE_RANGE_UNITS, FORTRESS_NEUTRAL_COLOR, FORTRESS_SIEGE_DMG, FORTRESS_ZONE_ENEMY_X, FORTRESS_ZONE_FRIENDLY_X, FORTRESS_ZONE_MID_X, FORTRESS_ZONE_Y, FRIENDLY_HELI_MOVE_UNITS, FRIENDLY_INF_POS, FRIENDLY_KIND_LIST, FRIENDLY_MARK_COLOR, FRIENDLY_SPACING_PUSH, FRIENDLY_SPACING_RADIUS, FUZES, GAME_SPEED_INTERVALS, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GAME_START_DATETIME, GAME_VERSION, HELI_ATTACK_BURST, HELI_ATTACK_DAMAGE, HELI_COOLDOWN_TICKS, HELI_ENGAGE_RANGE, HELI_EXPOSURE, HELI_MAX_RANGE_UNITS, HELI_MOVE_CAP, HELI_WITHDRAW_DIST, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_DEFENSE_ATTACKER_WINDOW_MS, HQ_DEFENSE_DMG_MULT, HQ_DEFENSE_RANGE_UNITS, HQ_DETECT_RANGE_UNITS, HQ_MAX_HP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, HQ_SUPPLY_HEAL_PCT_PER_TURN, HQ_SUPPLY_ZONE_RADIUS_UNITS, HQ_X, HQ_Y, ILLUM_DURATION_TURNS, ILLUM_RADIUS_M, INFANTRY_DRONE_COOLDOWN_TICKS, INFANTRY_DRONE_LAUNCH_CHANCE, INFANTRY_DRONE_SWARM_SIZE, INFANTRY_DUEL_DMG_TO_ENEMY, INFANTRY_MOVE_CAP, INFANTRY_STANDOFF_UNITS, INITIAL_DEPLOY_SPACING_MULT, LAST_STAND_THRESHOLD, LAUNCH_INTERVAL, MAP_SEED_CANDIDATE_COUNT, MARKER_REVEAL_RADIUS_UNITS, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MEDIC_POS, MEDIC_REVIVE_MS, MEDIC_REVIVE_RANGE_UNITS, MERGE_HP_THRESHOLD, METERS_PER_UNIT, MINE_DAMAGE, MINE_MAX_ACTIVE, MINE_PLACEMENT_CHANCE, MINE_TRIGGER_RADIUS_UNITS, MORTAR_BEST_LOADOUT, MORTAR_CB_DETECT_BASE, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CB_STRIKE_DMG, MORTAR_CB_WARN_TURNS, MORTAR_CREW_SIZE, MORTAR_DISPERSION_UNITS, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MAX_RANGE_UNITS, MORTAR_MIN_RANGE_M, MORTAR_MIN_RANGE_UNITS, MORTAR_MOVE_CAP, MORTAR_ORDER_LABEL, MORTAR_RELOAD_MS, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, NUM_ANTITANKS, NUM_ENGINEERS, NUM_MEDICS, NUM_MORTARS, NUM_SAMS, NUM_SCOUTS, NUM_SQUADS, NUM_TANKS, OP, OP_HOME_X, OP_HOME_Y, ORDER_LABEL, PERSONNEL_ROSTER, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, ROAD_PULL_RADIUS, ROSTER_ENGINEER_TEAMS, ROSTER_MEDIC_TEAMS, ROSTER_MORTAR_CREWS, ROSTER_RESERVE_INITIAL, ROSTER_SCOUT_TEAMS, ROSTER_SQUADS, ROUT_CHANCE, ROUT_ESCAPE_MARGIN, ROUT_SPEED_MULT, SAM_DUEL_DMG_TO_ENEMY, SAM_ENGAGE_RANGE, SAM_EXPOSURE, SAM_MAX_HP, SAM_MOVE_CAP, SAM_POS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_ADVANCE_LIMIT_X, SCOUT_EXPOSURE, SCOUT_LOWER_Y, SCOUT_MAX_RANGE_UNITS, SCOUT_MOVE_CAP, SCOUT_SQUAD_SIZE, SCOUT_UPPER_Y, SCOUT_X, SHELLS, SHELL_DISPERSION_MULT, SHELL_KILL_RADIUS_UNITS, SIM_STEP_MAX_CATCHUP, SIM_STEP_MS, SMART_ACTIONS, SMART_UNIT_TYPES, SMOKE_DURATION_TURNS, SMOKE_RADIUS_M, SMOKE_RADIUS_UNITS, SQUAD_ADVANCE_LIMIT_X, SQUAD_ANTI_DRONE_DMG, SQUAD_ANTI_DRONE_HIT_CHANCE, SQUAD_ANTI_DRONE_RANGE_UNITS, SQUAD_ASSAULT_LIMIT_X, SQUAD_ENGAGE_RANGE, SQUAD_FORMATION_ADJUST_M, SQUAD_GRID_OFFSETS, SQUAD_RETREAT_LIMIT_X, SQUAD_SIZE, STAGE_COUNT, STEP_RENDER_MIN_INTERVAL_MS, SUPPRESSION_CASUALTY_MULT, SUPPRESSION_COUNTER_MULT, SUPPRESSION_DUEL_DMG_BONUS, SUPPRESSION_MOVE_MULT, SUPPRESSION_NEARMISS_TURNS, SUPPRESSION_RETREAT_CHANCE, SUPPRESSION_TURNS, TANK_DUEL_DMG_TO_ENEMY, TANK_ENGAGE_RANGE, TANK_EXPOSURE, TANK_INCOMING_DMG, TANK_MAX_HP, TANK_MOVE_CAP, TANK_POS, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_GRID_CELL_SIZE, TARGET_GRID_MAX_RINGS, TARGET_TYPES, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, TRENCH_BUILD_COST, UNIT_AMMO_EMPTY_DMG_MULT, UNIT_AMMO_MAX, UNIT_AMMO_RESUPPLY_PER_TURN, VEHICLE_ASSAULT_DAMAGE, VEHICLE_ASSAULT_RANGE, VEHICLE_MOVE_CAP, VET_DMG_BONUS_PER_LEVEL, VET_EXPOSURE_BONUS_PER_LEVEL, VET_MAX_LEVEL, VET_XP_PER_LEVEL, HQ_MORTAR_COOLDOWN_TICKS, HQ_MORTAR_COUNT, HQ_MORTAR_DAMAGE, HQ_TANKGUN_COOLDOWN_TICKS, HQ_TANKGUN_COUNT, HQ_TANKGUN_DAMAGE, WALL_BUILD_COST, WALL_MAX_HP, WALL_RADIUS, WAVE_ARCHETYPES, WAVE_CLEAR_EFFECT_WAIT_MS, WAVE_CLEAR_FANFARE_HOLD_MS, WAVE_SPAWN_DELAY_MS, WAVE_SPAWN_WINDOW_MS, WEAPON_FIRE_INTERVAL, WEAPON_FIRE_OFFSET, WEATHER_TYPES, WORLD, WOUND_BLEEDOUT_MS, WOUND_CHANCE } from './constants.js';
+import { AA_ATTACK_DAMAGE, AA_COOLDOWN_TICKS, AA_ENGAGE_RANGE, AIRBORNE_DROP_AT_MS, AIRBORNE_LANDING_IMMUNE_MS, AIRBORNE_WARNING_LEAD_MS, ANOMALOUS_JUMP_UNITS, ANTITANK_AA_DMG, ANTITANK_AA_RANGE, ANTITANK_DUEL_DMG_TO_ENEMY, ANTITANK_ENGAGE_RANGE, ANTITANK_EXPOSURE, ANTITANK_INCOMING_DMG, ANTITANK_MAX_HP, ANTITANK_MOVE_CAP, ANTITANK_POS, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, ARTILLERY_FIRE_RANGE_UNITS, ARTILLERY_MOVE_CAP, ARTILLERY_STANDOFF_RANGE_UNITS, BAND_DUEL_DMG_TO_ENEMY, BAND_ENGAGE_RANGE, BAND_POS, BURST_COOLDOWN_MS_MAX, BURST_COOLDOWN_MS_MIN, BURST_DMG_COMPENSATION, BURST_SHOTS_MAX, BURST_SHOTS_MIN, BURST_SHOT_INTERVAL_MS_MAX, BURST_SHOT_INTERVAL_MS_MIN, CANVAS_H, CANVAS_W, COUNTER_CHANCE, COUNTER_DAMAGE, DECOY_LURE_MULT_DAY, DECOY_LURE_MULT_NIGHT, DECOY_MAX_HP, DECOY_MODES, DEPLOYMENT_MODES, DEPLOY_BOX_METERS, DIFFICULTIES, DRONE_DETONATE_DAMAGE, DRONE_DETONATE_RANGE, DRONE_INTRO_STAGE, DRONE_SPEED, ENEMY_FORMATION_BASE_SIZE, ENEMY_FORMATION_NAMES, ENEMY_FORMATION_TEMPLATES, ENEMY_FOCUS_FIRE_WINDOW_MS, ENEMY_HQ_EXPOSURE, ENEMY_INFANTRY_DOCTRINES, ENEMY_INFANTRY_TOTAL_TARGET, ENEMY_SPAWN_MIN_X, ENGINEER_POS, ENGINEER_REPAIR_HP_PER_TURN, ENGINEER_REPAIR_RANGE_UNITS, ESTIMATE_CLAMP_MARGIN, EXPOSURE_DEFAULT, FLANK_OFFSET_RANGE_UNITS, FLIGHT_DURATION, FORTRESS_CAPTURE_RANGE_UNITS, FORTRESS_COUNT, FORTRESS_MAX_HP, FORTRESS_MG_COOLDOWN_MS_MAX, FORTRESS_MG_COOLDOWN_MS_MIN, FORTRESS_MG_DMG, FORTRESS_MG_RANGE_UNITS, FORTRESS_MG_SHOTS_MAX, FORTRESS_MG_SHOTS_MIN, FORTRESS_MG_SHOT_INTERVAL_MS_MAX, FORTRESS_MG_SHOT_INTERVAL_MS_MIN, FORTRESS_MISSILE_COOLDOWN_MS_MAX, FORTRESS_MISSILE_COOLDOWN_MS_MIN, FORTRESS_MISSILE_DMG, FORTRESS_MISSILE_RANGE_UNITS, FORTRESS_NEUTRAL_COLOR, FORTRESS_SIEGE_DMG, FORTRESS_ZONE_ENEMY_X, FORTRESS_ZONE_FRIENDLY_X, FORTRESS_ZONE_MID_X, FORTRESS_ZONE_Y, FRIENDLY_HELI_MOVE_UNITS, FRIENDLY_INF_POS, FRIENDLY_KIND_LIST, FRIENDLY_MARK_COLOR, FRIENDLY_SPACING_PUSH, FRIENDLY_SPACING_RADIUS, FUZES, GAME_SPEED_INTERVALS, GAME_SPEED_LABEL, GAME_SPEED_ORDER, GAME_START_DATETIME, GAME_VERSION, HELI_ATTACK_BURST, HELI_ATTACK_DAMAGE, HELI_COOLDOWN_TICKS, HELI_ENGAGE_RANGE, HELI_EXPOSURE, HELI_MAX_RANGE_UNITS, HELI_MOVE_CAP, HELI_WITHDRAW_DIST, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_DEFENSE_ATTACKER_WINDOW_MS, HQ_DEFENSE_DMG_MULT, HQ_DEFENSE_RANGE_UNITS, HQ_DETECT_RANGE_UNITS, HQ_MAX_HP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, HQ_SUPPLY_HEAL_PCT_PER_TURN, HQ_SUPPLY_ZONE_RADIUS_UNITS, HQ_X, HQ_Y, ILLUM_DURATION_TURNS, ILLUM_RADIUS_M, INFANTRY_DRONE_COOLDOWN_TICKS, INFANTRY_DRONE_LAUNCH_CHANCE, INFANTRY_DRONE_SWARM_SIZE, INFANTRY_DUEL_DMG_TO_ENEMY, INFANTRY_MOVE_CAP, INFANTRY_STANDOFF_UNITS, INITIAL_DEPLOY_SPACING_MULT, LAST_STAND_THRESHOLD, LAUNCH_INTERVAL, MAP_SEED_CANDIDATE_COUNT, MARKER_REVEAL_RADIUS_UNITS, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MEDIC_POS, MEDIC_REVIVE_MS, MEDIC_REVIVE_RANGE_UNITS, MERGE_HP_THRESHOLD, METERS_PER_UNIT, MINE_DAMAGE, MINE_MAX_ACTIVE, MINE_PLACEMENT_CHANCE, MINE_TRIGGER_RADIUS_UNITS, MORTAR_BEST_LOADOUT, MORTAR_CB_DETECT_BASE, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CB_STRIKE_DMG, MORTAR_CB_WARN_TURNS, MORTAR_CREW_SIZE, MORTAR_DISPERSION_UNITS, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MAX_RANGE_UNITS, MORTAR_MIN_RANGE_M, MORTAR_MIN_RANGE_UNITS, MORTAR_MOVE_CAP, MORTAR_ORDER_LABEL, MORTAR_RELOAD_MS, MORTAR_ZONE_MAX_X, MORTAR_ZONE_MIN_X, NUM_ANTITANKS, NUM_BANDS, NUM_ENGINEERS, NUM_MEDICS, NUM_MORTARS, NUM_SAMS, NUM_SCOUTS, NUM_SQUADS, NUM_TANKS, OP, OP_HOME_X, OP_HOME_Y, ORDER_LABEL, PERSONNEL_ROSTER, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, ROAD_PULL_RADIUS, ROSTER_BAND_TEAMS, ROSTER_ENGINEER_TEAMS, ROSTER_MEDIC_TEAMS, ROSTER_MORTAR_CREWS, ROSTER_RESERVE_INITIAL, ROSTER_SCOUT_TEAMS, ROSTER_SQUADS, ROUT_CHANCE, ROUT_ESCAPE_MARGIN, ROUT_SPEED_MULT, SAM_DUEL_DMG_TO_ENEMY, SAM_ENGAGE_RANGE, SAM_EXPOSURE, SAM_MAX_HP, SAM_MOVE_CAP, SAM_POS, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SCOUT_ADVANCE_LIMIT_X, SCOUT_EXPOSURE, SCOUT_LOWER_Y, SCOUT_MAX_RANGE_UNITS, SCOUT_MOVE_CAP, SCOUT_SQUAD_SIZE, SCOUT_UPPER_Y, SCOUT_X, SHELLS, SHELL_DISPERSION_MULT, SHELL_KILL_RADIUS_UNITS, SIM_STEP_MAX_CATCHUP, SIM_STEP_MS, SMART_ACTIONS, SMART_UNIT_TYPES, SMOKE_DURATION_TURNS, SMOKE_RADIUS_M, SMOKE_RADIUS_UNITS, SQUAD_ADVANCE_LIMIT_X, SQUAD_ANTI_DRONE_DMG, SQUAD_ANTI_DRONE_HIT_CHANCE, SQUAD_ANTI_DRONE_RANGE_UNITS, SQUAD_ASSAULT_LIMIT_X, SQUAD_ENGAGE_RANGE, SQUAD_FORMATION_ADJUST_M, SQUAD_GRID_OFFSETS, SQUAD_RETREAT_LIMIT_X, SQUAD_SIZE, STAGE_COUNT, STEP_RENDER_MIN_INTERVAL_MS, SUPPRESSION_CASUALTY_MULT, SUPPRESSION_COUNTER_MULT, SUPPRESSION_DUEL_DMG_BONUS, SUPPRESSION_MOVE_MULT, SUPPRESSION_NEARMISS_TURNS, SUPPRESSION_RETREAT_CHANCE, SUPPRESSION_TURNS, TANK_DUEL_DMG_TO_ENEMY, TANK_ENGAGE_RANGE, TANK_EXPOSURE, TANK_INCOMING_DMG, TANK_MAX_HP, TANK_MOVE_CAP, TANK_POS, TANK_REPAIR_COST_PER_HP, TANK_REPAIR_HP_PER_CALL, TARGET_GRID_CELL_SIZE, TARGET_GRID_MAX_RINGS, TARGET_TYPES, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, TRENCH_BUILD_COST, UNIT_AMMO_EMPTY_DMG_MULT, UNIT_AMMO_MAX, UNIT_AMMO_RESUPPLY_PER_TURN, VEHICLE_ASSAULT_DAMAGE, VEHICLE_ASSAULT_RANGE, VEHICLE_MOVE_CAP, VET_DMG_BONUS_PER_LEVEL, VET_EXPOSURE_BONUS_PER_LEVEL, VET_MAX_LEVEL, VET_XP_PER_LEVEL, HQ_MORTAR_COOLDOWN_TICKS, HQ_MORTAR_COUNT, HQ_MORTAR_DAMAGE, HQ_TANKGUN_COOLDOWN_TICKS, HQ_TANKGUN_COUNT, HQ_TANKGUN_DAMAGE, WALL_BUILD_COST, WALL_MAX_HP, WALL_RADIUS, WAVE_ARCHETYPES, WAVE_CLEAR_EFFECT_WAIT_MS, WAVE_CLEAR_FANFARE_HOLD_MS, WAVE_SPAWN_DELAY_MS, WAVE_SPAWN_WINDOW_MS, WEAPON_FIRE_INTERVAL, WEAPON_FIRE_OFFSET, WEATHER_TYPES, WORLD, WOUND_BLEEDOUT_MS, WOUND_CHANCE } from './constants.js';
 import { resetClickCycle } from './input.js';
 import { render } from './main.js';
 import { applySavedCampaign, clearCampaignSave, loadCampaign, saveCampaign } from './savegame.js';
@@ -19,6 +19,7 @@ export function totalRosterCapacity(){
     + state.scouts.reduce((s,sc)=>s+sc.soldiers.length, 0)
     + state.engineers.reduce((s,en)=>s+en.soldiers.length, 0)
     + (state.medics||[]).reduce((s,me)=>s+me.soldiers.length, 0)
+    + (state.bands||[]).reduce((s,b)=>s+b.soldiers.length, 0)
     + state.mortars.length*MORTAR_CREW_SIZE
     + state.reserve;
 }
@@ -128,6 +129,7 @@ export function maintainFriendlySpacing(){
     ...state.sams.map((u,i)=>({u, kind:'sam', idx:i})),
     ...state.engineers.map((u,i)=>({u, kind:'engineer', idx:i})),
     ...state.medics.map((u,i)=>({u, kind:'medic', idx:i})),
+    ...state.bands.map((u,i)=>({u, kind:'band', idx:i})),
   ].filter(({u})=>u.hp===undefined ? unitAlive(u) : u.hp>0);
   for(let i=0;i<units.length;i++){
     for(let j=i+1;j<units.length;j++){
@@ -371,6 +373,7 @@ export function initGame(){
     sams: [],
     engineers: [],
     medics: [],
+    bands: [],
     walls: [],
     trenches: [],
     fortresses: [],
@@ -726,6 +729,7 @@ export function startStage(){
   if(state.sams) state.sams = state.sams.filter(sam=>sam.hp>0);
   if(state.engineers) state.engineers = state.engineers.filter(e=>unitAlive(e));
   if(state.medics) state.medics = state.medics.filter(m=>unitAlive(m));
+  if(state.bands) state.bands = state.bands.filter(b=>unitAlive(b));
   // per user request: 防壁(壁)は迫撃砲/戦車と同じく、決心のたびにリセットされる擬陣地とは違い、
   // 波を跨いで恒久的に残る(現実の陣地構築なので、破壊されない限り消えない)。
   if(state.walls) state.walls = state.walls.filter(w=>w.hp>0);
@@ -734,7 +738,7 @@ export function startStage(){
   // ことがある(蘇生も手遅れも間に合わなかった場合)。bleedOutAtは実時間(performance.now())
   // 基準のため、そのままだとWAVEクリア後の報酬選択/商店などで経過した実時間の分だけ、次WAVE
   // 開始と同時に手遅れ判定されてしまう。次WAVE開始のこの時点を基準に猶予をリセットする。
-  [state.squads, state.scouts, state.engineers, state.medics].forEach(units=>{
+  [state.squads, state.scouts, state.engineers, state.medics, state.bands].forEach(units=>{
     if(!units) return;
     units.forEach(u=>{
       u.soldiers.forEach(s=>{
@@ -858,6 +862,22 @@ export function startStage(){
       reviveTargetKind: null,
       reviveTargetIdx: null,
       reviveProgressMs: 0,
+    }));
+    // per user request: 音楽隊 -- 名前とは裏腹に近接戦闘に秀でた本部警備専任の実戦部隊。
+    // HQ_X直近(BAND_POS)に配置し、resolveSquadOrders/applySquadMovementと同型のロジック
+    // (resolveBandOrders/applyBandMovement)で動く。近接専用のため小隊のような弾薬(ammo)は
+    // 持たない。
+    state.bands = Array.from({length:NUM_BANDS}, (_,bi)=>({
+      id: bi,
+      order: 'hold',
+      pendingDest: null,
+      huntTargetId: null,
+      standingOrder: null,
+      x: deployX(BAND_POS.x),
+      y: clamp(deployYMid + (bi-(NUM_BANDS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMin, deployYMax),
+      soldiers: makeSoldiers(ROSTER_BAND_TEAMS[bi]),
+      reinforceUsed: false,
+      exposure: EXPOSURE_DEFAULT,
     }));
     state.walls = [];
     state.trenches = [];
@@ -1326,6 +1346,7 @@ export function regroupOverextendedUnits(){
   if(state.antitanks) state.antitanks.forEach(at=>pullBack(at, SQUAD_ADVANCE_LIMIT_X));
   if(state.engineers) state.engineers.forEach(en=>pullBack(en, SQUAD_ADVANCE_LIMIT_X));
   if(state.medics) state.medics.forEach(me=>pullBack(me, SQUAD_ADVANCE_LIMIT_X));
+  if(state.bands) state.bands.forEach(b=>pullBack(b, SQUAD_ADVANCE_LIMIT_X));
   if(state.scouts) state.scouts.forEach(sc=>pullBack(sc, SCOUT_ADVANCE_LIMIT_X));
   if(pulledBack>0){
     log('sys','前線', `${pulledBack}部隊、前線を再編成のため後退。`);
@@ -1487,6 +1508,13 @@ export function buildTrenchAt(x1, y1, x2, y2){
 export function clearSquadDest(idx){
   if(!state.squads[idx]) return;
   state.squads[idx].pendingDest = null;
+  state.orderMode = null;
+  render();
+}
+
+export function clearBandDest(idx){
+  if(!state.bands[idx]) return;
+  state.bands[idx].pendingDest = null;
   state.orderMode = null;
   render();
 }
@@ -1907,6 +1935,67 @@ export function applySquadMovement(sq, sqIdx, dt){
   checkMineTrigger('squad', sqIdx, sq.x, sq.y);
 }
 
+// per user request: 音楽隊 -- 近接戦闘に秀でた本部警備専任の実戦部隊。移動系は小隊
+// (applySquadMovement)とほぼ同型だが、assault/huntの間合いは小隊の200m待避
+// (INFANTRY_STANDOFF_UNITS)ではなく、実際に近接間合い(BAND_ENGAGE_RANGE)まで詰める。
+export function applyBandMovement(band, bandIdx, dt){
+  if(band.pendingDest){
+    const next = terrainAwareStep(band.x, band.y, band.pendingDest.x, band.pendingDest.y, INFANTRY_MOVE_CAP*dt);
+    band.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+    band.y = clamp(next.y, 30, CANVAS_H-30);
+    checkMineTrigger('band', bandIdx, band.x, band.y);
+    if(Math.hypot(band.x-band.pendingDest.x, band.y-band.pendingDest.y) < 12){
+      band.pendingDest = null;
+      log('sys','前線', `音楽隊、指定地点に到着。`);
+    }
+    return;
+  }
+  if(band.order==='advance'){
+    const next = terrainAwareStep(band.x, band.y, SQUAD_ADVANCE_LIMIT_X, band.y, INFANTRY_MOVE_CAP*dt);
+    band.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
+    band.y = clamp(next.y, 30, CANVAS_H-30);
+  } else if(band.order==='retreat'){
+    const next = terrainAwareStep(band.x, band.y, SQUAD_ADVANCE_LIMIT_X, band.y, INFANTRY_MOVE_CAP*dt);
+    band.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
+    band.y = clamp(next.y, 30, CANVAS_H-30);
+  } else if(band.order==='assault'){
+    const enemyInfantry = state.targets.filter(t=>!t.destroyed && t.type==='infantry');
+    if(enemyInfantry.length){
+      let nearest=null, nd=Infinity;
+      enemyInfantry.forEach(t=>{
+        const e = estPos(t);
+        const d = Math.hypot(e.x-band.x, e.y-band.y);
+        if(d<nd){ nd=d; nearest=e; }
+      });
+      if(nearest && nd > BAND_ENGAGE_RANGE*0.7){
+        const next = terrainAwareStep(band.x, band.y, nearest.x, nearest.y, INFANTRY_MOVE_CAP*dt);
+        band.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+        band.y = clamp(next.y, 30, CANVAS_H-30);
+      }
+    } else {
+      const next = terrainAwareStep(band.x, band.y, SQUAD_ADVANCE_LIMIT_X, band.y, INFANTRY_MOVE_CAP*dt);
+      band.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ADVANCE_LIMIT_X);
+      band.y = clamp(next.y, 30, CANVAS_H-30);
+    }
+  } else if(band.order==='hunt' && band.huntTargetId){
+    const target = state.targets.find(t=>t.id===band.huntTargetId);
+    if(!target || target.destroyed){
+      band.huntTargetId = null;
+      band.order = 'hold';
+      log('sys','前線', `音楽隊、攻撃目標を喪失(撃破/消失)。待機に移行。`);
+    } else {
+      const e = estPos(target);
+      const dist = Math.hypot(e.x-band.x, e.y-band.y);
+      if(dist > BAND_ENGAGE_RANGE*0.7){
+        const next = terrainAwareStep(band.x, band.y, e.x, e.y, INFANTRY_MOVE_CAP*dt);
+        band.x = clamp(next.x, SQUAD_RETREAT_LIMIT_X, SQUAD_ASSAULT_LIMIT_X);
+        band.y = clamp(next.y, 30, CANVAS_H-30);
+      }
+    }
+  }
+  checkMineTrigger('band', bandIdx, band.x, band.y);
+}
+
 export function applyEngineerMovement(en, enIdx, dt){
   if(en.pendingDest){
     const next = terrainAwareStep(en.x, en.y, en.pendingDest.x, en.pendingDest.y, INFANTRY_MOVE_CAP*dt);
@@ -2041,6 +2130,7 @@ function reviveTargetArray(kind){
   if(kind==='scout') return state.scouts;
   if(kind==='engineer') return state.engineers;
   if(kind==='medic') return state.medics;
+  if(kind==='band') return state.bands;
   return null;
 }
 
@@ -2049,6 +2139,7 @@ function reviveTargetLabel(kind, idx){
   if(kind==='scout') return `斥候${idx+1}班`;
   if(kind==='engineer') return '工兵小隊';
   if(kind==='medic') return `衛生${idx+1}小隊`;
+  if(kind==='band') return '音楽隊';
   return '';
 }
 
@@ -2263,6 +2354,93 @@ export function resolveSquadOrders(dt){
   }
   if(allSquadsWiped()){
     log('sys','前線', '自軍歩兵、全小隊が壊滅。前線が崩壊した。');
+    anyEvent = true;
+  }
+  return anyEvent;
+}
+
+export function allBandsWiped(){
+  return !state.bands.length || state.bands.every(b=>!unitAlive(b));
+}
+
+// per user request: 音楽隊 -- 名前とは裏腹に音楽とは無関係の、近接戦闘に秀でた本部警備専任の
+// 実戦部隊。resolveSquadOrdersとほぼ同型だが、射程はBAND_ENGAGE_RANGE(近接専用、小隊の
+// SQUAD_ENGAGE_RANGEよりずっと短い)、威力はBAND_DUEL_DMG_TO_ENEMY(小隊のINFANTRY_DUEL_
+// DMG_TO_ENEMYより高い)を使う。近接武器のため弾薬(ammo)の概念は持たない。
+export function resolveBandOrders(dt){
+  let anyEvent = false;
+  {
+    state.bands.forEach((band, bandIdx)=>{
+      const aliveSoldiers = band.soldiers.filter(s=>s.alive && !s.wounded);
+      if(aliveSoldiers.length===0) return;
+      if(band.resting){ tickUnitRest(band, '音楽隊', dt); return; }
+      applyStandingOrder(band, '音楽隊', true);
+      applyBandMovement(band, bandIdx, dt);
+
+      let engageTargets = state.targets.filter(t=>!t.destroyed && (t.type==='infantry' || t.type==='artillery'));
+      if(band.order==='hunt' && band.huntTargetId){
+        const huntTarget = state.targets.find(t=>t.id===band.huntTargetId && !t.destroyed && t.type!=='heli' && t.type!=='drone');
+        if(huntTarget && !engageTargets.includes(huntTarget)) engageTargets = engageTargets.concat([huntTarget]);
+      }
+      if(engageTargets.length===0) return;
+      if(!isUnitBurstReady(band)) return;
+      let dmgMult=1, casualtyMult=1;
+      if(band.order==='assault' || band.order==='hunt'){ dmgMult=1.6; casualtyMult=1.5; }
+      else if(band.order==='hold'){ dmgMult=0.9; casualtyMult=0.6; }
+      else if(band.order==='retreat'){ dmgMult=0.5; casualtyMult=0.7; }
+
+      let firedThisTick = false;
+      engageTargets.forEach(t=>{
+        if(firedThisTick) return;
+        if(t.destroyed) return;
+        const e = estPos(t);
+        const dist = Math.hypot(e.x-band.x, e.y-band.y);
+        if(dist > BAND_ENGAGE_RANGE) return;
+        if(!hasLineOfSight(band.x, band.y, t.trueX, t.trueY)) return;
+        const blockWall = wallBlockingLineOfFire(band.x, band.y, t.trueX, t.trueY);
+        if(blockWall){
+          anyEvent = true;
+          firedThisTick = true;
+          consumeBurstShot(band);
+          damageWall(blockWall, Math.round(rnd(BAND_DUEL_DMG_TO_ENEMY[0], BAND_DUEL_DMG_TO_ENEMY[1])), '音楽隊の白兵戦');
+          return;
+        }
+        if(revealTarget(t)){
+          log('op','斥候', `音楽隊が${t.id}と交戦、<b>${t.def.label}</b>と識別。`);
+        }
+        const curAlive = band.soldiers.filter(s=>s.alive && !s.wounded);
+        if(curAlive.length===0) return;
+        const suppressed = isSuppressed(t);
+        const strengthFrac = curAlive.length/band.soldiers.length;
+        const bandAltMult = altitudeBonus(band.x, band.y, t.trueX, t.trueY);
+        const suppressionDmgMult = suppressed ? SUPPRESSION_DUEL_DMG_BONUS : 1;
+        const enemyExposureMult = exposureNormalizedMult(getTargetExposure(t));
+        const vetDmgMult = 1 + unitAvgVetLevel(band.soldiers)*VET_DMG_BONUS_PER_LEVEL;
+        const dmgToEnemy = Math.round(rnd(BAND_DUEL_DMG_TO_ENEMY[0], BAND_DUEL_DMG_TO_ENEMY[1]) * strengthFrac * dmgMult * bandAltMult * suppressionDmgMult * enemyExposureMult * vetDmgMult);
+        applyDamageToTarget(t, dmgToEnemy);
+        anyEvent = true;
+        firedThisTick = true;
+        consumeBurstShot(band);
+        fireTracer(band.x, band.y, e.x, e.y, 220, 'rifle', aliveFigureOffsets(band.soldiers, SQUAD_GRID_OFFSETS));
+        if(t.hp<=0 && !t.destroyed){
+          t.destroyed = true; t.hp = 0;
+          log('op','斥候', `${t.id} 音楽隊との交戦で撃破を確認。`);
+          onTargetDestroyed(t);
+        }
+        const enemyAltMult = altitudeBonus(t.trueX, t.trueY, band.x, band.y);
+        const suppressionCasualtyMult = suppressed ? SUPPRESSION_CASUALTY_MULT : 1;
+        const casualtyChance = (0.08 + state.stage*0.008) * casualtyMult * enemyAltMult * suppressionCasualtyMult * exposureNormalizedMult(getUnitExposure({kind:'band', idx:bandIdx})) * BURST_DMG_COMPENSATION;
+        if(Math.random() < casualtyChance){
+          const victim = inflictCasualty(band, '音楽隊', 'band', bandIdx);
+          if(victim){
+            fireTracer(e.x, e.y, band.x, band.y, 280, 'rifle', t.type==='infantry' ? aliveFigureOffsets(t.troops, t.formationOffsets) : null);
+          }
+        }
+      });
+    });
+  }
+  if(allBandsWiped() && state.bands.length){
+    log('sys','前線', '音楽隊、壊滅。本部が無防備になった。');
     anyEvent = true;
   }
   return anyEvent;
@@ -2653,6 +2831,12 @@ export function setSquadOrder(idx, order){
   render();
 }
 
+export function setBandOrder(idx, order){
+  if(!state.bands[idx] || state.bands[idx].resting) return;
+  state.bands[idx].order = order;
+  render();
+}
+
 export function setTankOrder(idx, order){
   if(!state.tanks[idx]) return;
   state.tanks[idx].order = order;
@@ -2672,7 +2856,7 @@ export function setAntitankOrder(idx, order){
 }
 
 export function setStandingOrder(kind, idx, value){
-  const unit = kind==='squad' ? state.squads[idx] : null;
+  const unit = kind==='squad' ? state.squads[idx] : kind==='band' ? state.bands[idx] : null;
   if(!unit) return;
   unit.standingOrder = value || null;
   render();
@@ -2838,12 +3022,13 @@ export function clearMortarMainline(idx){
 
 export function reinforceUnitLabel(kind, idx){
   if(kind==='squad') return `第${idx+1}小隊`;
+  if(kind==='band') return '音楽隊';
   return `斥候${idx+1}班`;
 }
 
 export function requestReinforcement(kind, idx){
   if(!state || state.stageResolved) return;
-  const unit = kind==='squad' ? state.squads[idx] : kind==='scout' ? state.scouts[idx] : null;
+  const unit = kind==='squad' ? state.squads[idx] : kind==='scout' ? state.scouts[idx] : kind==='band' ? state.bands[idx] : null;
   if(!unit || unit.reinforceUsed || unit.resting) return;
   const deadCount = unit.soldiers.filter(s=>!s.alive).length;
   if(deadCount===0) return;
@@ -2879,6 +3064,7 @@ export function restUnitRef(kind, idx){
   if(kind==='scout') return state.scouts[idx];
   if(kind==='engineer') return state.engineers[idx];
   if(kind==='medic') return state.medics[idx];
+  if(kind==='band') return state.bands[idx];
   return null;
 }
 
@@ -2887,6 +3073,7 @@ export function restUnitLabel(kind, idx){
   if(kind==='scout') return `斥候${idx+1}班`;
   if(kind==='engineer') return `工兵小隊`;
   if(kind==='medic') return `衛生${idx+1}小隊`;
+  if(kind==='band') return `音楽隊`;
   return '';
 }
 
@@ -3044,6 +3231,10 @@ export function getUnitExposure(candidate){
     const u = state.medics[candidate.idx];
     return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y) + trenchCoverBonusAt(u.x, u.y);
   }
+  if(candidate.kind==='band'){
+    const u = state.bands[candidate.idx];
+    return u.exposure + unitAvgVetLevel(u.soldiers)*VET_EXPOSURE_BONUS_PER_LEVEL + terrainCoverTotal(u.x, u.y) + trenchCoverBonusAt(u.x, u.y);
+  }
   return EXPOSURE_DEFAULT;
 }
 
@@ -3085,6 +3276,9 @@ export function nearestFriendlyAsset(x, y, includeSquads){
     });
     state.medics.forEach((me,idx)=>{
       if(me.soldiers.some(s=>s.alive)) candidates.push({kind:'medic', idx, x:me.x, y:me.y});
+    });
+    state.bands.forEach((band,idx)=>{
+      if(band.soldiers.some(s=>s.alive)) candidates.push({kind:'band', idx, x:band.x, y:band.y});
     });
   }
   // per user request: 擬陣地 lure enemy indirect fire/vehicle assaults away from real assets
@@ -3180,6 +3374,7 @@ export function resolveBleedOuts(){
     {units:state.scouts,    label:i=>`斥候${i+1}班`},
     {units:state.engineers, label:()=>'工兵小隊'},
     {units:state.medics||[], label:i=>`衛生${i+1}小隊`},
+    {units:state.bands||[], label:()=>'音楽隊'},
   ];
   groups.forEach(group=>{
     group.units.forEach((unit,uIdx)=>{
@@ -3317,6 +3512,18 @@ export function damageFriendlyAsset(target, dmg, sourceLabel){
       if(unitAliveCount(me)===0){
         spawnDestructionEffect(me.x, me.y, `衛生${target.idx+1}小隊 全滅!`, FRIENDLY_MARK_COLOR);
         announceTicker(`衛生${target.idx+1}小隊 全滅!`, 'death');
+        speakRandomAliveUnit('outburst');
+      }
+    }
+  } else if(target.kind==='band'){
+    const band = state.bands[target.idx];
+    if(!band) return;
+    if(unitAliveCount(band)>0){
+      log('sys','被弾', `${sourceLabel}が音楽隊を攻撃。`);
+      inflictCasualty(band, '音楽隊', 'band', target.idx);
+      if(unitAliveCount(band)===0){
+        spawnDestructionEffect(band.x, band.y, '音楽隊 全滅!', FRIENDLY_MARK_COLOR);
+        announceTicker('音楽隊 全滅!', 'death');
         speakRandomAliveUnit('outburst');
       }
     }
@@ -4080,6 +4287,10 @@ export function resolveEnemyTurn(dt){
   if(!allMedicsWiped()){
     resolveMedicOrders(dt);
   }
+  let bandEvent = false;
+  if(!allBandsWiped()){
+    bandEvent = resolveBandOrders(dt);
+  }
   // Keep independently commanded formations from collapsing into one marker while
   // they advance toward the same FEBA or contact point in real time.
   maintainFriendlySpacing();
@@ -4090,7 +4301,7 @@ export function resolveEnemyTurn(dt){
   // per user request: 交戦時のサウンド -- looping battlefield-combat ambience plays while
   // squads/antitanks are actively engaging this turn, and pauses again once nothing is
   // actively engaging.
-  if(infEvent || antitankEvent || tankEvent || samEvent || antiDroned || heliEvent || aaEvent) playCombatAmbience(); else stopCombatAmbience();
+  if(infEvent || antitankEvent || tankEvent || samEvent || antiDroned || heliEvent || aaEvent || bandEvent) playCombatAmbience(); else stopCombatAmbience();
   state.targets.forEach(t=>{
     if(t.suppressed>0) t.suppressed = Math.max(0, t.suppressed-dt);
   });
@@ -4485,7 +4696,7 @@ export function checkEnd(){
   }
 
   const hasAmmo = state.ammo.he>0 || state.ammo.heat>0;
-  const canFightOn = hasAmmo || state.antitanks.some(at=>at.hp>0) || state.squads.some(sq=>sq.soldiers.some(s=>s.alive));
+  const canFightOn = hasAmmo || state.antitanks.some(at=>at.hp>0) || state.squads.some(sq=>sq.soldiers.some(s=>s.alive)) || state.bands.some(b=>b.soldiers.some(s=>s.alive));
   if(!canFightOn){
     state.stageResolved = true;
     log('sys','システム','全弾薬を消費し、交戦可能な部隊も残っていない。任務継続不能。');
@@ -4624,6 +4835,32 @@ export function clearSquadHunt(idx){
   if(!sq) return;
   sq.huntTargetId = null;
   if(sq.order==='hunt') sq.order = 'hold';
+  render();
+}
+
+export function assignBandHunt(idx, explicitTargetId){
+  const band = state.bands[idx];
+  if(!band || !band.soldiers.some(s=>s.alive) || band.resting) return;
+  const targetId = explicitTargetId || state.enemyCommandBox;
+  const target = targetId ? state.targets.find(t=>t.id===targetId && !t.destroyed) : null;
+  if(!target || target.type==='heli' || target.type==='drone') return;
+  if(band.order==='hunt' && band.huntTargetId===target.id){
+    clearBandHunt(idx);
+    log('sys','前線', `音楽隊、${target.id}への攻撃指示を解除。`);
+    return;
+  }
+  band.order = 'hunt';
+  band.huntTargetId = target.id;
+  band.pendingDest = null;
+  log('sys','前線', `音楽隊、${target.id} を攻撃目標に指示。接敵まで前進する。`);
+  render();
+}
+
+export function clearBandHunt(idx){
+  const band = state.bands[idx];
+  if(!band) return;
+  band.huntTargetId = null;
+  if(band.order==='hunt') band.order = 'hold';
   render();
 }
 
@@ -4819,4 +5056,4 @@ export function advanceSimulation(){
 }
 
 
-Object.assign(window, { totalSquadCapacity, totalRosterCapacity, roundRobinDistribute, gameClockNow, formatGameClock, mortarTooCloseToFire, mortarNotReadyToFire, setGameSpeedByIndex, unitMayFire, deltaTurns, updateTurnBoundary, currentTurnFloor, turnJustCrossed, isSuppressed, maintainFriendlySpacing, smoothVisualPos, buildEnemyInfantryGroups, effectMultiplier, bestMortarLoadoutFor, applyBestMortarLoadout, makeSoldiers, vetLevelOf, unitAvgVetLevel, unitAliveCount, makeFreshRoster, addNewSquad, addNewScout, addNewMortar, addNewAntitank, addNewHeli, healAllForces, unitAlive, initGame, rollMapSeedCandidates, startSetup, abandonSavedCampaign, buildHeliTarget, buildEnemyHqTarget, deployBoxSize, startStage, buildPlacementQueue, currentPlacementUnit, handlePlacementClick, skipRemainingPlacement, finishPlacement, makeDecoy, randomDecoySpot, applyDecoyPlacementMode, placeDecoyAt, finishDecoyPlacement, retryStage, deployStage, estimatedTargetPos, estPos, computeDispersionAt, estPosFromMortar, hasLineOfSight, lastStandActive, isTargetDetected, clearHqDest, clearTankDest, clearSamDest, clearAntitankDest, setEngineerOrder, armEngineerMoveOrder, clearEngineerDest, assignEngineerRepair, clearEngineerRepair, setMedicOrder, armMedicMoveOrder, clearMedicDest, assignMedicRevive, clearMedicRevive, armWallBuildOrder, buildWallAt, armTrenchBuildOrder, buildTrenchAt, clearSquadDest, armScoutMoveOrder, clearScoutOrder, revealTarget, updateHqDetection, findHqDefenseThreat, resolveOneScoutDecision, resolveScoutDecision, resolveFriendlyHeliTurn, allScoutsWiped, allAntitanksWiped, allMortarsWiped, setMortarOrder, armMortarTargetOrder, resolveOneMortarDecision, resolveMortarDecision, enemyCounterAttack, totalAliveSoldiers, allSquadsWiped, applyStandingOrder, applyHqMovement, resolveHqMovement, applySquadMovement, applyEngineerMovement, allEngineersWiped, resolveEngineerOrders, applyMedicMovement, allMedicsWiped, resolveMedicOrders, resolveSquadOrders, applyTankMovement, allTanksWiped, applySamMovement, allSamsWiped, resolveSamOrders, resolveTankOrders, applyAntitankMovement, resolveAntitankOrders, setSquadOrder, setTankOrder, setSamOrder, setAntitankOrder, setStandingOrder, resolveSmartUnitIdxs, randomMoveOffsetCanvasUnits, directedMoveOffsetCanvasUnits, applySmartMortarScatter, applySmartOrder, armMortarMainlineOrder, clearMortarMainline, reinforceUnitLabel, requestReinforcement, restUnitRef, restUnitLabel, startRest, tickUnitRest, buildHqCover, repairHq, applyHqSupplyZone, friendlyFireCandidateLabel, checkFriendlyFireAt, getUnitExposure, rollExposureHit, getTargetExposure, nearestFriendlyAsset, applyDamageToTarget, damageFriendlyAsset, spawnInfantryDrone, spawnInfantryDroneSwarm, targetGridCellKey, rebuildTargetGrid, nearestOtherAliveTarget, mergeAdjustedGoal, maybePlaceMine, checkMineTrigger, advanceEnemyArtillery, resolveVehicleAssault, resolveHeliAssault, resolveEnemyAntiAir, resolveSquadAntiDrone, resolveSquadAntiVehicle, resolveDroneSwarm, resolveEnemyEvasion, advanceEnemyInfantry, resolveMortarCounterBattery, resolveEnemyTurn, launchMortarVolley, isAutoCommitRunning, startRealtimeLoop, toggleAutoCommit, setGameSpeed, renderThrottledForStep, simulationStep, processAirborneWarning, finalizeVolley, checkEnd, triggerWaveClearSequence, computeReward, applyWaveResupply, awardVeteranXp, handleStageClear, assignSquadHunt, clearSquadHunt, assignTankHunt, clearTankHunt, repairTank, assignSamHunt, clearSamHunt, repairSam, assignAntitankHunt, clearAntitankHunt, repairAntitank, assignMortarFire, updateFireConfig, advanceSimulation });
+Object.assign(window, { totalSquadCapacity, totalRosterCapacity, roundRobinDistribute, gameClockNow, formatGameClock, mortarTooCloseToFire, mortarNotReadyToFire, setGameSpeedByIndex, unitMayFire, deltaTurns, updateTurnBoundary, currentTurnFloor, turnJustCrossed, isSuppressed, maintainFriendlySpacing, smoothVisualPos, buildEnemyInfantryGroups, effectMultiplier, bestMortarLoadoutFor, applyBestMortarLoadout, makeSoldiers, vetLevelOf, unitAvgVetLevel, unitAliveCount, makeFreshRoster, addNewSquad, addNewScout, addNewMortar, addNewAntitank, addNewHeli, healAllForces, unitAlive, initGame, rollMapSeedCandidates, startSetup, abandonSavedCampaign, buildHeliTarget, buildEnemyHqTarget, deployBoxSize, startStage, buildPlacementQueue, currentPlacementUnit, handlePlacementClick, skipRemainingPlacement, finishPlacement, makeDecoy, randomDecoySpot, applyDecoyPlacementMode, placeDecoyAt, finishDecoyPlacement, retryStage, deployStage, estimatedTargetPos, estPos, computeDispersionAt, estPosFromMortar, hasLineOfSight, lastStandActive, isTargetDetected, clearHqDest, clearTankDest, clearSamDest, clearAntitankDest, setEngineerOrder, armEngineerMoveOrder, clearEngineerDest, assignEngineerRepair, clearEngineerRepair, setMedicOrder, armMedicMoveOrder, clearMedicDest, assignMedicRevive, clearMedicRevive, armWallBuildOrder, buildWallAt, armTrenchBuildOrder, buildTrenchAt, clearSquadDest, clearBandDest, armScoutMoveOrder, clearScoutOrder, revealTarget, updateHqDetection, findHqDefenseThreat, resolveOneScoutDecision, resolveScoutDecision, resolveFriendlyHeliTurn, allScoutsWiped, allAntitanksWiped, allMortarsWiped, setMortarOrder, armMortarTargetOrder, resolveOneMortarDecision, resolveMortarDecision, enemyCounterAttack, totalAliveSoldiers, allSquadsWiped, applyStandingOrder, applyHqMovement, resolveHqMovement, applySquadMovement, applyEngineerMovement, allEngineersWiped, resolveEngineerOrders, applyMedicMovement, allMedicsWiped, resolveMedicOrders, applyBandMovement, allBandsWiped, resolveBandOrders, resolveSquadOrders, applyTankMovement, allTanksWiped, applySamMovement, allSamsWiped, resolveSamOrders, resolveTankOrders, applyAntitankMovement, resolveAntitankOrders, setSquadOrder, setTankOrder, setSamOrder, setAntitankOrder, setStandingOrder, resolveSmartUnitIdxs, randomMoveOffsetCanvasUnits, directedMoveOffsetCanvasUnits, applySmartMortarScatter, applySmartOrder, armMortarMainlineOrder, clearMortarMainline, reinforceUnitLabel, requestReinforcement, restUnitRef, restUnitLabel, startRest, tickUnitRest, buildHqCover, repairHq, applyHqSupplyZone, friendlyFireCandidateLabel, checkFriendlyFireAt, getUnitExposure, rollExposureHit, getTargetExposure, nearestFriendlyAsset, applyDamageToTarget, damageFriendlyAsset, spawnInfantryDrone, spawnInfantryDroneSwarm, targetGridCellKey, rebuildTargetGrid, nearestOtherAliveTarget, mergeAdjustedGoal, maybePlaceMine, checkMineTrigger, advanceEnemyArtillery, resolveVehicleAssault, resolveHeliAssault, resolveEnemyAntiAir, resolveSquadAntiDrone, resolveSquadAntiVehicle, resolveDroneSwarm, resolveEnemyEvasion, advanceEnemyInfantry, resolveMortarCounterBattery, resolveEnemyTurn, launchMortarVolley, isAutoCommitRunning, startRealtimeLoop, toggleAutoCommit, setGameSpeed, renderThrottledForStep, simulationStep, processAirborneWarning, finalizeVolley, checkEnd, triggerWaveClearSequence, computeReward, applyWaveResupply, awardVeteranXp, handleStageClear, assignSquadHunt, clearSquadHunt, assignBandHunt, clearBandHunt, setBandOrder, assignTankHunt, clearTankHunt, repairTank, assignSamHunt, clearSamHunt, repairSam, assignAntitankHunt, clearAntitankHunt, repairAntitank, assignMortarFire, updateFireConfig, advanceSimulation });

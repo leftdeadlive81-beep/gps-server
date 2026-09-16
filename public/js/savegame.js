@@ -50,6 +50,7 @@ export function saveCampaign(state){
       helis: state.helis,
       engineers: state.engineers,
       medics: state.medics,
+      bands: state.bands,
       walls: state.walls,
       trenches: state.trenches,
     };
@@ -90,7 +91,7 @@ export function applySavedCampaign(state, saved){
   const fields = [
     'stage','difficulty','money','ammo','fuzeUnlocked','equipment','reserve','reserveRoster',
     'missionMinutes','gameSpeed','deploymentMode','decoyPlacementMode',
-    'hq','mortars','squads','scouts','antitanks','tanks','sams','helis','engineers','medics','walls','trenches',
+    'hq','mortars','squads','scouts','antitanks','tanks','sams','helis','engineers','medics','bands','walls','trenches',
   ];
   fields.forEach(f=>{
     if(saved[f]!==undefined) state[f] = saved[f];

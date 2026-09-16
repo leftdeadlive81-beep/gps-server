@@ -1,7 +1,7 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement, unlockedAchievements } from './achievements.js';
 import { abandonSavedCampaign, addNewAntitank, addNewHeli, addNewMortar, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, healAllForces, isAutoCommitRunning, mapSeedCandidates, mortarNotReadyToFire, mortarTooCloseToFire, mortarTooFarToFire, resumedFromSave, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
-import { ACHIEVEMENTS, AMMO_PACK, ANTITANK_AA_RANGE, ANTITANK_ENGAGE_RANGE, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_ENGAGE_RANGE, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SMART_ACTIONS, SMART_UNIT_TYPES, SQUAD_ENGAGE_RANGE, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, TANK_ENGAGE_RANGE, TANK_REPAIR_COST_PER_HP,TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
+import { ACHIEVEMENTS, AMMO_PACK, ANTITANK_AA_RANGE, ANTITANK_ENGAGE_RANGE, BAND_ENGAGE_RANGE, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_ENGAGE_RANGE, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SMART_ACTIONS, SMART_UNIT_TYPES, SQUAD_ENGAGE_RANGE, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, TANK_ENGAGE_RANGE, TANK_REPAIR_COST_PER_HP,TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
 import { canvasToScreen, multiSelectCommonOrders, multiSelectMode, multiSelected, pruneMultiSelected, unitGroups } from './input.js';
 import { render } from './main.js';
 import { elevationAt, elevationLabel, terrainTypeAt, terrainTypeLabel } from './terrain.js';
@@ -951,6 +951,33 @@ export function squadBoxHtml(idx){
   `;
 }
 
+export function bandBoxHtml(idx){
+  const band = state.bands[idx];
+  const alive = band.soldiers.filter(s=>s.alive).length;
+  const wiped = alive===0 || band.resting;
+  const btns = ['advance','hold','assault','retreat'].map(o=>
+    `<button class="btn squad-order-btn ${band.order===o?'active':''}" ${wiped?'disabled':''} onclick="setBandOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
+  ).join('');
+  const huntTarget = band.huntTargetId ? state.targets.find(t=>t.id===band.huntTargetId) : null;
+  const huntStatus = (huntTarget && !huntTarget.destroyed)
+    ? `攻撃目標: ${huntTarget.id} (${huntTarget.revealed?huntTarget.def.label:'識別不能'})`
+    : null;
+  return `
+    <div class="meta">${alive} / ${band.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(band.x,band.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(band.x,band.y))}</div>
+    <div class="meta" style="margin-bottom:6px;color:var(--muted);">近接戦闘専任(射程は小隊よりずっと短いが威力は高い) ― 本部警備が主任務</div>
+    ${exposureMetaHtml(getUnitExposure({kind:'band', idx}))}
+    ${restButtonHtml('band', idx, band)}
+    <div class="squad-orders" style="margin:6px 0;">${btns}</div>
+    <div class="meta" style="margin-bottom:6px;">${wiped ? '移動先: 指定不可' : (band.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます')}</div>
+    ${band.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearBandDest(${idx})">移動先を解除</button>` : ''}
+    ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearBandHunt(${idx})">攻撃目標を解除</button>` : ''}
+    ${wiped ? '' : `<div class="meta" style="margin:8px 0 4px;">攻撃目標を選択:</div>${huntTargetListHtml(idx, band, BAND_ENGAGE_RANGE, 'assignBandHunt', tt=>tt.type!=='heli'&&tt.type!=='drone', band.huntTargetId)}`}
+    ${standingOrderSelectHtml('band', idx, band, true)}
+    ${soldierRosterHtml(band.soldiers)}
+    ${reinforceButtonHtml('band', idx, band)}
+  `;
+}
+
 export function tankBoxHtml(idx){
   const tank = state.tanks[idx];
   const dead = tank.hp<=0;
@@ -1104,6 +1131,7 @@ export function medicBoxHtml(idx){
     ...state.scouts.map((u,i)=>({kind:'scout', idx:i, unit:u, label:`斥候${i+1}班`})),
     ...state.engineers.map((u,i)=>({kind:'engineer', idx:i, unit:u, label:'工兵小隊'})),
     ...state.medics.map((u,i)=>({kind:'medic', idx:i, unit:u, label:`衛生${i+1}小隊`})),
+    ...state.bands.map((u,i)=>({kind:'band', idx:i, unit:u, label:'音楽隊'})),
   ].filter(c=>c.unit.soldiers.some(s=>s.alive && s.wounded));
   const reviveTargetEntry = me.reviveTargetKind!=null && me.reviveTargetIdx!=null
     ? reviveCandidates.find(c=>c.kind===me.reviveTargetKind && c.idx===me.reviveTargetIdx)
@@ -1227,6 +1255,12 @@ export function renderCommandBox(){
     title = `衛生${state.commandBox.idx+1}小隊`;
     bodyHtml = medicBoxHtml(state.commandBox.idx);
     pos = canvasToScreen(me._visX!==undefined?me._visX:me.x, me._visY!==undefined?me._visY:me.y);
+  } else if(kind==='band'){
+    const band = state.bands[state.commandBox.idx];
+    if(!band || !unitAlive(band)){ box.style.display='none'; return; }
+    title = '音楽隊';
+    bodyHtml = bandBoxHtml(state.commandBox.idx);
+    pos = canvasToScreen(band._visX!==undefined?band._visX:band.x, band._visY!==undefined?band._visY:band.y);
   } else {
     box.style.display='none';
     return;
@@ -1436,6 +1470,10 @@ export function renderStats(){
     const alive = me.soldiers.filter(s=>s.alive).length;
     rows.push(forceRow(`衛生${i+1}`, alive/me.soldiers.length, `${alive}/${me.soldiers.length}`, 'var(--blue-id)', 'medic', i));
   });
+  state.bands.forEach((band,i)=>{
+    const alive = band.soldiers.filter(s=>s.alive).length;
+    rows.push(forceRow(`音楽隊`, alive/band.soldiers.length, `${alive}/${band.soldiers.length}`, 'var(--blue-id)', 'band', i));
+  });
   rows.push(forceRow('予備', state.reserve/RESERVE_SIZE, `${state.reserve}/${RESERVE_SIZE}`, 'var(--muted)'));
   document.getElementById('force-list').innerHTML = rows.join('');
 
@@ -1577,6 +1615,7 @@ export function repositionOpenCommandBoxes(){
         : kind==='antitank' ? state.antitanks[idx]
         : kind==='engineer' ? state.engineers[idx]
         : kind==='medic' ? state.medics[idx]
+        : kind==='band' ? state.bands[idx]
         : null;
       if(unit){
         const ux = unit._visX!==undefined ? unit._visX : unit.x;
@@ -1640,4 +1679,4 @@ export function closeSurrenderOverlay(){
 }
 
 
-Object.assign(window, { renderMapSelectOverlay, renderMapSelectBody, selectMapSeed, renderDeploymentSelectBody, selectDeploymentMode, renderDecoySelectBody, selectDecoyMode, openShop, closeShop, renderShop, buyEquipment, buyAmmo, unlockFuze, toggleStatbar, toggleBoardNote, toggleDrawer, closeAllDrawers, toggleMapFullscreen, updateFullscreenBtnIcon, log, openSmartOrder, closeSmartOrder, smartOrderBack, smartOrderPickType, smartOrderPickScope, smartOrderPickAction, smartOrderPickTarget, smartOrderConfirmInstant, renderSmartOrder, hqBoxHtml, showWaveRewardChoice, chooseWaveReward, setOverlayAccent, showStageClear, proceedToShop, showGameClear, showStageFailed, renderMultiSelectBox, closeCommandBox, closeEnemyCommandBox, mortarBoxHtml, mortarMainlineHtml, updateFireConfigCancel, exposureMetaHtml, soldierRosterHtml, restButtonHtml, reinforceButtonHtml, scoutBoxHtml, standingOrderSelectHtml, squadBoxHtml, tankBoxHtml, samBoxHtml, engineerBoxHtml, medicBoxHtml, antitankBoxHtml, renderCommandBox, positionCommandBox, renderEnemyCommandBox, renderStats, renderDecisionPanel, closeDecoyCommandBox, renderDecoyCommandBox, repositionOpenCommandBoxes, anyOverlayShown, showBattleStartBanner, openSurrenderOverlay, closeSurrenderOverlay });
+Object.assign(window, { renderMapSelectOverlay, renderMapSelectBody, selectMapSeed, renderDeploymentSelectBody, selectDeploymentMode, renderDecoySelectBody, selectDecoyMode, openShop, closeShop, renderShop, buyEquipment, buyAmmo, unlockFuze, toggleStatbar, toggleBoardNote, toggleDrawer, closeAllDrawers, toggleMapFullscreen, updateFullscreenBtnIcon, log, openSmartOrder, closeSmartOrder, smartOrderBack, smartOrderPickType, smartOrderPickScope, smartOrderPickAction, smartOrderPickTarget, smartOrderConfirmInstant, renderSmartOrder, hqBoxHtml, showWaveRewardChoice, chooseWaveReward, setOverlayAccent, showStageClear, proceedToShop, showGameClear, showStageFailed, renderMultiSelectBox, closeCommandBox, closeEnemyCommandBox, mortarBoxHtml, mortarMainlineHtml, updateFireConfigCancel, exposureMetaHtml, soldierRosterHtml, restButtonHtml, reinforceButtonHtml, scoutBoxHtml, standingOrderSelectHtml, squadBoxHtml, bandBoxHtml, tankBoxHtml, samBoxHtml, engineerBoxHtml, medicBoxHtml, antitankBoxHtml, renderCommandBox, positionCommandBox, renderEnemyCommandBox, renderStats, renderDecisionPanel, closeDecoyCommandBox, renderDecoyCommandBox, repositionOpenCommandBoxes, anyOverlayShown, showBattleStartBanner, openSurrenderOverlay, closeSurrenderOverlay });

@@ -211,6 +211,20 @@ export const SQUAD_SIZE = 10;
 
 export const NUM_SQUADS = 4;
 
+// per user request: 音楽隊 -- 名前とは裏腹に音楽とは無関係の、近接戦闘に秀でた本部警備専任の
+// 実戦部隊。射程は小隊(SQUAD_ENGAGE_RANGE=100)よりずっと短い近接専用だが、1発あたりの
+// 威力は高い(接近を許した敵を確実に叩く精鋭部隊という位置づけ)。配置もHQ_X直近にして、
+// 本部の目と鼻の先を守る構成にする。resolveSquadOrders/squadBoxHtmlと同型の設計。
+export const NUM_BANDS = 1;
+
+export const BAND_SQUAD_SIZE = 8;
+
+export const BAND_POS = {x: HQ_X + 40, y: CANVAS_H/2};
+
+export const BAND_ENGAGE_RANGE = 55;
+
+export const BAND_DUEL_DMG_TO_ENEMY = [4, 9];
+
 export const SCOUT_SQUAD_SIZE = 5;
 
 export const NUM_SCOUTS = 3;
@@ -531,12 +545,25 @@ export const PERSONNEL_ROSTER = [
   {rank:'1等陸士', name:'平井'},
   {rank:'2等陸士', name:'村山'},
   {rank:'2等陸士', name:'荒木'},
+  // per user request: 音楽隊を追加。同じ理由でさらに人員を足す(NUM_BANDS*BAND_SQUAD_SIZE
+  // 分+若干の余裕)。
+  {rank:'2等陸尉', name:'水野'},
+  {rank:'3等陸曹', name:'菅野'},
+  {rank:'3等陸曹', name:'長沢'},
+  {rank:'陸士長', name:'福井'},
+  {rank:'陸士長', name:'秋山'},
+  {rank:'1等陸士', name:'相沢'},
+  {rank:'1等陸士', name:'寺田'},
+  {rank:'1等陸士', name:'河合'},
+  {rank:'2等陸士', name:'柳沢'},
+  {rank:'2等陸士', name:'小松'},
 ];
 
-export const [ROSTER_MORTAR_POOL, ROSTER_SCOUT_POOL, ROSTER_SQUAD_POOL, ROSTER_ENGINEER_POOL, ROSTER_MEDIC_POOL, ROSTER_RESERVE_INITIAL] =
+export const [ROSTER_MORTAR_POOL, ROSTER_SCOUT_POOL, ROSTER_SQUAD_POOL, ROSTER_ENGINEER_POOL, ROSTER_MEDIC_POOL, ROSTER_BAND_POOL, ROSTER_RESERVE_INITIAL] =
   roundRobinDistribute(PERSONNEL_ROSTER, [
     MORTAR_CREW_SIZE*NUM_MORTARS, SCOUT_SQUAD_SIZE*NUM_SCOUTS,
-    SQUAD_SIZE*NUM_SQUADS, ENGINEER_SQUAD_SIZE*NUM_ENGINEERS, MEDIC_SQUAD_SIZE*NUM_MEDICS, RESERVE_SIZE,
+    SQUAD_SIZE*NUM_SQUADS, ENGINEER_SQUAD_SIZE*NUM_ENGINEERS, MEDIC_SQUAD_SIZE*NUM_MEDICS,
+    BAND_SQUAD_SIZE*NUM_BANDS, RESERVE_SIZE,
   ]);
 
 export const ROSTER_MORTAR_CREWS = roundRobinDistribute(ROSTER_MORTAR_POOL, Array(NUM_MORTARS).fill(MORTAR_CREW_SIZE));
@@ -546,6 +573,8 @@ export const ROSTER_SCOUT_TEAMS  = roundRobinDistribute(ROSTER_SCOUT_POOL, Array
 export const ROSTER_ENGINEER_TEAMS = roundRobinDistribute(ROSTER_ENGINEER_POOL, Array(NUM_ENGINEERS).fill(ENGINEER_SQUAD_SIZE));
 
 export const ROSTER_MEDIC_TEAMS = roundRobinDistribute(ROSTER_MEDIC_POOL, Array(NUM_MEDICS).fill(MEDIC_SQUAD_SIZE));
+
+export const ROSTER_BAND_TEAMS = roundRobinDistribute(ROSTER_BAND_POOL, Array(NUM_BANDS).fill(BAND_SQUAD_SIZE));
 
 export const ROSTER_SQUADS = roundRobinDistribute(ROSTER_SQUAD_POOL, Array(NUM_SQUADS).fill(SQUAD_SIZE));
 
@@ -787,13 +816,16 @@ export const WAVE_SPAWN_WINDOW_MS = 180000;
 // asset independently. See resolveEnemyHqAttack() in combat.js.
 export const HQ_MORTAR_COUNT = 2;
 
-export const HQ_MORTAR_DAMAGE = [30, 50];
+// per user request: 敵味方共に本部の攻撃力を弱体化したい、との要望から半分に引き下げ
+// (旧値 [30,50])。自衛火力そのものは残す(発射数/連射間隔は変更なし)。
+export const HQ_MORTAR_DAMAGE = [15, 25];
 
 export const HQ_MORTAR_COOLDOWN_TICKS = 8;
 
 export const HQ_TANKGUN_COUNT = 3;
 
-export const HQ_TANKGUN_DAMAGE = [18, 32];
+// per user request: 上と同じ理由で半分に引き下げ(旧値 [18,32])。
+export const HQ_TANKGUN_DAMAGE = [9, 16];
 
 export const HQ_TANKGUN_COOLDOWN_TICKS = 2;
 
@@ -1199,6 +1231,7 @@ export const FRIENDLY_KIND_LIST = [
   { kind:'antitank', list:()=>state.antitanks, alive:u=>u.hp>0,                       label:i=>`対戦車${i+1}` },
   { kind:'engineer', list:()=>state.engineers, alive:u=>u.soldiers.some(s=>s.alive),  label:()=>'工兵小隊' },
   { kind:'medic',    list:()=>state.medics||[], alive:u=>u.soldiers.some(s=>s.alive), label:i=>`衛生${i+1}小隊` },
+  { kind:'band',     list:()=>state.bands||[], alive:u=>u.soldiers.some(s=>s.alive),  label:()=>'音楽隊' },
 ];
 
 export const TARGET_GRID_CELL_SIZE = 200;
@@ -1211,9 +1244,9 @@ export const WAVE_CLEAR_EFFECT_WAIT_MS = 1900;
 
 export const WAVE_CLEAR_FANFARE_HOLD_MS = 2000;
 
-export const DIRECT_MOVE_KINDS = ['squad','tank','sam','antitank','hq'];
+export const DIRECT_MOVE_KINDS = ['squad','tank','sam','antitank','hq','band'];
 
-export const MULTI_SELECT_KINDS = ['squad','tank','sam','antitank','engineer'];
+export const MULTI_SELECT_KINDS = ['squad','tank','sam','antitank','engineer','band'];
 
 export const MULTI_SELECT_ORDER_SETTER = {
   squad: (idx, order)=>{ if(state.squads[idx] && !state.squads[idx].resting) state.squads[idx].order = order; },
@@ -1221,6 +1254,7 @@ export const MULTI_SELECT_ORDER_SETTER = {
   sam: (idx, order)=>{ if(state.sams[idx]) state.sams[idx].order = order; },
   antitank: (idx, order)=>{ if(state.antitanks[idx]) state.antitanks[idx].order = order; },
   engineer: (idx, order)=>{ if(state.engineers[idx] && !state.engineers[idx].resting) state.engineers[idx].order = order; },
+  band: (idx, order)=>{ if(state.bands[idx] && !state.bands[idx].resting) state.bands[idx].order = order; },
 };
 
 export const COMBAT_CALLOUTS = {
