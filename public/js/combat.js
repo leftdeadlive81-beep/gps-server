@@ -550,6 +550,7 @@ export function startStage(){
   state.mines = [];
   state.lastStandAnnounced = false;
   state.routActive = false;
+  state.enemyHqDestroyed = false;
   // per user request: enemy AI focus-fire coordination -- reset each wave (see
   // ENEMY_FOCUS_FIRE_WINDOW_MS/enemyCounterAttack).
   state.enemyFocusTarget = null;
@@ -4981,8 +4982,19 @@ export function checkEnd(){
   // per user request (idea 4): destroying the enemy HQ clears the wave immediately,
   // regardless of how many other enemies are still alive -- an alternate, high-risk/
   // high-reward win condition alongside the usual "every target destroyed".
-  const enemyHqTarget = state.targets.find(t=>t.type==='hq');
-  const enemyHqDown = enemyHqTarget && enemyHqTarget.destroyed;
+  // per user request(バグ調査: 本部を破壊してもクリアにならないことがある): この判定を
+  // 「state.targetsの中に今もtype==='hq'かつdestroyedな要素が残っているか」で毎回
+  // 導出していたのが原因だった -- resolveEnemyTurn()は自分自身の呼び出しの終わりで
+  // 撃破済みターゲットをstate.targetsから間引く(削除する)ため、迫撃砲以外(小隊/戦車/
+  // 対戦車/対空によるhunt指示中の直接射撃など、resolveEnemyTurn内で解決される経路)で
+  // 本部を撃破すると、checkEnd()がここに辿り着く前に本部が配列から既に消えてしまい、
+  // 二度と見つからなくなっていた(迫撃砲による撃破はcheckEnd()を即座に呼ぶ非同期
+  // コールバック経由のため、この間引きより先に判定できておりバグの影響を受けなかった
+  // -- 「ないことがある」という再現性のばらつきの正体)。撃破の瞬間に一度だけ立てる
+  // 常駐フラグ(state.enemyHqDestroyed、onTargetDestroyed()で設定・startStage()で
+  // WAVE開始時にリセット)を見るように変更し、配列からの間引きタイミングに依存しない
+  // ようにした。
+  const enemyHqDown = !!state.enemyHqDestroyed;
   if((remaining.length===0 && allSpawned) || enemyHqDown){
     state.stageResolved = true;
     if(enemyHqDown && remaining.length>0){
@@ -5038,8 +5050,9 @@ export function computeReward(){
   // target -- it's the reward for identifying and hitting a small, well-defended objective
   // fast, even if that means less time to also clear (and less loot-relevant survival from)
   // the rest of the wave.
-  const enemyHqTarget = state.targets.find(t=>t.type==='hq');
-  const enemyHqBonus = (enemyHqTarget && enemyHqTarget.destroyed) ? 250 : 0;
+  // per user request(バグ調査): checkEnd()と同じ理由でstate.targets参照は使わず、
+  // state.enemyHqDestroyed(常駐フラグ)を見る。
+  const enemyHqBonus = state.enemyHqDestroyed ? 250 : 0;
   const total = Math.round((base+turnsBonus+ammoBonus+hpBonus+infBonus+scoutBonus+antitankBonus+hqBonus+enemyHqBonus) * DIFFICULTIES[state.difficulty].rewardMult);
   return {base,turnsBonus,ammoBonus,hpBonus,infBonus,scoutBonus,antitankBonus,hqBonus,enemyHqBonus,total};
 }

@@ -241,6 +241,12 @@ export function tracerWorldY(startX, startY, endX, endY, prog){
 export function onTargetDestroyed(t){
   unlockAchievement('firstBlood');
   if(t.type==='artillery') unlockAchievement('mortarHunter');
+  // per user request(バグ調査: 敵本部を破壊してもクリアにならないことがある) -- 撃破の
+  // 瞬間に一度だけ立てる常駐フラグ。checkEnd()/computeReward()側でstate.targetsを
+  // 都度検索する代わりにこれを見ることで、resolveEnemyTurn()末尾の間引き(撃破済み
+  // ターゲットをstate.targetsから削除する処理)より先に判定が済んでいたかというタイミング
+  // 依存を無くす。
+  if(t.type==='hq') state.enemyHqDestroyed = true;
   speakRandomAliveUnit('morale');
   spawnDestructionEffect(t.trueX, t.trueY, `${t.def.label} 撃破!`, ENEMY_MARK_COLOR);
 }
