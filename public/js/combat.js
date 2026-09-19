@@ -4781,6 +4781,7 @@ export function launchMortarVolley(mortar, shell, fuze, count, aim, snappedTarge
   const observedNote = isObservedByScout(aimX, aimY) ? '(斥候の前進観測により高精度)' : '';
   log('fdc','FDC', `迫撃砲${mortar.id+1}: ${aimLabel} へ射撃要求${observedNote}。${SHELLS[shell]}・${FUZES[fuze]}・${count}発。`);
   log('mortar','迫撃砲班', `迫撃砲${mortar.id+1} 了解。${count}発装填、撃て!`);
+  unitSpeak('mortar', mortar.id, 'mortarFire');
 
   let pending = count;
   let hitAny = false;
