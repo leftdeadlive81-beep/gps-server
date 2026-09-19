@@ -435,6 +435,14 @@
     width:280px;
   }
 
+  /* per user request(移動先指定時にコマンドボックスが地図を覆って指定しづらいとの声を
+     受けて追加): multi-select-boxと同じく、クリックした地点ではなく画面下端に固定表示
+     することで、地図(特に選択中ユニットの周辺)を塞がない。 */
+  .move-order-prompt{
+    left:50%; right:auto; top:auto; bottom:78px; transform:translateX(-50%);
+    width:200px;
+  }
+
   .decision-box{
     background:var(--panel-2);border:1px solid var(--amber-dim);border-radius:3px;
     padding:9px 10px;margin-bottom:14px;

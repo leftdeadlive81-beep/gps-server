@@ -189,6 +189,11 @@
      ここのボタンで選択中の全隊へ一括で命令できる(移動は地図クリックで一括指示)。 -->
 <div class="command-box multi-select-box" id="multi-select-box" style="display:none;"></div>
 
+<!-- per user request(移動先指定時にコマンドボックスが地図を覆って指定しづらいとの声を
+     受けて追加): 「移動」ボタンを押した瞬間、詳細なコマンドボックスの代わりにこの最小限の
+     プロンプトを画面下端に表示する(see renderMoveOrderPrompt() in ui.js)。 -->
+<div class="command-box move-order-prompt" id="move-order-prompt" style="display:none;"></div>
+
 <!-- per user request: upgraded from r128 -- 0.147.0 is the newest release that still ships the
      classic global build/three.min.js + examples/js/* script-tag loaders this page relies on;
      0.148+ dropped both in favor of ES modules only, which would require restructuring how

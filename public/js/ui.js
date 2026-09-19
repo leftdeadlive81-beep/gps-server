@@ -470,6 +470,7 @@ export function hqBoxHtml(){
     ${exposureMetaHtml(getUnitExposure({kind:'hq'}))}
     <button class="btn" ${canCover?'':'disabled'} onclick="buildHqCover()" style="margin:8px 0 4px;">掩体構築(掩蔽率+${HQ_COVER_EXPOSURE_BONUS}${hq.coverBuilt?' ・ このWAVEは実施済み':hq.exposure>=HQ_COVER_EXPOSURE_CAP?' ・ 上限到達':''})</button>
     <button class="btn" ${canRepair?'':'disabled'} onclick="repairHq()">応急修復(+${repairAmount}HP ・ ¥${repairCost})${hq.hp>=hq.maxHp?' ・ HP満タン':''}</button>
+    <button class="btn" style="width:100%;margin-top:4px;" onclick="armDirectMoveOrder('hq',0)">移転</button>
     <div class="meta" style="margin:8px 0 4px;">${hq.pendingDest ? '移転先: 設定済み(地図クリックで変更)' : '地図をクリックすると移転先を指定できます'}(移動速度: 歩兵と同一)</div>
     ${hq.pendingDest ? `<button class="btn" onclick="clearHqDest()">移転先を解除</button>` : ''}
   `;
@@ -625,6 +626,22 @@ export function renderMultiSelectBox(){
     <div class="squad-orders" style="grid-template-columns:repeat(9,1fr);margin-bottom:8px;">${groupSaveBtns}</div>
     <div class="meta" style="margin-bottom:4px;">グループを呼び出し:</div>
     <div class="squad-orders" style="grid-template-columns:repeat(9,1fr);">${groupRecallBtns}</div>
+  `;
+}
+
+// per user request(移動先指定時にコマンドボックスが地図を覆って指定しづらいとの声を受けて
+// 追加): 「移動」ボタン(各種ボックスのarmDirectMoveOrder呼び出し)を押した瞬間、詳細な
+// コマンドボックスは閉じる(armDirectMoveOrder側でstate.commandBox=null済み)ので、代わりに
+// この最小限のプロンプトだけを表示する。multi-select-boxと同じく画面下端に固定表示し、
+// クリックした地点周辺を塞がない。
+export function renderMoveOrderPrompt(){
+  const box = document.getElementById('move-order-prompt');
+  if(!box) return;
+  if(!state.orderMode || state.orderMode.kind!=='direct-move'){ box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  box.innerHTML = `
+    <div class="meta" style="margin-bottom:8px;text-align:center;font-weight:700;">地点を指定せよ</div>
+    <button class="btn" style="width:100%;" onclick="cancelDirectMoveOrder()">キャンセル</button>
   `;
 }
 
@@ -901,6 +918,7 @@ export function scoutBoxHtml(idx){
     ${exposureMetaHtml(getUnitExposure({kind:'scout', idx}))}
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/scout.soldiers.length*100)}%"></div></div>
     ${restButtonHtml('scout', idx, scout)}
+    <button class="btn" style="width:100%;margin-bottom:6px;" ${dead?'disabled':''} onclick="armDirectMoveOrder('scout',${idx})">移動</button>
     <div class="meta" style="margin-bottom:6px;">${dead ? '移動先: 指定不可' : (scout.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます')}</div>
     ${scout.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearScoutOrder(${idx})">移動先を解除</button>` : ''}
     ${soldierRosterHtml(scout.soldiers)}
@@ -954,6 +972,7 @@ export function squadBoxHtml(idx){
     ${exposureMetaHtml(getUnitExposure({kind:'squad', idx}))}
     ${restButtonHtml('squad', idx, sq)}
     <div class="squad-orders" style="margin:6px 0;">${btns}</div>
+    <button class="btn" style="width:100%;margin-bottom:6px;" ${wiped?'disabled':''} onclick="armDirectMoveOrder('squad',${idx})">移動</button>
     <div class="meta" style="margin-bottom:6px;">${wiped ? '移動先: 指定不可' : (sq.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます')}</div>
     ${sq.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearSquadDest(${idx})">移動先を解除</button>` : ''}
     ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearSquadHunt(${idx})">攻撃目標を解除</button>` : ''}
@@ -981,6 +1000,7 @@ export function bandBoxHtml(idx){
     ${exposureMetaHtml(getUnitExposure({kind:'band', idx}))}
     ${restButtonHtml('band', idx, band)}
     <div class="squad-orders" style="margin:6px 0;">${btns}</div>
+    <button class="btn" style="width:100%;margin-bottom:6px;" ${wiped?'disabled':''} onclick="armDirectMoveOrder('band',${idx})">移動</button>
     <div class="meta" style="margin-bottom:6px;">${wiped ? '移動先: 指定不可' : (band.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます')}</div>
     ${band.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearBandDest(${idx})">移動先を解除</button>` : ''}
     ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearBandHunt(${idx})">攻撃目標を解除</button>` : ''}
@@ -1017,6 +1037,7 @@ export function tankBoxHtml(idx){
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,tank.hp/tank.maxHp*100)}%"></div></div>
     ${exposureMetaHtml(getUnitExposure({kind:'tank', idx}))}
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
+    <button class="btn" style="width:100%;margin-bottom:6px;" onclick="armDirectMoveOrder('tank',${idx})">移動</button>
     <div class="meta" style="margin-bottom:6px;">${tank.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
     ${tank.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearTankDest(${idx})">移動先を解除</button>` : ''}
     ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearTankHunt(${idx})">攻撃目標を解除</button>` : ''}
@@ -1047,6 +1068,7 @@ export function samBoxHtml(idx){
     ${exposureMetaHtml(getUnitExposure({kind:'sam', idx}))}
     <div class="meta" style="margin-bottom:6px;color:var(--muted);">対空目標(ヘリ・ドローン)専任 ― 対地目標には交戦不可</div>
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
+    <button class="btn" style="width:100%;margin-bottom:6px;" onclick="armDirectMoveOrder('sam',${idx})">移動</button>
     <div class="meta" style="margin-bottom:6px;">${sam.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
     ${sam.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearSamDest(${idx})">移動先を解除</button>` : ''}
     ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearSamHunt(${idx})">攻撃目標を解除</button>` : ''}
@@ -1110,6 +1132,7 @@ export function engineerBoxHtml(idx){
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/en.soldiers.length*100)}%"></div></div>
     ${restButtonHtml('engineer', idx, en)}
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
+    <button class="btn" style="width:100%;margin-bottom:6px;" ${resting?'disabled':''} onclick="armDirectMoveOrder('engineer',${idx})">移動</button>
     <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
     ${en.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearEngineerDest(${idx})">移動先を解除</button>` : ''}
     <button class="btn ${armingWall?'active squad-order-btn':''}" ${resting||wallCapReached||wallMoneyShort?'disabled':''} style="width:100%;margin-bottom:4px;" onclick="armWallBuildOrder(${idx})">防壁を構築(¥${WALL_BUILD_COST}・地図で地点指定)</button>
@@ -1155,6 +1178,7 @@ export function supplyBoxHtml(idx){
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/su.soldiers.length*100)}%"></div></div>
     ${restButtonHtml('supply', idx, su)}
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
+    <button class="btn" style="width:100%;margin-bottom:6px;" ${resting?'disabled':''} onclick="armDirectMoveOrder('supply',${idx})">移動</button>
     <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
     ${su.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearSupplyDest(${idx})">移動先を解除</button>` : ''}
     ${supplyBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">${supplyBtns}</div>` : ''}
@@ -1202,6 +1226,7 @@ export function medicBoxHtml(idx){
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/me.soldiers.length*100)}%"></div></div>
     ${restButtonHtml('medic', idx, me)}
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
+    <button class="btn" style="width:100%;margin-bottom:6px;" ${resting?'disabled':''} onclick="armDirectMoveOrder('medic',${idx})">移動</button>
     <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
     ${me.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearMedicDest(${idx})">移動先を解除</button>` : ''}
     ${reviveBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">${reviveBtns}</div>` : ''}
@@ -1237,6 +1262,7 @@ export function antitankBoxHtml(idx){
     ${exposureMetaHtml(getUnitExposure({kind:'antitank', idx}))}
     <div class="meta" style="margin-bottom:6px;color:var(--muted);">対戦車ロケットランチャー(vehicle) + 対空自衛火器(heli/drone) ― 歩兵/砲兵には無力</div>
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
+    <button class="btn" style="width:100%;margin-bottom:6px;" onclick="armDirectMoveOrder('antitank',${idx})">移動</button>
     <div class="meta" style="margin-bottom:6px;">${at.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
     ${at.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearAntitankDest(${idx})">移動先を解除</button>` : ''}
     ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearAntitankHunt(${idx})">攻撃目標を解除</button>` : ''}

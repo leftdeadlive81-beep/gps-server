@@ -366,14 +366,8 @@ export function handleCanvasClick(evt){
   if(state.orderMode){
     const mode = state.orderMode;
     state.orderMode = null;
-    if(mode.kind==='squad'){
-      setUnitMoveDest('squad', mode.idx, px, py);
-    } else if(mode.kind==='tank-move'){
-      setUnitMoveDest('tank', mode.idx, px, py);
-    } else if(mode.kind==='sam-move'){
-      setUnitMoveDest('sam', mode.idx, px, py);
-    } else if(mode.kind==='hq-move'){
-      setUnitMoveDest('hq', mode.idx, px, py);
+    if(mode.kind==='direct-move'){
+      setUnitMoveDest(mode.unitKind, mode.idx, px, py);
     } else if(mode.kind==='wall-build'){
       buildWallAt(clamp(px, 10, CANVAS_W-10), clamp(py, 20, CANVAS_H-20));
     } else if(mode.kind==='trench-build-p1'){
