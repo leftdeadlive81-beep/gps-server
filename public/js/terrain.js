@@ -90,6 +90,14 @@ export function nearestRoadPoint(px,py){
   return best;
 }
 
+// per user request(道路の効果を分かりやすく): terrainAwareStep内で判定していた
+// 「道路上にいるか(オフロード減速を免除)」を共有ヘルパーとして切り出し、ユニット
+// アイコン/ラベルの道路インジケーター表示にも使えるようにする。
+export function isOnRoad(x, y){
+  const near = nearestRoadPoint(x, y);
+  return !!(near && near.dist < ROAD_PULL_RADIUS);
+}
+
 export function nearestWallHit(fromX, fromY, toX, toY){
   if(!state || !state.walls || !state.walls.length) return null;
   const dx = toX-fromX, dy = toY-fromY;
@@ -625,4 +633,4 @@ export function advanceAlongPath(fromX, fromY, path, stepLen){
 }
 
 
-Object.assign(window, { pickTerrainForStage, pickTypesForCount, generateSpots, generateAirborneLandingSpots, nearestPointOnRoad, nearestRoadPoint, nearestWallHit, applyWallBlock, wallBlockingLineOfFire, damageWall, terrainAwareStep, airborneStep, scoutTerrainAwareStep, elevationAtFor, elevationAt, elevationLabel, altitudeBonus, terrainCoverBonus, terrainTypeCoverBonus, terrainCoverTotal, trenchCoverBonusAt, computeFebaX, buildGridLineSegments, febaLineSegments, choppedLineSegments, pickArchetypeForStage, riverXAt, generateProceduralTerrain, terrainTypeAtFor, terrainTypeAt, terrainTypeLabel, buildProceduralRoads, buildContourLines, buildRoadGraph, nearestRoadNodeIdx, getCachedRoadPath, findRoadPath, advanceAlongPath });
+Object.assign(window, { pickTerrainForStage, pickTypesForCount, generateSpots, generateAirborneLandingSpots, nearestPointOnRoad, nearestRoadPoint, isOnRoad, nearestWallHit, applyWallBlock, wallBlockingLineOfFire, damageWall, terrainAwareStep, airborneStep, scoutTerrainAwareStep, elevationAtFor, elevationAt, elevationLabel, altitudeBonus, terrainCoverBonus, terrainTypeCoverBonus, terrainCoverTotal, trenchCoverBonusAt, computeFebaX, buildGridLineSegments, febaLineSegments, choppedLineSegments, pickArchetypeForStage, riverXAt, generateProceduralTerrain, terrainTypeAtFor, terrainTypeAt, terrainTypeLabel, buildProceduralRoads, buildContourLines, buildRoadGraph, nearestRoadNodeIdx, getCachedRoadPath, findRoadPath, advanceAlongPath });

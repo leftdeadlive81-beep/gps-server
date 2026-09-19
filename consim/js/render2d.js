@@ -2,7 +2,7 @@
 import { computeDispersionAt, currentPlacementUnit, estPos, isObservedByScout, isSuppressed, smoothVisualPos, state, unitAlive, unitAliveCount } from './combat.js';
 import { BAND_ENGAGE_RANGE, CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FORTRESS_NEUTRAL_COLOR, FRIENDLY_MARK_COLOR, GRID_LINES, HQ_SUPPLY_ZONE_RADIUS_UNITS, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_DETAIL_EFFECT_ZOOM, MAP_DETAIL_LABEL_ZOOM, MAP_FULL_DETAIL_ZOOM, MAP_INITIAL_AZIMUTH, MAP_VIEW, METERS_PER_UNIT, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, UNIT_AMMO_MAX, TRENCH_LINE_WIDTH, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
 import { isMultiSelected } from './input.js';
-import { choppedLineSegments, febaLineSegments } from './terrain.js';
+import { choppedLineSegments, febaLineSegments, isOnRoad } from './terrain.js';
 import { project, projectAtWorldY, scaledIconH, threeReady } from './three.js';
 import { bearingToXY, clamp } from './utils.js';
 import { craters, currentShakeOffset, debrisParticles, enemyTracers, ensureWeatherParticles, flashes, killBanners, projectileArcWorldY, projectiles, ripples, setDebrisParticles, setKillBanners, setRipples, setShockwaves, setWreckSmokes, shockwaves, tracerWorldY, weatherParticles, wreckSmokes } from './vfx.js';
@@ -418,6 +418,10 @@ export function drawBoard(){
   // unit inside a cluster is the way to "expand" it back to a full label).
   const pendingFriendlyLabels = [];
   const queueFriendlyLabel = (x, y, lines, selected, kind)=> pendingFriendlyLabels.push({x, y, lines, selected, kind});
+  // per user request(道路の効果を分かりやすく): オフロード減速が免除される道路上にいる間、
+  // ユニットのラベルに小さな印を付ける(isOnRoad、terrain.js -- terrainAwareStepの
+  // オフロード減速判定と同じ基準)。ワールド座標(unit.x/y)を渡す。
+  const roadTag = (wx, wy) => isOnRoad(wx, wy) ? ' 🛣️' : '';
 
   // per user request: roads used to be drawn here as a 2D overlay pass, but this whole `#board`
   // canvas sits compositely ABOVE the 3D `#three` WebGL canvas -- so a road always rendered on
@@ -576,7 +580,7 @@ export function drawBoard(){
     ctx.fillStyle = hqAlive ? FRIENDLY_MARK_COLOR : '#5c2a25';
     ctx.fill();
     if(showDetailLabels){
-      const hqLines = [{text: hqAlive?'指揮所':'指揮所(壊滅)', dy:34, font:'bold 15px "JetBrains Mono"'}];
+      const hqLines = [{text: (hqAlive?'指揮所':'指揮所(壊滅)')+(hqAlive?roadTag(hq.x,hq.y):''), dy:34, font:'bold 15px "JetBrains Mono"'}];
       if(hqAlive && hq.pendingDest) hqLines.push({text:'[移転中]', dy:50, font:'bold 13px "JetBrains Mono"'});
       queueFriendlyLabel(hqP.x, hqP.y, hqLines, state.commandBox && state.commandBox.kind==='hq', '指揮所');
     }
@@ -697,7 +701,7 @@ export function drawBoard(){
       ctx.arc(0, 0, 16, -Math.PI/2, -Math.PI/2 + Math.PI*2*(1-reloadLeft));
       ctx.stroke();
     }
-    if(showDetailLabels) queueFriendlyLabel(mVis.x, mVis.y, [{text: mAlive?`迫撃砲${mortar.id+1} ${mortarStatusIcon(mortar)}`:`迫撃砲${mortar.id+1}(戦闘不能)`, dy:44, font:'15px "JetBrains Mono"'}],
+    if(showDetailLabels) queueFriendlyLabel(mVis.x, mVis.y, [{text: (mAlive?`迫撃砲${mortar.id+1} ${mortarStatusIcon(mortar)}`:`迫撃砲${mortar.id+1}(戦闘不能)`)+(mAlive?roadTag(mortar.x,mortar.y):''), dy:44, font:'15px "JetBrains Mono"'}],
       state.commandBox && state.commandBox.kind==='mortar' && state.commandBox.idx===mIdx, '迫撃砲');
     ctx.restore();
 
@@ -808,7 +812,7 @@ export function drawBoard(){
     ctx.translate(scoutVis.x, scoutVis.y);
     drawSelectionRing(ctx, 0, 0, state.commandBox && state.commandBox.kind==='scout' && state.commandBox.idx===scIdx);
     if(showDetailLabels){
-      const scoutLines = [{text: scoutAlive?`斥候${scout.id+1} ${aliveCount}/${scout.soldiers.length}`:`斥候${scout.id+1}(戦闘不能)`, dy:-20, font:'15px "JetBrains Mono"'}];
+      const scoutLines = [{text: (scoutAlive?`斥候${scout.id+1} ${aliveCount}/${scout.soldiers.length}`:`斥候${scout.id+1}(戦闘不能)`)+(scoutAlive?roadTag(scout.x,scout.y):''), dy:-20, font:'15px "JetBrains Mono"'}];
       if(scoutAlive){
         let scoutOrderLabel = '[観測]';
         if(scout.resting) scoutOrderLabel = '[大休止]';
@@ -836,7 +840,7 @@ export function drawBoard(){
     // bracketed Japanese text, and merged onto the name's own line -- packed friendly deployment
     // areas were an unreadable wall of overlapping two-line labels on small screens.
     const tOrderIcon = ORDER_ICON[tank.order] + (tank.pendingDest ? '→' : '');
-    if(showDetailLabels) queueFriendlyLabel(tVis.x, tVis.y, [{text: tAlive?`戦車${tank.id+1} ${tOrderIcon}`:`戦車${tank.id+1}(撃破)`, dy:44, font:'15px "JetBrains Mono"'}],
+    if(showDetailLabels) queueFriendlyLabel(tVis.x, tVis.y, [{text: (tAlive?`戦車${tank.id+1} ${tOrderIcon}`:`戦車${tank.id+1}(撃破)`)+(tAlive?roadTag(tank.x,tank.y):''), dy:44, font:'15px "JetBrains Mono"'}],
       (state.commandBox && state.commandBox.kind==='tank' && state.commandBox.idx===tIdx) || isMultiSelected('tank', tIdx), '戦車');
     ctx.restore();
 
@@ -871,7 +875,7 @@ export function drawBoard(){
     drawSamIcon(ctx, 0, 0, scaledIconH(22), !samAlive);
     drawSelectionRing(ctx, 0, 0, (state.commandBox && state.commandBox.kind==='sam' && state.commandBox.idx===samIdx) || isMultiSelected('sam', samIdx));
     const samOrderIcon = ORDER_ICON[sam.order] + (sam.pendingDest ? '→' : '');
-    if(showDetailLabels) queueFriendlyLabel(samVis.x, samVis.y, [{text: samAlive?`対空${sam.id+1} ${samOrderIcon}`:`対空${sam.id+1}(撃破)`, dy:44, font:'15px "JetBrains Mono"'}],
+    if(showDetailLabels) queueFriendlyLabel(samVis.x, samVis.y, [{text: (samAlive?`対空${sam.id+1} ${samOrderIcon}`:`対空${sam.id+1}(撃破)`)+(samAlive?roadTag(sam.x,sam.y):''), dy:44, font:'15px "JetBrains Mono"'}],
       (state.commandBox && state.commandBox.kind==='sam' && state.commandBox.idx===samIdx) || isMultiSelected('sam', samIdx), '対空');
     ctx.restore();
 
@@ -937,7 +941,7 @@ export function drawBoard(){
     drawEngineerIcon(ctx, 0, 0, scaledIconH(22), aliveSoldiers.length===0);
     drawSelectionRing(ctx, 0, 0, (state.commandBox && state.commandBox.kind==='engineer' && state.commandBox.idx===enIdx) || isMultiSelected('engineer', enIdx));
     const enOrderIcon = aliveSoldiers.length>0 ? ` ${ORDER_ICON[en.order]}${en.pendingDest?'→':''}` : '';
-    if(showDetailLabels) queueFriendlyLabel(enVis.x, enVis.y, [{text:`工兵 ${aliveSoldiers.length}/${en.soldiers.length}${enOrderIcon}`, dy:28, font:'14px "JetBrains Mono"'}],
+    if(showDetailLabels) queueFriendlyLabel(enVis.x, enVis.y, [{text:`工兵 ${aliveSoldiers.length}/${en.soldiers.length}${enOrderIcon}${aliveSoldiers.length>0?roadTag(en.x,en.y):''}`, dy:28, font:'14px "JetBrains Mono"'}],
       (state.commandBox && state.commandBox.kind==='engineer' && state.commandBox.idx===enIdx) || isMultiSelected('engineer', enIdx), '工兵');
     ctx.restore();
     if(showDetailLabels && aliveSoldiers.length>0) drawAttritionBar(ctx, enVis.x+18, enVis.y, aliveSoldiers.length/en.soldiers.length);
@@ -953,7 +957,7 @@ export function drawBoard(){
     drawMedicIcon(ctx, 0, 0, scaledIconH(22), aliveSoldiers.length===0);
     drawSelectionRing(ctx, 0, 0, (state.commandBox && state.commandBox.kind==='medic' && state.commandBox.idx===meIdx));
     const meOrderIcon = aliveSoldiers.length>0 ? ` ${ORDER_ICON[me.order]}${me.pendingDest?'→':''}` : '';
-    if(showDetailLabels) queueFriendlyLabel(meVis.x, meVis.y, [{text:`衛生 ${aliveSoldiers.length}/${me.soldiers.length}${meOrderIcon}`, dy:28, font:'14px "JetBrains Mono"'}],
+    if(showDetailLabels) queueFriendlyLabel(meVis.x, meVis.y, [{text:`衛生 ${aliveSoldiers.length}/${me.soldiers.length}${meOrderIcon}${aliveSoldiers.length>0?roadTag(me.x,me.y):''}`, dy:28, font:'14px "JetBrains Mono"'}],
       (state.commandBox && state.commandBox.kind==='medic' && state.commandBox.idx===meIdx), '衛生');
     ctx.restore();
     if(showDetailLabels && aliveSoldiers.length>0) drawAttritionBar(ctx, meVis.x+18, meVis.y, aliveSoldiers.length/me.soldiers.length);
@@ -970,7 +974,7 @@ export function drawBoard(){
     drawSupplyIcon(ctx, 0, 0, scaledIconH(22), aliveSoldiers.length===0);
     drawSelectionRing(ctx, 0, 0, (state.commandBox && state.commandBox.kind==='supply' && state.commandBox.idx===suIdx));
     const suOrderIcon = aliveSoldiers.length>0 ? ` ${ORDER_ICON[su.order]}${su.pendingDest?'→':''}` : '';
-    if(showDetailLabels) queueFriendlyLabel(suVis.x, suVis.y, [{text:`補給 ${aliveSoldiers.length}/${su.soldiers.length}${suOrderIcon}`, dy:28, font:'14px "JetBrains Mono"'}],
+    if(showDetailLabels) queueFriendlyLabel(suVis.x, suVis.y, [{text:`補給 ${aliveSoldiers.length}/${su.soldiers.length}${suOrderIcon}${aliveSoldiers.length>0?roadTag(su.x,su.y):''}`, dy:28, font:'14px "JetBrains Mono"'}],
       (state.commandBox && state.commandBox.kind==='supply' && state.commandBox.idx===suIdx), '補給');
     ctx.restore();
     if(showDetailLabels && aliveSoldiers.length>0) drawAttritionBar(ctx, suVis.x+18, suVis.y, aliveSoldiers.length/su.soldiers.length);
@@ -993,7 +997,7 @@ export function drawBoard(){
       // per user request: 弾薬残数の表示 -- 0になった場合は視認しやすいよう明示的に「弾切れ」
       // と表示する(see applyHqSupplyZone()/UNIT_AMMO_EMPTY_DMG_MULT in combat.js)。
       const sqAmmoLabel = (sq.ammo===undefined || sq.ammo>0) ? ` 弾${Math.ceil(sq.ammo ?? UNIT_AMMO_MAX)}` : ' 弾切れ';
-      if(showDetailLabels) queueFriendlyLabel(sqVis.x, sqVis.y, [{text:`第${sqIdx+1}小隊 ${aliveSoldiers.length}/${sq.soldiers.length} ${sqOrderIcon}${sqAmmoLabel}`, dy:28, font:'14px "JetBrains Mono"', color: aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25'}],
+      if(showDetailLabels) queueFriendlyLabel(sqVis.x, sqVis.y, [{text:`第${sqIdx+1}小隊 ${aliveSoldiers.length}/${sq.soldiers.length} ${sqOrderIcon}${sqAmmoLabel}${aliveSoldiers.length>0?roadTag(sq.x,sq.y):''}`, dy:28, font:'14px "JetBrains Mono"', color: aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25'}],
         (state.commandBox && state.commandBox.kind==='squad' && state.commandBox.idx===sqIdx) || isMultiSelected('squad', sqIdx), '小隊');
 
       if(aliveSoldiers.length>0){
@@ -1026,7 +1030,7 @@ export function drawBoard(){
       drawSelectionRing(ctx, bandVis.x, bandVis.y, (state.commandBox && state.commandBox.kind==='band' && state.commandBox.idx===bandIdx) || isMultiSelected('band', bandIdx));
       if(showDetailLabels && aliveSoldiers.length>0) drawAttritionBar(ctx, bandVis.x+32, bandVis.y, aliveSoldiers.length/band.soldiers.length);
       const bandOrderIcon = ORDER_ICON[band.order] + (band.pendingDest ? '→' : '');
-      if(showDetailLabels) queueFriendlyLabel(bandVis.x, bandVis.y, [{text:`音楽隊 ${aliveSoldiers.length}/${band.soldiers.length} ${bandOrderIcon}`, dy:28, font:'14px "JetBrains Mono"', color: aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25'}],
+      if(showDetailLabels) queueFriendlyLabel(bandVis.x, bandVis.y, [{text:`音楽隊 ${aliveSoldiers.length}/${band.soldiers.length} ${bandOrderIcon}${aliveSoldiers.length>0?roadTag(band.x,band.y):''}`, dy:28, font:'14px "JetBrains Mono"', color: aliveSoldiers.length>0 ? LABEL_TEXT_COLOR : '#5c2a25'}],
         (state.commandBox && state.commandBox.kind==='band' && state.commandBox.idx===bandIdx) || isMultiSelected('band', bandIdx), '音楽隊');
 
       if(aliveSoldiers.length>0){
@@ -1057,7 +1061,7 @@ export function drawBoard(){
     ctx.translate(atVis.x, atVis.y);
     drawSelectionRing(ctx, 0, 0, (state.commandBox && state.commandBox.kind==='antitank' && state.commandBox.idx===atIdx) || isMultiSelected('antitank', atIdx));
     const atOrderIcon = ORDER_ICON[at.order] + (at.pendingDest ? '→' : '');
-    if(showDetailLabels) queueFriendlyLabel(atVis.x, atVis.y, [{text: atAlive?`対戦車${at.id+1} ${atOrderIcon}`:`対戦車${at.id+1}(撃破)`, dy:44, font:'15px "JetBrains Mono"'}],
+    if(showDetailLabels) queueFriendlyLabel(atVis.x, atVis.y, [{text: (atAlive?`対戦車${at.id+1} ${atOrderIcon}`:`対戦車${at.id+1}(撃破)`)+(atAlive?roadTag(at.x,at.y):''), dy:44, font:'15px "JetBrains Mono"'}],
       (state.commandBox && state.commandBox.kind==='antitank' && state.commandBox.idx===atIdx) || isMultiSelected('antitank', atIdx), '対戦車');
     ctx.restore();
 
@@ -1254,6 +1258,41 @@ export function drawBoard(){
       ctx.fill();
     });
   });
+
+  // per user request(道路の効果を分かりやすく): 移動先を指定済みの全ユニットについて、
+  // 現在地から移動先までの経路プレビューを破線で表示する。実際の移動(terrainAwareStep)は
+  // 道路を探して迂回するわけではなく直線移動+その場の速度倍率なので、プレビューも直線を
+  // 細かく区切り、区間ごとにisOnRoad()で色分けする(琥珀=道路上で速い、灰=オフロード)。
+  const drawMovePathPreview = (fromX, fromY, toX, toY)=>{
+    const STEPS = 24;
+    for(let i=0;i<STEPS;i++){
+      const t0 = i/STEPS, t1 = (i+1)/STEPS;
+      const ax = fromX+(toX-fromX)*t0, ay = fromY+(toY-fromY)*t0;
+      const bx = fromX+(toX-fromX)*t1, by = fromY+(toY-fromY)*t1;
+      const midOnRoad = isOnRoad((ax+bx)/2, (ay+by)/2);
+      const pa = project(ax, ay), pb = project(bx, by);
+      if(!pa.visible && !pb.visible) continue;
+      ctx.beginPath();
+      ctx.setLineDash([6,4]);
+      ctx.strokeStyle = midOnRoad ? 'rgba(224,184,74,0.85)' : 'rgba(160,160,160,0.55)';
+      ctx.lineWidth = midOnRoad ? 2 : 1.3;
+      ctx.moveTo(pa.x, pa.y);
+      ctx.lineTo(pb.x, pb.y);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  };
+  if(state.hq && state.hq.hp>0 && state.hq.pendingDest) drawMovePathPreview(state.hq.x, state.hq.y, state.hq.pendingDest.x, state.hq.pendingDest.y);
+  state.mortars.forEach(m=>{ if(m.hp>0 && m.pendingDest) drawMovePathPreview(m.x, m.y, m.pendingDest.x, m.pendingDest.y); });
+  state.scouts.forEach(s=>{ if(unitAlive(s) && s.pendingDest) drawMovePathPreview(s.x, s.y, s.pendingDest.x, s.pendingDest.y); });
+  state.squads.forEach(sq=>{ if(sq.soldiers.some(x=>x.alive) && sq.pendingDest) drawMovePathPreview(sq.x, sq.y, sq.pendingDest.x, sq.pendingDest.y); });
+  state.bands.forEach(b=>{ if(unitAliveCount(b)>0 && b.pendingDest) drawMovePathPreview(b.x, b.y, b.pendingDest.x, b.pendingDest.y); });
+  state.engineers.forEach(en=>{ if(unitAliveCount(en)>0 && en.pendingDest) drawMovePathPreview(en.x, en.y, en.pendingDest.x, en.pendingDest.y); });
+  state.medics.forEach(me=>{ if(unitAliveCount(me)>0 && me.pendingDest) drawMovePathPreview(me.x, me.y, me.pendingDest.x, me.pendingDest.y); });
+  (state.supplies||[]).forEach(su=>{ if(unitAliveCount(su)>0 && su.pendingDest) drawMovePathPreview(su.x, su.y, su.pendingDest.x, su.pendingDest.y); });
+  state.tanks.forEach(t=>{ if(t.hp>0 && t.pendingDest) drawMovePathPreview(t.x, t.y, t.pendingDest.x, t.pendingDest.y); });
+  state.sams.forEach(s=>{ if(s.hp>0 && s.pendingDest) drawMovePathPreview(s.x, s.y, s.pendingDest.x, s.pendingDest.y); });
+  state.antitanks.forEach(a=>{ if(a.hp>0 && a.pendingDest) drawMovePathPreview(a.x, a.y, a.pendingDest.x, a.pendingDest.y); });
 
   // pending fire points ― effect radius + crosshair, awaiting execute/cancel
   if(!state.animating){
