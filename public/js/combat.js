@@ -1768,6 +1768,7 @@ function applyMortarAutoFire(mortar){
   if(mortar.standingOrder!=='auto_fire' || mortar.hp<=0) return;
   if(mortar.pendingFire || mortar.order==='move') return;
   if(mortarNotReadyToFire(mortar)) return;
+  if(mortar.reloadingUntil && performance.now() < mortar.reloadingUntil) return;
   if(checkJammed(mortar, `迫撃砲${mortar.id+1}`)) return;
   let best = null, bestDist = Infinity;
   state.targets.forEach(t=>{
