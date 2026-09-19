@@ -299,7 +299,8 @@ export function addNewMortar(){
   const id = state.mortars.length;
   state.mortars.push({
     id, x: OP_HOME_X, y: clamp(OP_HOME_Y + rnd(-60,60), 30, CANVAS_H-30), hp:100, maxHp:100,
-    order:'standby', pendingFire:null, pendingDest:null, standingOrder:null,
+    // per user request: 迫撃砲の既定行動(standingOrder)は自動照準(auto_fire)をデフォルトに。
+    order:'standby', pendingFire:null, pendingDest:null, standingOrder:'auto_fire',
     fireShell:'he', fireFuze:'impact', fireCount:2,
     mainlineAngle: null,
     shotsSinceMove: 0, cbWarnTurns: null,
@@ -364,7 +365,8 @@ export function initGame(){
     equipment: {armor:false, optics:false, extMag:false},
     mortars: Array.from({length:NUM_MORTARS}, (_,i)=>({
       id:i, x:OP_HOME_X, y:OP_HOME_Y+(i-(NUM_MORTARS-1)/2)*40, hp:100, maxHp:100,
-      order:'standby', pendingFire:null, pendingDest:null,
+      // per user request: 迫撃砲の既定行動(standingOrder)は自動照準(auto_fire)をデフォルトに。
+      order:'standby', pendingFire:null, pendingDest:null, standingOrder:'auto_fire',
       fireShell:'he', fireFuze:'impact', fireCount:2,
       mainlineAngle: null,
       shotsSinceMove: 0, cbWarnTurns: null,
@@ -850,7 +852,8 @@ export function startStage(){
     }
     state.mortars = Array.from({length:NUM_MORTARS}, (_,i)=>({
       id:i, x:deployX(OP_HOME_X), y:clamp(deployYMid+(i-(NUM_MORTARS-1)/2)*40*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMinBound, deployYMaxBound), hp:100, maxHp:100,
-      order:'standby', pendingFire:null, pendingDest:null,
+      // per user request: 迫撃砲の既定行動(standingOrder)は自動照準(auto_fire)をデフォルトに。
+      order:'standby', pendingFire:null, pendingDest:null, standingOrder:'auto_fire',
       fireShell:'he', fireFuze:'impact', fireCount:2,
       mainlineAngle: null,
       shotsSinceMove: 0, cbWarnTurns: null,
