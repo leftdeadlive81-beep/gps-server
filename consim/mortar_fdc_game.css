@@ -102,6 +102,21 @@
     text-shadow:0 0 50px rgba(224,90,79,.75), 0 4px 20px rgba(0,0,0,.85);
     animation:critical-banner-pulse 480ms ease-in-out 2;
   }
+  /* per user request(ドラクエファン向け追加要素): 古参兵レベルアップ演出。3行(名前/
+     レベル/上昇したステータス)まで表示できるよう、既定の一行大文字バナーより文字サイズを
+     落とし、行間を確保する。 */
+  .battle-start-banner.levelup span{
+    font-size:clamp(18px, 4.2vw, 32px);
+    line-height:1.6;
+    letter-spacing:2px;
+    white-space:normal;
+    color:var(--amber);
+    text-shadow:0 0 40px rgba(240,189,85,.8), 0 4px 16px rgba(0,0,0,.85);
+    animation:levelup-banner-glow 900ms ease-in-out 2;
+  }
+  @keyframes levelup-banner-glow{
+    0%,100%{filter:brightness(1);} 50%{filter:brightness(1.55);}
+  }
   @keyframes battle-start-fade{
     0%{opacity:0;} 8%{opacity:1;} 78%{opacity:1;} 100%{opacity:0;}
   }
@@ -312,6 +327,7 @@
   .ticker-item.death{color:var(--red); font-weight:700;}
   .ticker-item.rout{color:var(--blue-id); font-weight:700;}
   .ticker-item.warning{color:var(--amber); font-weight:700;}
+  .ticker-item.medal{color:var(--amber); font-weight:700;}
   @keyframes ticker-scroll{
     from{transform:translateX(0);}
     to{transform:translateX(-50%);}

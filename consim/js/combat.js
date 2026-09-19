@@ -360,6 +360,9 @@ export function initGame(){
     stage: 1,
     difficulty: 'normal',
     money: 0,
+    // per user request(ドラクエファン向け追加要素): 強敵撃破の低確率ドロップ「ちいさな
+    // メダル」の所持数(onTargetDestroyed、vfx.js参照)。商店で一定枚数と交換できる。
+    medals: 0,
     ammo: {he:0, heat:0},
     fuzeUnlocked: {impact:true, proximity:false, delay:false},
     equipment: {armor:false, optics:false, extMag:false},
@@ -5249,13 +5252,22 @@ export function awardVeteranXp(){
         s.vetXp = (s.vetXp||0) + 1;
         const after = vetLevelOf(s);
         if(after>before){
-          levelUps.push(`${group.label(uIdx)} ${s.rank} ${s.name}(Lv.${after})`);
+          levelUps.push({unitLabel:group.label(uIdx), rank:s.rank, name:s.name, level:after});
           if(after>=VET_MAX_LEVEL) unlockAchievement('veteranMaster');
         }
       });
     });
   });
-  if(levelUps.length) log('fdc','戦果', `古参兵昇進: ${levelUps.join('、')}`);
+  if(levelUps.length){
+    log('fdc','戦果', `古参兵昇進: ${levelUps.map(l=>`${l.unitLabel} ${l.rank} ${l.name}(Lv.${l.level})`).join('、')}`);
+    // per user request(ドラクエファン向け追加要素): レベルアップをログの1行で済ませず、
+    // 既存の大型バナー演出(showBattleStartBanner)を流用してDQ風のファンファーレで見せる。
+    const dmgPct = Math.round(VET_DMG_BONUS_PER_LEVEL*100);
+    const bannerText = levelUps.length===1
+      ? `${levelUps[0].name}は<br>レベルが あがった!(Lv.${levelUps[0].level})<br>こうげき+${dmgPct}% ・ 被弾しにくさアップ`
+      : `${levelUps.length}名が<br>レベルアップ!`;
+    showBattleStartBanner(bannerText, 'levelup');
+  }
 }
 
 export function handleStageClear(){

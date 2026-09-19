@@ -1,7 +1,7 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement, unlockedAchievements } from './achievements.js';
 import { abandonSavedCampaign, addNewAntitank, addNewHeli, addNewMortar, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, healAllForces, isAutoCommitRunning, isJammed, isObservedByScout, mapSeedCandidates, mortarNotReadyToFire, mortarTooCloseToFire, mortarTooFarToFire, resumedFromSave, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
-import { ACHIEVEMENTS, AMMO_PACK, ANTITANK_AA_RANGE, ANTITANK_ENGAGE_RANGE, BAND_ENGAGE_RANGE, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_ENGAGE_RANGE, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SMART_ACTIONS, SMART_UNIT_TYPES, SQUAD_ENGAGE_RANGE, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, SUPPLY_CARRY_MAX, UNIT_AMMO_MAX, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, TANK_ENGAGE_RANGE, TANK_REPAIR_COST_PER_HP,TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
+import { ACHIEVEMENTS, AMMO_PACK, ANTITANK_AA_RANGE, ANTITANK_ENGAGE_RANGE, BAND_ENGAGE_RANGE, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MEDAL_EXCHANGE_COST, MEDAL_EXCHANGE_REWARD_HE, MEDAL_EXCHANGE_REWARD_HEAT, MEDAL_EXCHANGE_REWARD_MONEY, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_ENGAGE_RANGE, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SMART_ACTIONS, SMART_UNIT_TYPES, SQUAD_ENGAGE_RANGE, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, SUPPLY_CARRY_MAX, UNIT_AMMO_MAX, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, TANK_ENGAGE_RANGE, TANK_REPAIR_COST_PER_HP,TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
 import { canvasToScreen, multiSelectCommonOrders, multiSelectMode, multiSelected, pruneMultiSelected, unitGroups } from './input.js';
 import { render } from './main.js';
 import { elevationAt, elevationLabel, terrainTypeAt, terrainTypeLabel } from './terrain.js';
@@ -178,7 +178,26 @@ export function renderShop(){
         </div>
       `;
     }).join('')}
+
+    <p style="color:var(--muted);font-size:11px;margin:12px 0 8px;">ちいさなメダル交換(ドラクエファン向け追加要素)</p>
+    <div class="shop-row">
+      <div><div class="label">メダル交換</div><div class="sub">所持: ${state.medals||0}枚 ・ ${MEDAL_EXCHANGE_COST}枚で¥${MEDAL_EXCHANGE_REWARD_MONEY}+HE${MEDAL_EXCHANGE_REWARD_HE}発+HEAT${MEDAL_EXCHANGE_REWARD_HEAT}発と交換</div></div>
+      <div class="actions"><button class="btn" ${(state.medals||0)>=MEDAL_EXCHANGE_COST?'':'disabled'} onclick="exchangeMedals()">交換する</button></div>
+    </div>
   `;
+}
+
+// per user request(ドラクエファン向け追加要素): 強敵撃破でドロップする「ちいさなメダル」
+// (onTargetDestroyed、vfx.js参照)を、貯めた枚数分だけ商店でボーナス報酬と交換できる。
+export function exchangeMedals(){
+  if((state.medals||0) < MEDAL_EXCHANGE_COST) return;
+  state.medals -= MEDAL_EXCHANGE_COST;
+  state.money += MEDAL_EXCHANGE_REWARD_MONEY;
+  state.ammo.he += MEDAL_EXCHANGE_REWARD_HE;
+  state.ammo.heat += MEDAL_EXCHANGE_REWARD_HEAT;
+  log('fdc','戦果', `ちいさなメダル${MEDAL_EXCHANGE_COST}枚と交換: ¥${MEDAL_EXCHANGE_REWARD_MONEY}・HE+${MEDAL_EXCHANGE_REWARD_HE}・HEAT+${MEDAL_EXCHANGE_REWARD_HEAT}を入手。`);
+  renderShop();
+  renderStats();
 }
 
 export function buyEquipment(key){
@@ -1560,6 +1579,8 @@ export function renderStats(){
   document.querySelector('#stat-achievements .value').textContent = unlockedAchievements.size+' / '+Object.keys(ACHIEVEMENTS).length;
   document.querySelector('#stat-turns .value').textContent = `${Math.floor(state.missionMinutes)}分`;
   document.querySelector('#stat-money .value').textContent = '¥'+state.money.toLocaleString();
+  // per user request(ドラクエファン向け追加要素): 「ちいさなメダル」所持数の常時表示。
+  document.querySelector('#stat-medals .value').textContent = (state.medals||0)+'枚';
   // per user request: enemies trickle in over the wave rather than all spawning at once --
   // still-queued reinforcements (state.pendingSpawns) count as "remaining" too, so this
   // doesn't read as a near-clear while most of the wave hasn't arrived yet.
@@ -1871,4 +1892,4 @@ export function closeSurrenderOverlay(){
 }
 
 
-Object.assign(window, { renderMapSelectOverlay, renderMapSelectBody, selectMapSeed, renderDeploymentSelectBody, selectDeploymentMode, renderDecoySelectBody, selectDecoyMode, openShop, closeShop, renderShop, buyEquipment, buyAmmo, unlockFuze, toggleStatbar, toggleBoardNote, toggleDrawer, closeAllDrawers, toggleMapFullscreen, updateFullscreenBtnIcon, log, openSmartOrder, closeSmartOrder, smartOrderBack, smartOrderPickType, smartOrderPickScope, smartOrderPickAction, smartOrderPickTarget, smartOrderConfirmInstant, renderSmartOrder, hqBoxHtml, showWaveRewardChoice, chooseWaveReward, setOverlayAccent, showStageClear, proceedToShop, showGameClear, showStageFailed, renderMultiSelectBox, closeCommandBox, closeEnemyCommandBox, mortarBoxHtml, mortarMainlineHtml, updateFireConfigCancel, exposureMetaHtml, soldierRosterHtml, restButtonHtml, reinforceButtonHtml, scoutBoxHtml, standingOrderSelectHtml, squadBoxHtml, bandBoxHtml, tankBoxHtml, samBoxHtml, engineerBoxHtml, medicBoxHtml, supplyBoxHtml, antitankBoxHtml, renderCommandBox, positionCommandBox, renderEnemyCommandBox, getTroubledUnits, renderStats, renderDecisionPanel, closeDecoyCommandBox, renderDecoyCommandBox, repositionOpenCommandBoxes, anyOverlayShown, showBattleStartBanner, triggerScreenShake, openSurrenderOverlay, closeSurrenderOverlay });
+Object.assign(window, { renderMapSelectOverlay, renderMapSelectBody, selectMapSeed, renderDeploymentSelectBody, selectDeploymentMode, renderDecoySelectBody, selectDecoyMode, openShop, closeShop, renderShop, buyEquipment, buyAmmo, unlockFuze, exchangeMedals, toggleStatbar, toggleBoardNote, toggleDrawer, closeAllDrawers, toggleMapFullscreen, updateFullscreenBtnIcon, log, openSmartOrder, closeSmartOrder, smartOrderBack, smartOrderPickType, smartOrderPickScope, smartOrderPickAction, smartOrderPickTarget, smartOrderConfirmInstant, renderSmartOrder, hqBoxHtml, showWaveRewardChoice, chooseWaveReward, setOverlayAccent, showStageClear, proceedToShop, showGameClear, showStageFailed, renderMultiSelectBox, closeCommandBox, closeEnemyCommandBox, mortarBoxHtml, mortarMainlineHtml, updateFireConfigCancel, exposureMetaHtml, soldierRosterHtml, restButtonHtml, reinforceButtonHtml, scoutBoxHtml, standingOrderSelectHtml, squadBoxHtml, bandBoxHtml, tankBoxHtml, samBoxHtml, engineerBoxHtml, medicBoxHtml, supplyBoxHtml, antitankBoxHtml, renderCommandBox, positionCommandBox, renderEnemyCommandBox, getTroubledUnits, renderStats, renderDecisionPanel, closeDecoyCommandBox, renderDecoyCommandBox, repositionOpenCommandBoxes, anyOverlayShown, showBattleStartBanner, triggerScreenShake, openSurrenderOverlay, closeSurrenderOverlay });

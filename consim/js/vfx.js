@@ -2,7 +2,8 @@
 import { unlockAchievement } from './achievements.js';
 import { playSfx } from './audio.js';
 import { state } from './combat.js';
-import { ARC_HEIGHT, ENEMY_MARK_COLOR, EXPLOSION_SFX_MIN_GAP_MS, HIT_EFFECT_HEAVY_DMG, HIT_EFFECT_MIN_DMG, HIT_STOP_MS, MAP_VIEW, MAX_CRATERS, MAX_DEBRIS_PARTICLES, MAX_EFFECTS_3D, MAX_IMPACT_LIGHTS, MUZZLE_STYLE } from './constants.js';
+import { ARC_HEIGHT, ENEMY_MARK_COLOR, EXPLOSION_SFX_MIN_GAP_MS, HIT_EFFECT_HEAVY_DMG, HIT_EFFECT_MIN_DMG, HIT_STOP_MS, MAP_VIEW, MAX_CRATERS, MAX_DEBRIS_PARTICLES, MAX_EFFECTS_3D, MAX_IMPACT_LIGHTS, MEDAL_DROP_CHANCE, MEDAL_DROP_ELIGIBLE_TYPES, MUZZLE_STYLE } from './constants.js';
+import { announceTicker, log } from './ui.js';
 import { canvasUnitToWorldXZ, project, scene3d, terrainHeightAt } from './three.js';
 import { clamp, rnd } from './utils.js';
 import { speakRandomAliveUnit } from './voice.js';
@@ -249,6 +250,13 @@ export function onTargetDestroyed(t){
   if(t.type==='hq') state.enemyHqDestroyed = true;
   speakRandomAliveUnit('morale');
   spawnDestructionEffect(t.trueX, t.trueY, `${t.def.label} 撃破!`, ENEMY_MARK_COLOR);
+  // per user request(ドラクエファン向け追加要素): 強敵撃破で低確率の「ちいさなメダル」
+  // ドロップ(DQシリーズの収集要素オマージュ)。基本歩兵/ドローンは対象外。
+  if(MEDAL_DROP_ELIGIBLE_TYPES.includes(t.type) && Math.random() < MEDAL_DROP_CHANCE){
+    state.medals = (state.medals||0) + 1;
+    log('fdc','戦果', `${t.def.label}を撃破し、ちいさなメダルを発見!(所持数: ${state.medals}枚)`);
+    announceTicker('ちいさなメダルを発見!', 'medal');
+  }
 }
 
 export let lastExplosionSfxAt = -Infinity;

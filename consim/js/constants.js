@@ -97,6 +97,21 @@ export const PRICE_FUZE = 800;
 
 export const AMMO_PACK = 5;
 
+// per user request(ドラクエファン向け追加要素): 強敵撃破で低確率ドロップする「ちいさな
+// メダル」(DQシリーズの収集要素オマージュ)。基本歩兵/ドローンは対象外(TARGET_TYPESの
+// うち手強い部類のみ)。商店(ちいさなメダル交換)で一定枚数と交換して報酬を受け取れる。
+export const MEDAL_DROP_CHANCE = 0.15;
+
+export const MEDAL_DROP_ELIGIBLE_TYPES = ['artillery', 'vehicle', 'heli', 'aa', 'jammer', 'hq'];
+
+export const MEDAL_EXCHANGE_COST = 5;
+
+export const MEDAL_EXCHANGE_REWARD_MONEY = 1000;
+
+export const MEDAL_EXCHANGE_REWARD_HE = 10;
+
+export const MEDAL_EXCHANGE_REWARD_HEAT = 5;
+
 export const DIFFICULTIES = {
   // per user request: initial mortar ammo (HE/HEAT) is 5x what it used to be, across all difficulties
   easy: {

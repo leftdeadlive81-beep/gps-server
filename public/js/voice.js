@@ -60,6 +60,9 @@ export function speakCoordination(){
   speakRandomAliveUnit(Math.random()<0.25 ? 'irritation' : 'coordination');
 }
 
+// per user request(ドラクエファン向け追加要素): 台詞の吹き出しを、DQシリーズの
+// メッセージウィンドウ(濃紺の背景+白枠の二重罫線+右下に点滅する「▼」の待機カーソル)
+// 風のデザインに変更。ふきだしの三角ポインタは廃止し、DQの固定ウィンドウらしい矩形のみに。
 export function drawCallouts(ctx){
   const now = performance.now();
   activeCallouts = activeCallouts.filter(c=>c.expiresAt>now);
@@ -70,31 +73,40 @@ export function drawCallouts(ctx){
     const uy = unit._visY!==undefined ? unit._visY : unit.y;
     const p = project(ux, uy);
     if(!p.visible) return;
-    const label = `${c.name}: ${c.text}`;
+
+    ctx.save();
     ctx.font = '700 12px "Noto Sans JP", sans-serif';
-    const textW = ctx.measureText(label).width;
-    const boxW = textW+16, boxH = 22;
-    const bx = p.x - boxW/2, by = p.y - 44 - boxH;
-    ctx.fillStyle = 'rgba(20,24,15,0.92)';
-    ctx.strokeStyle = 'rgba(217,164,65,0.85)';
+    const nameW = ctx.measureText(c.name).width;
+    ctx.font = '400 12px "Noto Sans JP", sans-serif';
+    const textW = ctx.measureText(c.text).width;
+    const boxW = Math.max(96, nameW+6+textW+26), boxH = 30;
+    const bx = p.x - boxW/2, by = p.y - 46 - boxH;
+
+    // outer frame (light border, classic DQ window edge) then the dark navy interior.
+    ctx.fillStyle = '#e6ebf6';
+    ctx.fillRect(bx-3, by-3, boxW+6, boxH+6);
+    ctx.fillStyle = 'rgba(16,22,56,0.96)';
+    ctx.fillRect(bx, by, boxW, boxH);
+    ctx.strokeStyle = '#2a3a70';
     ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.rect(bx, by, boxW, boxH);
-    ctx.fill();
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(p.x-6, by+boxH);
-    ctx.lineTo(p.x+6, by+boxH);
-    ctx.lineTo(p.x, by+boxH+8);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(20,24,15,0.92)';
-    ctx.fill();
-    ctx.fillStyle = '#e8e3ce';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, p.x, by+boxH/2+1);
+    ctx.strokeRect(bx+2.5, by+2.5, boxW-5, boxH-5);
+
     ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#f0bd55';
+    ctx.font = '700 12px "Noto Sans JP", sans-serif';
+    ctx.fillText(c.name, bx+10, by+boxH/2);
+    ctx.fillStyle = '#f4f2ea';
+    ctx.font = '400 12px "Noto Sans JP", sans-serif';
+    ctx.fillText(c.text, bx+10+nameW+6, by+boxH/2);
+
+    // blinking "▼" wait-for-input cursor in the bottom-right corner, DQ-style.
+    ctx.globalAlpha = 0.45 + 0.55*Math.sin(now/220);
+    ctx.fillStyle = '#f4f2ea';
+    ctx.font = '700 11px "Noto Sans JP", sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('▼', bx+boxW-6, by+boxH-7);
+    ctx.restore();
   });
 }
 

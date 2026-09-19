@@ -31,6 +31,7 @@ export function saveCampaign(state){
       stage: state.stage,
       difficulty: state.difficulty,
       money: state.money,
+      medals: state.medals,
       ammo: state.ammo,
       fuzeUnlocked: state.fuzeUnlocked,
       equipment: state.equipment,
@@ -90,7 +91,7 @@ export function clearCampaignSave(){
 export function applySavedCampaign(state, saved){
   if(!state || !saved) return;
   const fields = [
-    'stage','difficulty','money','ammo','fuzeUnlocked','equipment','reserve','reserveRoster',
+    'stage','difficulty','money','medals','ammo','fuzeUnlocked','equipment','reserve','reserveRoster',
     'missionMinutes','gameSpeed','deploymentMode','decoyPlacementMode',
     'hq','mortars','squads','scouts','antitanks','tanks','sams','helis','engineers','medics','bands','supplies','walls','trenches',
   ];
