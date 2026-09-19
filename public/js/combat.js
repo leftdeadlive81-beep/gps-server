@@ -907,7 +907,8 @@ export function startStage(){
       id: ei,
       order: 'hold',
       pendingDest: null,
-      standingOrder: null,
+      // per user request: 工兵の既定行動(standingOrder)は自動対応(auto_assist)をデフォルトに。
+      standingOrder: 'auto_assist',
       x: deployX(ENGINEER_POS.x),
       y: clamp(deployYMid + (ei-(NUM_ENGINEERS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMinBound, deployYMaxBound),
       soldiers: makeSoldiers(ROSTER_ENGINEER_TEAMS[ei]),
@@ -920,7 +921,8 @@ export function startStage(){
       id: mi,
       order: 'hold',
       pendingDest: null,
-      standingOrder: null,
+      // per user request: 衛生の既定行動(standingOrder)は自動対応(auto_assist)をデフォルトに。
+      standingOrder: 'auto_assist',
       x: deployX(MEDIC_POS.x),
       y: clamp(deployYMid + (mi-(NUM_MEDICS-1)/2)*52*INITIAL_DEPLOY_SPACING_MULT*deployYScale, deployYMinBound, deployYMaxBound),
       soldiers: makeSoldiers(ROSTER_MEDIC_TEAMS[mi]),
