@@ -767,6 +767,12 @@ export function drawBoard(){
     // per user request(斥候の効果を分かりやすく): 以前はHQ/ヘリと同じ既定色で「何のための円か」
     // が伝わらなかった -- 迫撃砲の観測補正(computeDispersionAt/isObservedByScout)と揃えた
     // 琥珀色にし、円の上端にラベルを添えて意味を明示する。
+    // per user request(表示が重なって見づらい): 斥候が密集していると各自の円がほぼ重なり、
+    // 「観測圏(迫撃砲高精度)」ラベルが同じ位置に何重にも重なって判読不能になっていた。
+    // 直近に描いたラベルの画面座標を覚えておき、近接している(FRIENDLY_LABEL_CLUSTER_PX未満)
+    // 2つ目以降のラベルは省略する(円自体は重なっても意味が変わらないため、全ユニット分の
+    // 円は引き続き描くが、ラベルはクラスタにつき1つで十分)。
+    const scoutObsLabelPositions = [];
     state.scouts.forEach(scout=>{
       const scoutVisL = smoothVisualPos(scout, scout.x, scout.y);
       const scoutVis = project(scoutVisL.x, scoutVisL.y);
@@ -774,12 +780,14 @@ export function drawBoard(){
       drawGroundDetectionCircle(scoutVisL, SCOUT_MAX_RANGE_UNITS, 'rgba(224,184,74,0.55)', 'rgba(224,184,74,0.06)');
       const topL = { x: scoutVisL.x, y: scoutVisL.y - SCOUT_MAX_RANGE_UNITS*((WORLD.scaleZ>0.0001)?(WORLD.scaleX/WORLD.scaleZ):1) };
       const topP = project(topL.x, topL.y);
-      if(topP.visible){
-        ctx.fillStyle = 'rgba(224,184,74,0.9)';
-        ctx.font = mfont('11px "Noto Sans JP"');
-        ctx.textAlign = 'center';
-        ctx.fillText('観測圏(迫撃砲高精度)', topP.x, topP.y-4);
-      }
+      if(!topP.visible) return;
+      const tooClose = scoutObsLabelPositions.some(p=>Math.hypot(p.x-topP.x, p.y-topP.y) < FRIENDLY_LABEL_CLUSTER_PX);
+      if(tooClose) return;
+      scoutObsLabelPositions.push({x:topP.x, y:topP.y});
+      ctx.fillStyle = 'rgba(224,184,74,0.9)';
+      ctx.font = mfont('11px "Noto Sans JP"');
+      ctx.textAlign = 'center';
+      ctx.fillText('観測圏(迫撃砲高精度)', topP.x, topP.y-4);
     });
     (state.helis||[]).forEach(heli=>{
       const heliVisL = smoothVisualPos(heli, heli.x, heli.y);
