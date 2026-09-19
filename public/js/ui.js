@@ -817,6 +817,7 @@ export function mortarBoxHtml(idx){
     ${!dead ? mortarMainlineHtml(idx, mortar) : ''}
     ${exposureMetaHtml(getUnitExposure({kind:'mortar', idx}))}
     ${engineerBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin:6px 0;">${engineerBtns}</div>` : ''}
+    ${!dead ? standingOrderSelectHtml('mortar', idx, mortar, false) : ''}
     ${crewHtml}
   `;
 }
@@ -911,9 +912,17 @@ export function scoutBoxHtml(idx){
   `;
 }
 
+// per user request(モバイル操作とマイクロマネジメント負荷の軽減): 工兵/衛生/補給隊は
+// 戦闘用の既定行動(接敵時の防御/突撃、損耗時の後退)ではなく、「対象を毎回手動で選ばず、
+// 最寄りの要対応先へ自動的に向かう」auto_assistのみを選択肢とする(applyEngineerAutoAssist/
+// applyMedicAutoAssist/applySupplyAutoAssist、combat.js参照)。
+const AUTO_ASSIST_KINDS = ['engineer', 'medic', 'supply'];
+
 export function standingOrderSelectHtml(kind, idx, unit, allowAssault){
-  const options = ['', 'contact_hold', 'low_hp_retreat'];
-  if(allowAssault) options.splice(2, 0, 'contact_assault');
+  const options = kind==='mortar' ? ['', 'auto_fire']
+    : AUTO_ASSIST_KINDS.includes(kind)
+    ? ['', 'auto_assist']
+    : (allowAssault ? ['', 'contact_hold', 'contact_assault', 'low_hp_retreat'] : ['', 'contact_hold', 'low_hp_retreat']);
   const optionsHtml = options.map(v=>
     `<option value="${v}" ${(unit.standingOrder||'')===v?'selected':''}>${v?STANDING_ORDER_LABEL[v]:'なし(手動のみ)'}</option>`
   ).join('');
@@ -1112,6 +1121,7 @@ export function engineerBoxHtml(idx){
     ${repairBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">${repairBtns}</div>` : ''}
     <div class="meta" style="margin-bottom:8px;">${repairStatus}</div>
     ${repairTarget ? `<button class="btn" style="margin-bottom:8px;" onclick="clearEngineerRepair(${idx})">修理を解除</button>` : ''}
+    ${standingOrderSelectHtml('engineer', idx, en, false)}
     ${soldierRosterHtml(en.soldiers)}
   `;
 }
@@ -1156,6 +1166,7 @@ export function supplyBoxHtml(idx){
     ${supplyBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">${supplyBtns}</div>` : ''}
     <div class="meta" style="margin-bottom:8px;">${supplyStatus}</div>
     ${targetEntry ? `<button class="btn" style="margin-bottom:8px;" onclick="clearSupplyRun(${idx})">補給を解除</button>` : ''}
+    ${standingOrderSelectHtml('supply', idx, su, false)}
     ${soldierRosterHtml(su.soldiers)}
   `;
 }
@@ -1206,6 +1217,7 @@ export function medicBoxHtml(idx){
     ${reviveBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">${reviveBtns}</div>` : ''}
     <div class="meta" style="margin-bottom:8px;">${reviveStatus}</div>
     ${reviveTargetEntry ? `<button class="btn" style="margin-bottom:8px;" onclick="clearMedicRevive(${idx})">救護を解除</button>` : ''}
+    ${standingOrderSelectHtml('medic', idx, me, false)}
     ${soldierRosterHtml(me.soldiers)}
   `;
 }
@@ -1430,6 +1442,33 @@ export function renderEnemyCommandBox(){
   positionCommandBox(box, pos, 230);
 }
 
+// per user request(モバイル操作とマイクロマネジメント負荷の軽減): 「対応が必要な
+// ユニット」を一箇所で判定する共通関数。force-list-badgeの件数表示と、
+// focusNextTroubledUnit()(input.js)の巡回ジャンプ先の両方がこれを使う。撃破/全滅済み
+// (もう何も指示できない)ユニットは対象外 -- あくまで「今プレイヤーが手を打てる」ものだけを
+// 拾う。
+export function getTroubledUnits(){
+  const list = [];
+  if(state.hq.hp>0 && state.hq.hp/state.hq.maxHp<0.5) list.push({kind:'hq', idx:0, x:state.hq.x, y:state.hq.y});
+  state.mortars.forEach((m,i)=>{ if(m.hp>0 && m.hp/m.maxHp<0.5) list.push({kind:'mortar', idx:i, x:m.x, y:m.y}); });
+  state.tanks.forEach((tk,i)=>{ if(tk.hp>0 && tk.hp/tk.maxHp<0.5) list.push({kind:'tank', idx:i, x:tk.x, y:tk.y}); });
+  state.sams.forEach((sam,i)=>{ if(sam.hp>0 && sam.hp/sam.maxHp<0.5) list.push({kind:'sam', idx:i, x:sam.x, y:sam.y}); });
+  state.antitanks.forEach((at,i)=>{ if(at.hp>0 && at.hp/at.maxHp<0.5) list.push({kind:'antitank', idx:i, x:at.x, y:at.y}); });
+  state.scouts.forEach((s,i)=>{ const a=unitAliveCount(s); if(a>0 && a/s.soldiers.length<0.5) list.push({kind:'scout', idx:i, x:s.x, y:s.y}); });
+  state.squads.forEach((sq,i)=>{
+    const a = sq.soldiers.filter(x=>x.alive).length;
+    if(sq.shakenUntil || (a>0 && a/sq.soldiers.length<0.5)) list.push({kind:'squad', idx:i, x:sq.x, y:sq.y});
+  });
+  state.engineers.forEach((en,i)=>{
+    const a = unitAliveCount(en);
+    if(en.shakenUntil || (a>0 && a/en.soldiers.length<0.5)) list.push({kind:'engineer', idx:i, x:en.x, y:en.y});
+  });
+  state.medics.forEach((me,i)=>{ const a=unitAliveCount(me); if(a>0 && a/me.soldiers.length<0.5) list.push({kind:'medic', idx:i, x:me.x, y:me.y}); });
+  state.bands.forEach((b,i)=>{ const a=unitAliveCount(b); if(a>0 && a/b.soldiers.length<0.5) list.push({kind:'band', idx:i, x:b.x, y:b.y}); });
+  (state.supplies||[]).forEach((su,i)=>{ const a=unitAliveCount(su); if(a>0 && a/su.soldiers.length<0.5) list.push({kind:'supply', idx:i, x:su.x, y:su.y}); });
+  return list;
+}
+
 export function renderStats(){
   document.querySelector('#stat-datetime .value').textContent = formatGameClock(gameClockNow());
   document.querySelector('#stat-stage .value').textContent = state.stage+' / '+STAGE_COUNT;
@@ -1537,14 +1576,11 @@ export function renderStats(){
 
   // per user request: this panel is collapsed by default and duplicates the on-map
   // per-unit attrition bars, so give the collapsed header a one-glance answer to "is
-  // anything wrong" (dead or below half strength) instead of making the player expand
-  // it just to find out nothing needs attention.
-  let troubledUnits = 0;
-  if(state.hq.hp<=0 || state.hq.hp/state.hq.maxHp<0.5) troubledUnits++;
-  state.mortars.forEach(m=>{ if(m.hp<=0 || m.hp/m.maxHp<0.5) troubledUnits++; });
-  state.scouts.forEach(s=>{ const a=unitAliveCount(s); if(a===0 || a/s.soldiers.length<0.5) troubledUnits++; });
-  state.squads.forEach(sq=>{ const a=sq.soldiers.filter(x=>x.alive).length; if(a===0 || a/sq.soldiers.length<0.5) troubledUnits++; });
-  document.getElementById('force-list-badge').textContent = troubledUnits>0 ? `⚠ ${troubledUnits}` : '';
+  // anything wrong" (below half strength, or shaken) instead of making the player expand
+  // it just to find out nothing needs attention. The badge count and the "次の要対応部隊へ"
+  // jump button (see focusNextTroubledUnit() in input.js) share this same list.
+  const troubled = getTroubledUnits();
+  document.getElementById('force-list-badge').textContent = troubled.length>0 ? `⚠ ${troubled.length}` : '';
 
   document.getElementById('self-ammo-line').textContent = `現有弾薬: HE ${state.ammo.he} ／ HEAT ${state.ammo.heat}`;
 }
@@ -1752,4 +1788,4 @@ export function closeSurrenderOverlay(){
 }
 
 
-Object.assign(window, { renderMapSelectOverlay, renderMapSelectBody, selectMapSeed, renderDeploymentSelectBody, selectDeploymentMode, renderDecoySelectBody, selectDecoyMode, openShop, closeShop, renderShop, buyEquipment, buyAmmo, unlockFuze, toggleStatbar, toggleBoardNote, toggleDrawer, closeAllDrawers, toggleMapFullscreen, updateFullscreenBtnIcon, log, openSmartOrder, closeSmartOrder, smartOrderBack, smartOrderPickType, smartOrderPickScope, smartOrderPickAction, smartOrderPickTarget, smartOrderConfirmInstant, renderSmartOrder, hqBoxHtml, showWaveRewardChoice, chooseWaveReward, setOverlayAccent, showStageClear, proceedToShop, showGameClear, showStageFailed, renderMultiSelectBox, closeCommandBox, closeEnemyCommandBox, mortarBoxHtml, mortarMainlineHtml, updateFireConfigCancel, exposureMetaHtml, soldierRosterHtml, restButtonHtml, reinforceButtonHtml, scoutBoxHtml, standingOrderSelectHtml, squadBoxHtml, bandBoxHtml, tankBoxHtml, samBoxHtml, engineerBoxHtml, medicBoxHtml, antitankBoxHtml, renderCommandBox, positionCommandBox, renderEnemyCommandBox, renderStats, renderDecisionPanel, closeDecoyCommandBox, renderDecoyCommandBox, repositionOpenCommandBoxes, anyOverlayShown, showBattleStartBanner, openSurrenderOverlay, closeSurrenderOverlay });
+Object.assign(window, { renderMapSelectOverlay, renderMapSelectBody, selectMapSeed, renderDeploymentSelectBody, selectDeploymentMode, renderDecoySelectBody, selectDecoyMode, openShop, closeShop, renderShop, buyEquipment, buyAmmo, unlockFuze, toggleStatbar, toggleBoardNote, toggleDrawer, closeAllDrawers, toggleMapFullscreen, updateFullscreenBtnIcon, log, openSmartOrder, closeSmartOrder, smartOrderBack, smartOrderPickType, smartOrderPickScope, smartOrderPickAction, smartOrderPickTarget, smartOrderConfirmInstant, renderSmartOrder, hqBoxHtml, showWaveRewardChoice, chooseWaveReward, setOverlayAccent, showStageClear, proceedToShop, showGameClear, showStageFailed, renderMultiSelectBox, closeCommandBox, closeEnemyCommandBox, mortarBoxHtml, mortarMainlineHtml, updateFireConfigCancel, exposureMetaHtml, soldierRosterHtml, restButtonHtml, reinforceButtonHtml, scoutBoxHtml, standingOrderSelectHtml, squadBoxHtml, bandBoxHtml, tankBoxHtml, samBoxHtml, engineerBoxHtml, medicBoxHtml, supplyBoxHtml, antitankBoxHtml, renderCommandBox, positionCommandBox, renderEnemyCommandBox, getTroubledUnits, renderStats, renderDecisionPanel, closeDecoyCommandBox, renderDecoyCommandBox, repositionOpenCommandBoxes, anyOverlayShown, showBattleStartBanner, triggerScreenShake, openSurrenderOverlay, closeSurrenderOverlay });

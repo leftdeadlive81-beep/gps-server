@@ -299,7 +299,7 @@ export function addNewMortar(){
   const id = state.mortars.length;
   state.mortars.push({
     id, x: OP_HOME_X, y: clamp(OP_HOME_Y + rnd(-60,60), 30, CANVAS_H-30), hp:100, maxHp:100,
-    order:'standby', pendingFire:null, pendingDest:null,
+    order:'standby', pendingFire:null, pendingDest:null, standingOrder:null,
     fireShell:'he', fireFuze:'impact', fireCount:2,
     mainlineAngle: null,
     shotsSinceMove: 0, cbWarnTurns: null,
@@ -1706,7 +1706,27 @@ export function armMortarTargetOrder(idx){
   render();
 }
 
+// per user request(操作が忙しすぎるとの声を受けて追加): 迫撃砲の「自動照準」standingOrder --
+// 有効な間は視認済み(revealed)目標のうち射撃可能(近すぎ/遠すぎでない、射撃準備済み)な最も近い
+// 目標へ、都度の手動assignMortarFireなしで自動的に照準・射撃指示を出し続ける。候補の絞り込みは
+// mortarTargetListHtml(ui.js、候補一覧の表示/無効化ロジック)と揃えてある。
+function applyMortarAutoFire(mortar){
+  if(mortar.standingOrder!=='auto_fire' || mortar.hp<=0) return;
+  if(mortar.pendingFire || mortar.order==='move') return;
+  if(mortarNotReadyToFire(mortar)) return;
+  let best = null, bestDist = Infinity;
+  state.targets.forEach(t=>{
+    if(t.destroyed || !t.revealed) return;
+    if(mortarTooCloseToFire(mortar, t.trueX, t.trueY)) return;
+    if(mortarTooFarToFire(mortar, t.trueX, t.trueY)) return;
+    const dist = Math.hypot(t.trueX-mortar.x, t.trueY-mortar.y);
+    if(dist < bestDist){ bestDist = dist; best = t; }
+  });
+  if(best) assignMortarFire(mortar.id, best.id);
+}
+
 export function resolveOneMortarDecision(mortar, dt){
+  applyMortarAutoFire(mortar);
   if(mortar.order!=='move' || !mortar.pendingDest) return;
   const now = performance.now();
   // per user request: 10 seconds of packing up before the mortar actually starts moving
@@ -2123,6 +2143,23 @@ function findEngineerRepairTarget(en){
   return arr ? arr.find(t=>t.id===en.repairTargetId) : null;
 }
 
+// per user request(モバイル操作とマイクロマネジメント負荷の軽減): 既定行動で「自動対応」を
+// 選んでいる工兵小隊は、修理作業中でない限り、最寄りの損傷した装備(戦車/対戦車/迫撃砲)を
+// 自動的に見つけて修理に向かう。優先度は緊急度(損傷率)ではなく距離順 -- 無駄な長距離移動を
+// 避けるため。
+function applyEngineerAutoAssist(en, enIdx){
+  if(en.standingOrder!=='auto_assist' || en.order==='repair') return;
+  const candidates = [
+    ...state.tanks.map((t,i)=>({kind:'tank', idx:i, unit:t})),
+    ...state.antitanks.map((t,i)=>({kind:'antitank', idx:i, unit:t})),
+    ...state.mortars.map((t,i)=>({kind:'mortar', idx:i, unit:t})),
+  ].filter(c=>c.unit.hp>0 && c.unit.hp<c.unit.maxHp);
+  if(!candidates.length) return;
+  candidates.sort((a,b)=>Math.hypot(a.unit.x-en.x,a.unit.y-en.y)-Math.hypot(b.unit.x-en.x,b.unit.y-en.y));
+  const best = candidates[0];
+  assignEngineerRepair(enIdx, best.kind, best.idx);
+}
+
 // per user request: 工兵による戦車/対戦車/迫撃砲の野戦修理を指示/解除する。既存の即時・有償
 // 修理(repairTank等)とは独立した無償の手段 -- 工兵を対象まで移動させ、射程内に留まる間HPを
 // 緩やかに回復する。kindは'tank'/'antitank'/'mortar'、idxはその配列内でのインデックス。
@@ -2174,6 +2211,7 @@ export function resolveEngineerOrders(dt){
       }
     }
     applyStandingOrder(en, '工兵小隊', false);
+    applyEngineerAutoAssist(en, enIdx);
     const beforeX = en.x, beforeY = en.y;
     applyEngineerMovement(en, enIdx, dt);
     if(en.x!==beforeX || en.y!==beforeY) anyEvent = true;
@@ -2205,6 +2243,19 @@ export function resolveEngineerOrders(dt){
 // (supplyPhase: 'toHq'|'toTarget')を自動で繰り返す点が異なる。
 export function allSuppliesWiped(){
   return !state.supplies.length || state.supplies.every(su=>!unitAlive(su));
+}
+
+// per user request(モバイル操作とマイクロマネジメント負荷の軽減): 既定行動で「自動対応」を
+// 選んでいる補給隊は、補給任務中でない限り、弾薬が不足している最寄りの小隊を自動的に
+// 見つけて補給に向かう。
+function applySupplyAutoAssist(su, suIdx){
+  if(su.standingOrder!=='auto_assist' || su.order==='supply') return;
+  const candidates = state.squads
+    .map((sq,idx)=>({idx, unit:sq}))
+    .filter(c=>unitAlive(c.unit) && (c.unit.ammo===undefined || c.unit.ammo<c.unit.maxAmmo));
+  if(!candidates.length) return;
+  candidates.sort((a,b)=>Math.hypot(a.unit.x-su.x,a.unit.y-su.y)-Math.hypot(b.unit.x-su.x,b.unit.y-su.y));
+  assignSupplyRun(suIdx, candidates[0].idx);
 }
 
 export function assignSupplyRun(suIdx, squadIdx){
@@ -2275,6 +2326,7 @@ export function resolveSupplyOrders(dt){
     if(aliveSoldiers.length===0) return;
     if(su.resting){ tickUnitRest(su, `補給${suIdx+1}`, dt); return; }
     applyStandingOrder(su, `補給${suIdx+1}`, false);
+    applySupplyAutoAssist(su, suIdx);
     const beforeX = su.x, beforeY = su.y;
     applySupplyMovement(su, suIdx, dt);
     if(su.x!==beforeX || su.y!==beforeY) anyEvent = true;
@@ -2377,6 +2429,20 @@ export function applyMedicMovement(me, meIdx, dt){
   checkMineTrigger('medic', meIdx, me.x, me.y);
 }
 
+// per user request(モバイル操作とマイクロマネジメント負荷の軽減): 既定行動で「自動対応」を
+// 選んでいる衛生小隊は、蘇生作業中でない限り、負傷者を抱える最寄りのユニットを自動的に
+// 見つけて救護に向かう。
+function applyMedicAutoAssist(me, meIdx){
+  if(me.standingOrder!=='auto_assist' || me.order==='revive') return;
+  const candidates = ['squad','scout','engineer','medic','band'].flatMap(kind=>
+    reviveTargetArray(kind).map((unit,idx)=>({kind, idx, unit}))
+  ).filter(c=>findWoundedInUnit(c.unit));
+  if(!candidates.length) return;
+  candidates.sort((a,b)=>Math.hypot(a.unit.x-me.x,a.unit.y-me.y)-Math.hypot(b.unit.x-me.x,b.unit.y-me.y));
+  const best = candidates[0];
+  assignMedicRevive(meIdx, best.kind, best.idx);
+}
+
 // per user request: 衛生小隊に蘇生を指示/解除する。kindは'squad'/'scout'/'engineer'/'medic'、
 // idxはその配列内でのインデックス(対象ユニットそのものであって特定の兵士ではない -- 実際に
 // どの兵士を蘇生するかはfindWoundedInUnitが毎ティック決める)。
@@ -2416,6 +2482,7 @@ export function resolveMedicOrders(dt){
     if(aliveSoldiers.length===0) return;
     if(me.resting){ tickUnitRest(me, '衛生小隊', dt); return; }
     applyStandingOrder(me, '衛生小隊', false);
+    applyMedicAutoAssist(me, meIdx);
     const beforeX = me.x, beforeY = me.y;
     applyMedicMovement(me, meIdx, dt);
     if(me.x!==beforeX || me.y!==beforeY) anyEvent = true;
@@ -3068,7 +3135,13 @@ export function setAntitankOrder(idx, order){
 }
 
 export function setStandingOrder(kind, idx, value){
-  const unit = kind==='squad' ? state.squads[idx] : kind==='band' ? state.bands[idx] : null;
+  const unit = kind==='squad' ? state.squads[idx]
+    : kind==='band' ? state.bands[idx]
+    : kind==='engineer' ? state.engineers[idx]
+    : kind==='medic' ? state.medics[idx]
+    : kind==='supply' ? state.supplies[idx]
+    : kind==='mortar' ? state.mortars[idx]
+    : null;
   if(!unit) return;
   unit.standingOrder = value || null;
   render();

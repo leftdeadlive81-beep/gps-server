@@ -946,6 +946,12 @@ export const STANDING_ORDER_LABEL = {
   contact_hold: '接敵時: 防御',
   contact_assault: '接敵時: 突撃',
   low_hp_retreat: '損耗50%で後退',
+  // per user request(モバイル操作とマイクロマネジメント負荷の軽減): 工兵/衛生/補給隊向け
+  // ―「対象を毎回手動で選ばず、最も近い要対応先へ自動的に向かう」既定行動。
+  auto_assist: '自動対応(最寄りの要対応先へ)',
+  // per user request(操作が忙しすぎるとの声を受け、迫撃砲の毎射撃ごとの手動照準を軽減):
+  // 有効な間は視認済み目標のうち射撃可能な最も近い目標へ自動的に照準・射撃指示を続ける。
+  auto_fire: '自動照準(視認済み目標へ自動射撃)',
 };
 
 export const FRIENDLY_SPACING_RADIUS = 34;
