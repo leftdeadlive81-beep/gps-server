@@ -302,6 +302,7 @@
   }
   .ticker-item.death{color:var(--red); font-weight:700;}
   .ticker-item.rout{color:var(--blue-id); font-weight:700;}
+  .ticker-item.warning{color:var(--amber); font-weight:700;}
   @keyframes ticker-scroll{
     from{transform:translateX(0);}
     to{transform:translateX(-50%);}

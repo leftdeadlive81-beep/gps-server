@@ -302,15 +302,22 @@ export function drawMinimap(){
   };
   (state.roads||[]).forEach((road, roadIdx)=>{
     const kind = (state.roadKinds||[])[roadIdx] || 'main';
-    ctx.beginPath();
-    road.forEach((p, i)=>{
-      const pt = proj(p.x, p.y);
-      if(i===0) ctx.moveTo(pt.x, pt.y);
-      else ctx.lineTo(pt.x, pt.y);
-    });
-    ctx.strokeStyle = kind==='dirt' ? 'rgba(150,110,70,0.8)' : kind==='branch' ? 'rgba(145,145,120,0.85)' : 'rgba(185,181,155,0.9)';
-    ctx.lineWidth = kind==='dirt' ? 1 : 1.5;
-    ctx.stroke();
+    const baseColor = kind==='dirt' ? 'rgba(150,110,70,0.8)' : kind==='branch' ? 'rgba(145,145,120,0.85)' : 'rgba(185,181,155,0.9)';
+    const lineW = kind==='dirt' ? 1 : 1.5;
+    // per user request(地雷の存在を分かりやすく): 斥候の観測圏内(既存のisObservedByScout、
+    // 迫撃砲の観測補正/地雷回避と同じ判定)にある区間は、地雷を敷設されない安全な道として
+    // 琥珀色で塗り分ける。位置そのものは明かさず、「守れている範囲」だけを示す。
+    for(let i=1;i<road.length;i++){
+      const a = road[i-1], b = road[i];
+      const safe = isObservedByScout(a.x, a.y) || isObservedByScout(b.x, b.y);
+      const pa = proj(a.x, a.y), pb = proj(b.x, b.y);
+      ctx.beginPath();
+      ctx.moveTo(pa.x, pa.y);
+      ctx.lineTo(pb.x, pb.y);
+      ctx.strokeStyle = safe ? 'rgba(224,184,74,0.95)' : baseColor;
+      ctx.lineWidth = safe ? lineW+0.5 : lineW;
+      ctx.stroke();
+    }
   });
 
   const friendlyPts = [];

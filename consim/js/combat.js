@@ -4042,6 +4042,10 @@ export function maybePlaceMine(){
   if(!pt) return;
   state.mines.push({x:pt.x, y:pt.y});
   log('sys','警報', `敵が付近の道路に地雷を敷設した形跡がある。`);
+  // per user request(地雷の存在を分かりやすく): 位置は明かさない(奇襲の演出は維持)が、
+  // 「敷設されたらしい」という事実自体はFDCログに埋もれず一目で気付けるようテロップでも
+  // 強調する。
+  announceTicker('敵の地雷敷設を確認(位置不明)', 'warning');
 }
 
 export function checkMineTrigger(kind, idx, x, y){

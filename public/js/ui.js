@@ -1483,6 +1483,9 @@ export function renderStats(){
   document.querySelector('#stat-stage .value').textContent = state.stage+' / '+STAGE_COUNT;
   document.querySelector('#stat-difficulty .value').textContent = DIFFICULTIES[state.difficulty].label;
   document.querySelector('#stat-weather .value').textContent = WEATHER_TYPES[state.weather].label;
+  // per user request(地雷の存在を分かりやすく): 正確な位置は明かさないが、現在敷設されて
+  // いる(state.mines、maybePlaceMine参照)推定数は常時把握できるようにする。
+  document.querySelector('#stat-mines .value').textContent = (state.mines?state.mines.length:0);
   document.querySelector('#stat-achievements .value').textContent = unlockedAchievements.size+' / '+Object.keys(ACHIEVEMENTS).length;
   document.querySelector('#stat-turns .value').textContent = `${Math.floor(state.missionMinutes)}分`;
   document.querySelector('#stat-money .value').textContent = '¥'+state.money.toLocaleString();
