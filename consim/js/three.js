@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { estPos, smoothVisualPos, state, unitAlive } from './combat.js';
-import { BAND_SQUAD_SIZE, CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, FORTRESS_NEUTRAL_COLOR_3D, FRIENDLY_MARK_COLOR_3D, GRID_LINES, HELI_FLIGHT_ALTITUDE, MAP_INITIAL_AZIMUTH, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, PROC_CANOPY_CELL, PROC_CANOPY_DARK, PROC_CANOPY_LIGHT, PROC_CLEARING_CELL, PROC_CLEARING_COLOR, PROC_CLEARING_EDGE0, PROC_CLEARING_EDGE1, PROC_COLOR_FOREST, PROC_COLOR_HIGH, PROC_COLOR_LOW, PROC_COLOR_WATER, PROC_DRY_PATCH_CELL, PROC_DRY_PATCH_COLOR, PROC_DRY_PATCH_EDGE0, PROC_DRY_PATCH_EDGE1, PROC_MESH_SEGMENTS_X, PROC_MESH_SEGMENTS_Z, PROC_OPEN_MOTTLE_AMOUNT, PROC_OPEN_MOTTLE_CELL, PROC_TERRAIN_HEIGHT_SCALE, PROC_TEXTURE_NOISE_COARSE_AMOUNT, PROC_TEXTURE_NOISE_COARSE_CELL, PROC_TEXTURE_NOISE_FINE_AMOUNT, PROC_TEXTURE_NOISE_FINE_CELL, PROC_TEXTURE_SIZE_X, PROC_TEXTURE_SIZE_Z, SCOUT_SQUAD_SIZE, SHADOW_FRUSTUM_HALF, SKY_COLOR, SQUAD_GRID_OFFSETS, SUN_OFFSET, TARGET_TYPE_COLOR, TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, WALK_AMP_EASE, WALK_ANIM_DETAIL_ZOOM, WALK_ANIM_MIN_INTERVAL_MS, WALK_CYCLE_SPEED, WALK_SWING_MAX, WORLD, unitMarkers3d } from './constants.js';
+import { BAND_SQUAD_SIZE, CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, FORTRESS_NEUTRAL_COLOR_3D, FRIENDLY_MARK_COLOR_3D, GRID_LINES, HELI_FLIGHT_ALTITUDE, MAP_INITIAL_AZIMUTH, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, PROC_CANOPY_CELL, PROC_CANOPY_DARK, PROC_CANOPY_LIGHT, PROC_CLEARING_CELL, PROC_CLEARING_COLOR, PROC_CLEARING_EDGE0, PROC_CLEARING_EDGE1, PROC_COLOR_FOREST, PROC_COLOR_HIGH, PROC_COLOR_LOW, PROC_COLOR_WATER, PROC_DRY_PATCH_CELL, PROC_DRY_PATCH_COLOR, PROC_DRY_PATCH_EDGE0, PROC_DRY_PATCH_EDGE1, PROC_MESH_SEGMENTS_X, PROC_MESH_SEGMENTS_Z, PROC_OPEN_MOTTLE_AMOUNT, PROC_OPEN_MOTTLE_CELL, PROC_TERRAIN_HEIGHT_SCALE, PROC_TEXTURE_NOISE_COARSE_AMOUNT, PROC_TEXTURE_NOISE_COARSE_CELL, PROC_TEXTURE_NOISE_FINE_AMOUNT, PROC_TEXTURE_NOISE_FINE_CELL, PROC_TEXTURE_SIZE_X, PROC_TEXTURE_SIZE_Z, SCOUT_SQUAD_SIZE, SHADOW_FRUSTUM_HALF, SKY_COLOR, SQUAD_GRID_OFFSETS, SQUAD_SPRITE_FPS, SQUAD_SPRITE_FRAME_COUNT, SQUAD_SPRITE_SHEET_URL, SUN_OFFSET, TARGET_TYPE_COLOR, TERRAIN_TEXTURE_BRIGHTNESS, TERRAIN_TYPE_FOREST, TERRAIN_TYPE_WATER, WALK_AMP_EASE, WALK_ANIM_DETAIL_ZOOM, WALK_ANIM_MIN_INTERVAL_MS, WALK_CYCLE_SPEED, WALK_SWING_MAX, WORLD, unitMarkers3d } from './constants.js';
 import { updateMapFocusEase } from './input.js';
 import { buildContourLines, buildProceduralRoads, elevationAt, elevationAtFor, nearestPointOnRoad, riverXAt, terrainTypeAtFor } from './terrain.js';
 import { clamp, smoothstep01, valueNoise2D } from './utils.js';
@@ -850,6 +850,71 @@ function composeStaticWorldMatrix(marker, localX, localY, localZ, scaleX, scaleY
   return _mWorld.multiplyMatrices(marker.matrixWorld, _mLocal);
 }
 
+// per user request(ドラクエファン向けドット絵歩兵スプライト、まず小隊のみ試験導入):
+// 元のGIF(4コマの歩行ループ)は、あらかじめ64x64pxを横4コマ並べたスプライトシート
+// (SQUAD_SPRITE_SHEET_URL)に切り出し済み。Three.jsはGIFファイルをテクスチャとして
+// 自動再生しない(1コマ目で静止する)ため、シートの読み込みが終わった時点で4コマ分の
+// 静止テクスチャ(repeat/offsetでシートの該当コマだけを切り出したもの)を作っておき、
+// updateSquadSpriteWalkCycleがアニメーション中だけmapを差し替えてコマ送りする。
+let squadSpriteFrameTextures = null;
+let squadSpriteSheetLoading = false;
+const pendingSquadSpriteMaterials = [];
+
+function ensureSquadSpriteFrameTextures(){
+  if(squadSpriteFrameTextures || squadSpriteSheetLoading) return squadSpriteFrameTextures;
+  squadSpriteSheetLoading = true;
+  const img = new Image();
+  img.onload = () => {
+    squadSpriteFrameTextures = Array.from({length:SQUAD_SPRITE_FRAME_COUNT}, (_,i)=>{
+      const tex = new THREE.Texture(img);
+      tex.magFilter = THREE.NearestFilter;
+      tex.minFilter = THREE.NearestFilter;
+      tex.wrapS = THREE.ClampToEdgeWrapping;
+      tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.repeat.set(1/SQUAD_SPRITE_FRAME_COUNT, 1);
+      tex.offset.set(i/SQUAD_SPRITE_FRAME_COUNT, 0);
+      tex.needsUpdate = true;
+      return tex;
+    });
+    // Any sprite materials created before the sheet finished loading are still showing a
+    // blank placeholder -- patch them onto the real frame 0 texture now that it exists.
+    pendingSquadSpriteMaterials.forEach(mat=>{ mat.map = squadSpriteFrameTextures[0]; mat.needsUpdate = true; });
+    pendingSquadSpriteMaterials.length = 0;
+  };
+  img.src = SQUAD_SPRITE_SHEET_URL;
+  return null;
+}
+
+// Billboard-sprite equivalent of buildHumanoidFigures, used only for shape==='squad-sprite'.
+// Each soldier gets its own THREE.Sprite (always faces the camera) instead of a procedural
+// instanced-pool figure -- squads are capped at SQUAD_SIZE, so the extra per-object overhead
+// (vs. the shared instanced pool the humanoid figures use) is small and not worth the added
+// complexity of extending that pool to also carry per-instance sprite frame/UV state.
+function buildSquadSpriteFigures(group, offsets){
+  const s = Math.max(0.6, (WORLD.scaleX+WORLD.scaleZ)/2*7.5) * mobileIconMult();
+  const SC = s*2.2; // matches buildSoldierPool's FIGURE_SCALE so both styles read as the same size
+  const clusterR = SC*1.1;
+  const maxR = Math.max(1, ...offsets.map(o=>Math.hypot(o.dx,o.dy)));
+  const spriteSize = SC*0.85;
+  const frames = ensureSquadSpriteFrameTextures();
+  return offsets.map(o=>{
+    const x = (o.dx/maxR)*clusterR, z = (o.dy/maxR)*clusterR;
+    // alphaTest (not transparent:true) treats the sprite as an opaque cutout -- the source
+    // art has hard (non-blended) transparency, so this avoids transparent-sort artifacts
+    // between overlapping soldiers/terrain.
+    // per user request(色が薄い/フォグで霞んで見える): このゲームの地形フォグは全ユニット
+    // 共通で距離に関わらず一定量かかる設定になっており、ドット絵スプライトは他の3D形状より
+    // 薄い発色に感じられたため、このスプライトだけフォグの影響を外して原色に近い発色を保つ。
+    const material = new THREE.SpriteMaterial({ map: frames ? frames[0] : null, alphaTest: 0.5, fog: false });
+    if(!frames) pendingSquadSpriteMaterials.push(material);
+    const sprite = new THREE.Sprite(material);
+    sprite.position.set(x, spriteSize*0.5, z);
+    sprite.scale.set(spriteSize, spriteSize, 1);
+    group.add(sprite);
+    return { sprite, material, frame:0, walkFrameTimer:0, alive:true, facing:1 };
+  });
+}
+
 export function buildHumanoidFigures(group, colorHex, offsets, opts){
   opts = opts || {};
   if(!soldierPool) buildSoldierPool();
@@ -1020,6 +1085,12 @@ export function makeMarkerMesh3d(shape, colorHex, formationOffsets){
     const offsets = formationOffsets && formationOffsets.length ? formationOffsets : SQUAD_GRID_OFFSETS;
     group._soldierFigures = buildHumanoidFigures(group, colorHex, offsets);
     addFlag(colorHex);
+  } else if(shape==='squad-sprite'){
+    // per user request(ドラクエファン向けドット絵歩兵スプライト、まず小隊のみ試験導入):
+    // 小隊だけ、手続き型の人型フィギュアの代わりにドット絵の歩行スプライトを使う。
+    const offsets = formationOffsets && formationOffsets.length ? formationOffsets : SQUAD_GRID_OFFSETS;
+    group._squadSprites = buildSquadSpriteFigures(group, offsets);
+    addFlag(colorHex);
   } else if(shape==='scout'){
     // per user request: 斥候も小隊と同じ人型フィギュア(buildHumanoidFigures)にする一方、
     // 兵種が見分けられるよう小道具で差別化する -- 背嚢(偵察装備)のみで武器は目立たせない。
@@ -1136,6 +1207,58 @@ export function updateSoldierHeading3d(marker, unit, visualX, visualY){
   marker.rotation.y = Math.atan2(dx, dz);
 }
 
+// Sprite equivalents of updateSoldierFigures3d/updateSoldierWalkCycle/updateSoldierHeading3d,
+// used only for shape==='squad-sprite'. Unlike the shared instanced-pool figures, each sprite
+// is its own real THREE.Sprite child, so alive/dead just toggles .visible directly.
+export function updateSquadSpriteFigures3d(marker, aliveFlags){
+  if(!marker || !marker._squadSprites) return;
+  marker._squadSprites.forEach((fig,i)=>{
+    const alive = !!(aliveFlags && aliveFlags[i]);
+    fig.alive = alive;
+    fig.sprite.visible = alive;
+  });
+}
+
+export function updateSquadSpriteWalkCycle(marker, moving, dtSeconds){
+  if(!marker || !marker._squadSprites) return;
+  const frames = squadSpriteFrameTextures;
+  marker._squadSprites.forEach(fig=>{
+    if(!fig.alive) return;
+    if(moving){
+      fig.walkFrameTimer += dtSeconds;
+      const frame = Math.floor(fig.walkFrameTimer*SQUAD_SPRITE_FPS) % SQUAD_SPRITE_FRAME_COUNT;
+      if(frame!==fig.frame){
+        fig.frame = frame;
+        if(frames){ fig.material.map = frames[frame]; fig.material.needsUpdate = true; }
+      }
+    } else if(fig.frame!==0){
+      fig.frame = 0;
+      fig.walkFrameTimer = 0;
+      if(frames){ fig.material.map = frames[0]; fig.material.needsUpdate = true; }
+    }
+  });
+}
+
+// per user request(左右反転で移動方向に大まかに対応): このスプライトは1方向(横向き)の
+// 歩行絵しか無いため、THREE.Sprite自体の常時カメラ正対という性質上、humanoidの
+// updateSoldierHeading3d(marker.rotation.yで実際に体を回す)は通用しない。代わりに
+// 横方向(dxの符号)の移動だけ見て左右反転(scale.xの符号反転)する簡易対応にとどめる。
+export function updateSquadSpriteHeading3d(marker, unit, visualX, visualY){
+  if(!marker || !marker._squadSprites) return;
+  const prevX = unit._spriteMarkerX;
+  unit._spriteMarkerX = visualX;
+  unit._spriteMarkerY = visualY;
+  if(prevX===undefined) return;
+  const dx = visualX-prevX;
+  if(Math.abs(dx) < 0.01) return;
+  const facing = dx < 0 ? -1 : 1;
+  marker._squadSprites.forEach(fig=>{
+    if(fig.facing===facing) return;
+    fig.facing = facing;
+    fig.sprite.scale.x = facing * Math.abs(fig.sprite.scale.x);
+  });
+}
+
 export function updateTankHeading3d(marker, unit, visualX, visualY){
   const prevX = unit._tankMarkerX;
   const prevY = unit._tankMarkerY;
@@ -1187,8 +1310,15 @@ export function disposeMarker3d(key){
     flagSoldierPoolMatricesDirty();
     m._soldierFigures = null;
   }
+  m._squadSprites = null;
   m.traverse(child=>{
-    if(child.geometry) child.geometry.dispose();
+    // per user request(ドット絵歩兵スプライト): THREE.Sprite instances all share Three.js's
+    // own internal default plane geometry singleton -- disposing it here (as this loop does
+    // for every other child's own, non-shared geometry) would free the GPU buffer out from
+    // under every OTHER still-alive squad's sprites too. Only dispose each sprite's own
+    // (non-shared) SpriteMaterial; the shared frame textures it references are cached at
+    // module scope on purpose and must outlive any single marker's disposal.
+    if(child.geometry && !child.isSprite) child.geometry.dispose();
     if(child.material){
       if(Array.isArray(child.material)) child.material.forEach(material=>material.dispose());
       else child.material.dispose();
@@ -1261,6 +1391,11 @@ export function syncUnitMarkers3d(){
       if(walkAnimDue) updateSoldierWalkCycle(unitMarkers3d[key], moving, walkDt);
       updateSoldierHeading3d(unitMarkers3d[key], unit, p.x, p.y);
       flushSoldierInstances3d(unitMarkers3d[key]);
+    } else if(shape==='squad-sprite'){
+      updateSquadSpriteFigures3d(unitMarkers3d[key], unit.soldiers.map(s=>s.alive));
+      const moving = isVisuallyMoving(unit, p.x, p.y);
+      if(walkAnimDue) updateSquadSpriteWalkCycle(unitMarkers3d[key], moving, walkDt);
+      updateSquadSpriteHeading3d(unitMarkers3d[key], unit, p.x, p.y);
     }
   };
   state.mortars.forEach((m,i)=>friendlyUnit('mortar'+i, m, 'mortar', m.hp>0));
@@ -1268,7 +1403,10 @@ export function syncUnitMarkers3d(){
   state.sams.forEach((sam,i)=>friendlyUnit('sam'+i, sam, 'sam', sam.hp>0));
   (state.helis||[]).forEach((heli,i)=>friendlyUnit('heli'+i, heli, 'heli', heli.hp>0));
   state.scouts.forEach((s,i)=>friendlyUnit('scout'+i, s, 'scout', unitAlive(s)));
-  state.squads.forEach((sq,i)=>friendlyUnit('squad'+i, sq, 'infantry', unitAlive(sq)));
+  // per user request(ドラクエファン向けドット絵歩兵スプライト、まず小隊のみ試験導入):
+  // 小隊だけ手続き型の人型フィギュア('infantry')の代わりに'squad-sprite'を使う。
+  // 敵歩兵(shape==='infantry'、下のstate.targets.forEach参照)は変更していない。
+  state.squads.forEach((sq,i)=>friendlyUnit('squad'+i, sq, 'squad-sprite', unitAlive(sq)));
   state.bands.forEach((band,i)=>friendlyUnit('band'+i, band, 'band', unitAlive(band)));
   state.antitanks.forEach((at,i)=>friendlyUnit('antitank'+i, at, 'antitank', at.hp>0));
   state.engineers.forEach((en,i)=>friendlyUnit('engineer'+i, en, 'engineer', unitAlive(en)));

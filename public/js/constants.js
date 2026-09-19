@@ -1514,6 +1514,18 @@ export const WALK_SWING_MAX = 0.55;
 
 export const WALK_AMP_EASE = 6;
 
+// per user request(ドラクエファン向けドット絵歩兵スプライト、まず小隊のみ試験導入):
+// 手続き型の人型フィギュア(buildHumanoidFigures)の代わりに小隊にだけ使う、4コマ歩行
+// アニメーションのスプライトシート(64x64pxを横4コマ並べたもの)。常にカメラの方を向く
+// ビルボード(THREE.Sprite)として描画する。元のアニメーションGIFはThree.jsのテクスチャ
+// としては自動再生されない(1コマ目で静止する)ため、フレームごとに静的テクスチャを
+// 差し替える方式で自前アニメーションさせる(see buildSquadSpriteFigures in three.js)。
+export const SQUAD_SPRITE_SHEET_URL = './icons/squad_sprite/walk_sheet.png';
+
+export const SQUAD_SPRITE_FRAME_COUNT = 4;
+
+export const SQUAD_SPRITE_FPS = 6;
+
 export const FRIENDLY_MARK_COLOR_3D = 0x6f9bbf;
 
 export const HELI_FLIGHT_ALTITUDE = PROC_TERRAIN_HEIGHT_SCALE * 0.35;
