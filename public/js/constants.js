@@ -1468,6 +1468,14 @@ export const TERRAIN_TYPE_COVER_BONUS = { [TERRAIN_TYPE_FOREST]: 12, [TERRAIN_TY
 
 export const TERRAIN_TYPE_SPEED_MULT = { [TERRAIN_TYPE_FOREST]: 0.7, [TERRAIN_TYPE_WATER]: 0.35 };
 
+// per user request(バグ調査): hasLineOfSight()の森林による視線遮断は「遠距離からは森の
+// 奥が見通せない」を意図したものだが、距離を問わず無条件に適用されていたため、敵が森林
+// タイル上にいると密着(包囲)していても永久に交戦不能・無傷のままになっていた。この距離
+// 以内なら森林でも視線が通ることにする(接触/近接距離の目安)。
+export const FOREST_LOS_MIN_RANGE_M = 150;
+
+export const FOREST_LOS_MIN_RANGE_UNITS = FOREST_LOS_MIN_RANGE_M / METERS_PER_UNIT;
+
 export const MAP_DOUBLETAP_ZOOM_LEVEL = 2.5;
 
 // per user request(プレイヤーが驚くような演出): HQ危機・地雷奇襲など、ここぞという瞬間に
