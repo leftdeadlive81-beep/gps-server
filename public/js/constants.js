@@ -847,6 +847,10 @@ export const MORTAR_DISPERSION_M = 60;
 
 export const MORTAR_DISPERSION_UNITS = MORTAR_DISPERSION_M / METERS_PER_UNIT;
 
+// per user request(斥候の効果を分かりやすく): 斥候の観測圏内(SCOUT_MAX_RANGE_UNITS)に着弾点が
+// あると、前進観測により迫撃砲の散布界が縮小(命中率UP)する。isObservedByScout()参照。
+export const SCOUT_OBSERVATION_DISPERSION_MULT = 0.6;
+
 export const MORTAR_MIN_RANGE_M = 150;
 
 export const MORTAR_MIN_RANGE_UNITS = MORTAR_MIN_RANGE_M / METERS_PER_UNIT;

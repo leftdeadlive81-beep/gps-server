@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { unlockAchievement, unlockedAchievements } from './achievements.js';
-import { abandonSavedCampaign, addNewAntitank, addNewHeli, addNewMortar, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, healAllForces, isAutoCommitRunning, isJammed, mapSeedCandidates, mortarNotReadyToFire, mortarTooCloseToFire, mortarTooFarToFire, resumedFromSave, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
+import { abandonSavedCampaign, addNewAntitank, addNewHeli, addNewMortar, addNewSquad, applySmartMortarScatter, applySmartOrder, deployStage, estPos, estPosFromMortar, formatGameClock, gameClockNow, getUnitExposure, handleStageClear, healAllForces, isAutoCommitRunning, isJammed, isObservedByScout, mapSeedCandidates, mortarNotReadyToFire, mortarTooCloseToFire, mortarTooFarToFire, resumedFromSave, state, totalAliveSoldiers, totalRosterCapacity, unitAlive, unitAliveCount, vetLevelOf } from './combat.js';
 import { ACHIEVEMENTS, AMMO_PACK, ANTITANK_AA_RANGE, ANTITANK_ENGAGE_RANGE, BAND_ENGAGE_RANGE, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_ENGAGE_RANGE, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SMART_ACTIONS, SMART_UNIT_TYPES, SQUAD_ENGAGE_RANGE, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, SUPPLY_CARRY_MAX, UNIT_AMMO_MAX, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, TANK_ENGAGE_RANGE, TANK_REPAIR_COST_PER_HP,TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
 import { canvasToScreen, multiSelectCommonOrders, multiSelectMode, multiSelected, pruneMultiSelected, unitGroups } from './input.js';
 import { render } from './main.js';
@@ -678,9 +678,12 @@ function mortarTargetListHtml(idx, mortar){
     const distM = unitsToMeters(dist);
     const reason = tooClose ? '近すぎ' : tooFar ? '射程外' : null;
     const isActive = active===t.id;
+    // per user request(斥候の効果を分かりやすく): 目標選択の時点で、斥候の観測圏内にあるか
+    // (=命中率補正が掛かるか)を一目で分かるようにする。
+    const observedNote = isObservedByScout(t.trueX, t.trueY) ? ' <span style="color:#e0b84a;">👁観測中</span>' : '';
     return {
       outOfRange: disabled, dist,
-      html: `<button class="btn ${isActive?'active squad-order-btn':''} ${disabled?'range-out':''}" ${disabled?'disabled':''} onclick="assignMortarFire(${idx},'${t.id}')">${t.id} ― ${t.revealed?t.def.label:'識別不能'}${isActive?'(照準中)':''}<span class="range-note">距離${distM}m ／ 射程${MORTAR_MIN_RANGE_M}-${MORTAR_MAX_RANGE_M}m${reason?` ・ ${reason}`:''}</span></button>`,
+      html: `<button class="btn ${isActive?'active squad-order-btn':''} ${disabled?'range-out':''}" ${disabled?'disabled':''} onclick="assignMortarFire(${idx},'${t.id}')">${t.id} ― ${t.revealed?t.def.label:'識別不能'}${isActive?'(照準中)':''}${observedNote}<span class="range-note">距離${distM}m ／ 射程${MORTAR_MIN_RANGE_M}-${MORTAR_MAX_RANGE_M}m${reason?` ・ ${reason}`:''}</span></button>`,
     };
   });
   const sorted = rows.slice().sort((a,b)=>(a.outOfRange-b.outOfRange)||(a.dist-b.dist));

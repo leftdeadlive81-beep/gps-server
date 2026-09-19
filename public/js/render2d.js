@@ -1,5 +1,5 @@
 // Split out of the former monolithic mortar_fdc_game.js.
-import { computeDispersionAt, currentPlacementUnit, estPos, isSuppressed, smoothVisualPos, state, unitAlive, unitAliveCount } from './combat.js';
+import { computeDispersionAt, currentPlacementUnit, estPos, isObservedByScout, isSuppressed, smoothVisualPos, state, unitAlive, unitAliveCount } from './combat.js';
 import { BAND_ENGAGE_RANGE, CANVAS_H, CANVAS_W, CONTOUR_LINES_CANVAS, ENEMY_MARK_COLOR, FEBA_LINE_COLOR, FEBA_LINE_WIDTH, FORTRESS_NEUTRAL_COLOR, FRIENDLY_MARK_COLOR, GRID_LINES, HQ_SUPPLY_ZONE_RADIUS_UNITS, ILLUM_BURST_HEIGHT, ILLUM_DURATION_TURNS, ILLUM_FALL_DURATION, ILLUM_RADIUS_UNITS, LABEL_TEXT_COLOR, MAP_DETAIL_EFFECT_ZOOM, MAP_DETAIL_LABEL_ZOOM, MAP_FULL_DETAIL_ZOOM, MAP_INITIAL_AZIMUTH, MAP_VIEW, METERS_PER_UNIT, MORTAR_MAINLINE_HALF_FOV, MORTAR_MAINLINE_RANGE_UNITS, MORTAR_MIN_RANGE_UNITS, MORTAR_RELOAD_MS, MUZZLE_STYLE, ORDER_ICON, HELI_MAX_RANGE_UNITS, SCOUT_MAX_RANGE_UNITS, SMOKE_DURATION_TURNS, SQUAD_ENGAGE_RANGE, TRENCH_LINE_COLOR, UNIT_AMMO_MAX, TRENCH_LINE_WIDTH, WEATHER_TYPES, WORLD, enemyInfantryIcon, infantryIcon, mortarIcon } from './constants.js';
 import { isMultiSelected } from './input.js';
 import { choppedLineSegments, febaLineSegments } from './terrain.js';
@@ -753,10 +753,22 @@ export function drawBoard(){
     drawGroundDetectionCircle(state.hq, HQ_SUPPLY_ZONE_RADIUS_UNITS, 'rgba(122,201,138,0.55)', 'rgba(122,201,138,0.07)');
   }
   if(showDetailLabels){
+    // per user request(斥候の効果を分かりやすく): 以前はHQ/ヘリと同じ既定色で「何のための円か」
+    // が伝わらなかった -- 迫撃砲の観測補正(computeDispersionAt/isObservedByScout)と揃えた
+    // 琥珀色にし、円の上端にラベルを添えて意味を明示する。
     state.scouts.forEach(scout=>{
       const scoutVisL = smoothVisualPos(scout, scout.x, scout.y);
       const scoutVis = project(scoutVisL.x, scoutVisL.y);
-      if(unitAlive(scout) && scoutVis.visible) drawGroundDetectionCircle(scoutVisL, SCOUT_MAX_RANGE_UNITS);
+      if(!unitAlive(scout) || !scoutVis.visible) return;
+      drawGroundDetectionCircle(scoutVisL, SCOUT_MAX_RANGE_UNITS, 'rgba(224,184,74,0.55)', 'rgba(224,184,74,0.06)');
+      const topL = { x: scoutVisL.x, y: scoutVisL.y - SCOUT_MAX_RANGE_UNITS*((WORLD.scaleZ>0.0001)?(WORLD.scaleX/WORLD.scaleZ):1) };
+      const topP = project(topL.x, topL.y);
+      if(topP.visible){
+        ctx.fillStyle = 'rgba(224,184,74,0.9)';
+        ctx.font = mfont('11px "Noto Sans JP"');
+        ctx.textAlign = 'center';
+        ctx.fillText('観測圏(迫撃砲高精度)', topP.x, topP.y-4);
+      }
     });
     (state.helis||[]).forEach(heli=>{
       const heliVisL = smoothVisualPos(heli, heli.x, heli.y);
@@ -1238,18 +1250,29 @@ export function drawBoard(){
 
   // pending fire points ― effect radius + crosshair, awaiting execute/cancel
   if(!state.animating){
-    const pendDispersion = computeDispersionAt() * WEATHER_TYPES[state.weather].dispersionMult;
     state.mortars.forEach(mortar=>{
       if(!mortar.pendingFire) return;
+      // per user request(斥候の効果を分かりやすく): 斥候の観測圏内は散布界が縮小するため、
+      // 着弾点ごとに実際の散布界を計算し直す(以前は斥候の有無を無視した固定値だった)。
+      // 観測補正が効いている間は円の色を琥珀色にして、斥候の存在が結果に効いていると分かる
+      // ようにする。
+      const observed = isObservedByScout(mortar.pendingFire.x, mortar.pendingFire.y);
+      const pendDispersion = computeDispersionAt(mortar.pendingFire.x, mortar.pendingFire.y) * WEATHER_TYPES[state.weather].dispersionMult;
       const pp = project(mortar.pendingFire.x, mortar.pendingFire.y);
       const px = pp.x, py = pp.y;
       ctx.beginPath();
       ctx.setLineDash([4,4]);
-      ctx.strokeStyle = 'rgba(193,69,59,0.85)';
+      ctx.strokeStyle = observed ? 'rgba(224,184,74,0.9)' : 'rgba(193,69,59,0.85)';
       ctx.lineWidth = 1.5;
       ctx.arc(px, py, pendDispersion, 0, Math.PI*2);
       ctx.stroke();
       ctx.setLineDash([]);
+      if(observed){
+        ctx.fillStyle = 'rgba(224,184,74,0.95)';
+        ctx.font = mfont('bold 11px "Noto Sans JP"');
+        ctx.textAlign = 'center';
+        ctx.fillText('👁 斥候観測(高精度)', px, py-pendDispersion-8);
+      }
       ctx.beginPath();
       ctx.strokeStyle = '#c1453b';
       ctx.lineWidth = 2;
