@@ -138,6 +138,11 @@ export const TARGET_TYPES = {
   // tougher than any single normal target, on top of not sharing any type's AI behavior
   // (it never moves, advances, or counter-attacks -- see enemyCounterAttack's explicit skip).
   hq:        {label:'敵本部',       hp:400, radius:20, mark:ENEMY_MARK_COLOR},
+  // per user request(通信の要素): 電子妨害車両。移動せず、直接の攻撃手段も持たない代わりに、
+  // 生存中は周囲(JAMMER_JAM_RADIUS_UNITS)の自軍standingOrder自動化(迫撃砲の自動照準、
+  // 工兵/衛生/補給の自動対応、小隊/音楽隊の接敵時対応)を無効化する(isJammed()参照)。
+  // 見た目のHPは低めだが、放置すると自動化に頼った運用が丸ごと止まるため優先目標になる。
+  jammer:    {label:'電子妨害車両', hp:70,  radius:18, mark:ENEMY_MARK_COLOR},
 };
 
 export const DRONE_INTRO_STAGE = 3;
@@ -680,6 +685,14 @@ export const MORTAR_MAINLINE_HALF_FOV = 15;
 export const SCOUT_MAX_RANGE_UNITS = 700 / METERS_PER_UNIT;
 
 export const HELI_MAX_RANGE_UNITS = 1000 / METERS_PER_UNIT;
+
+// per user request(通信の要素): 電子妨害車両 -- JAMMER_INTRO_STAGE以降の各WAVEで
+// JAMMER_SPAWN_CHANCEの確率で1輌出現し、生存中はJAMMER_JAM_RADIUS_UNITS以内の自軍
+// standingOrder自動化を無効化する(isJammed()、combat.js参照)。
+export const JAMMER_INTRO_STAGE = 4;
+export const JAMMER_SPAWN_CHANCE = 0.35;
+export const JAMMER_JAM_RADIUS_M = 700;
+export const JAMMER_JAM_RADIUS_UNITS = JAMMER_JAM_RADIUS_M / METERS_PER_UNIT;
 
 // per user request: the enemy HQ (unlike every other target) starts hidden and is only
 // revealed once a friendly unit gets close enough to spot it -- scouts/helis use their own
