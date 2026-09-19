@@ -1,6 +1,6 @@
 // Split out of the former monolithic mortar_fdc_game.js.
 import { applyBestMortarLoadout, buildTrenchAt, buildWallAt, estPos, estPosFromMortar, handlePlacementClick, mortarNotReadyToFire, mortarTooCloseToFire, mortarTooFarToFire, placeDecoyAt, resolveSmartUnitIdxs, state, unitAlive } from './combat.js';
-import { CAMERA_PRESETS, CAMERA_SWOOP_HOLD_MS, CANVAS_H, CANVAS_W, DECOY_LONGPRESS_MOVE_TOLERANCE_PX, DECOY_LONGPRESS_MS, DIRECT_MOVE_KINDS, FRIENDLY_KIND_LIST, MAP_DOUBLETAP_ZOOM_LEVEL, MAP_INITIAL_AZIMUTH, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_MOVE_START_DELAY_MS, MULTI_SELECT_KINDS, MULTI_SELECT_ORDER_SETTER, ORDER_LABEL, SCOUT_ADVANCE_LIMIT_X, SMART_UNIT_TYPES, SQUAD_ADVANCE_LIMIT_X, SQUAD_ASSAULT_LIMIT_X, SQUAD_RETREAT_LIMIT_X } from './constants.js';
+import { CAMERA_PRESETS, CAMERA_SWOOP_HOLD_MS, CANVAS_H, CANVAS_W, DECOY_LONGPRESS_MOVE_TOLERANCE_PX, DECOY_LONGPRESS_MS, DIRECT_MOVE_KINDS, FRIENDLY_KIND_LIST, MAP_DOUBLETAP_ZOOM_LEVEL, MAP_INITIAL_AZIMUTH, MAP_POLAR_MAX, MAP_POLAR_MIN, MAP_VIEW, MAP_ZOOM_MAX, MAP_ZOOM_MIN, MORTAR_FIRE_READY_DELAY_MS, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_MOVE_START_DELAY_MS, MULTI_SELECT_FORMATION_SPACING, MULTI_SELECT_KINDS, MULTI_SELECT_ORDER_SETTER, ORDER_LABEL, SCOUT_ADVANCE_LIMIT_X, SMART_UNIT_TYPES, SQUAD_ADVANCE_LIMIT_X, SQUAD_ASSAULT_LIMIT_X, SQUAD_RETREAT_LIMIT_X } from './constants.js';
 import { render } from './main.js';
 import { clampMapView, groundPlaneCanvasUnitAt, project, resizeThree, terrainCanvasUnitAt, threeReady, updateCameraFromView } from './three.js';
 import { anyOverlayShown, log } from './ui.js';
@@ -19,6 +19,10 @@ function directMoveTargetUnit(kind, idx){
   if(kind==='antitank') return state.antitanks[idx];
   if(kind==='hq') return state.hq;
   if(kind==='band') return state.bands[idx];
+  if(kind==='scout') return state.scouts[idx];
+  if(kind==='engineer') return state.engineers[idx];
+  if(kind==='medic') return state.medics[idx];
+  if(kind==='supply') return state.supplies[idx];
   return null;
 }
 
@@ -204,10 +208,107 @@ export function handleMultiSelectClick(sx, sy, px, py){
     return;
   }
   if(!hit && multiSelected.length){
+    // per user request(操作性向上): 全隊が同じ1点に向かうと目的地で重なってしまうため、
+    // 目的地を中心にグリッド状へ散開配置する(1隊だけの場合はオフセット0で従来と同じ)。
     let moved = 0;
-    multiSelected.forEach(({kind, idx})=>{ if(setUnitMoveDest(kind, idx, px, py, true)) moved++; });
-    if(moved>0) log('sys','司令部', `選択中の${moved}隊に移動目標を指示。`);
+    const n = multiSelected.length;
+    const cols = Math.ceil(Math.sqrt(n));
+    const rows = Math.ceil(n/cols);
+    multiSelected.forEach(({kind, idx}, i)=>{
+      const col = i%cols, row = Math.floor(i/cols);
+      const ox = (col-(cols-1)/2)*MULTI_SELECT_FORMATION_SPACING;
+      const oy = (row-(rows-1)/2)*MULTI_SELECT_FORMATION_SPACING;
+      if(setUnitMoveDest(kind, idx, px+ox, py+oy, true)) moved++;
+    });
+    if(moved>0) log('sys','司令部', `選択中の${moved}隊に散開移動目標を指示。`);
   }
+}
+
+// per user request(操作性向上): マルチセレクトモード中は左ドラッグで矩形範囲を描いて、
+// 範囲内の友軍(MULTI_SELECT_KINDS)を一括選択できる(1隊ずつタップして追加する従来方式に
+// 加えての手段)。#box-select-rectはCSS側でposition:fixedにしてある -- .board-wrapが
+// position:fixed;inset:0で画面全体を覆っており#boardはそれをinset:0で埋めているため、
+// clientX/clientYをそのままleft/topに使ってよい(#boardのgetBoundingClientRectと一致する)。
+const BOX_SELECT_MOVE_THRESHOLD_PX = 6;
+
+let boxSelectStartClient = null;
+
+let boxSelectActive = false;
+
+export let boxSelectRect = null;
+
+function updateBoxSelectOverlay(){
+  const el = document.getElementById('box-select-rect');
+  if(!el) return;
+  if(!boxSelectRect){ el.style.display = 'none'; return; }
+  const {x1, y1, x2, y2} = boxSelectRect;
+  el.style.display = 'block';
+  el.style.left = `${Math.min(x1,x2)}px`;
+  el.style.top = `${Math.min(y1,y2)}px`;
+  el.style.width = `${Math.abs(x2-x1)}px`;
+  el.style.height = `${Math.abs(y2-y1)}px`;
+}
+
+function unitsInScreenRect({x1, y1, x2, y2}){
+  const cv = document.getElementById('board');
+  const rect = cv.getBoundingClientRect();
+  const minX = Math.min(x1,x2)-rect.left, maxX = Math.max(x1,x2)-rect.left;
+  const minY = Math.min(y1,y2)-rect.top, maxY = Math.max(y1,y2)-rect.top;
+  const found = [];
+  FRIENDLY_KIND_LIST.forEach(({kind, list, alive})=>{
+    if(!MULTI_SELECT_KINDS.includes(kind)) return;
+    list().forEach((u,idx)=>{
+      if(!alive(u)) return;
+      const ux = u._visX!==undefined ? u._visX : u.x;
+      const uy = u._visY!==undefined ? u._visY : u.y;
+      const p = project(ux, uy);
+      if(!p.visible) return;
+      if(p.x>=minX && p.x<=maxX && p.y>=minY && p.y<=maxY) found.push({kind, idx});
+    });
+  });
+  return found;
+}
+
+function startBoxSelect(clientX, clientY){
+  boxSelectStartClient = {x:clientX, y:clientY};
+  boxSelectActive = false;
+  boxSelectRect = null;
+  mapFocusTarget = null;
+  cameraSwoopActive = false;
+  mapDragMoved = false;
+}
+
+function moveBoxSelect(clientX, clientY){
+  if(!boxSelectStartClient) return;
+  const dx = clientX-boxSelectStartClient.x, dy = clientY-boxSelectStartClient.y;
+  if(Math.abs(dx)>BOX_SELECT_MOVE_THRESHOLD_PX || Math.abs(dy)>BOX_SELECT_MOVE_THRESHOLD_PX) boxSelectActive = true;
+  if(boxSelectActive){
+    boxSelectRect = {x1:boxSelectStartClient.x, y1:boxSelectStartClient.y, x2:clientX, y2:clientY};
+    updateBoxSelectOverlay();
+  }
+}
+
+function cancelBoxSelect(){
+  boxSelectStartClient = null;
+  boxSelectActive = false;
+  boxSelectRect = null;
+  updateBoxSelectOverlay();
+}
+
+function finishBoxSelect(){
+  if(boxSelectActive && boxSelectRect){
+    const found = unitsInScreenRect(boxSelectRect);
+    if(found.length){
+      multiSelected = found;
+      log('sys','司令部', `ドラッグ選択で${found.length}隊を選択。`);
+      render();
+    }
+    // 実際にドラッグ範囲選択が成立した場合、続けて発火するネイティブclickが
+    // handleCanvasClick経由でこの位置への移動指示を出してしまわないよう抑止する
+    // (地図ドラッグ後にmapDragMovedでclickを無視する既存の仕組みと同じ)。
+    mapDragMoved = true;
+  }
+  cancelBoxSelect();
 }
 
 export function handleCanvasClick(evt){
@@ -273,12 +374,6 @@ export function handleCanvasClick(evt){
       setUnitMoveDest('sam', mode.idx, px, py);
     } else if(mode.kind==='hq-move'){
       setUnitMoveDest('hq', mode.idx, px, py);
-    } else if(mode.kind==='engineer-move'){
-      setUnitMoveDest('engineer', mode.idx, px, py);
-    } else if(mode.kind==='medic-move'){
-      setUnitMoveDest('medic', mode.idx, px, py);
-    } else if(mode.kind==='supply-move'){
-      setUnitMoveDest('supply', mode.idx, px, py);
     } else if(mode.kind==='wall-build'){
       buildWallAt(clamp(px, 10, CANVAS_W-10), clamp(py, 20, CANVAS_H-20));
     } else if(mode.kind==='trench-build-p1'){
@@ -289,8 +384,6 @@ export function handleCanvasClick(evt){
       log('sys','工兵', `塹壕: 始点を指定。終点を地図でクリックしてください。`);
     } else if(mode.kind==='trench-build-p2'){
       buildTrenchAt(mode.x1, mode.y1, clamp(px, 10, CANVAS_W-10), clamp(py, 20, CANVAS_H-20));
-    } else if(mode.kind==='scout-move'){
-      setUnitMoveDest('scout', mode.idx, px, py);
     } else if(mode.kind==='mortar-target'){
       const mortar = state.mortars[mode.idx];
       if(mortar){
@@ -572,6 +665,12 @@ export function setupMapControls(){
   let mode = null, lastX=0, lastY=0, dragGround=null;
   el.addEventListener('mousedown', e=>{
     mapDragMoved = false;
+    // per user request(操作性向上): マルチセレクトモード中の左ドラッグは地図パンではなく
+    // 矩形範囲選択として扱う(右ドラッグの回転は従来通り)。
+    if(multiSelectMode && e.button===0){
+      startBoxSelect(e.clientX, e.clientY);
+      return;
+    }
     mode = e.button===2 ? 'rotate' : 'pan';
     lastX = e.clientX; lastY = e.clientY;
     mapFocusTarget = null;
@@ -583,6 +682,7 @@ export function setupMapControls(){
     }
   });
   window.addEventListener('mousemove', e=>{
+    if(boxSelectStartClient){ moveBoxSelect(e.clientX, e.clientY); return; }
     decoyLongPressMove(e.clientX, e.clientY);
     if(!mode) return;
     const dx = e.clientX-lastX, dy = e.clientY-lastY;
@@ -603,7 +703,10 @@ export function setupMapControls(){
       }
     }
   });
-  window.addEventListener('mouseup', ()=>{ mode = null; dragGround = null; decoyLongPressEnd(); });
+  window.addEventListener('mouseup', ()=>{
+    if(boxSelectStartClient){ finishBoxSelect(); return; }
+    mode = null; dragGround = null; decoyLongPressEnd();
+  });
 
   el.addEventListener('wheel', e=>{
     e.preventDefault();
@@ -639,6 +742,12 @@ export function setupMapControls(){
     mapFocusTarget = null;
     cameraSwoopActive = false;
     if(e.touches.length===1){
+      // per user request(操作性向上): マルチセレクトモード中は1本指ドラッグをパンではなく
+      // 矩形範囲選択として扱う。
+      if(multiSelectMode){
+        startBoxSelect(e.touches[0].clientX, e.touches[0].clientY);
+        return;
+      }
       touchLastX=e.touches[0].clientX; touchLastY=e.touches[0].clientY;
       const rect = el.getBoundingClientRect();
       const lx = touchLastX-rect.left, ly = touchLastY-rect.top;
@@ -659,8 +768,10 @@ export function setupMapControls(){
       // decoyLongPressStart above) was never canceled when a second finger joined to start
       // a pinch -- it could still fire mid-pinch/mid-gesture, placing a decoy out of
       // nowhere and hijacking the gesture the player was actually in the middle of
-      // (reported as gestures sometimes just not working).
+      // (reported as gestures sometimes just not working). A box-select armed by the first
+      // finger is canceled here for the same reason.
       decoyLongPressEnd();
+      cancelBoxSelect();
       touchMode='pinch'; mapDragMoved=true; dragGround=null;
       const [t0,t1] = e.touches;
       pinchStartDist = Math.hypot(t1.clientX-t0.clientX, t1.clientY-t0.clientY);
@@ -671,6 +782,10 @@ export function setupMapControls(){
   }, {passive:false});
   el.addEventListener('touchmove', e=>{
     e.preventDefault();
+    if(boxSelectStartClient && e.touches.length===1){
+      moveBoxSelect(e.touches[0].clientX, e.touches[0].clientY);
+      return;
+    }
     if(touchMode==='pan' && e.touches.length===1){
       decoyLongPressMove(e.touches[0].clientX, e.touches[0].clientY);
       const dx = e.touches[0].clientX-touchLastX, dy = e.touches[0].clientY-touchLastY;
@@ -703,6 +818,7 @@ export function setupMapControls(){
     }
   }, {passive:false});
   el.addEventListener('touchend', e=>{
+    if(boxSelectStartClient){ finishBoxSelect(); return; }
     decoyLongPressEnd();
     if(e.touches.length===1){
       // Dropping from two fingers to one: resume panning from the remaining

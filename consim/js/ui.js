@@ -896,20 +896,13 @@ export function scoutBoxHtml(idx){
   const scout = state.scouts[idx];
   const alive = unitAliveCount(scout);
   const dead = alive<=0 || scout.resting;
-  const armingMove = state.orderMode && state.orderMode.kind==='scout-move' && state.orderMode.idx===idx;
-  let orderStatus = '行動: 未設定';
-  if(armingMove) orderStatus = '地図をクリックして移動先指定…';
-  else if(scout.pendingDest) orderStatus = '行動: 移動先へ前進予定';
   return `
     <div class="meta">${alive<=0?'戦闘不能':alive+'/'+scout.soldiers.length+'名'} ・ 標高: ${elevationLabel(elevationAt(scout.x,scout.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(scout.x,scout.y))}</div>
     ${exposureMetaHtml(getUnitExposure({kind:'scout', idx}))}
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/scout.soldiers.length*100)}%"></div></div>
     ${restButtonHtml('scout', idx, scout)}
-    <div class="row-2" style="margin-bottom:6px;">
-      <button class="btn ${armingMove?'active squad-order-btn':''}" ${dead?'disabled':''} onclick="armScoutMoveOrder(${idx})">移動先を指定</button>
-    </div>
-    <div class="meta" style="margin-bottom:8px;">${orderStatus}</div>
-    <button class="btn" ${dead||!scout.pendingDest?'disabled':''} onclick="clearScoutOrder(${idx})">行動を解除</button>
+    <div class="meta" style="margin-bottom:6px;">${dead ? '移動先: 指定不可' : (scout.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます')}</div>
+    ${scout.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearScoutOrder(${idx})">移動先を解除</button>` : ''}
     ${soldierRosterHtml(scout.soldiers)}
     ${reinforceButtonHtml('scout', idx, scout)}
   `;
@@ -1073,10 +1066,9 @@ export function engineerBoxHtml(idx){
   const btns = ['advance','hold','retreat'].map(o=>
     `<button class="btn squad-order-btn ${en.order===o?'active':''}" ${resting?'disabled':''} onclick="setEngineerOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
-  const armingMove = state.orderMode && state.orderMode.kind==='engineer-move' && state.orderMode.idx===idx;
   const armingWall = state.orderMode && state.orderMode.kind==='wall-build' && state.orderMode.idx===idx;
   const armingTrench = state.orderMode && (state.orderMode.kind==='trench-build-p1' || state.orderMode.kind==='trench-build-p2') && state.orderMode.idx===idx;
-  const destStatus = armingMove ? '地図をクリックして移動先指定…' : (en.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
+  const destStatus = en.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます';
   const wallCapReached = state.walls.length >= MAX_WALLS;
   const wallMoneyShort = state.money < WALL_BUILD_COST;
   const trenchCapReached = state.trenches.length >= MAX_TRENCHES;
@@ -1118,11 +1110,8 @@ export function engineerBoxHtml(idx){
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/en.soldiers.length*100)}%"></div></div>
     ${restButtonHtml('engineer', idx, en)}
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
-    <div class="row-2" style="margin-bottom:6px;">
-      <button class="btn ${armingMove?'active squad-order-btn':''}" ${resting?'disabled':''} onclick="armEngineerMoveOrder(${idx})">移動先を指定</button>
-      <button class="btn" ${!en.pendingDest?'disabled':''} onclick="clearEngineerDest(${idx})">解除</button>
-    </div>
-    <div class="meta" style="margin-bottom:8px;">${destStatus}</div>
+    <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
+    ${en.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearEngineerDest(${idx})">移動先を解除</button>` : ''}
     <button class="btn ${armingWall?'active squad-order-btn':''}" ${resting||wallCapReached||wallMoneyShort?'disabled':''} style="width:100%;margin-bottom:4px;" onclick="armWallBuildOrder(${idx})">防壁を構築(¥${WALL_BUILD_COST}・地図で地点指定)</button>
     <div class="meta" style="margin-bottom:8px;">${wallStatus}</div>
     <button class="btn ${armingTrench?'active squad-order-btn':''}" ${resting||trenchCapReached||trenchMoneyShort?'disabled':''} style="width:100%;margin-bottom:4px;" onclick="armTrenchBuildOrder(${idx})">塹壕を構築(¥${TRENCH_BUILD_COST}・地図で始点→終点指定)</button>
@@ -1144,8 +1133,7 @@ export function supplyBoxHtml(idx){
   const btns = ['advance','hold','retreat'].map(o=>
     `<button class="btn squad-order-btn ${su.order===o?'active':''}" ${resting?'disabled':''} onclick="setSupplyOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
-  const armingMove = state.orderMode && state.orderMode.kind==='supply-move' && state.orderMode.idx===idx;
-  const destStatus = armingMove ? '地図をクリックして移動先指定…' : (su.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
+  const destStatus = su.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます';
   // per user request: 補給隊 -- 対象小隊を指定すると解除するまで自動で本部⇔対象を往復する
   // (工兵の野戦修理/衛生小隊の蘇生と同じ「指定→解除するまで継続」の導線)。
   const supplyCandidates = state.squads.map((sq,i)=>({idx:i, unit:sq, label:`第${i+1}小隊`}));
@@ -1167,11 +1155,8 @@ export function supplyBoxHtml(idx){
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/su.soldiers.length*100)}%"></div></div>
     ${restButtonHtml('supply', idx, su)}
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
-    <div class="row-2" style="margin-bottom:6px;">
-      <button class="btn ${armingMove?'active squad-order-btn':''}" ${resting?'disabled':''} onclick="armSupplyMoveOrder(${idx})">移動先を指定</button>
-      <button class="btn" ${!su.pendingDest?'disabled':''} onclick="clearSupplyDest(${idx})">解除</button>
-    </div>
-    <div class="meta" style="margin-bottom:8px;">${destStatus}</div>
+    <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
+    ${su.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearSupplyDest(${idx})">移動先を解除</button>` : ''}
     ${supplyBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">${supplyBtns}</div>` : ''}
     <div class="meta" style="margin-bottom:8px;">${supplyStatus}</div>
     ${targetEntry ? `<button class="btn" style="margin-bottom:8px;" onclick="clearSupplyRun(${idx})">補給を解除</button>` : ''}
@@ -1189,8 +1174,7 @@ export function medicBoxHtml(idx){
   const btns = ['advance','hold','retreat'].map(o=>
     `<button class="btn squad-order-btn ${me.order===o?'active':''}" ${resting?'disabled':''} onclick="setMedicOrder(${idx},'${o}')">${ORDER_ICON[o]} ${ORDER_LABEL[o]}</button>`
   ).join('');
-  const armingMove = state.orderMode && state.orderMode.kind==='medic-move' && state.orderMode.idx===idx;
-  const destStatus = armingMove ? '地図をクリックして移動先指定…' : (me.pendingDest ? '移動先: 設定済み' : '移動先: 未設定');
+  const destStatus = me.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます';
   // per user request: 衛生小隊による蘇生(「真の医療コンセプト」)-- 負傷者を抱える友軍ユニット
   // (小隊/斥候/工兵/他の衛生小隊)から選んで無償で救護を指示できる(工兵の野戦修理と同型の
   // 導線 -- see assignEngineerRepair/engineerBoxHtml)。
@@ -1218,11 +1202,8 @@ export function medicBoxHtml(idx){
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/me.soldiers.length*100)}%"></div></div>
     ${restButtonHtml('medic', idx, me)}
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
-    <div class="row-2" style="margin-bottom:6px;">
-      <button class="btn ${armingMove?'active squad-order-btn':''}" ${resting?'disabled':''} onclick="armMedicMoveOrder(${idx})">移動先を指定</button>
-      <button class="btn" ${!me.pendingDest?'disabled':''} onclick="clearMedicDest(${idx})">解除</button>
-    </div>
-    <div class="meta" style="margin-bottom:8px;">${destStatus}</div>
+    <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
+    ${me.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearMedicDest(${idx})">移動先を解除</button>` : ''}
     ${reviveBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">${reviveBtns}</div>` : ''}
     <div class="meta" style="margin-bottom:8px;">${reviveStatus}</div>
     ${reviveTargetEntry ? `<button class="btn" style="margin-bottom:8px;" onclick="clearMedicRevive(${idx})">救護を解除</button>` : ''}

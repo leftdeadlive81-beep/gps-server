@@ -14,6 +14,10 @@
   <canvas id="board3d"></canvas>
   <canvas id="board" width="2600" height="460"></canvas>
 
+  <!-- per user request(操作性向上): マルチセレクトモード中のドラッグ範囲選択の矩形表示
+       (see startBoxSelect/moveBoxSelect/finishBoxSelect in input.js)。 -->
+  <div class="box-select-rect" id="box-select-rect"></div>
+
   <!-- per user request: 毎WAVE開始時に画面中央へ「戦闘開始」を大きく3秒間表示する演出。
        pointer-events:none(CSS側)で戦闘操作をブロックしない。 -->
   <div class="battle-start-banner" id="battle-start-banner"></div>

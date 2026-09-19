@@ -64,6 +64,15 @@
   #board3d{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;}
   #board{position:absolute;inset:0;width:100%;height:100%;display:block;background:transparent;touch-action:none;}
 
+  /* per user request(操作性向上): マルチセレクトモード中のドラッグ範囲選択の矩形。
+     .board-wrapがposition:fixed;inset:0で画面全体を覆っているため、position:fixedのまま
+     クライアント座標をそのままleft/topに使える(see startBoxSelect/moveBoxSelect in
+     input.js)。pointer-events:noneで、矩形の下にあるcanvasへのドラッグ操作をブロックしない。 */
+  .box-select-rect{
+    display:none; position:fixed; z-index:47; pointer-events:none;
+    border:1.5px dashed var(--amber); background:rgba(240,189,85,.14);
+  }
+
   /* per user request: 毎WAVE開始時に画面中央へ大きく3秒間表示する「戦闘開始」演出。
      pointer-events:noneで戦闘操作(地図クリック等)をブロックしない。 */
   .battle-start-banner{

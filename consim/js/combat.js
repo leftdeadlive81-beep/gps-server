@@ -1502,13 +1502,6 @@ export function setEngineerOrder(idx, order){
   render();
 }
 
-export function armEngineerMoveOrder(idx){
-  if(state.engineers[idx] && state.engineers[idx].resting) return;
-  state.orderMode = {kind:'engineer-move', idx};
-  state.commandBox = null;
-  render();
-}
-
 export function clearEngineerDest(idx){
   if(!state.engineers[idx]) return;
   state.engineers[idx].pendingDest = null;
@@ -1522,13 +1515,6 @@ export function setMedicOrder(idx, order){
   render();
 }
 
-export function armMedicMoveOrder(idx){
-  if(state.medics[idx] && state.medics[idx].resting) return;
-  state.orderMode = {kind:'medic-move', idx};
-  state.commandBox = null;
-  render();
-}
-
 export function clearMedicDest(idx){
   if(!state.medics[idx]) return;
   state.medics[idx].pendingDest = null;
@@ -1539,13 +1525,6 @@ export function clearMedicDest(idx){
 export function setSupplyOrder(idx, order){
   if(!state.supplies[idx] || state.supplies[idx].resting) return;
   state.supplies[idx].order = order;
-  render();
-}
-
-export function armSupplyMoveOrder(idx){
-  if(state.supplies[idx] && state.supplies[idx].resting) return;
-  state.orderMode = {kind:'supply-move', idx};
-  state.commandBox = null;
   render();
 }
 
@@ -1618,14 +1597,6 @@ export function clearBandDest(idx){
   if(!state.bands[idx]) return;
   state.bands[idx].pendingDest = null;
   state.orderMode = null;
-  render();
-}
-
-export function armScoutMoveOrder(idx){
-  if(state.scouts[idx] && state.scouts[idx].resting) return;
-  state.orderMode = {kind:'scout-move', idx};
-  state.commandBox = null;
-  unitSpeakOrder('scout', idx);
   render();
 }
 
@@ -5512,4 +5483,4 @@ export function advanceSimulation(){
 }
 
 
-Object.assign(window, { totalSquadCapacity, totalRosterCapacity, roundRobinDistribute, gameClockNow, formatGameClock, mortarTooCloseToFire, mortarNotReadyToFire, setGameSpeedByIndex, unitMayFire, deltaTurns, updateTurnBoundary, currentTurnFloor, turnJustCrossed, isSuppressed, maintainFriendlySpacing, smoothVisualPos, buildEnemyInfantryGroups, effectMultiplier, bestMortarLoadoutFor, applyBestMortarLoadout, makeSoldiers, vetLevelOf, unitAvgVetLevel, unitAliveCount, makeFreshRoster, addNewSquad, addNewScout, addNewMortar, addNewAntitank, addNewHeli, healAllForces, unitAlive, initGame, rollMapSeedCandidates, startSetup, abandonSavedCampaign, buildHeliTarget, buildJammerTarget, isJammed, buildEnemyHqTarget, deployBoxSize, startStage, buildPlacementQueue, currentPlacementUnit, handlePlacementClick, skipRemainingPlacement, finishPlacement, makeDecoy, randomDecoySpot, applyDecoyPlacementMode, placeDecoyAt, finishDecoyPlacement, retryStage, deployStage, estimatedTargetPos, estPos, computeDispersionAt, isObservedByScout, estPosFromMortar, hasLineOfSight, lastStandActive, isTargetDetected, clearHqDest, clearTankDest, clearSamDest, clearAntitankDest, setEngineerOrder, armEngineerMoveOrder, clearEngineerDest, assignEngineerRepair, clearEngineerRepair, setMedicOrder, armMedicMoveOrder, clearMedicDest, assignMedicRevive, clearMedicRevive, setSupplyOrder, armSupplyMoveOrder, clearSupplyDest, assignSupplyRun, clearSupplyRun, armWallBuildOrder, buildWallAt, armTrenchBuildOrder, buildTrenchAt, clearSquadDest, clearBandDest, armScoutMoveOrder, clearScoutOrder, revealTarget, updateHqDetection, findHqDefenseThreat, resolveOneScoutDecision, resolveScoutDecision, resolveFriendlyHeliTurn, allScoutsWiped, allAntitanksWiped, allMortarsWiped, setMortarOrder, armMortarTargetOrder, resolveOneMortarDecision, resolveMortarDecision, enemyCounterAttack, totalAliveSoldiers, allSquadsWiped, applyStandingOrder, applyHqMovement, resolveHqMovement, applySquadMovement, applyEngineerMovement, allEngineersWiped, resolveEngineerOrders, applyMedicMovement, allMedicsWiped, resolveMedicOrders, applyBandMovement, allBandsWiped, resolveBandOrders, applySupplyMovement, allSuppliesWiped, resolveSupplyOrders, resolveSquadOrders, applyTankMovement, allTanksWiped, applySamMovement, allSamsWiped, resolveSamOrders, resolveTankOrders, applyAntitankMovement, resolveAntitankOrders, setSquadOrder, setTankOrder, setSamOrder, setAntitankOrder, setStandingOrder, resolveSmartUnitIdxs, randomMoveOffsetCanvasUnits, directedMoveOffsetCanvasUnits, applySmartMortarScatter, applySmartOrder, armMortarMainlineOrder, clearMortarMainline, reinforceUnitLabel, requestReinforcement, restUnitRef, restUnitLabel, startRest, tickUnitRest, buildHqCover, repairHq, applyHqSupplyZone, friendlyFireCandidateLabel, checkFriendlyFireAt, getUnitExposure, rollExposureHit, getTargetExposure, nearestFriendlyAsset, applyDamageToTarget, damageFriendlyAsset, spawnInfantryDrone, spawnInfantryDroneSwarm, targetGridCellKey, rebuildTargetGrid, nearestOtherAliveTarget, mergeAdjustedGoal, maybePlaceMine, checkMineTrigger, advanceEnemyArtillery, resolveVehicleAssault, resolveHeliAssault, resolveEnemyAntiAir, resolveSquadAntiDrone, resolveSquadAntiVehicle, resolveDroneSwarm, resolveEnemyEvasion, advanceEnemyInfantry, resolveMortarCounterBattery, resolveEnemyTurn, launchMortarVolley, isAutoCommitRunning, startRealtimeLoop, toggleAutoCommit, setGameSpeed, renderThrottledForStep, simulationStep, processAirborneWarning, finalizeVolley, checkEnd, triggerWaveClearSequence, computeReward, applyWaveResupply, awardVeteranXp, handleStageClear, assignSquadHunt, clearSquadHunt, assignBandHunt, clearBandHunt, setBandOrder, assignTankHunt, clearTankHunt, repairTank, assignSamHunt, clearSamHunt, repairSam, assignAntitankHunt, clearAntitankHunt, repairAntitank, assignMortarFire, updateFireConfig, advanceSimulation });
+Object.assign(window, { totalSquadCapacity, totalRosterCapacity, roundRobinDistribute, gameClockNow, formatGameClock, mortarTooCloseToFire, mortarNotReadyToFire, setGameSpeedByIndex, unitMayFire, deltaTurns, updateTurnBoundary, currentTurnFloor, turnJustCrossed, isSuppressed, maintainFriendlySpacing, smoothVisualPos, buildEnemyInfantryGroups, effectMultiplier, bestMortarLoadoutFor, applyBestMortarLoadout, makeSoldiers, vetLevelOf, unitAvgVetLevel, unitAliveCount, makeFreshRoster, addNewSquad, addNewScout, addNewMortar, addNewAntitank, addNewHeli, healAllForces, unitAlive, initGame, rollMapSeedCandidates, startSetup, abandonSavedCampaign, buildHeliTarget, buildJammerTarget, isJammed, buildEnemyHqTarget, deployBoxSize, startStage, buildPlacementQueue, currentPlacementUnit, handlePlacementClick, skipRemainingPlacement, finishPlacement, makeDecoy, randomDecoySpot, applyDecoyPlacementMode, placeDecoyAt, finishDecoyPlacement, retryStage, deployStage, estimatedTargetPos, estPos, computeDispersionAt, isObservedByScout, estPosFromMortar, hasLineOfSight, lastStandActive, isTargetDetected, clearHqDest, clearTankDest, clearSamDest, clearAntitankDest, setEngineerOrder, clearEngineerDest, assignEngineerRepair, clearEngineerRepair, setMedicOrder, clearMedicDest, assignMedicRevive, clearMedicRevive, setSupplyOrder, clearSupplyDest, assignSupplyRun, clearSupplyRun, armWallBuildOrder, buildWallAt, armTrenchBuildOrder, buildTrenchAt, clearSquadDest, clearBandDest, clearScoutOrder, revealTarget, updateHqDetection, findHqDefenseThreat, resolveOneScoutDecision, resolveScoutDecision, resolveFriendlyHeliTurn, allScoutsWiped, allAntitanksWiped, allMortarsWiped, setMortarOrder, armMortarTargetOrder, resolveOneMortarDecision, resolveMortarDecision, enemyCounterAttack, totalAliveSoldiers, allSquadsWiped, applyStandingOrder, applyHqMovement, resolveHqMovement, applySquadMovement, applyEngineerMovement, allEngineersWiped, resolveEngineerOrders, applyMedicMovement, allMedicsWiped, resolveMedicOrders, applyBandMovement, allBandsWiped, resolveBandOrders, applySupplyMovement, allSuppliesWiped, resolveSupplyOrders, resolveSquadOrders, applyTankMovement, allTanksWiped, applySamMovement, allSamsWiped, resolveSamOrders, resolveTankOrders, applyAntitankMovement, resolveAntitankOrders, setSquadOrder, setTankOrder, setSamOrder, setAntitankOrder, setStandingOrder, resolveSmartUnitIdxs, randomMoveOffsetCanvasUnits, directedMoveOffsetCanvasUnits, applySmartMortarScatter, applySmartOrder, armMortarMainlineOrder, clearMortarMainline, reinforceUnitLabel, requestReinforcement, restUnitRef, restUnitLabel, startRest, tickUnitRest, buildHqCover, repairHq, applyHqSupplyZone, friendlyFireCandidateLabel, checkFriendlyFireAt, getUnitExposure, rollExposureHit, getTargetExposure, nearestFriendlyAsset, applyDamageToTarget, damageFriendlyAsset, spawnInfantryDrone, spawnInfantryDroneSwarm, targetGridCellKey, rebuildTargetGrid, nearestOtherAliveTarget, mergeAdjustedGoal, maybePlaceMine, checkMineTrigger, advanceEnemyArtillery, resolveVehicleAssault, resolveHeliAssault, resolveEnemyAntiAir, resolveSquadAntiDrone, resolveSquadAntiVehicle, resolveDroneSwarm, resolveEnemyEvasion, advanceEnemyInfantry, resolveMortarCounterBattery, resolveEnemyTurn, launchMortarVolley, isAutoCommitRunning, startRealtimeLoop, toggleAutoCommit, setGameSpeed, renderThrottledForStep, simulationStep, processAirborneWarning, finalizeVolley, checkEnd, triggerWaveClearSequence, computeReward, applyWaveResupply, awardVeteranXp, handleStageClear, assignSquadHunt, clearSquadHunt, assignBandHunt, clearBandHunt, setBandOrder, assignTankHunt, clearTankHunt, repairTank, assignSamHunt, clearSamHunt, repairSam, assignAntitankHunt, clearAntitankHunt, repairAntitank, assignMortarFire, updateFireConfig, advanceSimulation });

@@ -1318,9 +1318,18 @@ export const WAVE_CLEAR_EFFECT_WAIT_MS = 1900;
 
 export const WAVE_CLEAR_FANFARE_HOLD_MS = 2000;
 
-export const DIRECT_MOVE_KINDS = ['squad','tank','sam','antitank','hq','band'];
+// per user request(操作性向上): 斥候・工兵・衛生・補給も他ユニットと同じく、ボックスを
+// 開いて空地をタップするだけで移動指示できるようにする(従来は「移動先を指定」ボタンを
+// 押してからタップする2手間が必要だった)。
+export const DIRECT_MOVE_KINDS = ['squad','tank','sam','antitank','hq','band','scout','engineer','medic','supply'];
 
 export const MULTI_SELECT_KINDS = ['squad','tank','sam','antitank','engineer','band'];
+
+// per user request(操作性向上): 複数選択で移動指示を出す際、全隊が同じ1点に向かって
+// 重なってしまわないよう、目的地を中心にグリッド状へ散開配置するための間隔(キャンバス単位)。
+// FRIENDLY_SPACING_RADIUS(34)より広めにして、常時働く自動間隔維持(maintainFriendlySpacing)
+// による到着後の押し出しジッターを避ける。
+export const MULTI_SELECT_FORMATION_SPACING = 50;
 
 export const MULTI_SELECT_ORDER_SETTER = {
   squad: (idx, order)=>{ if(state.squads[idx] && !state.squads[idx].resting) state.squads[idx].order = order; },
