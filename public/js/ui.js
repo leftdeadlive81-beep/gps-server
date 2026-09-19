@@ -457,6 +457,25 @@ export function renderSmartOrder(){
   }
 }
 
+// per user request(ドラクエ風の階層コマンドメニュー): 各コマンドボックスを「命令/攻撃目標/
+// 修理/その他」等の大分類ボタンだけのトップレベルと、選んだ大分類の中身(既存のボタン/一覧を
+// そのまま流用)の2階層に分ける共通ヘルパー。categoriesの各要素は
+// {key, label, onclick?, disabled?} -- keyを渡すとopenCommandCategory(key)を、onclickを
+// 渡せばそれを直接呼ぶ(「移動」のように大分類自体が即座にアクション -- armDirectMoveOrder
+// 等 -- を実行し、サブメニューを持たない場合に使う)。state.commandBoxMenuと一致するkeyの
+// ボタンはactive表示にする。
+function categoryMenuHtml(categories){
+  const menu = state.commandBoxMenu;
+  const btns = categories.map(c=>{
+    const action = c.onclick ? c.onclick : `openCommandCategory('${c.key}')`;
+    const active = c.key && menu===c.key;
+    return `<button class="btn ${active?'active squad-order-btn':''}" ${c.disabled?'disabled':''} onclick="${action}">${c.label}</button>`;
+  }).join('');
+  return `<div class="squad-orders" style="grid-template-columns:repeat(${categories.length},1fr);margin-bottom:8px;">${btns}</div>`;
+}
+
+const BACK_TO_MENU_BTN = `<button class="btn" style="width:100%;margin-bottom:8px;" onclick="closeCommandCategory()">← 戻る</button>`;
+
 export function hqBoxHtml(){
   const hq = state.hq;
   if(hq.hp<=0) return `<div class="empty-hint" style="padding:4px 0;color:var(--red);">壊滅</div>`;
@@ -464,14 +483,19 @@ export function hqBoxHtml(){
   const repairCost = Math.round(HQ_REPAIR_COST_PER_HP*repairAmount);
   const canRepair = hq.hp<hq.maxHp && state.money>=repairCost;
   const canCover = !hq.coverBuilt && hq.exposure<HQ_COVER_EXPOSURE_CAP;
+  const menu = state.commandBoxMenu;
   return `
     <div class="meta">HP: ${hq.hp} / ${hq.maxHp}</div>
     <div class="hpbar big" style="margin-bottom:8px;"><div style="width:${Math.max(0,hq.hp/hq.maxHp*100)}%"></div></div>
     ${exposureMetaHtml(getUnitExposure({kind:'hq'}))}
-    <button class="btn" ${canCover?'':'disabled'} onclick="buildHqCover()" style="margin:8px 0 4px;">掩体構築(掩蔽率+${HQ_COVER_EXPOSURE_BONUS}${hq.coverBuilt?' ・ このWAVEは実施済み':hq.exposure>=HQ_COVER_EXPOSURE_CAP?' ・ 上限到達':''})</button>
-    <button class="btn" ${canRepair?'':'disabled'} onclick="repairHq()">応急修復(+${repairAmount}HP ・ ¥${repairCost})${hq.hp>=hq.maxHp?' ・ HP満タン':''}</button>
-    <button class="btn" style="width:100%;margin-top:4px;" onclick="armDirectMoveOrder('hq',0)">移転</button>
-    <div class="meta" style="margin:8px 0 4px;">${hq.pendingDest ? '移転先: 設定済み(地図クリックで変更)' : '地図をクリックすると移転先を指定できます'}(移動速度: 歩兵と同一)</div>
+    ${categoryMenuHtml([
+      {label:'移転', onclick:"armDirectMoveOrder('hq',0)"},
+      {key:'defense', label:'防衛'},
+      {key:'repair', label:'修理'},
+    ])}
+    ${menu==='defense' ? `${BACK_TO_MENU_BTN}<button class="btn" ${canCover?'':'disabled'} onclick="buildHqCover()">掩体構築(掩蔽率+${HQ_COVER_EXPOSURE_BONUS}${hq.coverBuilt?' ・ このWAVEは実施済み':hq.exposure>=HQ_COVER_EXPOSURE_CAP?' ・ 上限到達':''})</button>` : ''}
+    ${menu==='repair' ? `${BACK_TO_MENU_BTN}<button class="btn" ${canRepair?'':'disabled'} onclick="repairHq()">応急修復(+${repairAmount}HP ・ ¥${repairCost})${hq.hp>=hq.maxHp?' ・ HP満タン':''}</button>` : ''}
+    <div class="meta" style="margin-top:6px;">${hq.pendingDest ? '移転先: 設定済み(地図クリックで変更)' : '地図をクリックすると移転先を指定できます'}(移動速度: 歩兵と同一)</div>
     ${hq.pendingDest ? `<button class="btn" onclick="clearHqDest()">移転先を解除</button>` : ''}
   `;
 }
@@ -829,16 +853,19 @@ export function mortarBoxHtml(idx){
     return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignEngineerRepair(${enIdx},'mortar',${idx})">工兵${enIdx+1}に修理させる(無償)${active?'(修理中)':''}</button>`;
   }).filter(Boolean).join('') : '';
 
+  const menu = state.commandBoxMenu;
   return `
     <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin-bottom:8px;">${stanceBtns}</div>
     ${hpHtml}
     ${cbWarnHtml}
     ${bodyHtml}
-    ${!dead ? mortarMainlineHtml(idx, mortar) : ''}
     ${exposureMetaHtml(getUnitExposure({kind:'mortar', idx}))}
-    ${engineerBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin:6px 0;">${engineerBtns}</div>` : ''}
-    ${!dead ? standingOrderSelectHtml('mortar', idx, mortar, false) : ''}
-    ${crewHtml}
+    ${!dead ? categoryMenuHtml([
+      {key:'mainline', label:'主線方位角'},
+      {key:'other', label:'その他'},
+    ]) : ''}
+    ${!dead && menu==='mainline' ? `${BACK_TO_MENU_BTN}${mortarMainlineHtml(idx, mortar)}` : ''}
+    ${!dead && menu==='other' ? `${BACK_TO_MENU_BTN}${engineerBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">${engineerBtns}</div>` : ''}${standingOrderSelectHtml('mortar', idx, mortar, false)}${crewHtml}` : ''}
   `;
 }
 
@@ -913,16 +940,18 @@ export function scoutBoxHtml(idx){
   const scout = state.scouts[idx];
   const alive = unitAliveCount(scout);
   const dead = alive<=0 || scout.resting;
+  const menu = state.commandBoxMenu;
   return `
     <div class="meta">${alive<=0?'戦闘不能':alive+'/'+scout.soldiers.length+'名'} ・ 標高: ${elevationLabel(elevationAt(scout.x,scout.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(scout.x,scout.y))}</div>
     ${exposureMetaHtml(getUnitExposure({kind:'scout', idx}))}
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/scout.soldiers.length*100)}%"></div></div>
-    ${restButtonHtml('scout', idx, scout)}
-    <button class="btn" style="width:100%;margin-bottom:6px;" ${dead?'disabled':''} onclick="armDirectMoveOrder('scout',${idx})">移動</button>
-    <div class="meta" style="margin-bottom:6px;">${dead ? '移動先: 指定不可' : (scout.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます')}</div>
+    ${categoryMenuHtml([
+      {label:'移動', onclick:`armDirectMoveOrder('scout',${idx})`, disabled:dead},
+      {key:'other', label:'その他'},
+    ])}
+    ${menu==='other' ? `${BACK_TO_MENU_BTN}${restButtonHtml('scout', idx, scout)}${soldierRosterHtml(scout.soldiers)}${reinforceButtonHtml('scout', idx, scout)}` : ''}
+    <div class="meta" style="margin-top:6px;">${dead ? '移動先: 指定不可' : (scout.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます')}</div>
     ${scout.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearScoutOrder(${idx})">移動先を解除</button>` : ''}
-    ${soldierRosterHtml(scout.soldiers)}
-    ${reinforceButtonHtml('scout', idx, scout)}
   `;
 }
 
@@ -966,20 +995,22 @@ export function squadBoxHtml(idx){
   const huntStatus = (huntTarget && !huntTarget.destroyed)
     ? `攻撃目標: ${huntTarget.id} (${huntTarget.revealed?huntTarget.def.label:'識別不能'})`
     : null;
+  const menu = state.commandBoxMenu;
   return `
     <div class="meta">${alive} / ${sq.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sq.x,sq.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(sq.x,sq.y))}</div>
     ${shaken ? `<div class="meta" style="margin-bottom:6px;color:var(--red);font-weight:700;">⚠ 動揺・統制喪失中 ― 独断で後退中(命令不能、残り約${Math.max(0,Math.ceil((sq.shakenUntil-performance.now())/1000))}秒)</div>` : ''}
     ${exposureMetaHtml(getUnitExposure({kind:'squad', idx}))}
-    ${restButtonHtml('squad', idx, sq)}
-    <div class="squad-orders" style="margin:6px 0;">${btns}</div>
-    <button class="btn" style="width:100%;margin-bottom:6px;" ${wiped?'disabled':''} onclick="armDirectMoveOrder('squad',${idx})">移動</button>
-    <div class="meta" style="margin-bottom:6px;">${wiped ? '移動先: 指定不可' : (sq.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます')}</div>
+    ${categoryMenuHtml([
+      {key:'order', label:'命令'},
+      {label:'移動', onclick:`armDirectMoveOrder('squad',${idx})`, disabled:wiped},
+      {key:'hunt', label:'攻撃目標'},
+      {key:'other', label:'その他'},
+    ])}
+    ${menu==='order' ? `${BACK_TO_MENU_BTN}<div class="squad-orders" style="margin-bottom:6px;">${btns}</div>` : ''}
+    ${menu==='hunt' ? `${BACK_TO_MENU_BTN}${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearSquadHunt(${idx})">攻撃目標を解除</button>` : ''}${wiped ? '<div class="meta">交戦不能</div>' : huntTargetListHtml(idx, sq, SQUAD_ENGAGE_RANGE, 'assignSquadHunt', tt=>tt.type!=='heli'&&tt.type!=='drone', sq.huntTargetId)}` : ''}
+    ${menu==='other' ? `${BACK_TO_MENU_BTN}${restButtonHtml('squad', idx, sq)}${standingOrderSelectHtml('squad', idx, sq, true)}${soldierRosterHtml(sq.soldiers)}${reinforceButtonHtml('squad', idx, sq)}` : ''}
+    <div class="meta" style="margin-top:6px;">${wiped ? '移動先: 指定不可' : (sq.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます')}</div>
     ${sq.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearSquadDest(${idx})">移動先を解除</button>` : ''}
-    ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearSquadHunt(${idx})">攻撃目標を解除</button>` : ''}
-    ${wiped ? '' : `<div class="meta" style="margin:8px 0 4px;">攻撃目標を選択:</div>${huntTargetListHtml(idx, sq, SQUAD_ENGAGE_RANGE, 'assignSquadHunt', tt=>tt.type!=='heli'&&tt.type!=='drone', sq.huntTargetId)}`}
-    ${standingOrderSelectHtml('squad', idx, sq, true)}
-    ${soldierRosterHtml(sq.soldiers)}
-    ${reinforceButtonHtml('squad', idx, sq)}
   `;
 }
 
@@ -994,20 +1025,22 @@ export function bandBoxHtml(idx){
   const huntStatus = (huntTarget && !huntTarget.destroyed)
     ? `攻撃目標: ${huntTarget.id} (${huntTarget.revealed?huntTarget.def.label:'識別不能'})`
     : null;
+  const menu = state.commandBoxMenu;
   return `
     <div class="meta">${alive} / ${band.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(band.x,band.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(band.x,band.y))}</div>
     <div class="meta" style="margin-bottom:6px;color:var(--muted);">近接戦闘専任(射程は小隊よりずっと短いが威力は高い) ― 本部警備が主任務</div>
     ${exposureMetaHtml(getUnitExposure({kind:'band', idx}))}
-    ${restButtonHtml('band', idx, band)}
-    <div class="squad-orders" style="margin:6px 0;">${btns}</div>
-    <button class="btn" style="width:100%;margin-bottom:6px;" ${wiped?'disabled':''} onclick="armDirectMoveOrder('band',${idx})">移動</button>
-    <div class="meta" style="margin-bottom:6px;">${wiped ? '移動先: 指定不可' : (band.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます')}</div>
+    ${categoryMenuHtml([
+      {key:'order', label:'命令'},
+      {label:'移動', onclick:`armDirectMoveOrder('band',${idx})`, disabled:wiped},
+      {key:'hunt', label:'攻撃目標'},
+      {key:'other', label:'その他'},
+    ])}
+    ${menu==='order' ? `${BACK_TO_MENU_BTN}<div class="squad-orders" style="margin-bottom:6px;">${btns}</div>` : ''}
+    ${menu==='hunt' ? `${BACK_TO_MENU_BTN}${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearBandHunt(${idx})">攻撃目標を解除</button>` : ''}${wiped ? '<div class="meta">交戦不能</div>' : huntTargetListHtml(idx, band, BAND_ENGAGE_RANGE, 'assignBandHunt', tt=>tt.type!=='heli'&&tt.type!=='drone', band.huntTargetId)}` : ''}
+    ${menu==='other' ? `${BACK_TO_MENU_BTN}${restButtonHtml('band', idx, band)}${standingOrderSelectHtml('band', idx, band, true)}${soldierRosterHtml(band.soldiers)}${reinforceButtonHtml('band', idx, band)}` : ''}
+    <div class="meta" style="margin-top:6px;">${wiped ? '移動先: 指定不可' : (band.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます')}</div>
     ${band.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearBandDest(${idx})">移動先を解除</button>` : ''}
-    ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearBandHunt(${idx})">攻撃目標を解除</button>` : ''}
-    ${wiped ? '' : `<div class="meta" style="margin:8px 0 4px;">攻撃目標を選択:</div>${huntTargetListHtml(idx, band, BAND_ENGAGE_RANGE, 'assignBandHunt', tt=>tt.type!=='heli'&&tt.type!=='drone', band.huntTargetId)}`}
-    ${standingOrderSelectHtml('band', idx, band, true)}
-    ${soldierRosterHtml(band.soldiers)}
-    ${reinforceButtonHtml('band', idx, band)}
   `;
 }
 
@@ -1032,19 +1065,22 @@ export function tankBoxHtml(idx){
     const active = en.order==='repair' && en.repairTargetKind==='tank' && en.repairTargetId===tank.id;
     return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignEngineerRepair(${enIdx},'tank',${idx})">工兵${enIdx+1}に修理させる(無償)${active?'(修理中)':''}</button>`;
   }).filter(Boolean).join('') : '';
+  const menu = state.commandBoxMenu;
   return `
     <div class="meta">HP: ${tank.hp} / ${tank.maxHp}</div>
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,tank.hp/tank.maxHp*100)}%"></div></div>
     ${exposureMetaHtml(getUnitExposure({kind:'tank', idx}))}
-    <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
-    <button class="btn" style="width:100%;margin-bottom:6px;" onclick="armDirectMoveOrder('tank',${idx})">移動</button>
-    <div class="meta" style="margin-bottom:6px;">${tank.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
+    ${categoryMenuHtml([
+      {key:'order', label:'命令'},
+      {label:'移動', onclick:`armDirectMoveOrder('tank',${idx})`},
+      {key:'hunt', label:'攻撃目標'},
+      {key:'repair', label:'修理'},
+    ])}
+    ${menu==='order' ? `${BACK_TO_MENU_BTN}<div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin-bottom:6px;">${btns}</div>` : ''}
+    ${menu==='hunt' ? `${BACK_TO_MENU_BTN}${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearTankHunt(${idx})">攻撃目標を解除</button>` : ''}${huntTargetListHtml(idx, tank, TANK_ENGAGE_RANGE, 'assignTankHunt', tt=>tt.type!=='heli'&&tt.type!=='drone', tank.huntTargetId)}` : ''}
+    ${menu==='repair' ? `${BACK_TO_MENU_BTN}<button class="btn" ${canRepair?'':'disabled'} onclick="repairTank(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${tank.hp>=tank.maxHp?' ・ HP満タン':''}</button>${engineerBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">${engineerBtns}</div>` : ''}` : ''}
+    <div class="meta" style="margin-top:6px;">${tank.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
     ${tank.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearTankDest(${idx})">移動先を解除</button>` : ''}
-    ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearTankHunt(${idx})">攻撃目標を解除</button>` : ''}
-    <div class="meta" style="margin:8px 0 4px;">攻撃目標を選択:</div>
-    ${huntTargetListHtml(idx, tank, TANK_ENGAGE_RANGE, 'assignTankHunt', tt=>tt.type!=='heli'&&tt.type!=='drone', tank.huntTargetId)}
-    <button class="btn" style="margin-top:8px;" ${canRepair?'':'disabled'} onclick="repairTank(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${tank.hp>=tank.maxHp?' ・ HP満タン':''}</button>
-    ${engineerBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">${engineerBtns}</div>` : ''}
   `;
 }
 
@@ -1062,19 +1098,23 @@ export function samBoxHtml(idx){
   const repairAmount = Math.min(SAM_REPAIR_HP_PER_CALL, sam.maxHp-sam.hp);
   const repairCost = Math.round(SAM_REPAIR_COST_PER_HP*repairAmount);
   const canRepair = sam.hp<sam.maxHp && state.money>=repairCost;
+  const menu = state.commandBoxMenu;
   return `
     <div class="meta">HP: ${sam.hp} / ${sam.maxHp}</div>
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,sam.hp/sam.maxHp*100)}%"></div></div>
     ${exposureMetaHtml(getUnitExposure({kind:'sam', idx}))}
     <div class="meta" style="margin-bottom:6px;color:var(--muted);">対空目標(ヘリ・ドローン)専任 ― 対地目標には交戦不可</div>
-    <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
-    <button class="btn" style="width:100%;margin-bottom:6px;" onclick="armDirectMoveOrder('sam',${idx})">移動</button>
-    <div class="meta" style="margin-bottom:6px;">${sam.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
+    ${categoryMenuHtml([
+      {key:'order', label:'命令'},
+      {label:'移動', onclick:`armDirectMoveOrder('sam',${idx})`},
+      {key:'hunt', label:'攻撃目標'},
+      {key:'repair', label:'修理'},
+    ])}
+    ${menu==='order' ? `${BACK_TO_MENU_BTN}<div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin-bottom:6px;">${btns}</div>` : ''}
+    ${menu==='hunt' ? `${BACK_TO_MENU_BTN}${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearSamHunt(${idx})">攻撃目標を解除</button>` : ''}${huntTargetListHtml(idx, sam, SAM_ENGAGE_RANGE, 'assignSamHunt', tt=>tt.type==='heli'||tt.type==='drone', sam.huntTargetId)}` : ''}
+    ${menu==='repair' ? `${BACK_TO_MENU_BTN}<button class="btn" ${canRepair?'':'disabled'} onclick="repairSam(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${sam.hp>=sam.maxHp?' ・ HP満タン':''}</button>` : ''}
+    <div class="meta" style="margin-top:6px;">${sam.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
     ${sam.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearSamDest(${idx})">移動先を解除</button>` : ''}
-    ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearSamHunt(${idx})">攻撃目標を解除</button>` : ''}
-    <div class="meta" style="margin:8px 0 4px;">攻撃目標を選択:</div>
-    ${huntTargetListHtml(idx, sam, SAM_ENGAGE_RANGE, 'assignSamHunt', tt=>tt.type==='heli'||tt.type==='drone', sam.huntTargetId)}
-    <button class="btn" style="margin-top:8px;" ${canRepair?'':'disabled'} onclick="repairSam(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${sam.hp>=sam.maxHp?' ・ HP満タン':''}</button>
   `;
 }
 
@@ -1125,25 +1165,30 @@ export function engineerBoxHtml(idx){
   const repairStatus = repairTarget
     ? `修理対象: ${repairTargetEntry.label} (HP ${Math.round(repairTarget.hp)}/${repairTarget.maxHp}) ・ 近接すると自動で回復`
     : (repairableCandidates.length ? '損傷した戦車・対戦車・迫撃砲を選んで無償で修理を指示できます(近接が必要)' : '損傷した装備はありません');
+  const menu = state.commandBoxMenu;
   return `
     <div class="meta">${alive}/${en.soldiers.length}名</div>
     ${shaken ? `<div class="meta" style="margin-bottom:6px;color:var(--red);font-weight:700;">⚠ 動揺・統制喪失中 ― 独断で後退中(命令不能、残り約${Math.max(0,Math.ceil((en.shakenUntil-performance.now())/1000))}秒)</div>` : ''}
     ${exposureMetaHtml(getUnitExposure({kind:'engineer', idx}))}
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/en.soldiers.length*100)}%"></div></div>
-    ${restButtonHtml('engineer', idx, en)}
-    <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
-    <button class="btn" style="width:100%;margin-bottom:6px;" ${resting?'disabled':''} onclick="armDirectMoveOrder('engineer',${idx})">移動</button>
-    <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
+    ${categoryMenuHtml([
+      {key:'order', label:'命令'},
+      {label:'移動', onclick:`armDirectMoveOrder('engineer',${idx})`, disabled:resting},
+      {key:'build', label:'建設'},
+      {key:'repair', label:'修理'},
+      {key:'other', label:'その他'},
+    ])}
+    ${menu==='order' ? `${BACK_TO_MENU_BTN}<div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin-bottom:6px;">${btns}</div>` : ''}
+    ${menu==='build' ? `${BACK_TO_MENU_BTN}
+      <button class="btn ${armingWall?'active squad-order-btn':''}" ${resting||wallCapReached||wallMoneyShort?'disabled':''} style="width:100%;margin-bottom:4px;" onclick="armWallBuildOrder(${idx})">防壁を構築(¥${WALL_BUILD_COST}・地図で地点指定)</button>
+      <div class="meta" style="margin-bottom:8px;">${wallStatus}</div>
+      <button class="btn ${armingTrench?'active squad-order-btn':''}" ${resting||trenchCapReached||trenchMoneyShort?'disabled':''} style="width:100%;margin-bottom:4px;" onclick="armTrenchBuildOrder(${idx})">塹壕を構築(¥${TRENCH_BUILD_COST}・地図で始点→終点指定)</button>
+      <div class="meta" style="margin-bottom:8px;">${trenchStatus}</div>
+    ` : ''}
+    ${menu==='repair' ? `${BACK_TO_MENU_BTN}${repairBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">${repairBtns}</div>` : ''}<div class="meta" style="margin-bottom:8px;">${repairStatus}</div>${repairTarget ? `<button class="btn" style="margin-bottom:8px;" onclick="clearEngineerRepair(${idx})">修理を解除</button>` : ''}` : ''}
+    ${menu==='other' ? `${BACK_TO_MENU_BTN}${restButtonHtml('engineer', idx, en)}${standingOrderSelectHtml('engineer', idx, en, false)}${soldierRosterHtml(en.soldiers)}` : ''}
+    <div class="meta" style="margin-top:6px;">${destStatus}</div>
     ${en.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearEngineerDest(${idx})">移動先を解除</button>` : ''}
-    <button class="btn ${armingWall?'active squad-order-btn':''}" ${resting||wallCapReached||wallMoneyShort?'disabled':''} style="width:100%;margin-bottom:4px;" onclick="armWallBuildOrder(${idx})">防壁を構築(¥${WALL_BUILD_COST}・地図で地点指定)</button>
-    <div class="meta" style="margin-bottom:8px;">${wallStatus}</div>
-    <button class="btn ${armingTrench?'active squad-order-btn':''}" ${resting||trenchCapReached||trenchMoneyShort?'disabled':''} style="width:100%;margin-bottom:4px;" onclick="armTrenchBuildOrder(${idx})">塹壕を構築(¥${TRENCH_BUILD_COST}・地図で始点→終点指定)</button>
-    <div class="meta" style="margin-bottom:8px;">${trenchStatus}</div>
-    ${repairBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">${repairBtns}</div>` : ''}
-    <div class="meta" style="margin-bottom:8px;">${repairStatus}</div>
-    ${repairTarget ? `<button class="btn" style="margin-bottom:8px;" onclick="clearEngineerRepair(${idx})">修理を解除</button>` : ''}
-    ${standingOrderSelectHtml('engineer', idx, en, false)}
-    ${soldierRosterHtml(en.soldiers)}
   `;
 }
 
@@ -1172,20 +1217,22 @@ export function supplyBoxHtml(idx){
   const supplyStatus = targetEntry
     ? `補給対象: ${targetEntry.label} (弾薬 ${Math.round(targetEntry.unit.ammo!==undefined?targetEntry.unit.ammo:UNIT_AMMO_MAX)}/${targetEntry.unit.maxAmmo||UNIT_AMMO_MAX}) ・ 携行弾薬 ${Math.round(su.carry)}/${SUPPLY_CARRY_MAX} ・ ${phaseLabel}`
     : (needyCandidates.length ? '弾薬が不足している小隊を選んで補給を指示できます(解除するまで本部と自動往復)' : '弾薬不足の小隊はありません');
+  const menu = state.commandBoxMenu;
   return `
     <div class="meta">${alive}/${su.soldiers.length}名</div>
     ${exposureMetaHtml(getUnitExposure({kind:'supply', idx}))}
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/su.soldiers.length*100)}%"></div></div>
-    ${restButtonHtml('supply', idx, su)}
-    <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
-    <button class="btn" style="width:100%;margin-bottom:6px;" ${resting?'disabled':''} onclick="armDirectMoveOrder('supply',${idx})">移動</button>
-    <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
+    ${categoryMenuHtml([
+      {key:'order', label:'命令'},
+      {label:'移動', onclick:`armDirectMoveOrder('supply',${idx})`, disabled:resting},
+      {key:'target', label:'補給対象'},
+      {key:'other', label:'その他'},
+    ])}
+    ${menu==='order' ? `${BACK_TO_MENU_BTN}<div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin-bottom:6px;">${btns}</div>` : ''}
+    ${menu==='target' ? `${BACK_TO_MENU_BTN}${supplyBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">${supplyBtns}</div>` : ''}<div class="meta" style="margin-bottom:8px;">${supplyStatus}</div>${targetEntry ? `<button class="btn" style="margin-bottom:8px;" onclick="clearSupplyRun(${idx})">補給を解除</button>` : ''}` : ''}
+    ${menu==='other' ? `${BACK_TO_MENU_BTN}${restButtonHtml('supply', idx, su)}${standingOrderSelectHtml('supply', idx, su, false)}${soldierRosterHtml(su.soldiers)}` : ''}
+    <div class="meta" style="margin-top:6px;">${destStatus}</div>
     ${su.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearSupplyDest(${idx})">移動先を解除</button>` : ''}
-    ${supplyBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">${supplyBtns}</div>` : ''}
-    <div class="meta" style="margin-bottom:8px;">${supplyStatus}</div>
-    ${targetEntry ? `<button class="btn" style="margin-bottom:8px;" onclick="clearSupplyRun(${idx})">補給を解除</button>` : ''}
-    ${standingOrderSelectHtml('supply', idx, su, false)}
-    ${soldierRosterHtml(su.soldiers)}
   `;
 }
 
@@ -1220,20 +1267,22 @@ export function medicBoxHtml(idx){
   const reviveStatus = reviveTargetEntry
     ? `救護対象: ${reviveTargetEntry.label} ・ 近接すると自動で処置開始`
     : (reviveCandidates.length ? '負傷者を抱える部隊を選んで無償で救護を指示できます(近接が必要)' : '救護を要する負傷者はいません');
+  const menu = state.commandBoxMenu;
   return `
     <div class="meta">${alive}/${me.soldiers.length}名</div>
     ${exposureMetaHtml(getUnitExposure({kind:'medic', idx}))}
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,alive/me.soldiers.length*100)}%"></div></div>
-    ${restButtonHtml('medic', idx, me)}
-    <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
-    <button class="btn" style="width:100%;margin-bottom:6px;" ${resting?'disabled':''} onclick="armDirectMoveOrder('medic',${idx})">移動</button>
-    <div class="meta" style="margin-bottom:6px;">${destStatus}</div>
+    ${categoryMenuHtml([
+      {key:'order', label:'命令'},
+      {label:'移動', onclick:`armDirectMoveOrder('medic',${idx})`, disabled:resting},
+      {key:'target', label:'救護対象'},
+      {key:'other', label:'その他'},
+    ])}
+    ${menu==='order' ? `${BACK_TO_MENU_BTN}<div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin-bottom:6px;">${btns}</div>` : ''}
+    ${menu==='target' ? `${BACK_TO_MENU_BTN}${reviveBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">${reviveBtns}</div>` : ''}<div class="meta" style="margin-bottom:8px;">${reviveStatus}</div>${reviveTargetEntry ? `<button class="btn" style="margin-bottom:8px;" onclick="clearMedicRevive(${idx})">救護を解除</button>` : ''}` : ''}
+    ${menu==='other' ? `${BACK_TO_MENU_BTN}${restButtonHtml('medic', idx, me)}${standingOrderSelectHtml('medic', idx, me, false)}${soldierRosterHtml(me.soldiers)}` : ''}
+    <div class="meta" style="margin-top:6px;">${destStatus}</div>
     ${me.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearMedicDest(${idx})">移動先を解除</button>` : ''}
-    ${reviveBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;">${reviveBtns}</div>` : ''}
-    <div class="meta" style="margin-bottom:8px;">${reviveStatus}</div>
-    ${reviveTargetEntry ? `<button class="btn" style="margin-bottom:8px;" onclick="clearMedicRevive(${idx})">救護を解除</button>` : ''}
-    ${standingOrderSelectHtml('medic', idx, me, false)}
-    ${soldierRosterHtml(me.soldiers)}
   `;
 }
 
@@ -1256,26 +1305,41 @@ export function antitankBoxHtml(idx){
     const active = en.order==='repair' && en.repairTargetKind==='antitank' && en.repairTargetId===at.id;
     return `<button class="btn ${active?'active squad-order-btn':''}" onclick="assignEngineerRepair(${enIdx},'antitank',${idx})">工兵${enIdx+1}に修理させる(無償)${active?'(修理中)':''}</button>`;
   }).filter(Boolean).join('') : '';
+  const menu = state.commandBoxMenu;
   return `
     <div class="meta">HP: ${at.hp} / ${at.maxHp}</div>
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,at.hp/at.maxHp*100)}%"></div></div>
     ${exposureMetaHtml(getUnitExposure({kind:'antitank', idx}))}
     <div class="meta" style="margin-bottom:6px;color:var(--muted);">対戦車ロケットランチャー(vehicle) + 対空自衛火器(heli/drone) ― 歩兵/砲兵には無力</div>
-    <div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin:6px 0;">${btns}</div>
-    <button class="btn" style="width:100%;margin-bottom:6px;" onclick="armDirectMoveOrder('antitank',${idx})">移動</button>
-    <div class="meta" style="margin-bottom:6px;">${at.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
+    ${categoryMenuHtml([
+      {key:'order', label:'命令'},
+      {label:'移動', onclick:`armDirectMoveOrder('antitank',${idx})`},
+      {key:'hunt', label:'攻撃目標'},
+      {key:'repair', label:'修理'},
+    ])}
+    ${menu==='order' ? `${BACK_TO_MENU_BTN}<div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin-bottom:6px;">${btns}</div>` : ''}
+    ${menu==='hunt' ? `${BACK_TO_MENU_BTN}${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearAntitankHunt(${idx})">攻撃目標を解除</button>` : ''}${huntTargetListHtml(idx, at, tt=>tt.type==='vehicle'?ANTITANK_ENGAGE_RANGE:ANTITANK_AA_RANGE, 'assignAntitankHunt', tt=>tt.type==='vehicle'||tt.type==='heli'||tt.type==='drone', at.huntTargetId)}` : ''}
+    ${menu==='repair' ? `${BACK_TO_MENU_BTN}<button class="btn" ${canRepair?'':'disabled'} onclick="repairAntitank(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${at.hp>=at.maxHp?' ・ HP満タン':''}</button>${engineerBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">${engineerBtns}</div>` : ''}` : ''}
+    <div class="meta" style="margin-top:6px;">${at.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
     ${at.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearAntitankDest(${idx})">移動先を解除</button>` : ''}
-    ${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearAntitankHunt(${idx})">攻撃目標を解除</button>` : ''}
-    <div class="meta" style="margin:8px 0 4px;">攻撃目標を選択:</div>
-    ${huntTargetListHtml(idx, at, tt=>tt.type==='vehicle'?ANTITANK_ENGAGE_RANGE:ANTITANK_AA_RANGE, 'assignAntitankHunt', tt=>tt.type==='vehicle'||tt.type==='heli'||tt.type==='drone', at.huntTargetId)}
-    <button class="btn" style="margin-top:8px;" ${canRepair?'':'disabled'} onclick="repairAntitank(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${at.hp>=at.maxHp?' ・ HP満タン':''}</button>
-    ${engineerBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">${engineerBtns}</div>` : ''}
   `;
 }
 
+// per user request(ドラクエ風の階層コマンドメニュー): renderCommandBox()はrenderThrottledForStep
+// 経由で1秒間に何度も呼ばれる(戦闘中も同じユニットのボックスを開き続けられるため)ので、
+// 呼ばれるたびにcommandBoxMenuをリセットしてしまうと選んだ大分類の中身を一切見られなくなる。
+// 前回描画したユニット(kind:idx)と変わった時だけ(=別ユニットを選び直した/開き直した時だけ)
+// トップレベルへ戻す。
+let lastCommandBoxKey = null;
+
 export function renderCommandBox(){
   const box = document.getElementById('command-box');
-  if(!state.commandBox){ box.style.display='none'; return; }
+  if(!state.commandBox){ lastCommandBoxKey = null; box.style.display='none'; return; }
+  const commandBoxKey = `${state.commandBox.kind}:${state.commandBox.idx}`;
+  if(commandBoxKey !== lastCommandBoxKey){
+    state.commandBoxMenu = null;
+    lastCommandBoxKey = commandBoxKey;
+  }
   const kind = state.commandBox.kind;
   let title, bodyHtml, pos;
   if(kind==='hq'){
