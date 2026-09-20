@@ -29,9 +29,16 @@ export function unitSpeak(kind, idx, category){
   if(!list || !list.length) return;
   const name = calloutSpeakerName(kind, idx);
   if(!name) return;
+  const now = performance.now();
+  // per user request(同じ位置に吹き出しが延々と次々に出続けるバグの修正): 迫撃砲の自動照準
+  // (MORTAR_RELOAD_MS=650msごとに再発射しうる)のように短い間隔で繰り返し発生するイベントが
+  // unitSpeakを高頻度で呼ぶと、表示中の吹き出し(CALLOUT_DURATION_MS=4000ms)が消える前に
+  // 次の発言へ差し替わり続け、見た目上そのユニットの位置に吹き出しが途切れず残り続けて
+  // しまっていた。同一ユニットの吹き出しがまだ表示中なら、自然に消えるまで新規発言を控える。
+  if(activeCallouts.some(c=>c.kind===kind && c.idx===idx && c.expiresAt>now)) return;
   const text = list[Math.floor(Math.random()*list.length)];
   activeCallouts = activeCallouts.filter(c=>!(c.kind===kind && c.idx===idx));
-  activeCallouts.push({kind, idx, name, text, expiresAt: performance.now()+CALLOUT_DURATION_MS});
+  activeCallouts.push({kind, idx, name, text, expiresAt: now+CALLOUT_DURATION_MS});
 }
 
 export function randomAliveUnitRef(){
