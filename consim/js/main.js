@@ -54,21 +54,46 @@ export function render(){
   drawBoard();
 }
 
+// per user request(バグ調査: マップ画面が固まって以後一切更新されなくなる報告): この
+// loop()自体、および内部で呼んでいるadvanceSimulation()(=全ての resolve* を含む毎ターンの
+// シミュレーション全体)がrequestAnimationFrame(loop)の呼び出し「より前」にあり、間で何か
+// 一つでも例外を投げると最終行のrequestAnimationFrame(loop)が二度と実行されず、ループ自体が
+// 永久に停止する(render2d.jsのctx.arc()負の半径バグの記録にある通り、過去にも同種の
+// フリーズが実際に起きている)。一方、コマンドボックス等のボタンはrender()を個別に直接
+// 呼ぶ別経路なので、この停止の影響を受けず動き続ける -- 報告された「ボタンは反応するが
+// マップだけ固まる」という症状と一致する。
+// 広範なストレステスト(通常ターン数百回分、全確率イベントを高頻度化した状態での長時間
+// 実行、対戦車部隊/戦車の撃破エフェクト、歩兵スプライトの全滅・破棄)では特定の再現手順は
+// 見つからなかったが、根本原因のクラス(ループ本体のどこか一箇所でも未捕捉の例外が起きると
+// 全体が完全に停止する、という設計そのもの)は明確なので、個別のバグを潰すより先に
+// ループ自体を「1フレームで何が起きても次のフレームは必ず来る」よう堅牢化する。
+let lastLoopErrorMsg = null, lastLoopErrorAt = 0;
 export function loop(){
-  advanceSimulation();
-  updateProjectiles();
-  updateEnemyTracers();
-  update3dEffects();
-  updateImpactLights();
-  if(state){
-    repositionOpenCommandBoxes();
+  try{
+    advanceSimulation();
+    updateProjectiles();
+    updateEnemyTracers();
+    update3dEffects();
+    updateImpactLights();
+    if(state){
+      repositionOpenCommandBoxes();
+    }
+    if(!anyOverlayShown()){
+      if(state) drawBoard();
+      if(state) drawMinimap();
+      renderThreeFrame();
+    }
+    syncWakeLock();
+  }catch(e){
+    // Rate-limit identical repeat errors (e.g. a bad state that keeps throwing every frame)
+    // so this doesn't flood the console at 60fps -- one log per distinct message per 3s.
+    const now = performance.now();
+    if(e.message !== lastLoopErrorMsg || now-lastLoopErrorAt > 3000){
+      lastLoopErrorMsg = e.message;
+      lastLoopErrorAt = now;
+      console.error('[loop] frame error (次フレームへ継続):', e);
+    }
   }
-  if(!anyOverlayShown()){
-    if(state) drawBoard();
-    if(state) drawMinimap();
-    renderThreeFrame();
-  }
-  syncWakeLock();
   requestAnimationFrame(loop);
 }
 
