@@ -452,7 +452,7 @@ export function renderSmartOrder(){
       // primarily the SAM's job. Antitank carries both a主兵装(対戦車ロケットランチャー、
       // vehicle専任)と副武装(対空自衛火器、heli/drone)なので、その両方を選べる。
       const typeGate = smartWizard.unitType==='sam' ? (t=>t.type==='heli'||t.type==='drone')
-        : smartWizard.unitType==='antitank' ? (t=>t.type==='vehicle'||t.type==='heli'||t.type==='drone')
+        : smartWizard.unitType==='antitank' ? (t=>t.type==='vehicle'||t.type==='at_gun'||t.type==='heli'||t.type==='drone')
         : ['squad','tank'].includes(smartWizard.unitType) ? (t=>t.type!=='heli'&&t.type!=='drone')
         : ()=>true;
       const knownTargets = state.targets.filter(t=>!t.destroyed && t.revealed && typeGate(t));
@@ -1337,7 +1337,7 @@ export function antitankBoxHtml(idx){
       {key:'repair', label:'修理'},
     ])}
     ${menu==='order' ? `${BACK_TO_MENU_BTN}<div class="squad-orders" style="grid-template-columns:repeat(3,1fr);margin-bottom:6px;">${btns}</div>` : ''}
-    ${menu==='hunt' ? `${BACK_TO_MENU_BTN}${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearAntitankHunt(${idx})">攻撃目標を解除</button>` : ''}${huntTargetListHtml(idx, at, tt=>tt.type==='vehicle'?ANTITANK_ENGAGE_RANGE:ANTITANK_AA_RANGE, 'assignAntitankHunt', tt=>tt.type==='vehicle'||tt.type==='heli'||tt.type==='drone', at.huntTargetId)}` : ''}
+    ${menu==='hunt' ? `${BACK_TO_MENU_BTN}${huntStatus ? `<div class="meta" style="margin-bottom:4px;">${huntStatus}</div><button class="btn" style="margin-bottom:6px;" onclick="clearAntitankHunt(${idx})">攻撃目標を解除</button>` : ''}${huntTargetListHtml(idx, at, tt=>(tt.type==='vehicle'||tt.type==='at_gun')?ANTITANK_ENGAGE_RANGE:ANTITANK_AA_RANGE, 'assignAntitankHunt', tt=>tt.type==='vehicle'||tt.type==='at_gun'||tt.type==='heli'||tt.type==='drone', at.huntTargetId)}` : ''}
     ${menu==='repair' ? `${BACK_TO_MENU_BTN}<button class="btn" ${canRepair?'':'disabled'} onclick="repairAntitank(${idx})">応急修復(+${repairAmount}HP ・ ¥${repairCost})${at.hp>=at.maxHp?' ・ HP満タン':''}</button>${engineerBtns ? `<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">${engineerBtns}</div>` : ''}` : ''}
     <div class="meta" style="margin-top:6px;">${at.pendingDest ? '移動先: 設定済み(地図クリックで変更)' : '地図をクリックすると移動先を指定できます'}</div>
     ${at.pendingDest ? `<button class="btn" style="margin-bottom:6px;" onclick="clearAntitankDest(${idx})">移動先を解除</button>` : ''}
@@ -1503,7 +1503,7 @@ export function renderEnemyCommandBox(){
   // per user request: 対地の直接照準兵器(小隊/戦車)はもはや対空目標(ヘリ・ドローン)を
   // 直接狙い撃てない -- 対空はSAM専任(下のsamBtns)。
   const isAirTarget = t.type==='heli' || t.type==='drone';
-  const isVehicleTarget = t.type==='vehicle';
+  const isVehicleTarget = t.type==='vehicle' || t.type==='at_gun';
   const squadRows = isAirTarget ? [] : state.squads.map((sq,idx)=>{
     if(!sq.soldiers.some(s=>s.alive)) return null;
     return huntRow('squad', idx, sq, `第${idx+1}小隊に攻撃させる`, SQUAD_ENGAGE_RANGE, `assignSquadHunt(${idx})`);

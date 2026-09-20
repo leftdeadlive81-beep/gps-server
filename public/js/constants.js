@@ -158,9 +158,15 @@ export const TARGET_TYPES = {
   // 工兵/衛生/補給の自動対応、小隊/音楽隊の接敵時対応)を無効化する(isJammed()参照)。
   // 見た目のHPは低めだが、放置すると自動化に頼った運用が丸ごと止まるため優先目標になる。
   jammer:    {label:'電子妨害車両', hp:70,  radius:18, mark:ENEMY_MARK_COLOR},
+  // per user request(自軍戦車が強すぎるとの声を受けて追加): 据え置き型の敵対戦車砲。
+  // 発見されれば脆いよう、装甲車(vehicle:95)より低めのHPにしてある。詳細は
+  // ENEMY_AT_GUN_RANGE/ENEMY_AT_GUN_DMG/resolveEnemyAntiTank()を参照。
+  at_gun:    {label:'対戦車部隊', hp:85,  radius:16, mark:ENEMY_MARK_COLOR},
 };
 
 export const DRONE_INTRO_STAGE = 3;
+
+export const AT_GUN_INTRO_STAGE = 2;
 
 export const CONTOUR_LEVELS = [0.25, 0.5, 0.75, 1.0, 1.25];
 
@@ -311,6 +317,18 @@ export const ANTITANK_REPAIR_COST_PER_HP = 30;
 export const ANTITANK_AA_RANGE = 300;
 
 export const ANTITANK_AA_DMG = [6, 12];
+
+// per user request(自軍戦車が強すぎるとの声を受けて追加): 敵の対戦車部隊(据え置き型の
+// 対戦車砲)。戦車のTANK_ENGAGE_RANGE(325)・対戦車のANTITANK_ENGAGE_RANGE(380)より
+// さらに遠いENEMY_AT_GUN_RANGEから、TANK_INCOMING_DMG/ANTITANK_INCOMING_DMGより重い
+// 一撃(ENEMY_AT_GUN_DMG)を撃ち込む代わりに、発射間隔は長く(ENEMY_AT_GUN_COOLDOWN_TICKS)
+// HPも低い(TARGET_TYPES.at_gun参照)ため、発見され次第の優先排除で無力化できる。
+// resolveEnemyAntiTank()参照。
+export const ENEMY_AT_GUN_RANGE = 400;
+
+export const ENEMY_AT_GUN_DMG = [18, 34];
+
+export const ENEMY_AT_GUN_COOLDOWN_TICKS = 3;
 
 // per user request: 工兵による戦車の野戦修理 -- 上の即時・有償の応急修復(repairTank)とは
 // 別の無償(労力のみ)の手段。工兵を戦車に近接させて修理を指示すると、この射程内にいる間
@@ -1048,7 +1066,7 @@ export const WAVE_ARCHETYPES = [
   {
     id:'balanced', label:'混成部隊',
     weight:3,
-    otherTypeWeights:{vehicle:1, artillery:1, aa:1, drone:1},
+    otherTypeWeights:{vehicle:1, artillery:1, aa:1, drone:1, at_gun:0.7},
     infantryPasses:2,
     doctrineWeights:{assault:1, flank:1, support:1},
     extraHeli:0,
@@ -1056,7 +1074,9 @@ export const WAVE_ARCHETYPES = [
   {
     id:'armor', label:'装甲強襲',
     weight:1,
-    otherTypeWeights:{vehicle:5, artillery:0.5, aa:0.5, drone:0.3},
+    // per user request(自軍戦車が強すぎるとの声を受けて追加): 装甲強襲は戦車の主戦場
+    // なので、対戦車部隊(at_gun)も他アーキタイプよりまとまった比率で登場させる。
+    otherTypeWeights:{vehicle:5, artillery:0.5, aa:0.5, drone:0.3, at_gun:2.5},
     infantryPasses:1,
     doctrineWeights:{assault:3, flank:1.5, support:0.5},
     extraHeli:0,
@@ -1064,7 +1084,7 @@ export const WAVE_ARCHETYPES = [
   {
     id:'artillery', label:'砲兵制圧',
     weight:1,
-    otherTypeWeights:{vehicle:0.5, artillery:5, aa:0.5, drone:0.3},
+    otherTypeWeights:{vehicle:0.5, artillery:5, aa:0.5, drone:0.3, at_gun:0.5},
     infantryPasses:2,
     doctrineWeights:{support:3, flank:1, assault:0.5},
     // per user request: 先に榴弾攻撃、その後歩兵前進 -- 歩兵の出現をWAVE_SPAWN_WINDOW_MS内で
@@ -1076,7 +1096,7 @@ export const WAVE_ARCHETYPES = [
   {
     id:'air', label:'航空襲撃',
     weight:1,
-    otherTypeWeights:{vehicle:0.4, artillery:0.4, aa:1.5, drone:4},
+    otherTypeWeights:{vehicle:0.4, artillery:0.4, aa:1.5, drone:4, at_gun:0.3},
     infantryPasses:1,
     doctrineWeights:{flank:2, assault:1, support:1},
     // per user request: 航空襲撃らしさを出すため、通常は必ず1機の戦闘ヘリ(buildHeliTarget)
@@ -1086,7 +1106,7 @@ export const WAVE_ARCHETYPES = [
   {
     id:'airborne', label:'空挺強襲',
     weight:1,
-    otherTypeWeights:{vehicle:0.5, artillery:0.5, aa:0.7, drone:0.7},
+    otherTypeWeights:{vehicle:0.5, artillery:0.5, aa:0.7, drone:0.7, at_gun:0.5},
     // per user request: 前線本体の歩兵は少なめにして、代わりに空挺降下部隊(下の
     // AIRBORNE_*定数、startStage()参照)が自軍後方(迫撃砲/指揮所付近)へ直接着陸する --
     // 前線を突破しなくても後方が脅かされる、という新しい脅威軸を作る。
