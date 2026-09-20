@@ -587,8 +587,12 @@ export function showStageClear(reward, resupply){
   const ov = document.getElementById('overlay');
   setOverlayAccent('', 'After-Action Report');
   document.getElementById('overlay-title').textContent = 'WAVE CLEAR';
+  // per user request(陸上自衛隊の「服務事故」の多さをエッセンスとして): WAVE中に発生した
+  // 軽微な服務事故の件数を表示する(resolveServiceIncidents参照)。0件なら模範部隊として讃える。
+  const incidentsThisWave = state.serviceIncidentsThisWave||0;
+  const incidentNote = incidentsThisWave===0 ? '0件(模範部隊)' : `${incidentsThisWave}件`;
   document.getElementById('overlay-text').textContent =
-    `WAVE ${state.stage} 撃退成功。報酬 ¥${reward.total.toLocaleString()}(基本¥${reward.base}+速攻¥${reward.turnsBonus}+残弾¥${reward.ammoBonus}+指揮所無傷¥${reward.hqBonus}+砲兵無傷¥${reward.hpBonus}+歩兵無傷¥${reward.infBonus}+斥候無傷¥${reward.scoutBonus}+対戦車無傷¥${reward.antitankBonus}+敵本部撃破¥${reward.enemyHqBonus}) ／ 所持金 ¥${state.money.toLocaleString()} ／ 補給: 戦果${Math.round(resupply.perf*100)}%によりHE+${resupply.ammoHe}・HEAT+${resupply.ammoHeat}・予備兵力+${resupply.personnel}名`;
+    `WAVE ${state.stage} 撃退成功。報酬 ¥${reward.total.toLocaleString()}(基本¥${reward.base}+速攻¥${reward.turnsBonus}+残弾¥${reward.ammoBonus}+指揮所無傷¥${reward.hqBonus}+砲兵無傷¥${reward.hpBonus}+歩兵無傷¥${reward.infBonus}+斥候無傷¥${reward.scoutBonus}+対戦車無傷¥${reward.antitankBonus}+敵本部撃破¥${reward.enemyHqBonus}) ／ 所持金 ¥${state.money.toLocaleString()} ／ 補給: 戦果${Math.round(resupply.perf*100)}%によりHE+${resupply.ammoHe}・HEAT+${resupply.ammoHeat}・予備兵力+${resupply.personnel}名 ／ 今回の服務事故: ${incidentNote}`;
   document.getElementById('overlay-buttons').innerHTML =
     `<button class="btn primary" onclick="proceedToShop()">次のWAVEへ</button>`;
   ov.classList.add('show');
@@ -607,7 +611,7 @@ export function showGameClear(reward){
   setOverlayAccent('green', 'Campaign Complete');
   document.getElementById('overlay-title').textContent = 'ALL WAVES SURVIVED';
   document.getElementById('overlay-text').textContent =
-    `全${STAGE_COUNT}WAVEの猛攻を耐え抜いた。最終報酬 ¥${reward.total.toLocaleString()}。総資産 ¥${state.money.toLocaleString()}。お疲れ様でした、THUNDER-6。`;
+    `全${STAGE_COUNT}WAVEの猛攻を耐え抜いた。最終報酬 ¥${reward.total.toLocaleString()}。総資産 ¥${state.money.toLocaleString()}。道中の服務事故 合計${state.serviceIncidentsTotal||0}件。お疲れ様でした、THUNDER-6。`;
   document.getElementById('overlay-buttons').innerHTML =
     `<button class="btn primary" onclick="initGame()">最初から (RESTART)</button>`;
   ov.classList.add('show');
