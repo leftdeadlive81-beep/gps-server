@@ -4,7 +4,7 @@ import { abandonSavedCampaign, addNewAntitank, addNewHeli, addNewMortar, addNewS
 import { ACHIEVEMENTS, AMMO_PACK, ANTITANK_AA_RANGE, ANTITANK_ENGAGE_RANGE, BAND_ENGAGE_RANGE, DECOY_MODES, DEPLOYMENT_MODES, DIFFICULTIES, EQUIP_LABEL, GAME_SPEED_LABEL, GAME_SPEED_ORDER, HQ_COVER_EXPOSURE_BONUS, HQ_COVER_EXPOSURE_CAP, HQ_REPAIR_COST_PER_HP, HQ_REPAIR_HP_PER_CALL, ILLUM_RADIUS_M, MAP_SEED_THUMB_H, MAP_SEED_THUMB_W, MAX_DECOYS, MAX_TRENCHES, MAX_WALLS, MEDAL_EXCHANGE_COST, MEDAL_EXCHANGE_REWARD_HE, MEDAL_EXCHANGE_REWARD_HEAT, MEDAL_EXCHANGE_REWARD_MONEY, MORTAR_CB_SHOTS_THRESHOLD, MORTAR_CREW_SIZE, MORTAR_MAINLINE_RANGE_M, MORTAR_MAX_RANGE_M, MORTAR_MIN_RANGE_M, MORTAR_ORDER_ICON, MORTAR_ORDER_LABEL, ORDER_ICON, ORDER_LABEL, PRICE_EQUIP, PRICE_FUZE, PRICE_HE, PRICE_HEAT, REINFORCE_COST_PER_SOLDIER, REINFORCE_MAX_PER_CALL, RESERVE_SIZE, REST_DURATION_TURNS, SAM_ENGAGE_RANGE, SAM_REPAIR_COST_PER_HP, SAM_REPAIR_HP_PER_CALL, SMART_ACTIONS, SMART_UNIT_TYPES, SQUAD_ENGAGE_RANGE, SQUAD_SIZE, STAGE_COUNT, STANDING_ORDER_LABEL, SUPPLY_CARRY_MAX, UNIT_AMMO_MAX, ANTITANK_REPAIR_COST_PER_HP, ANTITANK_REPAIR_HP_PER_CALL, TANK_ENGAGE_RANGE, TANK_REPAIR_COST_PER_HP,TANK_REPAIR_HP_PER_CALL, TARGET_TYPES, TICKER_MAX_ENTRIES, TRENCH_BUILD_COST, WALL_BUILD_COST, WEATHER_TYPES } from './constants.js';
 import { canvasToScreen, multiSelectCommonOrders, multiSelectMode, multiSelected, pruneMultiSelected, unitGroups } from './input.js';
 import { render } from './main.js';
-import { elevationAt, elevationLabel, terrainTypeAt, terrainTypeLabel } from './terrain.js';
+import { altitudeBonus, elevationAt, elevationLabel, terrainTypeAt, terrainTypeLabel } from './terrain.js';
 import { paintTerrainColors } from './three.js';
 import { bearingBetween, clamp, hitChanceFromExposure, rnd, unitsToMeters } from './utils.js';
 import { speakRandomAliveUnit } from './voice.js';
@@ -698,6 +698,30 @@ export function closeEnemyCommandBox(){
   render();
 }
 
+// per user request(標高が実際どう影響するか分かりにくいとの声を受けて追加): 各部隊の
+// 「標高: 高地/丘陵/低地」表示だけでは、それが与ダメージ/被ダメージに具体的にどう効いて
+// いるのか(altitudeBonus、±40%まで)が分からなかった。hunt中の目標があればそれ、なければ
+// 射程内で最も近い視認済みの目標との標高差から、実際に生じている倍率をパーセントで添える。
+// 比較対象になる目標がなければ空文字(標高ラベルだけを表示)。
+function altitudeEffectNote(x, y, engageRangeUnits, huntTargetId, targetTypeGate){
+  let target = huntTargetId ? state.targets.find(t=>t.id===huntTargetId && !t.destroyed) : null;
+  if(!target){
+    let bestDist = Infinity;
+    state.targets.forEach(t=>{
+      if(t.destroyed || !t.revealed) return;
+      if(targetTypeGate && !targetTypeGate(t)) return;
+      const range = typeof engageRangeUnits==='function' ? engageRangeUnits(t) : engageRangeUnits;
+      const d = Math.hypot(t.trueX-x, t.trueY-y);
+      if(d<=range && d<bestDist){ bestDist=d; target=t; }
+    });
+  }
+  if(!target) return '';
+  const fmt = p => (p>=0?'+':'')+p+'%';
+  const outPct = Math.round((altitudeBonus(x, y, target.trueX, target.trueY)-1)*100);
+  const inPct = Math.round((altitudeBonus(target.trueX, target.trueY, x, y)-1)*100);
+  return ` (対${target.id}: 与${fmt(outPct)}/被${fmt(inPct)})`;
+}
+
 // per user request: 部隊自身の指令ボックスから直接、目標を選んで攻撃を指示できるように --
 // 従来は一度このボックスを閉じて敵側のパネル(renderEnemyCommandBox)を開き直す必要が
 // あった。距離/射程の表示・並び替え(射程内を先、距離が近い順)は敵パネルと同じロジック。
@@ -1016,7 +1040,7 @@ export function squadBoxHtml(idx){
     : null;
   const menu = state.commandBoxMenu;
   return `
-    <div class="meta">${alive} / ${sq.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sq.x,sq.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(sq.x,sq.y))}</div>
+    <div class="meta">${alive} / ${sq.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(sq.x,sq.y))}${altitudeEffectNote(sq.x, sq.y, SQUAD_ENGAGE_RANGE, sq.huntTargetId, tt=>tt.type!=='heli'&&tt.type!=='drone')} ・ 地形: ${terrainTypeLabel(terrainTypeAt(sq.x,sq.y))}</div>
     ${shaken ? `<div class="meta" style="margin-bottom:6px;color:var(--red);font-weight:700;">⚠ 動揺・統制喪失中 ― 独断で後退中(命令不能、残り約${Math.max(0,Math.ceil((sq.shakenUntil-performance.now())/1000))}秒)</div>` : ''}
     ${exposureMetaHtml(getUnitExposure({kind:'squad', idx}))}
     ${categoryMenuHtml([
@@ -1046,7 +1070,7 @@ export function bandBoxHtml(idx){
     : null;
   const menu = state.commandBoxMenu;
   return `
-    <div class="meta">${alive} / ${band.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(band.x,band.y))} ・ 地形: ${terrainTypeLabel(terrainTypeAt(band.x,band.y))}</div>
+    <div class="meta">${alive} / ${band.soldiers.length}名 ・ 標高: ${elevationLabel(elevationAt(band.x,band.y))}${altitudeEffectNote(band.x, band.y, BAND_ENGAGE_RANGE, band.huntTargetId, tt=>tt.type!=='heli'&&tt.type!=='drone')} ・ 地形: ${terrainTypeLabel(terrainTypeAt(band.x,band.y))}</div>
     <div class="meta" style="margin-bottom:6px;color:var(--muted);">近接戦闘専任(射程は小隊よりずっと短いが威力は高い) ― 本部警備が主任務</div>
     ${exposureMetaHtml(getUnitExposure({kind:'band', idx}))}
     ${categoryMenuHtml([
@@ -1088,6 +1112,7 @@ export function tankBoxHtml(idx){
   return `
     <div class="meta">HP: ${tank.hp} / ${tank.maxHp}</div>
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,tank.hp/tank.maxHp*100)}%"></div></div>
+    <div class="meta">標高: ${elevationLabel(elevationAt(tank.x,tank.y))}${altitudeEffectNote(tank.x, tank.y, TANK_ENGAGE_RANGE, tank.huntTargetId, tt=>tt.type!=='heli'&&tt.type!=='drone')} ・ 地形: ${terrainTypeLabel(terrainTypeAt(tank.x,tank.y))}</div>
     ${exposureMetaHtml(getUnitExposure({kind:'tank', idx}))}
     ${categoryMenuHtml([
       {key:'order', label:'命令'},
@@ -1121,6 +1146,7 @@ export function samBoxHtml(idx){
   return `
     <div class="meta">HP: ${sam.hp} / ${sam.maxHp}</div>
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,sam.hp/sam.maxHp*100)}%"></div></div>
+    <div class="meta">標高: ${elevationLabel(elevationAt(sam.x,sam.y))}${altitudeEffectNote(sam.x, sam.y, SAM_ENGAGE_RANGE, sam.huntTargetId, tt=>tt.type==='heli'||tt.type==='drone')} ・ 地形: ${terrainTypeLabel(terrainTypeAt(sam.x,sam.y))}</div>
     ${exposureMetaHtml(getUnitExposure({kind:'sam', idx}))}
     <div class="meta" style="margin-bottom:6px;color:var(--muted);">対空目標(ヘリ・ドローン)専任 ― 対地目標には交戦不可</div>
     ${categoryMenuHtml([
@@ -1328,6 +1354,7 @@ export function antitankBoxHtml(idx){
   return `
     <div class="meta">HP: ${at.hp} / ${at.maxHp}</div>
     <div class="hpbar" style="margin-bottom:8px;"><div style="width:${Math.max(0,at.hp/at.maxHp*100)}%"></div></div>
+    <div class="meta">標高: ${elevationLabel(elevationAt(at.x,at.y))}${altitudeEffectNote(at.x, at.y, tt=>(tt.type==='vehicle'||tt.type==='at_gun')?ANTITANK_ENGAGE_RANGE:ANTITANK_AA_RANGE, at.huntTargetId, tt=>tt.type==='vehicle'||tt.type==='at_gun'||tt.type==='heli'||tt.type==='drone')} ・ 地形: ${terrainTypeLabel(terrainTypeAt(at.x,at.y))}</div>
     ${exposureMetaHtml(getUnitExposure({kind:'antitank', idx}))}
     <div class="meta" style="margin-bottom:6px;color:var(--muted);">対戦車ロケットランチャー(vehicle) + 対空自衛火器(heli/drone) ― 歩兵/砲兵には無力</div>
     ${categoryMenuHtml([
